@@ -1,0 +1,122 @@
+{% extends "05-layout" %} {% block title %}{{ pageTitle }} - My Website{%
+endblock %} {% block meta %}
+<meta
+  name="description"
+  content="Example page demonstrating template inheritance in Clarity"
+/>
+<meta name="keywords" content="clarity, template, inheritance, blocks" />
+{% endblock %} {% block styles %} .hero { background: linear-gradient(135deg,
+#667eea 0%, #764ba2 100%); color: white; padding: 60px 20px; border-radius: 8px;
+margin-bottom: 30px; text-align: center; } .hero h1 { font-size: 48px;
+margin-bottom: 20px; } .feature-grid { display: grid; grid-template-columns:
+repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin: 30px 0; } .feature-card
+{ background: white; padding: 30px; border-radius: 8px; border: 1px solid
+#e0e0e0; transition: transform 0.3s, box-shadow 0.3s; } .feature-card:hover {
+transform: translateY(-5px); box-shadow: 0 5px 20px rgba(0,0,0,0.1); }
+.feature-card h3 { color: #4CAF50; margin-bottom: 15px; } .stats { display:
+flex; justify-content: space-around; background: #f5f5f5; padding: 30px;
+border-radius: 8px; margin: 30px 0; } .stat { text-align: center; } .stat
+.number { font-size: 36px; font-weight: bold; color: #4CAF50; } .stat .label {
+color: #666; margin-top: 5px; } {% endblock %} {% block breadcrumbs %}
+<nav style="margin-bottom: 20px; color: #666">
+  <a href="/" style="color: #4caf50; text-decoration: none">Home</a>
+  <span>›</span>
+  <a href="/examples" style="color: #4caf50; text-decoration: none">Examples</a>
+  <span>›</span>
+  <span>{{ pageTitle }}</span>
+</nav>
+{% endblock %} {% block content %}
+<div class="hero">
+  <h1>{{ pageTitle }}</h1>
+  <p style="font-size: 20px; opacity: 0.9">{{ pageDescription }}</p>
+</div>
+
+<section>
+  <h2>Template Inheritance in Action</h2>
+  <p>
+    This page extends the base layout (05-layout.clarity.html) and demonstrates
+    how blocks work:
+  </p>
+
+  <ul
+    style="
+      background: #f9f9f9;
+      padding: 20px 40px;
+      border-radius: 4px;
+      margin: 20px 0;
+    "
+  >
+    <li><strong>Title block:</strong> Custom page title in browser tab</li>
+    <li><strong>Meta block:</strong> SEO meta tags specific to this page</li>
+    <li>
+      <strong>Styles block:</strong> Page-specific CSS (the styles you see here)
+    </li>
+    <li><strong>Breadcrumbs block:</strong> Navigation breadcrumb trail</li>
+    <li><strong>Content block:</strong> Main page content (this section)</li>
+    <li><strong>Sidebar block:</strong> Additional sidebar content below</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Key Features</h2>
+  <div class="feature-grid">
+    {% for feature in features %}
+    <div class="feature-card">
+      <h3>{{ feature.icon }} {{ feature.title }}</h3>
+      <p>{{ feature.description }}</p>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<section>
+  <h2>Statistics</h2>
+  <div class="stats">
+    {% for stat in stats %}
+    <div class="stat">
+      <div class="number">{{ stat.value }}</div>
+      <div class="label">{{ stat.label }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<section>
+  <h2>How It Works</h2>
+  <p>
+    The child template (this file) uses
+    <code>{% extends "05-layout" %}</code> to inherit the structure from the
+    parent layout. Each <code>{% block blockName %}</code> overrides the
+    corresponding block in the parent.
+  </p>
+
+  <p>
+    Blocks that aren't overridden (like the footer and navigation) use the
+    parent's default content, making it easy to create consistent page
+    structures.
+  </p>
+</section>
+{% endblock %} {% block sidebar %}
+<aside class="sidebar">
+  <h3>Quick Links</h3>
+  <ul>
+    {% for link in quickLinks %}
+    <li>
+      <a href="{{ link.url }}" style="color: #4caf50; text-decoration: none"
+        >{{ link.title }}</a
+      >
+    </li>
+    {% endfor %}
+  </ul>
+
+  <h3>Recent Updates</h3>
+  <p style="color: #666; font-size: 14px">
+    Last updated: {{ lastUpdated |> date('F j, Y') }}
+  </p>
+</aside>
+{% endblock %} {% block scripts %}
+<script>
+  console.log("Page-specific JavaScript loaded");
+  console.log("Features count: {{ features.length }}");
+</script>
+{% endblock %}

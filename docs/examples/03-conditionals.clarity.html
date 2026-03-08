@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Conditionals - Clarity Example</title>
+    <style>
+      body {
+        font-family:
+          system-ui,
+          -apple-system,
+          sans-serif;
+        max-width: 900px;
+        margin: 40px auto;
+        padding: 0 20px;
+        line-height: 1.6;
+      }
+      .section {
+        background: #f9f9f9;
+        padding: 20px;
+        margin: 20px 0;
+        border-radius: 8px;
+      }
+      h1 {
+        color: #333;
+      }
+      h2 {
+        color: #555;
+        margin-top: 0;
+      }
+      .badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 14px;
+        font-weight: 500;
+      }
+      .badge-success {
+        background: #4caf50;
+        color: white;
+      }
+      .badge-warning {
+        background: #ff9800;
+        color: white;
+      }
+      .badge-danger {
+        background: #f44336;
+        color: white;
+      }
+      .badge-info {
+        background: #2196f3;
+        color: white;
+      }
+      .status-box {
+        padding: 15px;
+        border-radius: 4px;
+        margin: 10px 0;
+      }
+      .success {
+        background: #e8f5e9;
+        border-left: 4px solid #4caf50;
+      }
+      .warning {
+        background: #fff3e0;
+        border-left: 4px solid #ff9800;
+      }
+      .danger {
+        background: #ffebee;
+        border-left: 4px solid #f44336;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Conditional Rendering Examples</h1>
+
+    <div class="section">
+      <h2>Simple If Statement</h2>
+      {% if user.isLoggedIn %}
+      <p>✓ Welcome back, {{ user.name }}!</p>
+      {% endif %}
+    </div>
+
+    <div class="section">
+      <h2>If-Else Statement</h2>
+      {% if stock > 0 %}
+      <p class="success">✓ Product is in stock ({{ stock }} available)</p>
+      {% else %}
+      <p class="danger">✗ Product is out of stock</p>
+      {% endif %}
+    </div>
+
+    <div class="section">
+      <h2>If-Elseif-Else Statement</h2>
+      {% if score >= 90 %}
+      <div class="status-box success">
+        <strong>Grade A:</strong> Excellent! (Score: {{ score }})
+      </div>
+      {% elseif score >= 75 %}
+      <div class="status-box success">
+        <strong>Grade B:</strong> Good! (Score: {{ score }})
+      </div>
+      {% elseif score >= 60 %}
+      <div class="status-box warning">
+        <strong>Grade C:</strong> Satisfactory (Score: {{ score }})
+      </div>
+      {% else %}
+      <div class="status-box danger">
+        <strong>Grade F:</strong> Needs improvement (Score: {{ score }})
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="section">
+      <h2>Comparison Operators</h2>
+
+      <p>Age: {{ age }}</p>
+
+      {% if age > 18 %}
+      <p>✓ Over 18: {{ age > 18 }}</p>
+      {% endif %} {% if age >= 18 %}
+      <p>✓ 18 or older: {{ age >= 18 }}</p>
+      {% endif %} {% if age == 21 %}
+      <p>✓ Exactly 21!</p>
+      {% else %}
+      <p>Not 21 (age is {{ age }})</p>
+      {% endif %}
+    </div>
+
+    <div class="section">
+      <h2>Logical Operators</h2>
+
+      <h3>AND Operator</h3>
+      {% if user.isActive and user.role == 'admin' %}
+      <span class="badge badge-danger">ADMIN ACCESS</span>
+      {% endif %}
+
+      <h3>OR Operator</h3>
+      {% if user.role == 'admin' or user.role == 'moderator' %}
+      <span class="badge badge-warning">STAFF MEMBER</span>
+      {% endif %}
+
+      <h3>NOT Operator</h3>
+      {% if not user.isBanned %}
+      <p>✓ Account is in good standing</p>
+      {% else %}
+      <p>⚠ Account is banned</p>
+      {% endif %}
+
+      <h3>Complex Condition</h3>
+      {% if (age >= 18 and not user.isBanned) or user.hasParentalConsent %}
+      <p>✓ User can access this content</p>
+      {% else %}
+      <p>✗ Access denied</p>
+      {% endif %}
+    </div>
+
+    <div class="section">
+      <h2>Ternary Operator</h2>
+
+      <p>
+        Status:
+        <span
+          class="badge {{ user.isActive ? 'badge-success' : 'badge-danger' }}"
+        >
+          {{ user.isActive ? 'Active' : 'Inactive' }}
+        </span>
+      </p>
+
+      <p>
+        Price:
+        <strong>{{ discount > 0 ? price * (1 - discount) : price }} EUR</strong>
+        {{ discount > 0 ? '(with ' ~ (discount * 100) ~ '% discount)' : '' }}
+      </p>
+    </div>
+
+    <div class="section">
+      <h2>Null Coalescing</h2>
+
+      <p>User nickname: {{ user.nickname ?? user.name }}</p>
+      <p>Custom message: {{ customMessage ?? 'No message provided' }}</p>
+    </div>
+
+    <div class="section">
+      <h2>Nested Conditionals</h2>
+
+      {% if user.isLoggedIn %}
+      <div class="status-box success">
+        <p><strong>Logged in as:</strong> {{ user.name }}</p>
+
+        {% if user.hasNotifications %}
+        <p>📧 You have {{ user.notificationCount }} new notifications</p>
+        {% else %}
+        <p>No new notifications</p>
+        {% endif %}
+      </div>
+      {% else %}
+      <div class="status-box warning">
+        <p>Please log in to view your notifications</p>
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="section">
+      <h2>Conditional Content Rendering</h2>
+
+      {% if products.length > 0 %}
+      <h3>Products Available ({{ products.length }})</h3>
+      <ul>
+        {% for product in products %}
+        <li>{{ product }}</li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p><em>No products available</em></p>
+      {% endif %}
+    </div>
+  </body>
+</html>

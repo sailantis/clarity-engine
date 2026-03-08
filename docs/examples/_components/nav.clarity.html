@@ -1,0 +1,25 @@
+<nav>
+  <ul style="list-style: none; display: flex; gap: 20px; margin: 0; padding: 0">
+    {% for item in navItems |> default([ {title: 'Home', url: '/'}, {title:
+    'About', url: '/about'}, {title: 'Docs', url: '/docs'}, {title: 'Examples',
+    url: '/examples'} ]) %}
+    <li>
+      <a
+        href="{{ item.url }}"
+        style="
+          color: white;
+          text-decoration: none;
+          padding: 8px 16px;
+          border-radius: 4px;
+          display: block;
+          transition: background 0.3s;
+        "
+        onmouseover="this.style.background = 'rgba(255,255,255,0.2)'"
+        onmouseout="this.style.background = 'transparent'"
+      >
+        {{ item.title }}
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+</nav>

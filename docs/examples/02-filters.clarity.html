@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Filters - Clarity Example</title>
+    <style>
+      body {
+        font-family:
+          system-ui,
+          -apple-system,
+          sans-serif;
+        max-width: 900px;
+        margin: 40px auto;
+        padding: 0 20px;
+        line-height: 1.6;
+      }
+      .section {
+        background: #f9f9f9;
+        padding: 20px;
+        margin: 20px 0;
+        border-radius: 8px;
+        border-left: 4px solid #4caf50;
+      }
+      h1 {
+        color: #333;
+      }
+      h2 {
+        color: #555;
+        margin-top: 0;
+      }
+      .example {
+        background: #fff;
+        padding: 10px;
+        border-radius: 4px;
+        margin: 10px 0;
+      }
+      code {
+        color: #d63384;
+        font-family: monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Filter Examples</h1>
+    <p>
+      Filters transform data before output using the <code>|></code> operator.
+    </p>
+
+    <div class="section">
+      <h2>Text Filters</h2>
+
+      <div class="example"><strong>Original:</strong> {{ text }}</div>
+
+      <div class="example"><strong>Upper:</strong> {{ text |> upper }}</div>
+
+      <div class="example"><strong>Lower:</strong> {{ text |> lower }}</div>
+
+      <div class="example">
+        <strong>Capitalize:</strong> {{ text |> capitalize }}
+      </div>
+
+      <div class="example"><strong>Title:</strong> {{ text |> title }}</div>
+
+      <div class="example">
+        <strong>Trim:</strong> "{{ messyText |> trim }}"
+      </div>
+
+      <div class="example">
+        <strong>Truncate:</strong> {{ longText |> truncate(50) }}
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Number Filters</h2>
+
+      <div class="example"><strong>Original:</strong> {{ price }}</div>
+
+      <div class="example">
+        <strong>Number (2 decimals):</strong> {{ price |> number(2) }}
+      </div>
+
+      <div class="example">
+        <strong>Number (0 decimals):</strong> {{ price |> number(0) }}
+      </div>
+
+      <div class="example">
+        <strong>Rounded:</strong> {{ price |> round(1) }}
+      </div>
+
+      <div class="example">
+        <strong>Absolute value:</strong> {{ negativeNumber |> abs }}
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Date Filters</h2>
+
+      <div class="example">
+        <strong>Default format:</strong> {{ timestamp |> date }}
+      </div>
+
+      <div class="example">
+        <strong>Custom format (d.m.Y):</strong> {{ timestamp |> date('d.m.Y') }}
+      </div>
+
+      <div class="example">
+        <strong>With time (H:i:s):</strong> {{ timestamp |> date('Y-m-d H:i:s')
+        }}
+      </div>
+
+      <div class="example">
+        <strong>Readable format:</strong> {{ timestamp |> date('F j, Y') }}
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Array Filters</h2>
+
+      <div class="example"><strong>Join:</strong> {{ tags |> join(', ') }}</div>
+
+      <div class="example">
+        <strong>First element:</strong> {{ tags |> first }}
+      </div>
+
+      <div class="example">
+        <strong>Last element:</strong> {{ tags |> last }}
+      </div>
+
+      <div class="example">
+        <strong>Length:</strong> {{ tags |> length }} tags
+      </div>
+
+      <div class="example">
+        <strong>Reverse:</strong> {{ tags |> reverse |> join(', ') }}
+      </div>
+
+      <div class="example">
+        <strong>Sort:</strong> {{ numbers |> sort |> join(', ') }}
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Filter Chaining</h2>
+      <p>Multiple filters can be chained together:</p>
+
+      <div class="example">
+        <strong>Chain:</strong> {{ text |> lower |> trim |> capitalize }}
+      </div>
+
+      <div class="example">
+        <strong>Complex chain:</strong> {{ description |> trim |> truncate(100)
+        |> upper }}
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Lambda Filters</h2>
+      <p>Use lambdas with map, filter, and reduce:</p>
+
+      <div class="example">
+        <strong>Map (extract names):</strong> {{ users |> map(u => u.name) |>
+        join(', ') }}
+      </div>
+
+      <div class="example">
+        <strong>Filter (active only):</strong> {{ users |> filter(u => u.active)
+        |> map(u => u.name) |> join(', ') }}
+      </div>
+
+      <div class="example">
+        <strong>Map with filter (uppercase):</strong> {{ tags |> map(t => t |>
+        upper) |> join(' | ') }}
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Utility Filters</h2>
+
+      <div class="example">
+        <strong>Default value:</strong> {{ emptyValue |> default('No value
+        provided') }}
+      </div>
+
+      <div class="example">
+        <strong>JSON encode:</strong> {{ data |> json |> raw }}
+      </div>
+    </div>
+  </body>
+</html>

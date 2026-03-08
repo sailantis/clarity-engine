@@ -1,0 +1,32 @@
+<header
+  style="
+    background: #4caf50;
+    color: white;
+    padding: 20px 0;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  "
+>
+  <div
+    style="
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    "
+  >
+    <div>
+      <h1 style="font-size: 24px; font-weight: 600; margin: 0">
+        {{ siteName |> default('Clarity Engine') }}
+      </h1>
+      {% if tagline %}
+      <p style="margin: 5px 0 0 0; opacity: 0.9; font-size: 14px">
+        {{ tagline }}
+      </p>
+      {% endif %}
+    </div>
+
+    {% if showNav %} {{ include("_components/nav") }} {% endif %}
+  </div>
+</header>

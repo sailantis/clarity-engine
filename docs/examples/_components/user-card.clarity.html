@@ -1,0 +1,83 @@
+<div
+  class="user-card"
+  style="
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    border: 1px solid #e0e0e0;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    transition:
+      transform 0.3s,
+      box-shadow 0.3s;
+  "
+  onmouseover="
+    this.style.transform = 'translateY(-5px)';
+    this.style.boxShadow = '0 5px 20px rgba(0,0,0,0.1)';
+  "
+  onmouseout="
+    this.style.transform = 'translateY(0)';
+    this.style.boxShadow = 'none';
+  "
+>
+  <div
+    class="user-avatar"
+    style="width: 60px; height: 60px; border-radius: 50%; background: {{ user.color |> default('#4CAF50') }}; color: white; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; flex-shrink: 0;"
+  >
+    {{ user.name |> first |> upper }}
+  </div>
+
+  <div class="user-info" style="flex: 1">
+    <div
+      class="user-name"
+      style="font-size: 18px; font-weight: 600; color: #333; margin-bottom: 5px"
+    >
+      {{ user.name }}
+    </div>
+
+    {% if user.title %}
+    <div
+      class="user-title"
+      style="color: #666; font-size: 14px; margin-bottom: 5px"
+    >
+      {{ user.title }}
+    </div>
+    {% endif %} {% if user.email %}
+    <div class="user-email" style="color: #999; font-size: 13px">
+      {{ user.email }}
+    </div>
+    {% endif %} {% if user.tags %}
+    <div
+      class="user-tags"
+      style="display: flex; gap: 5px; margin-top: 8px; flex-wrap: wrap"
+    >
+      {% for tag in user.tags |> slice(0, 3) %}
+      <span
+        style="
+          display: inline-block;
+          padding: 3px 8px;
+          background: #e8f5e9;
+          color: #4caf50;
+          border-radius: 10px;
+          font-size: 11px;
+          font-weight: 500;
+        "
+      >
+        {{ tag }}
+      </span>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+
+  {% if user.status %}
+  <div class="user-status" style="flex-shrink: 0">
+    <span
+      style="display: inline-block; padding: 6px 12px; border-radius: 12px; font-size: 12px; font-weight: 500; {{ user.status == 'active' ? 'background: #4CAF50; color: white;' : 'background: #f44336; color: white;' }}"
+    >
+      {{ user.status |> capitalize }}
+    </span>
+  </div>
+  {% endif %}
+</div>

@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Loops - Clarity Example</title>
+    <style>
+      body {
+        font-family:
+          system-ui,
+          -apple-system,
+          sans-serif;
+        max-width: 900px;
+        margin: 40px auto;
+        padding: 0 20px;
+        line-height: 1.6;
+      }
+      .section {
+        background: #f9f9f9;
+        padding: 20px;
+        margin: 20px 0;
+        border-radius: 8px;
+      }
+      h1 {
+        color: #333;
+      }
+      h2 {
+        color: #555;
+        margin-top: 0;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        background: white;
+        margin: 15px 0;
+      }
+      th,
+      td {
+        padding: 12px;
+        text-align: left;
+        border-bottom: 1px solid #ddd;
+      }
+      th {
+        background: #4caf50;
+        color: white;
+      }
+      tr:hover {
+        background: #f5f5f5;
+      }
+      .first {
+        border-left: 4px solid #4caf50;
+        background: #e8f5e9;
+      }
+      .last {
+        border-left: 4px solid #f44336;
+        background: #ffebee;
+      }
+      .product-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 15px;
+        margin: 15px 0;
+      }
+      .product-card {
+        background: white;
+        padding: 15px;
+        border-radius: 8px;
+        border: 1px solid #ddd;
+      }
+      ul {
+        background: white;
+        padding: 20px 40px;
+        margin: 15px 0;
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Loop Examples</h1>
+
+    <div class="section">
+      <h2>Basic For Loop</h2>
+      <ul>
+        {% for item in items %}
+        <li>{{ item }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+
+    <div class="section">
+      <h2>Loop Variables</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Index (0-based)</th>
+            <th>Index (1-based)</th>
+            <th>User Name</th>
+            <th>Position</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for user in users %}
+          <tr
+            class="{{ loop.first ? 'first' : '' }} {{ loop.last ? 'last' : '' }}"
+          >
+            <td>{{ loop.index }}</td>
+            <td>{{ loop.index1 }}</td>
+            <td>{{ user.name }}</td>
+            <td>
+              {% if loop.first %} First {% elseif loop.last %} Last {% else %}
+              Middle {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <p><em>Total users: {{ users.length }}</em></p>
+    </div>
+
+    <div class="section">
+      <h2>Range Loops</h2>
+
+      <h3>Exclusive Range (1..10)</h3>
+      <p>
+        Numbers: {% for i in 1..10 %}{{ i }}{{ loop.last ? '' : ', ' }}{% endfor
+        %}
+      </p>
+
+      <h3>Inclusive Range (1...10)</h3>
+      <p>
+        Numbers: {% for i in 1...10 %}{{ i }}{{ loop.last ? '' : ', ' }}{%
+        endfor %}
+      </p>
+
+      <h3>Range with Step (0...100 step 10)</h3>
+      <p>
+        Numbers: {% for i in 0...100 step 10 %}{{ i }}{{ loop.last ? '' : ', '
+        }}{% endfor %}
+      </p>
+
+      <h3>Countdown (10...1 step -1)</h3>
+      <p>
+        Countdown: {% for i in 10...1 step -1 %}{{ i }}{{ loop.last ? '!' : ', '
+        }}{% endfor %}
+      </p>
+    </div>
+
+    <div class="section">
+      <h2>Loop with Filters</h2>
+
+      <h3>Original Array</h3>
+      <p>{{ tags |> join(', ') }}</p>
+
+      <h3>Uppercase Tags</h3>
+      <ul>
+        {% for tag in tags |> map(t => t |> upper) %}
+        <li>{{ tag }}</li>
+        {% endfor %}
+      </ul>
+
+      <h3>Sorted Tags</h3>
+      <ul>
+        {% for tag in tags |> sort %}
+        <li>{{ tag }}</li>
+        {% endfor %}
+      </ul>
+
+      <h3>Reversed Tags</h3>
+      <ul>
+        {% for tag in tags |> reverse %}
+        <li>{{ tag }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+
+    <div class="section">
+      <h2>Nested Loops</h2>
+
+      <h3>Categories and Products</h3>
+      {% for category in categories %}
+      <div
+        style="
+          background: white;
+          padding: 15px;
+          margin: 10px 0;
+          border-radius: 4px;
+        "
+      >
+        <h4>{{ category.name }} ({{ category.products.length }} products)</h4>
+        <ul>
+          {% for product in category.products %}
+          <li>{{ product.name }} - {{ product.price |> number(2) }} EUR</li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="section">
+      <h2>Conditional Loop</h2>
+
+      <h3>Active Products Only</h3>
+      {% set activeProducts = products |> filter(p => p.active) %} {% if
+      activeProducts.length > 0 %}
+      <div class="product-grid">
+        {% for product in activeProducts %}
+        <div class="product-card">
+          <h4>{{ product.name }}</h4>
+          <p><strong>{{ product.price |> number(2) }} EUR</strong></p>
+          <p><small>Stock: {{ product.stock }}</small></p>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p><em>No active products available</em></p>
+      {% endif %}
+    </div>
+
+    <div class="section">
+      <h2>Complex Loop Example</h2>
+
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Product</th>
+            <th>Price</th>
+            <th>Status</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for product in products %}
+          <tr
+            class="{{ loop.first ? 'first' : '' }} {{ loop.last ? 'last' : '' }}"
+          >
+            <td>{{ loop.index1 }}</td>
+            <td>{{ product.name }}</td>
+            <td>{{ product.price |> number(2) }} EUR</td>
+            <td>
+              {% if product.active %} ✓ Active {% else %} ✗ Inactive {% endif %}
+            </td>
+            <td>
+              {% if product.stock == 0 %} Out of stock {% elseif product.stock <
+              10 %} Low stock ({{ product.stock }} remaining) {% else %} In
+              stock {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section">
+      <h2>Empty Loop Handling</h2>
+
+      {% if emptyArray.length > 0 %}
+      <ul>
+        {% for item in emptyArray %}
+        <li>{{ item }}</li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p><em>No items to display</em></p>
+      {% endif %}
+    </div>
+  </body>
+</html>

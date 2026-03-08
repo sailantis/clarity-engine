@@ -1,0 +1,27 @@
+{
+  "name": "simsaai/clarity-engine",
+  "description": "A fast and powerful Template engine DSL for PHP inspired by Twig.",
+  "type": "library",
+  "require": {
+    "php": ">=8.1",
+    "ext-mbstring": "*"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^9.6",
+    "phpdocumentor/reflection-docblock": "^6.0"
+  },
+  "license": "MIT",
+  "autoload": {
+    "psr-4": {
+      "Clarity\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Clarity\\Tests\\": "tests/"
+    }
+  },
+  "scripts": {
+    "test": "phpunit"
+  }
+}
