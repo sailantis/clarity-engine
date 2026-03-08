@@ -112,7 +112,7 @@ class ClarityEngine
     protected array $vars = [];
 
     /**
-     * Create a new ViewEngine instance.
+     * Create a new ClarityEngine instance.
      *
      * @param array $vars Initial variables available to all views.
      */

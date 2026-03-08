@@ -96,7 +96,7 @@ Templates are sandboxed and cannot:
 
 `public function __construct(array $vars = []): mixed`
 
-Create a new ViewEngine instance.
+Create a new ClarityEngine instance.
 
 **🧭 Parameters**
 
