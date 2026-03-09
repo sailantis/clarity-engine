@@ -6,7 +6,7 @@ Filters transform values in templates, while functions perform operations and re
 
 Filters transform a value before output using the `|>` operator:
 
-```html
+```twig
 {{ userName |> upper }} {{ price |> number(2) }} {{ createdAt |> date('d.m.Y
 H:i') }}
 ```
@@ -15,14 +15,14 @@ H:i') }}
 
 Chain multiple filters together—each filter receives the output of the previous one:
 
-```html
+```twig
 {{ description |> trim |> upper }} {{ tags |> map(t => t.name) |> join(', ') }}
 {{ price |> number(0) |> replace('0', 'FREE') }}
 ```
 
 ### Filter Syntax
 
-```html
+```twig
 {{ value |> filterName }} {# No arguments #} {{ value |> filterName(arg1) }} {#
 One argument #} {{ value |> filterName(arg1, arg2) }} {# Multiple arguments #}
 ```
@@ -35,7 +35,7 @@ One argument #} {{ value |> filterName(arg1, arg2) }} {# Multiple arguments #}
 
 Remove leading and trailing whitespace:
 
-```html
+```twig
 {{ " hello " |> trim }} {# Output: "hello" #}
 ```
 
@@ -43,7 +43,7 @@ Remove leading and trailing whitespace:
 
 Convert to uppercase (Unicode-aware):
 
-```html
+```twig
 {{ "hello world" |> upper }} {# Output: "HELLO WORLD" #}
 ```
 
@@ -51,7 +51,7 @@ Convert to uppercase (Unicode-aware):
 
 Convert to lowercase (Unicode-aware):
 
-```html
+```twig
 {{ "HELLO WORLD" |> lower }} {# Output: "hello world" #}
 ```
 
@@ -59,7 +59,7 @@ Convert to lowercase (Unicode-aware):
 
 First character uppercase, rest lowercase:
 
-```html
+```twig
 {{ "hELLO wORLD" |> capitalize }} {# Output: "Hello world" #}
 ```
 
@@ -67,7 +67,7 @@ First character uppercase, rest lowercase:
 
 Title-case every word:
 
-```html
+```twig
 {{ "hello world" |> title }} {# Output: "Hello World" #}
 ```
 
@@ -75,7 +75,7 @@ Title-case every word:
 
 HTML-escape the value (same as auto-escaping):
 
-```html
+```twig
 {{ userInput |> escape }} {# Manually escape if needed #}
 ```
 
@@ -85,7 +85,7 @@ HTML-escape the value (same as auto-escaping):
 
 Convert newlines to `<br>` tags:
 
-```html
+```twig
 {{ description |> nl2br |> raw }} {# Converts \n to <br />
 - use raw to output HTML #}
 ```
@@ -94,7 +94,7 @@ Convert newlines to `<br>` tags:
 
 Replace all occurrences:
 
-```html
+```twig
 {{ "Hello World" |> replace('World', 'Clarity') }} {# Output: "Hello Clarity" #}
 {{ phoneNumber |> replace('-', '') }} {# Remove dashes #}
 ```
@@ -103,7 +103,7 @@ Replace all occurrences:
 
 Split string into array:
 
-```html
+```twig
 {{ "apple,banana,cherry" |> split(',') |> join(' - ') }} {# Output: "apple -
 banana - cherry" #} {{ text |> split(' ', 3) }} {# Limit to 3 parts #}
 ```
@@ -112,7 +112,7 @@ banana - cherry" #} {{ text |> split(' ', 3) }} {# Limit to 3 parts #}
 
 Join array elements into string:
 
-```html
+```twig
 {{ ['apple', 'banana', 'cherry'] |> join(', ') }} {# Output: "apple, banana,
 cherry" #} {{ tags |> map(t => t.name) |> join(', ') }}
 ```
@@ -121,7 +121,7 @@ cherry" #} {{ tags |> map(t => t.name) |> join(', ') }}
 
 Truncate string to specified length:
 
-```html
+```twig
 {{ longText |> truncate(100) }} {# Truncate to 100 chars, adds '…' #} {{
 longText |> truncate(50, '...') }} {# Custom ellipsis #}
 ```
@@ -130,7 +130,7 @@ longText |> truncate(50, '...') }} {# Custom ellipsis #}
 
 sprintf-style formatting:
 
-```html
+```twig
 {{ "Hello, %s! You have %d messages." |> format(userName, messageCount) }}
 ```
 
@@ -140,7 +140,7 @@ sprintf-style formatting:
 
 Format number with decimal places:
 
-```html
+```twig
 {{ 1234.5678 |> number(2) }} {# Output: "1,234.57" #} {{ price |> number(0) }}
 {# No decimals: "1,235" #}
 ```
@@ -149,7 +149,7 @@ Format number with decimal places:
 
 Absolute value:
 
-```html
+```twig
 {{ -42 |> abs }} {# Output: 42 #}
 ```
 
@@ -157,7 +157,7 @@ Absolute value:
 
 Round to specified decimal places:
 
-```html
+```twig
 {{ 3.14159 |> round(2) }} {# Output: 3.14 #} {{ 3.7 |> round }} {# Output: 4.0
 (default precision: 0) #}
 ```
@@ -168,7 +168,7 @@ Round to specified decimal places:
 
 Format timestamps or date strings:
 
-```html
+```twig
 {{ timestamp |> date('Y-m-d') }} {# Output: "2026-03-08" #} {{ timestamp |>
 date('d.m.Y H:i:s') }} {# Output: "08.03.2026 14:30:00" #} {{ "2026-01-15" |>
 date('F j, Y') }} {# Output: "January 15, 2026" #}
@@ -186,7 +186,7 @@ Common format patterns:
 
 Format dates using IntlDateFormatter:
 
-```html
+```twig
 {{ timestamp |> format_datetime('long', 'short') }} {# Output depends on locale:
 "March 8, 2026 at 2:30 PM" #} {{ timestamp |> format_datetime('full', 'none',
 'de_DE', 'Europe/Berlin') }}
@@ -198,7 +198,7 @@ Styles: `none`, `short`, `medium`, `long`, `full`
 
 Apply date modification and return new timestamp:
 
-```html
+```twig
 {{ timestamp |> date_modify('+1 day') |> date('Y-m-d') }} {{ timestamp |>
 date_modify('-1 month') |> date('F Y') }} {{ timestamp |> date_modify('next
 Monday') |> date('l, F j') }}
@@ -210,7 +210,7 @@ Monday') |> date('l, F j') }}
 
 Get first element (or first character of string):
 
-```html
+```twig
 {{ [1, 2, 3] |> first }} {# Output: 1 #} {{ "hello" |> first }} {# Output: "h"
 #}
 ```
@@ -219,7 +219,7 @@ Get first element (or first character of string):
 
 Get last element (or last character of string):
 
-```html
+```twig
 {{ [1, 2, 3] |> last }} {# Output: 3 #} {{ "hello" |> last }} {# Output: "o" #}
 ```
 
@@ -227,7 +227,7 @@ Get last element (or last character of string):
 
 Get array keys:
 
-```html
+```twig
 {{ {name: 'John', age: 30} |> keys |> join(', ') }} {# Output: "name, age" #}
 ```
 
@@ -235,7 +235,7 @@ Get array keys:
 
 Merge arrays:
 
-```html
+```twig
 {{ [1, 2] |> merge([3, 4]) |> join(', ') }} {# Output: "1, 2, 3, 4" #}
 ```
 
@@ -243,7 +243,7 @@ Merge arrays:
 
 Sort array values:
 
-```html
+```twig
 {{ [3, 1, 2] |> sort |> join(', ') }} {# Output: "1, 2, 3" #}
 ```
 
@@ -251,7 +251,7 @@ Sort array values:
 
 Reverse array or string:
 
-```html
+```twig
 {{ [1, 2, 3] |> reverse |> join(', ') }} {# Output: "3, 2, 1" #} {{ "hello" |>
 reverse }} {# Output: "olleh" (Unicode-aware) #}
 ```
@@ -260,7 +260,7 @@ reverse }} {# Output: "olleh" (Unicode-aware) #}
 
 Randomly shuffle array:
 
-```html
+```twig
 {{ items |> shuffle }} {# Returns shuffled copy #}
 ```
 
@@ -268,7 +268,7 @@ Randomly shuffle array:
 
 Split array into chunks:
 
-```html
+```twig
 {% set items = [1, 2, 3, 4, 5] %} {% for chunk in items |> batch(2) %}
 <div>{{ chunk |> join(', ') }}</div>
 {% endfor %} {# Outputs: "1, 2" "3, 4" "5" #} {# With fill #} {{ [1, 2, 3] |>
@@ -279,7 +279,7 @@ batch(2, 0) }} {# [[1, 2], [3, 0]] #}
 
 Transform each element (see [Lambda Expressions](#lambda-expressions)):
 
-```html
+```twig
 {{ users |> map(u => u.name) |> join(', ') }} {# Extract names: "Alice, Bob,
 Charlie" #} {{ numbers |> map(n => n * 2) |> join(', ') }} {# Double each: "2,
 4, 6" #} {{ tags |> map("upper") |> join(', ') }} {# Using filter reference #}
@@ -289,7 +289,7 @@ Charlie" #} {{ numbers |> map(n => n * 2) |> join(', ') }} {# Double each: "2,
 
 Filter elements (see [Lambda Expressions](#lambda-expressions)):
 
-```html
+```twig
 {{ users |> filter(u => u.isActive) |> map(u => u.name) |> join(', ') }} {# Only
 active users #} {{ numbers |> filter(n => n > 10) |> join(', ') }} {# Numbers
 greater than 10 #} {# Without callable: remove falsy values #} {{ [0, 1, false,
@@ -300,7 +300,7 @@ greater than 10 #} {# Without callable: remove falsy values #} {{ [0, 1, false,
 
 Reduce array to single value (see [Lambda Expressions](#lambda-expressions)):
 
-```html
+```twig
 {{ [1, 2, 3, 4] |> reduce(sum => sum + value, 0) }} {# Output: 10 #} {{ words |>
 reduce(acc => acc ~ ' ' ~ value) }} {# Join with spaces #}
 ```
@@ -311,7 +311,7 @@ reduce(acc => acc ~ ' ' ~ value) }} {# Join with spaces #}
 
 Count array elements or string length:
 
-```html
+```twig
 {{ items.length }} {# Property access also works #} {{ items |> length }} {#
 Filter form #} {{ "hello" |> length }} {# Output: 5 #}
 ```
@@ -320,7 +320,7 @@ Filter form #} {{ "hello" |> length }} {# Output: 5 #}
 
 Extract portion of array or string:
 
-```html
+```twig
 {{ [1, 2, 3, 4, 5] |> slice(1, 3) |> join(', ') }} {# Output: "2, 3, 4" #} {{
 "Hello World" |> slice(0, 5) }} {# Output: "Hello" #} {{ items |> slice(0, 10)
 }} {# First 10 items #}
@@ -330,7 +330,7 @@ Extract portion of array or string:
 
 Return fallback if value is falsy:
 
-```html
+```twig
 {{ userName |> default('Guest') }} {# Output: "Guest" if userName is
 empty/false/null #} {{ count |> default(0) }}
 ```
@@ -339,7 +339,7 @@ empty/false/null #} {{ count |> default(0) }}
 
 Encode as JSON:
 
-```html
+```twig
 {{ data |> json |> raw }} {# Output: {"name":"John","age":30} #} {{ [1, 2, 3] |>
 json |> raw }} {# Output: [1,2,3] #}
 ```
@@ -352,7 +352,7 @@ json |> raw }} {# Output: [1,2,3] #}
 
 URL-encode string:
 
-```html
+```twig
 <a href="/search?q={{ query |> url_encode }}">Search</a>
 ```
 
@@ -360,7 +360,7 @@ URL-encode string:
 
 Convert to base64 data URI:
 
-```html
+```twig
 <img src="{{ imageData |> data_uri('image/png') }}" />
 ```
 
@@ -368,7 +368,7 @@ Convert to base64 data URI:
 
 Wrap in UnicodeString for Unicode operations:
 
-```html
+```twig
 {{ text |> unicode |> reverse }} {# Unicode-aware string reverse #}
 ```
 
@@ -386,26 +386,26 @@ parameter => expression
 
 Extract a field from objects:
 
-```html
+```twig
 {{ users |> map(user => user.name) |> join(', ') }}
 ```
 
 Transform values:
 
-```html
+```twig
 {{ numbers |> map(n => n * 2) |> join(', ') }}
 ```
 
 Complex expressions:
 
-```html
+```twig
 {{ products |> map(p => p.name ~ ' ($' ~ (p.price |> number(2)) ~ ')') |>
 join(', ') }}
 ```
 
 Access outer variables:
 
-```html
+```twig
 {% set prefix = 'Item: ' %} {{ items |> map(item => prefix ~ item.name) |>
 join(', ') }}
 ```
@@ -414,13 +414,13 @@ join(', ') }}
 
 Filter with condition:
 
-```html
+```twig
 {{ users |> filter(u => u.age >= 18) |> map(u => u.name) |> join(', ') }}
 ```
 
 Multiple conditions:
 
-```html
+```twig
 {{ products |> filter(p => p.inStock and p.price < 100) }}
 ```
 
@@ -428,7 +428,7 @@ Multiple conditions:
 
 Sum numbers:
 
-```html
+```twig
 {{ numbers |> reduce(sum => sum + value, 0) }}
 ```
 
@@ -436,13 +436,13 @@ Sum numbers:
 
 Build a string:
 
-```html
+```twig
 {{ words |> reduce(result => result ~ ' ' ~ value, '') }}
 ```
 
 Calculate total price:
 
-```html
+```twig
 {{ cart.items |> reduce(total => total + (value.price * value.quantity), 0) |>
 number(2) }}
 ```
@@ -451,7 +451,7 @@ number(2) }}
 
 Use registered filter names as callbacks:
 
-```html
+```twig
 {{ tags |> map("upper") |> join(', ') }} {# Apply 'upper' filter to each tag #}
 {{ names |> map("trim") |> join(', ') }} {# Trim each name #} {# Works with
 custom filters too #} {{ prices |> map("currency") |> join(', ') }}
@@ -467,13 +467,13 @@ Functions are called directly in expressions.
 
 Get all current template variables:
 
-```html
+```twig
 {% set allVars = context() %} {{ allVars |> json |> raw }}
 ```
 
 Useful for debugging or passing all context to an include:
 
-```html
+```twig
 {{ include("partial", context()) }}
 ```
 
@@ -481,20 +481,20 @@ Useful for debugging or passing all context to an include:
 
 Dynamically render another template at runtime:
 
-```html
+```twig
 {{ include("partials/card", { title: "Hello", content: "World" }) }}
 ```
 
 With dynamic template name:
 
-```html
+```twig
 {% for widget in widgets %} {{ include("widgets/" ~ widget.type, widget.data) }}
 {% endfor %}
 ```
 
 Merge current context:
 
-```html
+```twig
 {{ include("partials/user", { ...context(), showEmail: true }) }}
 ```
 
@@ -502,7 +502,7 @@ Merge current context:
 
 Encode values as JSON:
 
-```html
+```twig
 {{ json(user.name, user.age) |> raw }} {# Output: ["John",30] #} {{ json(data)
 |> raw }} {# Encode single value #}
 ```
@@ -511,7 +511,7 @@ Encode values as JSON:
 
 Debug output (print_r):
 
-```html
+```twig
 <pre>{{ dump(user, settings) }}</pre>
 {# Useful for debugging #}
 ```
@@ -520,7 +520,7 @@ Debug output (print_r):
 
 Get array keys:
 
-```html
+```twig
 {{ keys(data) |> join(', ') }}
 ```
 
@@ -528,7 +528,7 @@ Get array keys:
 
 Get array values (re-indexed):
 
-```html
+```twig
 {{ values(data) |> join(', ') }}
 ```
 
@@ -546,7 +546,7 @@ $engine->addFilter('currency', function($value, string $symbol = '€') {
 
 Use in template:
 
-```html
+```twig
 {{ price |> currency }} {# Output: € 12.50 #} {{ price |> currency('$') }} {#
 Output: $ 12.50 #}
 ```
@@ -563,7 +563,7 @@ $engine->addFilter('excerpt', function($text, int $length = 100, string $ellipsi
 
 Use in template:
 
-```html
+```twig
 {{ article.body |> excerpt(50) }} {{ article.body |> excerpt(150, '…') }}
 ```
 
@@ -583,7 +583,7 @@ $engine->addFilter('highlight', function($text, string $query) {
 
 Use in template:
 
-```html
+```twig
 {{ description |> highlight(searchTerm) |> raw }}
 ```
 
@@ -613,7 +613,7 @@ $engine->addFunction('asset', function(string $path) {
 
 Use in template:
 
-```html
+```twig
 <img src="{{ asset('images/logo.png') }}" />
 <link rel="stylesheet" href="{{ asset('css/style.css') }}" />
 ```
@@ -638,7 +638,7 @@ $engine->addFunction('range', function(int $start, int $end, int $step = 1) {
 
 Use in template:
 
-```html
+```twig
 {% for i in range(1, 10) %}
 <li>Item {{ i }}</li>
 {% endfor %}
@@ -651,7 +651,7 @@ Use in template:
 - **Filters:** Transform a value (pipe input → output)
 - **Functions:** Generate or compute a value (return result)
 
-```html
+```twig
 <!-- Filter: Transform existing value -->
 {{ userName |> upper }}
 
@@ -665,7 +665,7 @@ Templates should focus on presentation. Complex business logic belongs in PHP:
 
 ❌ **Bad:**
 
-```html
+```twig
 {{ items |> filter(i => i.price > 100 and i.category == 'electronics' and
 i.stock > 0) |> map(i => i.name ~ ' - $' ~ i.price) }}
 ```
@@ -680,7 +680,7 @@ $expensiveElectronics = array_filter($items, fn($i) =>
 $engine->render('products', ['products' => $expensiveElectronics]);
 ```
 
-```html
+```twig
 <!-- In template -->
 {% for product in products %}
 <li>{{ product.name }} - {{ product.price |> currency }}</li>

@@ -26,20 +26,20 @@ $engine->render('page', [
 
 2. **Use default filter:**
 
-```html
+```twig
 {{ variableName |> default('Default Value') }}
 ```
 
 3. **Check with conditional:**
 
-```html
+```twig
 {% if variableName %} {{ variableName }} {% else %} No value provided {% endif
 %}
 ```
 
 4. **Use null coalescing operator:**
 
-```html
+```twig
 {{ variableName ?? 'Default' }}
 ```
 
@@ -59,7 +59,7 @@ Filter 'filterName' is not registered
 
 1. **Check filter name spelling:**
 
-```html
+```twig
 {# ❌ Wrong #} {{ value |> uppercase }} {# ✅ Correct #} {{ value |> upper }}
 ```
 
@@ -91,7 +91,7 @@ Syntax error: unexpected token '}' at line 42
 
 1. **Unclosed tags:**
 
-```html
+```twig
 {# ❌ Wrong #} {% if condition %}
 <p>Content</p>
 {# Missing {% endif %} #} {# ✅ Correct #} {% if condition %}
@@ -101,13 +101,13 @@ Syntax error: unexpected token '}' at line 42
 
 2. **Mismatched delimiters:**
 
-```html
+```twig
 {# ❌ Wrong #} {{ value |> upper } {# ✅ Correct #} {{ value |> upper }}
 ```
 
 3. **Missing closing parenthesis:**
 
-```html
+```twig
 {# ❌ Wrong #} {{ value |> truncate(100 }} {# ✅ Correct #} {{ value |>
 truncate(100) }}
 ```
@@ -153,7 +153,7 @@ $engine->setExtension('.tpl.html');
 
 4. **Use correct namespace:**
 
-```html
+```twig
 {# ❌ Wrong #} {% include "admin/sidebar" %} {# ✅ Correct with namespace #} {%
 include "admin::sidebar" %}
 ```
@@ -172,14 +172,14 @@ Circular include detected: template1 → template2 → template1
 
 **Example:**
 
-```html
+```twig
 {# templates/a.clarity.html #} {% include "b" %} {# templates/b.clarity.html #}
 {% include "a" %} {# Circular! #}
 ```
 
 **Solution:** Refactor to break the circular dependency:
 
-```html
+```twig
 {# templates/a.clarity.html #} {% include "c" %} {# templates/b.clarity.html #}
 {% include "c" %} {# templates/c.clarity.html #}
 <div>Shared content</div>
@@ -314,14 +314,14 @@ rm -rf cache/clarity/*
 
 **Example:**
 
-```html
+```twig
 {# ❌ Wrong: Disables escaping #} {{ userInput |> raw }} {# ✅ Correct:
 Auto-escaped #} {{ userInput }}
 ```
 
 **Solution:** Remove `raw` filter unless outputting trusted HTML:
 
-```html
+```twig
 {# Only use raw with sanitized content #} {{ sanitizedArticleBody |> raw }}
 ```
 
@@ -333,7 +333,7 @@ Auto-escaped #} {{ userInput }}
 
 **Example:**
 
-```html
+```twig
 {# ❌ Vulnerable #} {{ userComment |> raw }} {# If userComment = "
 <script>
   alert("XSS");
@@ -476,7 +476,7 @@ $engine->render('page', ['items' => array_slice($millionRows, 0, 20)]);
 
 2. **Infinite loop in template:**
 
-```html
+```twig
 {# ❌ Infinite loop #} {% for i in 1..999999999 %} {{ i }} {% endfor %}
 ```
 
@@ -498,7 +498,7 @@ In your editor: File → Save with Encoding → UTF-8
 
 2. **Declare charset in HTML:**
 
-```html
+```twig
 <meta charset="UTF-8" />
 ```
 
@@ -529,7 +529,7 @@ ALTER TABLE posts CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 2. **Ensure UTF-8 encoding:**
 
-```html
+```twig
 <meta charset="UTF-8" />
 ```
 
@@ -558,13 +558,13 @@ error_log('Template error: ' . $exception->getMessage());
 
 ### Dump Template Variables
 
-```html
+```twig
 <pre>{{ context() |> json |> raw }}</pre>
 ```
 
 Or specific variable:
 
-```html
+```twig
 <pre>{{ dump(user) }}</pre>
 ```
 
@@ -585,7 +585,7 @@ echo file_get_contents($files[0]);
 
 Create minimal test template:
 
-```html
+```twig
 {# test.clarity.html #}
 <p>Test: {{ variable }}</p>
 ```
@@ -645,7 +645,7 @@ $engine->addFunction('asset', function($path) {
 });
 ```
 
-```html
+```twig
 <link rel="stylesheet" href="{{ asset('css/main.css') }}" />
 <script src="{{ asset('js/app.js') }}"></script>
 ```

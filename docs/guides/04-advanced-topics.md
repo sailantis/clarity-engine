@@ -20,7 +20,7 @@ $engine->addNamespace('components', __DIR__ . '/views/components');
 
 Reference templates using the `namespace::path` syntax:
 
-```html
+```twig
 {% include "admin::sidebar" %} {% extends "admin::layouts/base" %} {{
 include("emails::welcome", { userName: user.name }) }}
 ```
@@ -29,7 +29,7 @@ include("emails::welcome", { userName: user.name }) }}
 
 Both dots and slashes work as path separators:
 
-```html
+```twig
 {% include "admin::partials.sidebar" %} {% include "admin::partials/sidebar" %}
 {# Both are equivalent #}
 ```
@@ -42,7 +42,7 @@ Namespaces can contain nested directories:
 $engine->addNamespace('components', __DIR__ . '/views/components');
 ```
 
-```html
+```twig
 {% include "components::buttons/primary" %} {% include
 "components::cards/user-card" %} {% include "components::forms/input-field" %}
 ```
@@ -90,7 +90,7 @@ $engine->addNamespace('emails', __DIR__ . '/views/emails');
 
 **Usage:**
 
-```html
+```twig
 {# Main site pages (no namespace) #} {% extends "layouts/main" %} {# Admin area
 #} {% include "admin::partials/header" %} {# Reusable components #} {% include
 "components::buttons/primary" %} {# Email templates #} {% extends
@@ -242,7 +242,7 @@ Clarity automatically escapes all output for security by default.
 
 Every output expression is wrapped with `htmlspecialchars()`:
 
-```html
+```twig
 {{ userInput }}
 ```
 
@@ -256,7 +256,7 @@ htmlspecialchars($vars['userInput'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
 
 **Without auto-escaping:**
 
-```html
+```twig
 {{ userComment }}
 <!-- If userComment = "<script>alert('XSS')</script>" -->
 <!-- Outputs: <script>alert('XSS')</script> -->
@@ -265,7 +265,7 @@ htmlspecialchars($vars['userInput'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
 
 **With auto-escaping (Clarity default):**
 
-```html
+```twig
 {{ userComment }}
 <!-- Outputs: &lt;script&gt;alert('XSS')&lt;/script&gt; -->
 <!-- SAFE: Displays as text, doesn't execute -->
@@ -275,7 +275,7 @@ htmlspecialchars($vars['userInput'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
 
 To output raw HTML, use the `raw` filter:
 
-```html
+```twig
 {{ trustedHtml |> raw }}
 ```
 
@@ -285,7 +285,7 @@ The `raw` filter is a **compile-time marker** that disables the auto-escape wrap
 
 ✅ **Safe uses:**
 
-```html
+```twig
 {# 1. Sanitized HTML from a WYSIWYG editor #} {{ article.sanitizedBody |> raw }}
 {# 2. Pre-rendered HTML fragments from your application #} {{ renderedWidget |>
 raw }} {# 3. JSON output #} {{ data |> json |> raw }} {# 4. HTML-generating
@@ -294,7 +294,7 @@ filters like nl2br #} {{ description |> nl2br |> raw }}
 
 ❌ **Dangerous uses:**
 
-```html
+```twig
 {# NEVER use raw with user input #} {{ userInput |> raw }} {# ⚠️ XSS
 VULNERABILITY #} {# NEVER use raw with untrusted data #} {{ $_GET['name'] |> raw
 }} {# ⚠️ DANGER #}
@@ -313,7 +313,7 @@ $engine->addFilter('badge', function($value, string $type = 'default') {
 
 Use in template:
 
-```html
+```twig
 {{ status |> badge('success') |> raw }}
 ```
 
@@ -323,7 +323,7 @@ Use in template:
 
 When `raw` appears **anywhere** in the filter chain, auto-escaping is disabled for the entire expression:
 
-```html
+```twig
 {{ description |> trim |> nl2br |> raw }} {# No escaping applied (because of
 raw) #} {{ description |> raw |> upper }} {# Still no escaping (raw anywhere in
 chain) #}
@@ -365,7 +365,7 @@ Even though the error occurs in compiled PHP, Clarity traces it back to the sour
 
 #### Undefined Variable
 
-```html
+```twig
 {{ nonExistentVariable }}
 ```
 
@@ -373,13 +373,13 @@ Even though the error occurs in compiled PHP, Clarity traces it back to the sour
 
 **Solution:** Pass the variable to `render()`, or use `default` filter:
 
-```html
+```twig
 {{ nonExistentVariable |> default('N/A') }}
 ```
 
 #### Undefined Filter
 
-```html
+```twig
 {{ value |> unknownFilter }}
 ```
 
@@ -389,7 +389,7 @@ Even though the error occurs in compiled PHP, Clarity traces it back to the sour
 
 #### Syntax Errors
 
-```html
+```twig
 {{ user.name |> upper( }} {# Missing closing parenthesis #}
 ```
 
@@ -399,7 +399,7 @@ Even though the error occurs in compiled PHP, Clarity traces it back to the sour
 
 #### Circular Includes
 
-```html
+```twig
 {# a.clarity.html #} {% include "b" %} {# b.clarity.html #} {% include "a" %} {#
 Circular! #}
 ```
@@ -456,7 +456,7 @@ Clarity is fully Unicode-aware via the `mbstring` extension.
 
 String filters use multibyte functions:
 
-```html
+```twig
 {{ "Ä Ö Ü ß" |> upper }} {# Output: "Ä Ö Ü SS" (Unicode-aware) #} {{ "ПРИВЕТ
 МИР" |> lower }} {# Output: "привет мир" #} {{ "你好世界" |> length }} {#
 Output: 4 (characters, not bytes) #}
@@ -466,7 +466,7 @@ Output: 4 (characters, not bytes) #}
 
 For advanced Unicode operations, use the `unicode` filter:
 
-```html
+```twig
 {{ text |> unicode |> reverse }} {# Unicode-aware string reversal #}
 ```
 
@@ -483,7 +483,7 @@ $ustr->reverse();      // Reverse string
 
 Clarity handles emoji correctly:
 
-```html
+```twig
 {{ "Hello 👋 World 🌍" |> length }} {# Output: 13 (counts emoji as 1 character
 each) #} {{ "🚀🌟💡" |> reverse }} {# Output: "💡🌟🚀" #}
 ```
@@ -515,32 +515,32 @@ The following are **rejected at compile time** (template won't compile):
 
 ❌ **Direct PHP variables:**
 
-```html
+```twig
 {{ $variable }} {# ERROR #}
 ```
 
 ❌ **Arbitrary function calls:**
 
-```html
+```twig
 {{ strtoupper(name) }} {# ERROR #} {{ file_get_contents('/etc/passwd') }} {#
 ERROR #}
 ```
 
 ❌ **Method calls:**
 
-```html
+```twig
 {{ user.getName() }} {# ERROR #}
 ```
 
 ❌ **PHP statements:**
 
-```html
+```twig
 {{ $x = 5; }} {# ERROR #}
 ```
 
 ❌ **Backticks, heredocs, PHP tags:**
 
-```html
+```twig
 {{ `ls -la` }} {# ERROR #}
 ```
 
@@ -566,7 +566,7 @@ $engine->render('page', ['user' => $user]);
 
 **In template:**
 
-```html
+```twig
 {{ user.name }} {# Works: public properties exposed #} {{ user.password }} {#
 NULL: private properties hidden #} {{ user.getName() }} {# COMPILE ERROR: method
 calls not allowed #}
@@ -599,14 +599,14 @@ Lambdas in `map`, `filter`, `reduce` only accept:
 
 ❌ **NOT allowed:**
 
-```html
+```twig
 {# Cannot pass callable via variable #} {% set callback = someCallable %} {{
 items |> map(callback) }} {# ERROR #}
 ```
 
 ✅ **Allowed:**
 
-```html
+```twig
 {{ items |> map(i => i.name) }} {# Lambda: safe #} {{ items |> map("upper") }}
 {# Filter reference: safe #}
 ```
@@ -619,7 +619,7 @@ Only **registered** filters and functions are callable:
 $engine->addFilter('customFilter', $callable);
 ```
 
-```html
+```twig
 {{ value |> customFilter }} {# Allowed: registered #} {{ value |> notRegistered
 }} {# ERROR: not registered #}
 ```

@@ -18,7 +18,7 @@ Clarity uses two primary delimiters:
 
 Use double curly braces to output a value:
 
-```html
+```twig
 <p>{{ message }}</p>
 <h1>{{ pageTitle }}</h1>
 ```
@@ -27,7 +27,7 @@ Use double curly braces to output a value:
 
 **All output is automatically HTML-escaped** for security:
 
-```html
+```twig
 {{ userInput }}
 <!-- If userInput = "<script>alert('xss')</script>" -->
 <!-- Outputs: &lt;script&gt;alert('xss')&lt;/script&gt; -->
@@ -35,7 +35,7 @@ Use double curly braces to output a value:
 
 To output raw HTML (use with caution!), use the `raw` filter:
 
-```html
+```twig
 {{ trustedHtml |> raw }}
 ```
 
@@ -45,7 +45,7 @@ To output raw HTML (use with caution!), use the `raw` filter:
 
 Access variables using dot notation or bracket notation:
 
-```html
+```twig
 <!-- Simple variable -->
 {{ name }}
 
@@ -72,7 +72,7 @@ Directives use `{% ... %}` syntax for control flow and template structure.
 
 #### If / Else / Elseif
 
-```html
+```twig
 {% if user.isActive %}
 <span class="badge active">Active</span>
 {% elseif user.isPending %}
@@ -84,7 +84,7 @@ Directives use `{% ... %}` syntax for control flow and template structure.
 
 Single condition:
 
-```html
+```twig
 {% if stock > 0 %}
 <button>Add to Cart</button>
 {% endif %}
@@ -96,7 +96,7 @@ Single condition:
 
 Iterate over arrays:
 
-```html
+```twig
 <ul>
   {% for item in items %}
   <li>{{ item.name }} - {{ item.price |> number(2) }}</li>
@@ -108,7 +108,7 @@ Iterate over arrays:
 
 Access the loop index (0-based):
 
-```html
+```twig
 {% for product in products %}
 <div>Item #{{ loop.index }}: {{ product.name }}</div>
 {% endfor %}
@@ -126,7 +126,7 @@ Available loop variables:
 
 Example using loop variables:
 
-```html
+```twig
 <ul>
   {% for user in users %}
   <li class="{{ loop.first ? 'first' : '' }} {{ loop.last ? 'last' : '' }}">
@@ -140,26 +140,26 @@ Example using loop variables:
 
 **Exclusive range** (doesn't include end):
 
-```html
+```twig
 {% for i in 1..10 %} {{ i }} {# Outputs: 1 2 3 4 5 6 7 8 9 #} {% endfor %}
 ```
 
 **Inclusive range** (includes end):
 
-```html
+```twig
 {% for i in 1...10 %} {{ i }} {# Outputs: 1 2 3 4 5 6 7 8 9 10 #} {% endfor %}
 ```
 
 **Range with step:**
 
-```html
+```twig
 {% for i in 0...100 step 10 %} {{ i }} {# Outputs: 0 10 20 30 40 50 60 70 80 90
 100 #} {% endfor %}
 ```
 
 **Dynamic ranges:**
 
-```html
+```twig
 {% for i in start...end step increment %} {{ i }} {% endfor %}
 ```
 
@@ -167,7 +167,7 @@ Example using loop variables:
 
 Set variables for reuse:
 
-```html
+```twig
 {% set total = items.length %} {% set fullName = user.firstName ~ ' ' ~
 user.lastName %} {% set discount = price * 0.1 %}
 
@@ -184,7 +184,7 @@ Assigned variables are scoped to the current template and blocks.
 
 Extend a parent layout:
 
-```html
+```twig
 {% extends "layouts/main" %}
 ```
 
@@ -196,7 +196,7 @@ Define overridable sections:
 
 **Parent template** (`layouts/main.clarity.html`):
 
-```html
+```twig
 <!DOCTYPE html>
 <html>
   <head>
@@ -223,7 +223,7 @@ Define overridable sections:
 
 **Child template** (`pages/about.clarity.html`):
 
-```html
+```twig
 {% extends "layouts/main" %} {% block title %}About Us{% endblock %} {% block
 content %}
 <h2>About Our Company</h2>
@@ -239,7 +239,7 @@ Blocks not overridden in the child will use the parent's default content.
 
 Include another template, sharing the current variable scope:
 
-```html
+```twig
 {% include "partials/header" %}
 
 <main>
@@ -253,7 +253,7 @@ Included templates are inlined at compile time.
 
 #### Include with Namespaces
 
-```html
+```twig
 {% include "admin::sidebar" %} {% include "emails::header" %}
 ```
 
@@ -263,7 +263,7 @@ See [Advanced Topics](04-advanced-topics.md#named-namespaces) for namespace conf
 
 ### Comparison Operators
 
-```html
+```twig
 {% if age >= 18 %} {% if status == 'active' %} {% if count != 0 %} {% if price <
 100 %} {% if score > 50 %} {% if rating <= 5 %}
 ```
@@ -279,7 +279,7 @@ See [Advanced Topics](04-advanced-topics.md#named-namespaces) for namespace conf
 
 ### Logical Operators
 
-```html
+```twig
 {% if user.isActive and user.role == 'admin' %} {% if status == 'pending' or
 status == 'review' %} {% if not user.isBlocked %}
 ```
@@ -292,7 +292,7 @@ status == 'review' %} {% if not user.isBlocked %}
 
 ### Arithmetic Operators
 
-```html
+```twig
 {% set total = price + tax %} {% set discount = price * 0.1 %} {% set remaining
 = total - paid %} {% set perItem = total / count %} {% set remainder = total %
 10 %}
@@ -310,7 +310,7 @@ status == 'review' %} {% if not user.isBlocked %}
 
 Use the `~` operator:
 
-```html
+```twig
 {% set fullName = firstName ~ ' ' ~ lastName %} {% set greeting = 'Hello, ' ~
 user.name ~ '!' %}
 
@@ -319,7 +319,7 @@ user.name ~ '!' %}
 
 ### Ternary Operator
 
-```html
+```twig
 {{ user.isActive ? 'Active' : 'Inactive' }} {{ stock > 0 ? 'In Stock' : 'Out of
 Stock' }} {{ age >= 18 ? 'Adult' : 'Minor' }}
 ```
@@ -328,7 +328,7 @@ Syntax: `condition ? valueIfTrue : valueIfFalse`
 
 ### Null Coalescing
 
-```html
+```twig
 {{ user.nickname ?? user.name }} {{ customTitle ?? defaultTitle }}
 ```
 
@@ -338,7 +338,7 @@ Returns the right value if the left is null or undefined.
 
 ### Literal Values
 
-```html
+```twig
 {{ 42 }} {{ 3.14 }} {{ true }} {{ false }} {{ null }} {{ "string literal" }} {{
 'single quotes' }}
 ```
@@ -347,21 +347,21 @@ Returns the right value if the left is null or undefined.
 
 **Arrays:**
 
-```html
+```twig
 {% set numbers = [1, 2, 3, 4, 5] %} {% set mixed = [true, "text", 42, user.name]
 %}
 ```
 
 **Objects:**
 
-```html
+```twig
 {% set person = { name: "John", age: 30, active: true } %} {% set data = { id:
 item.id, title: item.title } %}
 ```
 
 **Spread operator** in collections:
 
-```html
+```twig
 {% set extended = [1, 2, ...moreNumbers, 99] %} {% set merged = { foo: "bar",
 ...otherData } %}
 ```
@@ -372,7 +372,7 @@ item.id, title: item.title } %}
 
 Returns all current template variables:
 
-```html
+```twig
 {% set allVars = context() %} {{ allVars |> json |> raw }}
 ```
 
@@ -380,7 +380,7 @@ Returns all current template variables:
 
 Dynamically render another template at runtime:
 
-```html
+```twig
 {{ include("partials/card", { title: "Hello", ...context() }) }} {{
 include(templateName, variables) }}
 ```
@@ -394,7 +394,7 @@ Unlike the `{% include %}` directive, this function:
 
 Example:
 
-```html
+```twig
 {% for componentType in components %} {{ include("components/" ~ componentType,
 { data: item }) }} {% endfor %}
 ```
@@ -405,7 +405,7 @@ See [Filters and Functions](02-filters-and-functions.md) for custom functions.
 
 Comments are removed during compilation and don't appear in output:
 
-```html
+```twig
 {# This is a comment #} {# Multi-line comment Useful for documentation #} {#
 TODO: Add pagination here #}
 ```
@@ -414,7 +414,7 @@ TODO: Add pagination here #}
 
 ### Nested Loops
 
-```html
+```twig
 <table>
   {% for category in categories %}
   <tr>
@@ -433,7 +433,7 @@ TODO: Add pagination here #}
 
 ### Conditional Rendering with Loops
 
-```html
+```twig
 {% if users.length > 0 %}
 <ul>
   {% for user in users %} {% if user.isActive %}
@@ -447,7 +447,7 @@ TODO: Add pagination here #}
 
 ### Complex Variable Assignment
 
-```html
+```twig
 {% set userData = { fullName: user.firstName ~ ' ' ~ user.lastName, age:
 user.birthYear ? (2026 - user.birthYear) : null, isAdult: user.birthYear and
 (2026 - user.birthYear) >= 18 } %}
@@ -460,7 +460,7 @@ user.birthYear ? (2026 - user.birthYear) : null, isAdult: user.birthYear and
 
 ### Dynamic Includes
 
-```html
+```twig
 {% for widget in dashboard.widgets %} {{ include("widgets/" ~ widget.type, {
 title: widget.title, data: widget.data, config: widget.config }) }} {% endfor %}
 ```
@@ -471,37 +471,37 @@ Clarity is sandboxed for security. The following are **not permitted**:
 
 ❌ Direct PHP variables:
 
-```html
+```twig
 {{ $variable }} {# ERROR #}
 ```
 
 ❌ Arbitrary PHP function calls:
 
-```html
+```twig
 {{ strtoupper(name) }} {# ERROR #}
 ```
 
 ❌ Method calls on objects:
 
-```html
+```twig
 {{ user.getName() }} {# ERROR #}
 ```
 
 ✅ Instead, use filters:
 
-```html
+```twig
 {{ name |> upper }} {# CORRECT #}
 ```
 
 ❌ PHP statements or semicolons:
 
-```html
+```twig
 {{ $x = 5; }} {# ERROR #}
 ```
 
 ✅ Instead, use `{% set %}`:
 
-```html
+```twig
 {% set x = 5 %} {# CORRECT #}
 ```
 

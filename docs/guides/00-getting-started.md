@@ -50,7 +50,7 @@ $engine->setCachePath(__DIR__ . '/cache/clarity');
 
 Create a file `views/hello.clarity.html`:
 
-```html
+```twig
 <!DOCTYPE html>
 <html>
   <head>
@@ -150,14 +150,17 @@ $engine->addNamespace('emails', __DIR__ . '/views/emails');
 
 ### Output Expressions
 
-```html
-{{ variable }} {{ user.name }} {{ items[0].title }} {{ price |> number(2) }} {{
-description |> upper |> trim }}
+```twig
+{{ variable }}
+{{ user.name }}
+{{ items[0].title }}
+{{ price |> number(2) }}
+{{ description |> upper |> trim }}
 ```
 
 ### Directives
 
-```html
+```twig
 <!-- Conditionals -->
 {% if user.isActive %}
 <p>Active user</p>
@@ -222,7 +225,7 @@ echo $engine->render('home', [
 
 **File: `views/layouts/main.clarity.html`**
 
-```html
+```twig
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -238,14 +241,14 @@ echo $engine->render('home', [
 
     <main>{% block content %}{% endblock %}</main>
 
-    <footer>&copy; 2026 My Website</footer>
+    <footer>&copy; {{ "now" |> date("Y") }} My Website</footer>
   </body>
 </html>
 ```
 
 **File: `views/home.clarity.html`**
 
-```html
+```twig
 {% extends "layouts/main" %} {% block title %}{{ title }} - My Website{%
 endblock %} {% block content %}
 <h2>Hello, {{ user.name }}!</h2>
@@ -265,7 +268,7 @@ endblock %} {% block content %}
 
 **File: `views/partials/nav.clarity.html`**
 
-```html
+```twig
 <nav>
   <ul>
     <li><a href="/">Home</a></li>

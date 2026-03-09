@@ -8,7 +8,7 @@ Template inheritance is one of Clarity's most powerful features. It allows you t
 
 A child template **extends** a parent layout using the `{% extends %}` directive:
 
-```html
+```twig
 {% extends "layouts/main" %}
 ```
 
@@ -16,7 +16,7 @@ A child template **extends** a parent layout using the `{% extends %}` directive
 
 **Blocks** are named sections in a layout that can be overridden by child templates:
 
-```html
+```twig
 {% block blockName %} Default content {% endblock %}
 ```
 
@@ -32,7 +32,7 @@ A child template **extends** a parent layout using the `{% extends %}` directive
 
 **File: `views/layouts/main.clarity.html`**
 
-```html
+```twig
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -79,7 +79,7 @@ A child template **extends** a parent layout using the `{% extends %}` directive
 
 **File: `views/pages/about.clarity.html`**
 
-```html
+```twig
 {% extends "layouts/main" %} {% block title %}About Us - My Website{% endblock
 %} {% block content %}
 <h2>About Our Company</h2>
@@ -104,7 +104,7 @@ A child template **extends** a parent layout using the `{% extends %}` directive
 
 Blocks with content in the parent serve as defaults:
 
-```html
+```twig
 {% block sidebar %}
 <p>Default sidebar content</p>
 {% endblock %}
@@ -116,7 +116,7 @@ If the child doesn't override this block, the default is used.
 
 Empty blocks serve as placeholders:
 
-```html
+```twig
 {% block extraScripts %}{% endblock %}
 ```
 
@@ -126,7 +126,7 @@ Child templates can optionally fill them.
 
 You can have as many blocks as needed:
 
-```html
+```twig
 {% block meta %}{% endblock %} {% block title %}{% endblock %} {% block styles
 %}{% endblock %} {% block content %}{% endblock %} {% block sidebar %}{%
 endblock %} {% block footer %}{% endblock %} {% block scripts %}{% endblock %}
@@ -140,7 +140,7 @@ Layouts can extend other layouts, creating a hierarchy.
 
 **File: `views/layouts/base.clarity.html`**
 
-```html
+```twig
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -158,7 +158,7 @@ Layouts can extend other layouts, creating a hierarchy.
 
 **File: `views/layouts/admin.clarity.html`**
 
-```html
+```twig
 {% extends "layouts/base" %} {% block head %}
 <link rel="stylesheet" href="/css/admin.css" />
 {% block extraStyles %}{% endblock %} {% endblock %} {% block body %}
@@ -185,7 +185,7 @@ Layouts can extend other layouts, creating a hierarchy.
 
 **File: `views/admin/users.clarity.html`**
 
-```html
+```twig
 {% extends "layouts/admin" %} {% block title %}User Management - Admin{%
 endblock %} {% block content %}
 <h1>Users</h1>
@@ -211,7 +211,7 @@ endblock %} {% block content %}
 
 **Layout:**
 
-```html
+```twig
 <head>
   <link rel="stylesheet" href="/css/main.css" />
   {% block pageStyles %}{% endblock %}
@@ -220,7 +220,7 @@ endblock %} {% block content %}
 
 **Page:**
 
-```html
+```twig
 {% block pageStyles %}
 <link rel="stylesheet" href="/css/product-gallery.css" />
 {% endblock %}
@@ -230,7 +230,7 @@ endblock %} {% block content %}
 
 **Layout:**
 
-```html
+```twig
     {% block scripts %}
         <script src="/js/main.js"></script>
     {% endblock %}
@@ -239,7 +239,7 @@ endblock %} {% block content %}
 
 **Page:**
 
-```html
+```twig
 {% block scripts %}
 <script src="/js/main.js"></script>
 <script src="/js/maps.js"></script>
@@ -253,7 +253,7 @@ endblock %} {% block content %}
 
 **Layout:**
 
-```html
+```twig
 <div class="container">
   <main class="{% block mainClass %}{% endblock %}">
     {% block content %}{% endblock %}
@@ -265,7 +265,7 @@ endblock %} {% block content %}
 
 **Page with sidebar:**
 
-```html
+```twig
 {% block mainClass %}with-sidebar{% endblock %} {% block sidebar %}
 <aside>
   <h3>Related Content</h3>
@@ -280,7 +280,7 @@ endblock %} {% block content %}
 
 **Layout:**
 
-```html
+```twig
 <header>
   <nav>{% include "partials/nav" %}</nav>
 
@@ -290,7 +290,7 @@ endblock %} {% block content %}
 
 **Page:**
 
-```html
+```twig
 {% block breadcrumbs %}
 <ol class="breadcrumb">
   <li><a href="/">Home</a></li>
@@ -326,7 +326,7 @@ Blocks can be defined within blocks for fine-grained control:
 
 **Parent:**
 
-```html
+```twig
 {% block content %}
 <article>
   {% block articleHeader %}
@@ -338,7 +338,7 @@ Blocks can be defined within blocks for fine-grained control:
 
 **Child:**
 
-```html
+```twig
 {% block articleTitle %}My Article{% endblock %} {% block articleBody %}
 <p>Article content here.</p>
 {% endblock %}
@@ -348,7 +348,7 @@ Blocks can be defined within blocks for fine-grained control:
 
 Blocks can contain variables and expressions:
 
-```html
+```twig
 {% block title %}{{ pageTitle ?? 'My Website' }}{% endblock %} {% block content
 %}
 <h1>{{ heading }}</h1>
@@ -365,13 +365,13 @@ Blocks can contain variables and expressions:
 
 ✅ **Correct:**
 
-```html
+```twig
 {% extends "layouts/main" %} {% block content %} ... {% endblock %}
 ```
 
 ❌ **Incorrect:**
 
-```html
+```twig
 <p>Some content</p>
 {% extends "layouts/main" %} {# ERROR: extends must be first #}
 ```
@@ -380,7 +380,7 @@ Blocks can contain variables and expressions:
 
 In a child template, only content **inside blocks** is rendered:
 
-```html
+```twig
 {% extends "layouts/main" %}
 
 <p>This will be IGNORED</p>
@@ -393,7 +393,7 @@ In a child template, only content **inside blocks** is rendered:
 
 Block names must match exactly (case-sensitive):
 
-```html
+```twig
 {# Parent #} {% block Content %}...{% endblock %} {# Child #} {% block content
 %}...{% endblock %} {# Won't override (different case) #}
 ```
@@ -404,7 +404,7 @@ A template can extend only **one** parent:
 
 ❌ **Not allowed:**
 
-```html
+```twig
 {% extends "layouts/base" %} {% extends "layouts/admin" %} {# ERROR: multiple
 extends #}
 ```
@@ -434,7 +434,7 @@ Use for **reusable components** that appear multiple times:
 
 **Layout with includes:**
 
-```html
+```twig
 <!DOCTYPE html>
 <html>
   <head>
@@ -452,7 +452,7 @@ Use for **reusable components** that appear multiple times:
 
 **Child template:**
 
-```html
+```twig
 {% extends "layouts/main" %} {% block content %} {% include "partials/user-card"
 %}
 
@@ -467,7 +467,7 @@ endblock %}
 
 **Base Layout: `layouts/base.clarity.html`**
 
-```html
+```twig
 <!DOCTYPE html>
 <html>
   <head>
@@ -487,7 +487,7 @@ endblock %}
 
 **Shop Layout: `layouts/shop.clarity.html`**
 
-```html
+```twig
 {% extends "layouts/base" %} {% block styles %}
 <link rel="stylesheet" href="/css/shop.css" />
 {% endblock %} {% block body %} {% include "partials/shop-header" %}
@@ -505,7 +505,7 @@ endblock %}
 
 **Product Listing Page: `products/index.clarity.html`**
 
-```html
+```twig
 {% extends "layouts/shop" %} {% block title %}All Products{% endblock %} {%
 block bodyClass %}products-page{% endblock %} {% block products %}
 <h1>All Products</h1>
@@ -527,7 +527,7 @@ block bodyClass %}products-page{% endblock %} {% block products %}
 
 **Product Detail Page: `products/show.clarity.html`**
 
-```html
+```twig
 {% extends "layouts/base" %} {% block title %}{{ product.name }}{% endblock %}
 {% block bodyClass %}product-detail{% endblock %} {% block styles %}
 <link rel="stylesheet" href="/css/product-detail.css" />
@@ -560,7 +560,7 @@ block bodyClass %}products-page{% endblock %} {% block products %}
 
 Organize blocks logically:
 
-```html
+```twig
 {% block head %} {% block meta %}{% endblock %} {% block title %}{% endblock %}
 {% block styles %}{% endblock %} {% endblock %} {% block body %} {% block header
 %}{% endblock %} {% block content %}{% endblock %} {% block footer %}{% endblock
@@ -577,7 +577,7 @@ Organize blocks logically:
 
 Make blocks work out-of-the-box:
 
-```html
+```twig
 {% block header %}
 <h1>{{ siteName }}</h1>
 {% include "partials/nav" %} {% endblock %}
@@ -587,7 +587,7 @@ Make blocks work out-of-the-box:
 
 Don't overcomplicate layouts with business logic:
 
-```html
+```twig
 {# ❌ Bad: Logic in layout #} {% if user.isPremium and user.notifications > 0 %}
 ... {% endif %} {# ✅ Good: Logic in PHP, simple variables in layout #} {% if
 showNotificationBadge %}

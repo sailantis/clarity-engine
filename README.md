@@ -22,7 +22,7 @@
 ## 📦 Installation
 
 ```bash
-composer require clarity/template-engine
+composer require simsaai/clarity-engine
 ```
 
 **Requirements:** PHP 8.1 or higher
@@ -55,7 +55,7 @@ echo $engine->render('welcome', [
 
 **templates/welcome.clarity.html:**
 
-```html
+```twig
 <!DOCTYPE html>
 <html>
   <head>
@@ -222,13 +222,15 @@ Clarity is designed for speed. Templates compile to native PHP classes and lever
 
 | Engine  | Warm (ms) | Mean (ms) | P95 (ms) |
 | ------- | --------- | --------- | -------- |
-| PHP     | 1.88      | 0.22      | 0.32     |
-| Clarity | 0.70      | 0.27      | 0.38     |
-| Plates  | 5.96      | 0.39      | 0.56     |
-| Blade   | 28.47     | 0.75      | 1.04     |
-| Twig    | 19.75     | 0.83      | 1.11     |
+| Native  | 0.676     | 0.456     | 0.514    |
+| Clarity | 0.676     | 0.459     | 0.520    |
+| Plates  | 2.552     | 0.543     | 0.617    |
+| Blade   | 25.98     | 0.703     | 0.797    |
+| Twig    | 34.87     | 1.238     | 1.399    |
 
-_10,000 iterations, PHP 8.3 with OPcache CLI enabled_
+![Benchmark Results](docs/images/benchmark-results.svg)
+
+_30 runs × 10,000 iterations, PHP 8.3.6 with OPcache enabled_
 
 📖 **[Performance optimization guide →](docs/guides/05-best-practices.md#performance)**
 

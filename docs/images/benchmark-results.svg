@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 700 220"
+   role="img"
+   aria-labelledby="title"
+   version="1.1"
+   id="svg13"
+   sodipodi0:docname="benchmark-results.svg"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:sodipodi0="http://sodipodi.sourceforge.net/DTD/sodipodi-0.0.dtd">
+  <defs
+     id="defs13" />
+  <sodipodi0:namedview
+     id="namedview13"
+     pagecolor="#505050"
+     bordercolor="#eeeeee"
+     borderopacity="1" />
+  <title
+     id="title">Template Engine Benchmark — mean render time (ms)</title>
+  <style
+     id="style1">
+    .bg { fill: #ffffff }
+    .axis { stroke: #333; stroke-width: 1 }
+    .label { font: 12px sans-serif; fill: #222 }
+    .value { font: 11px monospace; fill: #111 }
+    .bar-clarity { fill: #2b9f4b }
+    .bar-native { fill: #2b6fbf }
+    .bar-plates { fill: #8a6fdf }
+    .bar-blade { fill: #f39c12 }
+    .bar-twig { fill: #d35400 }
+  </style>
+  <!-- axes -->
+  <rect
+     x="0"
+     y="0"
+     width="700"
+     height="220"
+     rx="7"
+     class="bg"
+     id="rect12-4"
+     ry="7" />
+  <line
+     x1="100"
+     y1="32"
+     x2="100"
+     y2="192"
+     class="axis"
+     id="line1" />
+  <line
+     x1="100"
+     y1="192"
+     x2="670.28363"
+     y2="192"
+     class="axis"
+     id="line2" />
+  <!-- labels -->
+  <text
+     x="20"
+     y="25"
+     class="label"
+     id="text2"
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:12px;line-height:normal;font-family:sans-serif">Engine</text>
+  <text
+     x="520"
+     y="25"
+     class="label"
+     id="text3"
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:12px;line-height:normal;font-family:sans-serif">Mean render time (ms)</text>
+  <!-- data -->
+  <!-- scale: max value 1.23847 -> width available 480px -->
+  <!-- helper: width = round((value / 1.23847) * 480) -->
+  <!-- native: 0.45566 ms -> width=177 -->
+  <text
+     x="20"
+     y="52"
+     class="label"
+     id="text4"
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:12px;line-height:normal;font-family:sans-serif">native</text>
+  <rect
+     x="130"
+     y="40"
+     width="177"
+     height="18"
+     rx="3"
+     class="bar-native"
+     id="rect4" />
+  <text
+     x="313"
+     y="54"
+     class="value"
+     id="text5"
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:11px;line-height:normal;font-family:monospace">0.456 ms</text>
+  <!-- clarity: 0.45929 ms -> width=178 -->
+  <text
+     x="20"
+     y="82"
+     class="label"
+     id="text6"
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:12px;line-height:normal;font-family:sans-serif">clarity</text>
+  <rect
+     x="130"
+     y="70"
+     width="178"
+     height="18"
+     rx="3"
+     class="bar-clarity"
+     id="rect6" />
+  <text
+     x="314"
+     y="84"
+     class="value"
+     id="text7"
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:11px;line-height:normal;font-family:monospace">0.459 ms</text>
+  <!-- plates: 0.54309 ms -> width=211 -->
+  <text
+     x="20"
+     y="112"
+     class="label"
+     id="text8"
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:12px;line-height:normal;font-family:sans-serif">plates</text>
+  <rect
+     x="130"
+     y="100"
+     width="211"
+     height="18"
+     rx="3"
+     class="bar-plates"
+     id="rect8" />
+  <text
+     x="347"
+     y="114"
+     class="value"
+     id="text9"
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:11px;line-height:normal;font-family:monospace">0.543 ms</text>
+  <!-- blade: 0.70305 ms -> width=272 -->
+  <text
+     x="20"
+     y="142"
+     class="label"
+     id="text10"
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:12px;line-height:normal;font-family:sans-serif">blade</text>
+  <rect
+     x="130"
+     y="130"
+     width="272"
+     height="18"
+     rx="3"
+     class="bar-blade"
+     id="rect10" />
+  <text
+     x="408"
+     y="144"
+     class="value"
+     id="text11"
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:11px;line-height:normal;font-family:monospace">0.703 ms</text>
+  <!-- twig: 1.23847 ms -> width=480 -->
+  <text
+     x="20"
+     y="172"
+     class="label"
+     id="text12"
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:12px;line-height:normal;font-family:sans-serif">twig</text>
+  <rect
+     x="130"
+     y="160"
+     width="480"
+     height="18"
+     rx="3"
+     class="bar-twig"
+     id="rect12" />
+  <text
+     x="616"
+     y="174"
+     class="value"
+     id="text13"
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:11px;line-height:normal;font-family:monospace;fill:#000000;fill-opacity:1">1.238 ms</text>
+  <metadata
+     id="metadata13">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:title>Template Engine Benchmark — mean render time (ms)</dc:title>
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+</svg>

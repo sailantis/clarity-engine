@@ -144,7 +144,7 @@ $engine->addNamespace('admin', __DIR__ . '/views/admin');
 
 ✅ **Correct:**
 
-```html
+```twig
 <p>{{ user.bio }}</p>
 <h1>{{ pageTitle }}</h1>
 ```
@@ -155,13 +155,13 @@ Auto-escaping protects against XSS by default.
 
 ❌ **Dangerous:**
 
-```html
+```twig
 {{ userInput |> raw }} {{ $_GET['name'] |> raw }}
 ```
 
 ✅ **Safe:**
 
-```html
+```twig
 {# Only with trusted, sanitized content #} {{ sanitizedArticleBody |> raw }} {#
 Or content you control #} {{ renderedWidget |> raw }} {{ data |> json |> raw }}
 ```
@@ -170,7 +170,7 @@ Or content you control #} {{ renderedWidget |> raw }} {{ data |> json |> raw }}
 
 ❌ **Bad:**
 
-```html
+```twig
 {# Don't sanitize in templates #} {{ userBio |> strip_tags |> raw }}
 ```
 
@@ -183,7 +183,7 @@ $sanitized = strip_tags($user->bio, '<p><br><strong><em>');
 $engine->render('profile', ['userBio' => $sanitized]);
 ```
 
-```html
+```twig
 {# Template assumes clean data #} {{ userBio |> raw }}
 ```
 
@@ -233,7 +233,7 @@ But remember: **Clarity auto-escapes by default**, so even unsanitized input is 
 
 ❌ **Bad: Complex logic in templates**
 
-```html
+```twig
 {% set filteredUsers = users |> filter(u => u.age >= 18 and u.active and u.role
 == 'member') |> map(u => { name: u.firstName ~ ' ' ~ u.lastName, email: u.email
 |> lower, joined: u.createdAt |> date('Y-m-d') }) %}
@@ -253,7 +253,7 @@ $filteredUsers = array_map(function($u) {
 $engine->render('users', ['users' => $filteredUsers]);
 ```
 
-```html
+```twig
 {% for user in users %}
 <li>{{ user.name }} ({{ user.email }})</li>
 {% endfor %}
@@ -263,16 +263,19 @@ $engine->render('users', ['users' => $filteredUsers]);
 
 ❌ **Bad: Repeated computation**
 
-```html
-{% for item in items %} {{ items.length - loop.index }} items remaining {%
-endfor %}
+```twig
+{% for item, idx in items %}
+{{ items.length - idx }} items remaining
+{% endfor %}
 ```
 
 ✅ **Good: Compute once**
 
-```html
-{% set total = items.length %} {% for item in items %} {{ total - loop.index }}
-items remaining {% endfor %}
+```twig
+{% set total = items.length %}
+{% for item in items %}
+{{ total - loop.index }} items remaining
+{% endfor %}
 ```
 
 Or better, in PHP:
@@ -285,10 +288,16 @@ $data['itemCount'] = count($items);
 
 ❌ **Bad:**
 
-```html
-{% if user %} {% if user.isActive %} {% if user.hasPermission %} {% for item in
-user.items %} {% if item.isPublished %} {# Deeply nested #} {% endif %} {%
-endfor %} {% endif %} {% endif %} {% endif %}
+```twig
+{% if user %}
+{% if user.isActive %}
+{% if user.hasPermission %}
+{% for item in user.items %}
+{% if item.isPublished %} {# Deeply nested #} {% endif %}
+{% endfor %}
+{% endif %}
+{% endif %}
+{% endif %}
 ```
 
 ✅ **Good: Flatten in PHP**
@@ -301,8 +310,10 @@ $publishedItems = $user && $user->isActive && $user->hasPermission
 $engine->render('items', ['items' => $publishedItems]);
 ```
 
-```html
-{% for item in items %} {# Simple, flat loop #} {% endfor %}
+```twig
+{% for item in items %}
+{# Simple, flat loop #}
+{% endfor %}
 ```
 
 ### Persistent Cache Directory
@@ -325,7 +336,7 @@ $engine->setCachePath('/var/cache/clarity');  // Survives restarts
 
 Use consistent indentation (2 or 4 spaces):
 
-```html
+```twig
 {% if condition %}
 <div>
   {% for item in items %}
@@ -339,13 +350,13 @@ Use consistent indentation (2 or 4 spaces):
 
 ✅ **Preferred:**
 
-```html
+```twig
 {{ variable }} {% for item in items %}
 ```
 
 ❌ **Avoid:**
 
-```html
+```twig
 {{variable}} {%for item in items%}
 ```
 
@@ -353,7 +364,7 @@ Use consistent indentation (2 or 4 spaces):
 
 Keep lines under 120 characters. Break long chains:
 
-```html
+```twig
 {# ✅ Good #} {{ productDescription |> trim |> truncate(100) |> nl2br |> raw }}
 {# ❌ Too long #} {{ productDescription |> trim |> truncate(100) |> nl2br |> raw
 }}
@@ -363,7 +374,7 @@ Keep lines under 120 characters. Break long chains:
 
 Use comments to explain complex logic:
 
-```html
+```twig
 {# Calculate discounted price: 10% off for members #} {% set finalPrice =
 user.isMember ? (price * 0.9) : price %} {# Loop through published articles only
 #} {% for article in articles |> filter(a => a.isPublished) %} ... {% endfor %}
@@ -410,7 +421,7 @@ $products = array_map(function($p) {
 
 Templates can rely on this structure:
 
-```html
+```twig
 {% for product in products %}
 <div>
   {{ product.name }} - {% if product.inStock %}In Stock{% else %}Out of Stock{%
@@ -423,14 +434,14 @@ Templates can rely on this structure:
 
 Use `default` filter:
 
-```html
+```twig
 {{ user.nickname |> default(user.name) }} {{ customMessage |> default('No
 message provided') }}
 ```
 
 Or ternary:
 
-```html
+```twig
 {{ user.avatar ? user.avatar : '/images/default-avatar.png' }}
 ```
 
@@ -518,20 +529,20 @@ public function testProductCard(): void
 
 Use the `dump()` function for debugging:
 
-```html
+```twig
 <pre>{{ dump(user) }}</pre>
 <pre>{{ dump(products, settings) }}</pre>
 ```
 
 ### Display All Context
 
-```html
+```twig
 <pre>{{ context() |> json |> raw }}</pre>
 ```
 
 ### Check Variable Existence
 
-```html
+```twig
 {% if user %}
 <p>User exists: {{ user.name }}</p>
 {% else %}
@@ -543,7 +554,7 @@ Use the `dump()` function for debugging:
 
 Chain `dump` in filter pipeline:
 
-```html
+```twig
 {# See intermediate result #} {{ items |> filter(i => i.active) |> dump |>
 slice(0, 5) }}
 ```
@@ -563,12 +574,6 @@ if ($_ENV['APP_ENV'] === 'development') {
 $engine->flushCache();
 ```
 
-Or manually delete cache files:
-
-```bash
-rm -rf cache/clarity/*
-```
-
 ## Reusability Patterns
 
 ### Partial Templates
@@ -577,7 +582,7 @@ Extract reusable components:
 
 **File: `partials/user-avatar.clarity.html`**
 
-```html
+```twig
 <div class="avatar">
   <img
     src="{{ user.avatar |> default('/images/default-avatar.png') }}"
@@ -588,7 +593,7 @@ Extract reusable components:
 
 **Usage:**
 
-```html
+```twig
 {% include "partials/user-avatar" %}
 ```
 
@@ -598,7 +603,7 @@ Pass variables to includes using `include()` function:
 
 **File: `components/button.clarity.html`**
 
-```html
+```twig
 <button
   class="btn btn-{{ type |> default('primary') }}"
   type="{{ buttonType |> default('button') }}"
@@ -609,10 +614,10 @@ Pass variables to includes using `include()` function:
 
 **Usage:**
 
-```html
+```twig
 {{ include("components/button", { label: "Submit", type: "success", buttonType:
-"submit" }) }} {{ include("components/button", { label: "Cancel", type:
-"secondary" }) }}
+"submit" }) }}
+{{ include("components/button", { label: "Cancel", type: "secondary" }) }}
 ```
 
 ### Layout Slots
@@ -621,7 +626,7 @@ Create flexible layouts with multiple slots:
 
 **File: `layouts/two-column.clarity.html`**
 
-```html
+```twig
 <div class="two-column-layout">
   <aside class="sidebar">{% block sidebar %}{% endblock %}</aside>
 
@@ -631,7 +636,7 @@ Create flexible layouts with multiple slots:
 
 **Usage:**
 
-```html
+```twig
 {% extends "layouts/two-column" %} {% block sidebar %}
 <h3>Categories</h3>
 <ul>
@@ -667,16 +672,16 @@ $engine->addFunction('asset', function($path) {
 });
 ```
 
-```html
-<link rel="stylesheet" href="{{ asset('css/main.css') }}" /> {# Outputs:
-/assets/css/main.css?v=1234567890 #}
+```twig
+<link rel="stylesheet" href="{{ asset('css/main.css') }}" />
+{# Outputs: /assets/css/main.css?v=1234567890 #}
 ```
 
 ## Documentation
 
 ### Comment Complex Logic
 
-```html
+```twig
 {# Calculate total price with discount: - Base price from product - 10% discount
 for members - Sales tax applied after discount #} {% set basePrice =
 product.price %} {% set discount = user.isMember ? (basePrice * 0.1) : 0 %} {%
@@ -732,7 +737,7 @@ Create `views/README.md`:
 
 ❌ **Bad:**
 
-```html
+```twig
 {% set users = <?php echo json_encode($users); ?> %}
 ```
 
@@ -748,7 +753,7 @@ $engine->render('page', ['users' => $users]);
 
 ❌ **Bad: Excessive chaining**
 
-```html
+```twig
 {{ text |> trim |> lower |> capitalize |> truncate(50) |> replace('old', 'new')
 }}
 ```

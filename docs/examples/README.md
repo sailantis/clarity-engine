@@ -159,7 +159,7 @@ Add your own example template:
 
 **File: `my-example.clarity.html`**
 
-```html
+```twig
 <!DOCTYPE html>
 <html>
   <head>
