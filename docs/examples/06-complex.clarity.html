@@ -1,43 +1,190 @@
 {% extends "05-layout" %} {% block title %}Blog - My Website{% endblock %} {%
-block styles %} .blog-header { background: linear-gradient(135deg, #667eea 0%,
-#764ba2 100%); color: white; padding: 60px 20px; border-radius: 8px;
-margin-bottom: 40px; text-align: center; } .blog-header h1 { font-size: 48px;
-margin-bottom: 15px; } .blog-header p { font-size: 18px; opacity: 0.9; }
-.filters { background: #f5f5f5; padding: 20px; border-radius: 8px;
-margin-bottom: 30px; display: flex; gap: 15px; flex-wrap: wrap; align-items:
-center; } .filter-tag { display: inline-block; padding: 8px 16px; background:
-white; border: 2px solid #4CAF50; border-radius: 20px; color: #4CAF50;
-font-size: 14px; font-weight: 500; text-decoration: none; transition: all 0.3s;
-} .filter-tag:hover { background: #4CAF50; color: white; } .filter-tag.active {
-background: #4CAF50; color: white; } .article-grid { display: grid; gap: 30px;
-margin-bottom: 40px; } .article-card { background: white; border-radius: 8px;
-overflow: hidden; border: 1px solid #e0e0e0; transition: transform 0.3s,
-box-shadow 0.3s; } .article-card:hover { transform: translateY(-5px);
-box-shadow: 0 10px 30px rgba(0,0,0,0.1); } .article-header { position: relative;
-height: 200px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-display: flex; align-items: center; justify-content: center; color: white;
-font-size: 24px; font-weight: bold; } .article-content { padding: 25px; }
-.article-meta { display: flex; gap: 15px; margin-bottom: 15px; font-size: 14px;
-color: #666; } .article-meta span { display: flex; align-items: center; gap:
-5px; } .article-title { font-size: 24px; margin-bottom: 15px; color: #333; }
-.article-excerpt { color: #666; line-height: 1.6; margin-bottom: 15px; }
-.article-tags { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 15px; }
-.tag { display: inline-block; padding: 4px 12px; background: #e8f5e9; color:
-#4CAF50; border-radius: 12px; font-size: 12px; font-weight: 500; } .author {
-display: flex; align-items: center; gap: 12px; padding-top: 15px; border-top:
-1px solid #e0e0e0; } .author-avatar { width: 40px; height: 40px; border-radius:
-50%; background: #4CAF50; color: white; display: flex; align-items: center;
-justify-content: center; font-weight: bold; } .author-info { flex: 1; }
-.author-name { font-weight: 600; color: #333; } .author-bio { font-size: 13px;
-color: #666; } .read-more { display: inline-block; padding: 10px 20px;
-background: #4CAF50; color: white; border-radius: 4px; text-decoration: none;
-font-weight: 500; transition: background 0.3s; } .read-more:hover { background:
-#45a049; } .stats-bar { display: flex; justify-content: space-around;
-background: #f5f5f5; padding: 30px; border-radius: 8px; margin-bottom: 30px; }
-.stat { text-align: center; } .stat-number { font-size: 36px; font-weight: bold;
-color: #4CAF50; } .stat-label { color: #666; margin-top: 5px; } .no-articles {
-text-align: center; padding: 60px 20px; color: #666; } {% endblock %} {% block
-content %}
+block styles %}
+<style>
+  .blog-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 60px 20px;
+    border-radius: 8px;
+    margin-bottom: 40px;
+    text-align: center;
+  }
+  .blog-header h1 {
+    font-size: 48px;
+    margin-bottom: 15px;
+  }
+  .blog-header p {
+    font-size: 18px;
+    opacity: 0.9;
+  }
+  .filters {
+    background: #f5f5f5;
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 30px;
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .filter-tag {
+    display: inline-block;
+    padding: 8px 16px;
+    background: white;
+    border: 2px solid #4caf50;
+    border-radius: 20px;
+    color: #4caf50;
+    font-size: 14px;
+    font-weight: 500;
+    text-decoration: none;
+    transition: all 0.3s;
+  }
+  .filter-tag:hover {
+    background: #4caf50;
+    color: white;
+  }
+  .filter-tag.active {
+    background: #4caf50;
+    color: white;
+  }
+  .article-grid {
+    display: grid;
+    gap: 30px;
+    margin-bottom: 40px;
+  }
+  .article-card {
+    background: white;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid #e0e0e0;
+    transition:
+      transform 0.3s,
+      box-shadow 0.3s;
+  }
+  .article-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+  }
+  .article-header {
+    position: relative;
+    height: 200px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 24px;
+    font-weight: bold;
+  }
+  .article-content {
+    padding: 25px;
+  }
+  .article-meta {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 15px;
+    font-size: 14px;
+    color: #666;
+  }
+  .article-meta span {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .article-title {
+    font-size: 24px;
+    margin-bottom: 15px;
+    color: #333;
+  }
+  .article-excerpt {
+    color: #666;
+    line-height: 1.6;
+    margin-bottom: 15px;
+  }
+  .article-tags {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 15px;
+  }
+  .tag {
+    display: inline-block;
+    padding: 4px 12px;
+    background: #e8f5e9;
+    color: #4caf50;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .author {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-top: 15px;
+    border-top: 1px solid #e0e0e0;
+  }
+  .author-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: #4caf50;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+  }
+  .author-info {
+    flex: 1;
+  }
+  .author-name {
+    font-weight: 600;
+    color: #333;
+  }
+  .author-bio {
+    font-size: 13px;
+    color: #666;
+  }
+  .read-more {
+    display: inline-block;
+    padding: 10px 20px;
+    background: #4caf50;
+    color: white;
+    border-radius: 4px;
+    text-decoration: none;
+    font-weight: 500;
+    transition: background 0.3s;
+  }
+  .read-more:hover {
+    background: #45a049;
+  }
+  .stats-bar {
+    display: flex;
+    justify-content: space-around;
+    background: #f5f5f5;
+    padding: 30px;
+    border-radius: 8px;
+    margin-bottom: 30px;
+  }
+  .stat {
+    text-align: center;
+  }
+  .stat-number {
+    font-size: 36px;
+    font-weight: bold;
+    color: #4caf50;
+  }
+  .stat-label {
+    color: #666;
+    margin-top: 5px;
+  }
+  .no-articles {
+    text-align: center;
+    padding: 60px 20px;
+    color: #666;
+  }
+</style>
+{% endblock %} {% block content %}
 <div class="blog-header">
   <h1>Our Blog</h1>
   <p>Insights, tutorials, and updates from our team</p>
@@ -124,9 +271,10 @@ publishedArticles.length > 0 %}
     articles.length }} total.
   </p>
 
-  {% set totalViews = publishedArticles |> map(a => a.views) |> reduce(sum =>
-  sum + value, 0) %} {% set avgReadTime = (publishedArticles |> map(a =>
-  a.readTime) |> reduce(sum => sum + value, 0)) / publishedArticles.length %}
+  {% set totalViews = publishedArticles |> map(a => a.views) |> reduce(sum,
+  value => sum + value, 0) %} {% set avgReadTime = (publishedArticles |> map(a
+  => a.readTime) |> reduce(sum, value => sum + value, 0)) /
+  publishedArticles.length %}
 
   <p>
     <strong>Total views:</strong> {{ totalViews }} |

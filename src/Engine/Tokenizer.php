@@ -39,14 +39,35 @@ use Clarity\ClarityException;
 class Tokenizer
 {
     public const TEXT = 1;
-    public const OUTPUT_TAG = 2;
-    public const BLOCK_TAG = 3;
+    public const OUTPUT = 2;
+    public const BLOCK = 3;
 
     public const KEY_TYPE = 0;
     public const KEY_CONTENT = 1;
     public const KEY_LINE = 2;
 
     private bool $autoEscape = true;
+
+    private ?Registry $registry = null;
+
+    private array $varChainCache = [];
+    private const IDENT_RE = '/^[A-Za-z_][A-Za-z0-9_]*$/';
+    private const CHAIN_RE = '/^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$/';
+
+    private const RE_FILTER = '/^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\(\s*(.*)\s*\))?\s*$/s';
+
+    /**
+     * Filters whose first argument must be a lambda expression or a filter
+     * reference (quoted string). Plain variable references are rejected to
+     * prevent callable injection from template variables.
+     */
+    private const CALLABLE_ARG_FILTERS = ['map' => true, 'filter' => true, 'reduce' => true];
+
+
+    public function setRegistry(Registry $registry): void
+    {
+        $this->registry = $registry;
+    }
 
     // -------------------------------------------------------------------------
     // Segment splitting
@@ -95,10 +116,10 @@ class Tokenizer
                 case '#':
                     continue 2; // comment tag: skip
                 case '%':
-                    $type = self::BLOCK_TAG;
+                    $type = self::BLOCK;
                     break;
                 case '{':
-                    $type = self::OUTPUT_TAG;
+                    $type = self::OUTPUT;
                     break;
                 default:
                     throw new ClarityException("Unexpected tag type in match: {$match[0]}");
@@ -412,7 +433,7 @@ class Tokenizer
                         $j++;
                     }
                     if ($j < $len && $expr[$j] === '(') {
-                        if ($this->functionRegistry !== null && $this->functionRegistry->hasFunction($token)) {
+                        if ($this->registry !== null && $this->registry->hasFunction($token)) {
                             [$call, $i] = $this->buildFunctionCallInExpr($token, $expr, $j, $len);
                             $out .= $call;
                             continue;
@@ -803,7 +824,7 @@ class Tokenizer
         }
 
         $safeName = "'" . \addslashes($name) . "'";
-        $call = "\$this->__fn[{$safeName}](";
+        $call = "\$__fn[{$safeName}](";
 
         if (\trim($argsRaw) !== '') {
             $argList = $this->splitRespectingStrings($argsRaw, ',');
@@ -811,15 +832,9 @@ class Tokenizer
         }
 
         $call .= ')';
-        if ($this->functionRegistry?->isCustomFunction($name)) {
-            $call = '($this->__cast)(' . $call . ')';
-        }
+
         return [$call, $i];
     }
-
-    private array $varChainCache = [];
-    private const IDENT_RE = '/^[A-Za-z_][A-Za-z0-9_]*$/';
-    private const CHAIN_RE = '/^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$/';
 
     /**
      * Parse a var-chain from $subject starting at $start.
@@ -1031,31 +1046,15 @@ class Tokenizer
         return $this->varChainToPhpWithSegments($chain, $parsed['segments']);
     }
 
-    private const RE_FILTER = '/^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\(\s*(.*)\s*\))?\s*$/s';
-
     /**
-     * Filters whose first argument must be a lambda expression or a filter
-     * reference (quoted string). Plain variable references are rejected to
-     * prevent callable injection from template variables.
-     */
-    private const CALLABLE_ARG_FILTERS = ['map' => true, 'filter' => true, 'reduce' => true];
-
-    private ?FunctionRegistry $functionRegistry = null;
-
-    public function setFilterRegistry(FunctionRegistry $registry): void
-    {
-        $this->functionRegistry = $registry;
-    }
-
-    /**
-     * If $arg is a named argument of the form  identifier=expression  (where
-     * = is not part of ==, !=, <=, >=), return ['name'=>…, 'expr'=>…].
+     * If $arg is a named argument of the form  identifier:expression  (where
+     * : is not part of ::), return ['name'=>…, 'expr'=>…].
      * Returns null for ordinary positional arguments.
      */
     private function parseNamedArg(string $arg): ?array
     {
         // identifier followed by = that is not == ; also must not be !=, <=, >=
-        if (\preg_match('/^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*=(?![=])(.+)$/s', $arg, $m)) {
+        if (\preg_match('/^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*:(?!:)(.+)$/s', $arg, $m)) {
             return ['name' => $m[1], 'expr' => \trim($m[2])];
         }
         return null;
@@ -1104,6 +1103,97 @@ class Tokenizer
     }
 
     /**
+     * @param string[] $argList
+     * @return array{0: string[], 1: array<string, string>}
+     */
+    private function compileFilterArguments(array $argList): array
+    {
+        $positional = [];
+        $named = [];
+        $seenNamed = false;
+
+        foreach ($argList as $arg) {
+            $arg = \trim($arg);
+            if (\str_starts_with($arg, '...')) {
+                throw new ClarityException('Spread operator is only allowed inside array and object literals.');
+            }
+
+            $parsedNamed = $this->parseNamedArg($arg);
+            if ($parsedNamed !== null) {
+                $seenNamed = true;
+                $named[$parsedNamed['name']] = $this->processCondition($parsedNamed['expr']);
+                continue;
+            }
+
+            if ($seenNamed) {
+                throw new ClarityException(
+                    "Positional argument after named argument in argument list: '{$arg}'"
+                );
+            }
+
+            $positional[] = $this->processCondition($arg);
+        }
+
+        return [$positional, $named];
+    }
+
+    /**
+     * map/filter/reduce accept a callable as their first argument. For reduce,
+     * that callable may declare two comma-separated parameters on the left side
+     * of the lambda arrow, so we merge split segments back into one callable arg.
+     *
+     * @return string[]
+     */
+    private function splitCallableFilterArgs(string $args): array
+    {
+        // Split top-level commas (your existing helper)
+        $parts = $this->splitRespectingStrings($args, ',');
+
+        if ($parts === []) {
+            return [];
+        }
+
+        // Case 1: first argument already contains =>
+        if ($this->findLambdaArrow($parts[0]) !== false) {
+            return $parts;
+        }
+
+        // Case 2: find the first argument that contains =>
+        $lambdaEnd = null;
+        $count = \count($parts);
+
+        for ($i = 1; $i < $count; $i++) {
+            if ($this->findLambdaArrow($parts[$i]) !== false) {
+                $lambdaEnd = $i;
+                break;
+            }
+        }
+
+        // No lambda found or lambda is first argument → nothing to merge
+        if ($lambdaEnd === null) {
+            return $parts;
+        }
+
+        // Merge everything up to the lambda arrow into one argument
+        $lambdaArg = '';
+        for ($i = 0; $i <= $lambdaEnd; $i++) {
+            if ($i > 0) {
+                $lambdaArg .= ', ';
+            }
+            $lambdaArg .= \trim($parts[$i]);
+        }
+
+        // Build final argument list
+        $result = [$lambdaArg];
+
+        for ($i = $lambdaEnd + 1; $i < $count; $i++) {
+            $result[] = $parts[$i];
+        }
+
+        return $result;
+    }
+
+    /**
      * Build a PHP filter call:  $this->__fl['name']($value, arg1, name2: arg2)
      *
      * For map / filter / reduce the first argument must be either:
@@ -1132,11 +1222,23 @@ class Tokenizer
             return $phpValue;
         }
 
-        $safeName = "'" . \addslashes($name) . "'";
-        $call = "\$this->__fl[{$safeName}]({$phpValue}";
-
-        if ($args !== '') {
+        if ($args === '') {
+            $argList = [];
+        } elseif (isset(self::CALLABLE_ARG_FILTERS[$name])) {
+            $argList = $this->splitCallableFilterArgs($args);
+        } else {
             $argList = $this->splitRespectingStrings($args, ',');
+        }
+
+        $inlineCall = $this->buildInlineFilterCall($name, $phpValue, $argList);
+        if ($inlineCall !== null) {
+            return $inlineCall;
+        }
+
+        $safeName = "'" . \addslashes($name) . "'";
+        $call = "\$__fl[{$safeName}]({$phpValue}";
+
+        if ($argList !== []) {
             $isCallableFilter = isset(self::CALLABLE_ARG_FILTERS[$name]);
 
             if ($isCallableFilter) {
@@ -1159,18 +1261,136 @@ class Tokenizer
         }
 
         $call .= ')';
-        if ($this->functionRegistry?->isCustomFilter($name)) {
-            $call = '($this->__cast)(' . $call . ')';
-        }
         return $call;
+    }
+
+    /**
+     * @param string[] $argList
+     */
+    private function buildInlineFilterCall(string $name, string $phpValue, array $argList): ?string
+    {
+        $definition = $this->registry->getInlineFilter($name);
+        if ($definition === null) {
+            return null;
+        }
+
+        [$positionalArgs, $namedArgs] = $this->compileFilterArguments($argList);
+
+        if (($definition['variadic'] ?? false) === true) {
+            return $this->buildInlineVariadicFilterCall($name, $definition['php'], $phpValue, $positionalArgs, $namedArgs);
+        }
+
+        $slots = $this->resolveInlineFilterSlots($name, $definition, $phpValue, $positionalArgs, $namedArgs);
+        return $this->substituteInlineFilterTemplate($definition['php'], $slots);
+    }
+
+    /**
+     * @param array{php?: string, params?: string[], defaults?: array<string, string>, variadic?: bool} $definition
+     * @param string[] $positionalArgs
+     * @param array<string, string> $namedArgs
+     * @return array<int, string>
+     */
+    private function resolveInlineFilterSlots(string $filterName, array $definition, string $phpValue, array $positionalArgs, array $namedArgs): array
+    {
+        $params = $definition['params'] ?? [];
+        $defaults = $definition['defaults'] ?? [];
+        $slots = [1 => $phpValue];
+        $assigned = [];
+
+        foreach ($positionalArgs as $index => $phpArg) {
+            if (!isset($params[$index])) {
+                throw new ClarityException(
+                    "Filter '{$filterName}' received too many positional arguments."
+                );
+            }
+
+            $paramName = $params[$index];
+            $slots[$index + 2] = $phpArg;
+            $assigned[$paramName] = true;
+        }
+
+        foreach ($namedArgs as $paramName => $phpArg) {
+            $paramIndex = \array_search($paramName, $params, true);
+            if ($paramIndex === false) {
+                throw new ClarityException(
+                    "Unknown named argument '{$paramName}' for filter '{$filterName}'."
+                );
+            }
+            if (isset($assigned[$paramName])) {
+                throw new ClarityException(
+                    "Filter '{$filterName}' received '{$paramName}' more than once."
+                );
+            }
+
+            $slots[$paramIndex + 2] = $phpArg;
+            $assigned[$paramName] = true;
+        }
+
+        foreach ($params as $index => $paramName) {
+            $slotIndex = $index + 2;
+            if (isset($slots[$slotIndex])) {
+                continue;
+            }
+            if (isset($defaults[$paramName])) {
+                $slots[$slotIndex] = $defaults[$paramName];
+                continue;
+            }
+            throw new ClarityException(
+                "Missing required argument '{$paramName}' for filter '{$filterName}'."
+            );
+        }
+
+        return $slots;
+    }
+
+    /**
+     * @param string[] $positionalArgs
+     * @param array<string, string> $namedArgs
+     */
+    private function buildInlineVariadicFilterCall(string $filterName, string $name, string $phpValue, array $positionalArgs, array $namedArgs): ?string
+    {
+        if ($namedArgs !== []) {
+            $firstNamedArg = \array_key_first($namedArgs);
+            throw new ClarityException(
+                "Unknown named argument '{$firstNamedArg}' for filter '{$filterName}'."
+            );
+        }
+
+        $pieces = ["(string) ({$phpValue})"];
+        foreach ($positionalArgs as $phpArg) {
+            $pieces[] = '(' . $phpArg . ')';
+        }
+
+        return $name . '(' . \implode(', ', $pieces) . ')';
+    }
+
+    /**
+     * @param array<int, string> $slots
+     */
+    private function substituteInlineFilterTemplate(string $template, array $slots): string
+    {
+        return (string) \preg_replace_callback(
+            '/\{(\d+)\}/',
+            static function (array $matches) use ($slots): string {
+                $slotIndex = (int) $matches[1];
+                if (!isset($slots[$slotIndex])) {
+                    throw new ClarityException("Missing filter argument {{$slotIndex}}.");
+                }
+
+                return '(' . $slots[$slotIndex] . ')';
+            },
+            $template
+        );
     }
 
     /**
      * Compile the callable argument accepted by map / filter / reduce.
      *
      * Accepted forms:
-     *   param => expression            single-parameter lambda
-     *   'filterName' / "filterName"   reference to a registered filter
+     *   param => expression                  single-parameter lambda
+     *   acc, item => expression             explicit two-parameter reduce lambda
+     *   'filterName' / "filterName"         reference to a registered filter
+     *                                        or to an inline built-in filter for map()
      *
      * Anything else (bare variable names, function calls, …) is rejected.
      */
@@ -1188,20 +1408,41 @@ class Tokenizer
                         "Filter reference must be a plain identifier, got: '{$refName}'"
                     );
                 }
-                return "\$this->__fl['" . \addslashes($refName) . "']";
+
+                if ($this->shouldInlineCallableFilterReference($filterName, $refName)) {
+                    return $this->buildInlineCallableFilterReference($refName);
+                }
+
+                return "\$__fl['" . \addslashes($refName) . "']";
             }
         }
 
-        // ── Lambda: param => expression ──────────────────────────────────────
+        // ── Lambda: param => expression / acc, item => expression ───────────
         $arrowPos = $this->findLambdaArrow($arg);
         if ($arrowPos !== false) {
-            return $this->compileLambda($arg, $arrowPos, $filterName === 'reduce');
+            return $this->compileLambda($arg, $arrowPos, $filterName);
         }
 
         throw new ClarityException(
             "The '{$filterName}' filter requires a lambda (e.g. 'item => item.name') "
             . "or a filter reference (e.g. '\"upper\"'), got: '{$arg}'"
         );
+    }
+
+    private function shouldInlineCallableFilterReference(string $filterName, string $referenceName): bool
+    {
+        return $filterName === 'map'
+            && $this->registry->hasInlineFilter($referenceName);
+    }
+
+    private function buildInlineCallableFilterReference(string $referenceName): string
+    {
+        $inlineCall = $this->buildInlineFilterCall($referenceName, '$__val', []);
+        if ($inlineCall === null) {
+            throw new ClarityException("Unknown inline filter reference: '{$referenceName}'");
+        }
+
+        return "static fn(mixed \$__val): mixed => {$inlineCall}";
     }
 
     /**
@@ -1242,12 +1483,14 @@ class Tokenizer
     /**
      * Compile a Clarity lambda expression to a PHP static closure.
      *
-     * Syntax: param => body_expression
+     * Syntax:
+     *   param => body_expression
+     *   acc, item => body_expression    (reduce only)
      *
-     * - The parameter name becomes a PHP closure parameter ($param).
-     * - For 'reduce', a second implicit parameter named 'value' (the current
-     *   element) is automatically added so you can write:
-     *       carry => carry + value
+     * - Each lambda parameter becomes a PHP closure parameter with the same name.
+     * - 'map' and 'filter' require exactly one parameter.
+     * - 'reduce' requires exactly two parameters so you can write:
+     *       carry, item => carry + item
      * - The body is compiled as a full Clarity expression (including filter
      *   pipelines) with the parameter name(s) treated as local variables,
      *   while all other identifiers are resolved from the captured $vars.
@@ -1256,17 +1499,24 @@ class Tokenizer
      *
      * @param string $arg      The full lambda string (e.g. 'item => item.name').
      * @param int    $arrow    Position of '=>' in $arg.
-     * @param bool   $isReduce When true, add implicit second param 'value'.
+     * @param string $filterName The callable filter currently being compiled.
      */
-    private function compileLambda(string $arg, int $arrow, bool $isReduce): string
+    private function compileLambda(string $arg, int $arrow, string $filterName): string
     {
-        $param = \trim(\substr($arg, 0, $arrow));
+        $paramList = \trim(\substr($arg, 0, $arrow));
         $body = \trim(\substr($arg, $arrow + 2));
 
-        if (!\preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $param)) {
-            throw new ClarityException(
-                "Lambda parameter must be a valid identifier, got: '{$param}'"
-            );
+        $first = \strstr($paramList, ',', true);
+        if ($first === false) {
+            $first = $paramList;
+        } else {
+            $second = \ltrim(\substr($paramList, \strpos($paramList, ',') + 1));
+            if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $second)) {
+                throw new ClarityException("Invalid lambda parameter: '{$second}'");
+            }
+        }
+        if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $first)) {
+            throw new ClarityException("Invalid lambda parameter: '{$first}'");
         }
 
         // Compile the body as a full Clarity expression (handles |> pipelines).
@@ -1274,31 +1524,25 @@ class Tokenizer
         // up the parameter references afterwards with a targeted substitution.
         $phpBody = $this->processCondition($body);
 
-        // Replace $vars['param'] → $param  (lambda's own parameter)
-        $phpBody = \str_replace("\$vars['{$param}']", '$' . $param, $phpBody);
+        $phpBody = \str_replace("\$vars['{$first}']", '$' . $first, $phpBody);
+        $signature = "mixed \${$first}";
 
-        $signature = "mixed \${$param}";
-
-        if ($isReduce) {
-            // Implicit second parameter for reduce: the current element.
-            $phpBody = \str_replace("\$vars['value']", '$value', $phpBody);
-            $signature .= ', mixed $value';
+        if ($filterName === 'reduce') {
+            if (!isset($second)) {
+                throw new ClarityException(
+                    "The 'reduce' filter lambda must declare two parameters separated by a comma "
+                    . "(e.g. 'acc, item => acc + item'), got: '{$paramList}'"
+                );
+            }
+            $phpBody = \str_replace("\$vars['{$second}']", '$' . $second, $phpBody);
+            $signature .= ", mixed \${$second}";
+        } elseif (isset($second)) {
+            throw new ClarityException(
+                "The '{$filterName}' filter lambda must declare only one parameter, got: '{$paramList}'"
+            );
         }
 
-        return "function({$signature}) use (\$vars): mixed { return {$phpBody}; }";
-    }
-
-    private const RE_FILTER_NAME = '/^([a-zA-Z_][a-zA-Z0-9_]*)/';
-
-    /**
-     * Extract just the filter name from a filter segment string (e.g. 'number(2)' → 'number').
-     */
-    public function filterName(string $filterSegment): string
-    {
-        if (preg_match(self::RE_FILTER_NAME, trim($filterSegment), $m)) {
-            return $m[1];
-        }
-        return '';
+        return "static function({$signature}) use (\$vars): mixed { return {$phpBody}; }";
     }
 
 }

@@ -1,16 +1,28 @@
 <?php
 namespace Clarity\Tests;
 
-use Clarity\Engine\Cache;
-use Clarity\ClarityException;
 use Clarity\ClarityEngine;
+use Clarity\ClarityException;
+use Clarity\Engine\Cache;
+use Clarity\Engine\Registry;
+use Clarity\Engine\Tokenizer;
 use PHPUnit\Framework\TestCase;
+
+class TestClarityEngine extends ClarityEngine
+{
+    public function getRegistry(): Registry
+    {
+        return $this->registry;
+    }
+}
 
 class ClarityEngineTest extends TestCase
 {
     private static string $viewDir;
     private static string $cacheDir;
     private static ClarityEngine $engine;
+
+    private static Registry $registry;
 
     // -------------------------------------------------------------------------
     // Lifecycle
@@ -25,11 +37,12 @@ class ClarityEngineTest extends TestCase
         @mkdir(self::$viewDir, 0755, true);
         @mkdir(self::$cacheDir, 0755, true);
 
-        self::$engine = new ClarityEngine();
+        self::$engine = new TestClarityEngine();
         self::$engine
             ->setViewPath(self::$viewDir)
             ->setCachePath(self::$cacheDir)
             ->setExtension('clarity.html');
+        self::$registry = self::$engine->getRegistry();
     }
 
     public static function tearDownAfterClass(): void
@@ -282,6 +295,21 @@ class ClarityEngineTest extends TestCase
         $this->assertSame('4', self::render('f_strlen', ['name' => 'test']));
     }
 
+    public function testInlineLengthEvaluatesInputExpressionOnce(): void
+    {
+        $calls = 0;
+
+        self::$engine->addFunction('next_value_for_length', function () use (&$calls): string {
+            $calls++;
+            return 'test';
+        });
+
+        self::tpl('f_length_once', '{{ next_value_for_length() |> length }}');
+
+        $this->assertSame('4', self::render('f_length_once'));
+        $this->assertSame(1, $calls);
+    }
+
     public function testFilterNumber(): void
     {
         self::tpl('f_num', '{{ price |> number(2) }}');
@@ -293,6 +321,34 @@ class ClarityEngineTest extends TestCase
     {
         self::tpl('f_num2', '{{ price |> number }}');
         $this->assertSame('9.99', self::render('f_num2', ['price' => 9.99]));
+    }
+
+    public function testInlineFilterMissingRequiredArgumentThrows(): void
+    {
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches("/Missing required argument 'start' for filter 'slice'/");
+
+        self::tpl('f_slice_missing_start', '{{ value |> slice }}');
+        self::render('f_slice_missing_start', ['value' => 'hello']);
+    }
+
+    public function testInlineFilterTooManyArgumentsThrows(): void
+    {
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/Filter \'upper\' received too many positional arguments/');
+
+        self::tpl('f_upper_too_many_args', '{{ value |> upper(1) }}');
+        self::render('f_upper_too_many_args', ['value' => 'hello']);
+    }
+
+    public function testFilterFormat(): void
+    {
+        self::tpl('f_format', '{{ fmt |> format(name, count) }}');
+        $this->assertSame('Hello Alice, 3', self::render('f_format', [
+            'fmt' => 'Hello %s, %d',
+            'name' => 'Alice',
+            'count' => 3,
+        ]));
     }
 
     public function testFilterJson(): void
@@ -380,6 +436,29 @@ class ClarityEngineTest extends TestCase
         $this->assertSame('4', self::render('f_round_default', ['v' => 3.7]));
     }
 
+    public function testFilterCeil(): void
+    {
+        self::tpl('f_ceil', '{{ v |> ceil }}');
+        $this->assertSame('4', self::render('f_ceil', ['v' => 3.2]));
+    }
+
+    public function testFilterFloor(): void
+    {
+        self::tpl('f_floor', '{{ v |> floor }}');
+        $this->assertSame('3', self::render('f_floor', ['v' => 3.9]));
+    }
+
+    public function testFilterDateCompilesInline(): void
+    {
+        $tokenizer = new Tokenizer();
+        $tokenizer->setRegistry(self::$registry);
+
+        $compiled = $tokenizer->buildFilterCall('date("Y")', '$ts');
+
+        $this->assertStringContainsString('\\date(', $compiled);
+        $this->assertStringNotContainsString('$this->__fl[\'date\']', $compiled);
+    }
+
     // -- Date filters ---------------------------------------------------------
 
     public function testFilterDateModify(): void
@@ -407,6 +486,12 @@ class ClarityEngineTest extends TestCase
     {
         self::tpl('f_keys', '{{ map |> keys |> join(",") }}');
         $this->assertSame('x,y', self::render('f_keys', ['map' => ['x' => 1, 'y' => 2]]));
+    }
+
+    public function testFilterValues(): void
+    {
+        self::tpl('f_values', '{{ map |> values |> join(",") }}');
+        $this->assertSame('1,2', self::render('f_values', ['map' => ['x' => 1, 'y' => 2]]));
     }
 
     public function testFilterMerge(): void
@@ -441,9 +526,33 @@ class ClarityEngineTest extends TestCase
 
     public function testFilterMap(): void
     {
-        // Filter reference: "upper" resolves to the registered 'upper' filter.
+        // Quoted map references can resolve to built-in inline filters as well.
         self::tpl('f_map', '{{ items |> map("upper") |> join(",") }}');
         $this->assertSame('A,B,C', self::render('f_map', ['items' => ['a', 'b', 'c']]));
+    }
+
+    public function testFilterMapCompilesInlineFilterReference(): void
+    {
+        $tokenizer = new Tokenizer();
+        $tokenizer->setRegistry(self::$registry);
+
+        $compiled = $tokenizer->buildFilterCall('map("upper")', '$items');
+
+        $this->assertStringContainsString('static fn(mixed $__val): mixed =>', $compiled);
+        $this->assertStringContainsString('\\mb_strtoupper', $compiled);
+        $this->assertStringNotContainsString('$this->__fl[\'upper\']', $compiled);
+    }
+
+    public function testFilterMapCompilesInlineUnicodeReference(): void
+    {
+        $tokenizer = new Tokenizer();
+        $tokenizer->setRegistry(self::$registry);
+
+        $compiled = $tokenizer->buildFilterCall('map("unicode")', '$items');
+
+        $this->assertStringContainsString('static fn(mixed $__val): mixed =>', $compiled);
+        $this->assertStringContainsString('new \\Clarity\\Engine\\UnicodeString', $compiled);
+        $this->assertStringNotContainsString('$this->__fl[\'unicode\']', $compiled);
     }
 
     public function testFilterFilter(): void
@@ -455,8 +564,8 @@ class ClarityEngineTest extends TestCase
 
     public function testFilterReduce(): void
     {
-        // Lambda with implicit 'value' second parameter.
-        self::tpl('f_reduce', '{{ items |> reduce(carry => carry + value, 0) }}');
+        // Reduce lambda uses explicit accumulator and item parameters.
+        self::tpl('f_reduce', '{{ items |> reduce(carry, item => carry + item, 0) }}');
         $this->assertSame('10', self::render('f_reduce', ['items' => [1, 2, 3, 4]]));
     }
 
@@ -528,20 +637,27 @@ class ClarityEngineTest extends TestCase
 
     public function testLambdaReduceSum(): void
     {
-        // Reduce with implicit 'value' second parameter.
-        self::tpl('lambda_reduce_sum', '{{ numbers |> reduce(carry => carry + value, 0) }}');
+        // Reduce uses explicit accumulator and item parameters.
+        self::tpl('lambda_reduce_sum', '{{ numbers |> reduce(carry, item => carry + item, 0) }}');
         $this->assertSame('10', self::render('lambda_reduce_sum', ['numbers' => [1, 2, 3, 4]]));
     }
 
     public function testLambdaReduceWithOuterVar(): void
     {
         // Reduce lambda accesses an outer template variable.
-        self::tpl('lambda_reduce_outer', '{{ numbers |> reduce(carry => carry + value + bonus, 0) }}');
+        self::tpl('lambda_reduce_outer', '{{ numbers |> reduce(carry, item => carry + item + bonus, 0) }}');
         // 4 elements, each adds value + bonus(=1), sums (1+1)+(2+1)+(3+1)+(4+1) = 14
         $this->assertSame('14', self::render('lambda_reduce_outer', [
             'numbers' => [1, 2, 3, 4],
             'bonus' => 1,
         ]));
+    }
+
+    public function testReduceLambdaRequiresTwoParams(): void
+    {
+        $this->expectException(ClarityException::class);
+        self::tpl('lambda_reduce_arity', '{{ numbers |> reduce(carry => carry + item, 0) }}');
+        self::render('lambda_reduce_arity', ['numbers' => [1, 2, 3, 4]]);
     }
 
     public function testFilterReferenceMap(): void
@@ -656,7 +772,7 @@ class ClarityEngineTest extends TestCase
         // Positional first, then named for remaining
         self::$engine->addFilter('fmtnum', fn(mixed $v, int $dec = 2, string $sep = '.'): string =>
             number_format((float) $v, $dec, $sep));
-        self::tpl('named_mixed', '{{ v |> fmtnum(3, sep=",") }}');
+        self::tpl('named_mixed', '{{ v |> fmtnum(3, sep:",") }}');
         $this->assertSame('3,142', self::render('named_mixed', ['v' => 3.14159]));
     }
 
@@ -666,7 +782,7 @@ class ClarityEngineTest extends TestCase
         // With the reflection-free approach, PHP validates named arg names at
         // runtime (Error), not at compile time (ClarityException).
         $this->expectException(\Throwable::class);
-        self::tpl('named_unknown', '{{ v |> number(decimalz=2) }}');
+        self::tpl('named_unknown', '{{ v |> number(decimalz:2) }}');
         self::render('named_unknown', ['v' => 1.5]);
     }
 
@@ -676,7 +792,7 @@ class ClarityEngineTest extends TestCase
         // Positional after named is caught at compile time as a ClarityException
         // (avoids generating syntactically invalid PHP).
         self::$engine->addFilter('foo', fn(mixed $v, int $a = 1, int $b = 2): int => $v + $a + $b);
-        self::tpl('named_positional_after', '{{ v |> foo(a=1, 2) }}');
+        self::tpl('named_positional_after', '{{ v |> foo(a:1, 2) }}');
         self::render('named_positional_after', ['v' => 0]);
     }
 
@@ -701,14 +817,14 @@ class ClarityEngineTest extends TestCase
     public function testCustomFunctionNamedArgs(): void
     {
         self::$engine->addFunction('concat', fn(string $a, string $b = ''): string => $a . $b);
-        self::tpl('func_concat_named', '{{ concat(b=", world", a="Hello") }}');
+        self::tpl('func_concat_named', '{{ concat(b:", world", a:"Hello") }}');
         $this->assertSame('Hello, world', self::render('func_concat_named'));
     }
 
     public function testCustomFunctionNamedArgWithDefault(): void
     {
         self::$engine->addFunction('incr', fn(int $a, int $inc = 1): int => $a + $inc);
-        self::tpl('func_incr_default', '{{ incr(a=3) }}');
+        self::tpl('func_incr_default', '{{ incr(a:3) }}');
         $this->assertSame('4', self::render('func_incr_default'));
     }
 
@@ -1084,6 +1200,20 @@ class ClarityEngineTest extends TestCase
         $this->assertTrue($cache->isFresh($sourcePath), 'Expected a fresh cache entry after first render');
     }
 
+    public function testInlineFilterCompilesWithoutRuntimeRegistryLookup(): void
+    {
+        self::tpl('inline_upper_cache', '{{ name |> upper }}');
+        self::render('inline_upper_cache', ['name' => 'alice']);
+
+        $sourcePath = $this->normalizedSourcePath('inline_upper_cache');
+        $cache = new Cache(self::$cacheDir);
+        $compiled = file_get_contents($cache->cacheFilePath($sourcePath));
+
+        $this->assertIsString($compiled);
+        $this->assertStringContainsString('mb_strtoupper', $compiled);
+        $this->assertStringNotContainsString("__fl['upper']", $compiled);
+    }
+
     public function testCacheInvalidatedOnTemplateChange(): void
     {
         // After a template file changes, isFresh() must report stale and a
@@ -1299,5 +1429,360 @@ class ClarityEngineTest extends TestCase
 
         // Clean up
         @rmdir($isolatedCache);
+    }
+
+    // =========================================================================
+    // Module system
+    // =========================================================================
+
+    public function testUseCallsModuleRegister(): void
+    {
+        $engine = new ClarityEngine();
+        $engine->setViewPath(self::$viewDir)->setCachePath(self::$cacheDir);
+
+        $registered = false;
+        $module = new class ($registered) implements \Clarity\Module {
+            public function __construct(private bool &$flag)
+            {}
+            public function register(ClarityEngine $e): void
+            {
+                $this->flag = true; }
+        };
+
+        $this->assertFalse($registered);
+        $engine->use($module);
+        $this->assertTrue($registered);
+    }
+
+    public function testUseIsFluent(): void
+    {
+        $engine = new ClarityEngine();
+        $module = new class implements \Clarity\Module {
+            public function register(ClarityEngine $e): void
+            {
+            }
+        };
+        $result = $engine->use($module);
+        $this->assertSame($engine, $result);
+    }
+
+    public function testModuleCanRegisterFilter(): void
+    {
+        $engine = new ClarityEngine();
+        $engine->setViewPath(self::$viewDir)->setCachePath(self::$cacheDir);
+
+        $module = new class implements \Clarity\Module {
+            public function register(ClarityEngine $e): void
+            {
+                $e->addFilter('shout', fn(string $v): string => strtoupper($v) . '!!!');
+            }
+        };
+        $engine->use($module);
+
+        self::tpl('mod_filter', '{{ word |> shout }}');
+        $result = $engine->renderPartial('mod_filter', ['word' => 'hello']);
+        $this->assertSame('HELLO!!!', $result);
+    }
+
+    // =========================================================================
+    // Custom block directives (BlockRegistry)
+    // =========================================================================
+
+    public function testAddBlockRegistersCustomDirective(): void
+    {
+        $engine = new ClarityEngine();
+        $engine->setViewPath(self::$viewDir)->setCachePath(self::$cacheDir);
+        $engine->addBlock('noop', fn(string $r, string $p, int $l, callable $e): string => '/* noop */');
+        $engine->addBlock('endnoop', fn(string $r, string $p, int $l, callable $e): string => '/* endnoop */');
+
+        self::tpl('block_noop', '{% noop %}inner{% endnoop %}');
+        $result = $engine->renderPartial('block_noop');
+        $this->assertSame('inner', $result);
+    }
+
+    public function testUnknownDirectiveStillThrows(): void
+    {
+        $engine = new ClarityEngine();
+        $engine->setViewPath(self::$viewDir)->setCachePath(self::$cacheDir);
+
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches("/Unknown directive 'totally_unknown'/");
+        self::tpl('bad_directive', '{% totally_unknown %}');
+        $engine->renderPartial('bad_directive');
+    }
+
+    public function testBlockHandlerCanProcessExpression(): void
+    {
+        // A custom block that wraps its content in a tag determined by an expression
+        $engine = new ClarityEngine();
+        $engine->setViewPath(self::$viewDir)->setCachePath(self::$cacheDir);
+
+        $engine->addBlock('tag', function (string $rest, string $path, int $line, callable $expr): string {
+            $phpTag = $expr($rest);    // converts Clarity expression → PHP
+            return "ob_start(); \$__tag = {$phpTag};";
+        });
+        $engine->addBlock(
+            'endtag',
+            fn(string $r, string $p, int $l, callable $e): string =>
+            'echo "<" . htmlspecialchars((string)$__tag) . ">" . ob_get_clean() . "</" . htmlspecialchars((string)$__tag) . ">";'
+        );
+
+        self::tpl('block_expr', '{% tag tagName %}hello{% endtag %}');
+        $result = $engine->renderPartial('block_expr', ['tagName' => 'span']);
+        $this->assertSame('<span>hello</span>', $result);
+    }
+
+    // =========================================================================
+    // Inline filter registration (addInlineFilter)
+    // =========================================================================
+
+    public function testAddInlineFilterCompilesAtCompileTime(): void
+    {
+        $engine = new ClarityEngine();
+        $engine->setViewPath(self::$viewDir)->setCachePath(self::$cacheDir);
+
+        // Register an inline filter — it is baked into the generated PHP,
+        // not called at runtime via $this->__fl.
+        $engine->addInlineFilter('bang', [
+            'php' => '((string) {1}) . "!"',
+        ]);
+
+        self::tpl('inline_bang', '{{ word |> bang }}');
+        $result = $engine->renderPartial('inline_bang', ['word' => 'hello']);
+        $this->assertSame('hello!', $result);
+    }
+
+    public function testAddInlineFilterWithParamsAndDefaults(): void
+    {
+        $engine = new ClarityEngine();
+        $engine->setViewPath(self::$viewDir)->setCachePath(self::$cacheDir);
+
+        $engine->addInlineFilter('repeat_str', [
+            'php' => '\str_repeat((string) {1}, {2})',
+            'params' => ['times'],
+            'defaults' => ['times' => '2'],
+        ]);
+
+        self::tpl('inline_repeat', '{{ ch |> repeat_str }}:{{ ch |> repeat_str(4) }}');
+        $result = $engine->renderPartial('inline_repeat', ['ch' => 'ab']);
+        $this->assertSame('abab:abababab', $result);
+    }
+
+    // =========================================================================
+    // Filter service (addFilterService)
+    // =========================================================================
+
+    public function testAddFilterServiceExposedInTemplate(): void
+    {
+        $engine = new ClarityEngine();
+        $engine->setViewPath(self::$viewDir)->setCachePath(self::$cacheDir);
+
+        // An "inline" filter whose PHP template calls a method on a service object
+        $counter = new class {
+            public int $n = 0;
+            public function next(): int
+            {
+                return ++$this->n;
+            }
+        };
+        $engine->addService('counter', $counter);
+        $engine->addInlineFilter('counted', [
+            'php' => '((string) {1}) . "#" . $__sv[\'counter\']->next()',
+        ]);
+
+        self::tpl('svc_filter', '{{ a |> counted }}:{{ b |> counted }}');
+        $result = $engine->renderPartial('svc_filter', ['a' => 'x', 'b' => 'y']);
+        $this->assertSame('x#1:y#2', $result);
+    }
+
+    // =========================================================================
+    // Localization module — ClarityLocale (unit)
+    // =========================================================================
+
+    public function testClarityLocalePushPop(): void
+    {
+        $locale = new \Clarity\Localization\LocaleStack('en_US');
+        $this->assertSame('en_US', $locale->current());
+
+        $locale->push('de_DE');
+        $this->assertSame('de_DE', $locale->current());
+
+        $locale->push('fr_FR');
+        $this->assertSame('fr_FR', $locale->current());
+
+        $locale->pop();
+        $this->assertSame('de_DE', $locale->current());
+
+        $locale->pop();
+        $this->assertSame('en_US', $locale->current());
+    }
+
+    public function testClarityLocaleIgnoresNullAndEmptyPush(): void
+    {
+        $locale = new \Clarity\Localization\LocaleStack('en_US');
+        $locale->push(null);
+        $locale->push('');
+        $this->assertSame('en_US', $locale->current());
+    }
+
+    public function testClarityLocalePopOnEmptyStackIsNoOp(): void
+    {
+        $locale = new \Clarity\Localization\LocaleStack('en_US');
+        $locale->pop(); // should not throw
+        $this->assertSame('en_US', $locale->current());
+    }
+
+    // =========================================================================
+    // Localization module — TranslationLoader (unit)
+    // =========================================================================
+
+    public function testTranslationLoaderSimpleGet(): void
+    {
+        $dir = sys_get_temp_dir() . '/clarity_test_translations_' . uniqid();
+        mkdir($dir);
+        file_put_contents($dir . '/en_US.php', '<?php return ' . \var_export(['greeting' => 'Hello, {name}!'], true) . ';');
+
+        $loader = new \Clarity\Localization\TranslationLoader($dir, 'en_US');
+        $result = $loader->get('en_US', 'greeting', ['name' => 'Alice']);
+        $this->assertSame('Hello, Alice!', $result);
+
+        @unlink($dir . '/en_US.php');
+        @rmdir($dir);
+    }
+
+    public function testTranslationLoaderFallsBackToFallbackLocale(): void
+    {
+        $dir = sys_get_temp_dir() . '/clarity_test_translations_fallback_' . uniqid();
+        mkdir($dir);
+        file_put_contents($dir . '/en_US.php', '<?php return ' . \var_export(['save' => 'Save'], true) . ';');
+        // de_DE.php does NOT have 'save'
+
+        $loader = new \Clarity\Localization\TranslationLoader($dir, 'en_US');
+        $result = $loader->get('de_DE', 'save');
+        $this->assertSame('Save', $result);
+
+        @unlink($dir . '/en_US.php');
+        @rmdir($dir);
+    }
+
+    public function testTranslationLoaderFallsBackToKeyWhenMissing(): void
+    {
+        $loader = new \Clarity\Localization\TranslationLoader(null, 'en_US');
+        $result = $loader->get('de_DE', 'some.missing.key');
+        $this->assertSame('some.missing.key', $result);
+    }
+
+    // =========================================================================
+    // Localization module — ClarityLocalizationModule (integration)
+    // =========================================================================
+
+    private function makeLocaleEngine(?string $translationsDir = null): ClarityEngine
+    {
+        $engine = new ClarityEngine();
+        $engine->setViewPath(self::$viewDir)->setCachePath(self::$cacheDir);
+        $engine->use(new \Clarity\Localization\LocalizationModule([
+            'locale' => 'en_US',
+            'fallback_locale' => 'en_US',
+            'translations_path' => $translationsDir,
+        ]));
+        return $engine;
+    }
+
+    public function testTFilterSimpleTranslation(): void
+    {
+        $dir = sys_get_temp_dir() . '/clarity_test_lmod_' . uniqid();
+        mkdir($dir);
+        file_put_contents($dir . '/en_US.php', '<?php return ' . \var_export(['hello' => 'Hello World'], true) . ';');
+
+        $engine = $this->makeLocaleEngine($dir);
+        self::tpl('lmod_t_simple', '{{ "hello" |> t }}');
+        $result = $engine->renderPartial('lmod_t_simple');
+        $this->assertSame('Hello World', $result);
+
+        @unlink($dir . '/en_US.php');
+        @rmdir($dir);
+    }
+
+    public function testTFilterFallsBackToKeyWhenNoTranslation(): void
+    {
+        $engine = $this->makeLocaleEngine(null);
+        self::tpl('lmod_t_missing', '{{ "missing.key" |> t }}');
+        $result = $engine->renderPartial('lmod_t_missing');
+        $this->assertSame('missing.key', $result);
+    }
+
+    public function testCurrencyFilter(): void
+    {
+        if (!\extension_loaded('intl')) {
+            $this->markTestSkipped('intl extension required');
+        }
+        $engine = $this->makeLocaleEngine(null);
+        self::tpl('lmod_currency', '{{ price |> currency("USD", "en_US") }}');
+        $result = $engine->renderPartial('lmod_currency', ['price' => 1234.56]);
+        $this->assertStringContainsString('1,234.56', $result);
+    }
+
+    public function testWithLocaleBlockChangesLocale(): void
+    {
+        if (!\extension_loaded('intl')) {
+            $this->markTestSkipped('intl extension required');
+        }
+        $engine = new ClarityEngine();
+        $engine->setViewPath(self::$viewDir)->setCachePath(self::$cacheDir);
+
+        $module = new \Clarity\Localization\LocalizationModule(['locale' => 'en_US']);
+        $engine->use($module);
+
+        // Outside the block, locale = en_US; inside, locale = de_DE
+        self::tpl('lmod_with_locale', '{{ 1234.56 |> currency("EUR", "en_US") }}|{% with_locale "de_DE" %}{{ 1234.56 |> currency("EUR", "de_DE") }}{% endwith_locale %}');
+        $result = $engine->renderPartial('lmod_with_locale');
+
+        // en_US EUR format includes € and uses comma as thousands separator
+        [$outside, $inside] = explode('|', $result, 2);
+        $this->assertStringContainsString('1,234.56', $outside);
+        $this->assertStringContainsString('1.234,56', $inside);
+    }
+
+    public function testWithLocaleBlockRestoresLocaleAfter(): void
+    {
+        if (!\extension_loaded('intl')) {
+            $this->markTestSkipped('intl extension required');
+        }
+        $engine = new ClarityEngine();
+        $engine->setViewPath(self::$viewDir)->setCachePath(self::$cacheDir);
+        $engine->use(new \Clarity\Localization\LocalizationModule(['locale' => 'en_US']));
+
+        self::tpl(
+            'lmod_locale_restore',
+            '{% with_locale "de_DE" %}inner{% endwith_locale %}{{ 1234.56 |> currency("EUR", "en_US") }}'
+        );
+        $result = $engine->renderPartial('lmod_locale_restore');
+        $this->assertStringContainsString('1,234.56', $result);
+    }
+
+    public function testWithLocaleRequiresArgument(): void
+    {
+        $engine = new ClarityEngine();
+        $engine->setViewPath(self::$viewDir)->setCachePath(self::$cacheDir);
+        $engine->use(new \Clarity\Localization\LocalizationModule(['locale' => 'en_US']));
+
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches("/'with_locale' requires/");
+        self::tpl('lmod_no_arg', '{% with_locale %}oops{% endwith_locale %}');
+        $engine->renderPartial('lmod_no_arg');
+    }
+
+    public function testWithLocaleAcceptsVariableExpression(): void
+    {
+        if (!\extension_loaded('intl')) {
+            $this->markTestSkipped('intl extension required');
+        }
+        $engine = new ClarityEngine();
+        $engine->setViewPath(self::$viewDir)->setCachePath(self::$cacheDir);
+        $engine->use(new \Clarity\Localization\LocalizationModule(['locale' => 'en_US']));
+
+        self::tpl('lmod_var_locale', '{% with_locale userLocale %}{{ 1234.56 |> currency("EUR", "de_DE") }}{% endwith_locale %}');
+        $result = $engine->renderPartial('lmod_var_locale', ['userLocale' => 'de_DE']);
+        $this->assertStringContainsString('1.234,56', $result);
     }
 }

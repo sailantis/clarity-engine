@@ -37,15 +37,32 @@ Named arguments
 ## 📌 Public Constants
 
 - **TEXT** = `1`
-- **OUTPUT_TAG** = `2`
-- **BLOCK_TAG** = `3`
+- **OUTPUT** = `2`
+- **BLOCK** = `3`
 - **KEY_TYPE** = `0`
 - **KEY_CONTENT** = `1`
 - **KEY_LINE** = `2`
 
 ## 🚀 Public methods
 
-### tokenize() · [source](../../src/Engine/Tokenizer.php#L63)
+### setRegistry() · [source](../../src/Engine/Tokenizer.php#L67)
+
+`public function setRegistry(Clarity\Engine\Registry $registry): void`
+
+**🧭 Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$registry` | [Registry](Clarity_Engine_Registry.md) | - |  |
+
+**➡️ Return value**
+
+- Type: void
+
+
+---
+
+### tokenize() · [source](../../src/Engine/Tokenizer.php#L84)
 
 `public function tokenize(string $source): array`
 
@@ -66,7 +83,7 @@ Each element is:  ['type' => TEXT|OUTPUT|BLOCK, 'content' => string, 'line' => i
 
 ---
 
-### processExpression() · [source](../../src/Engine/Tokenizer.php#L147)
+### processExpression() · [source](../../src/Engine/Tokenizer.php#L168)
 
 `public function processExpression(string $expression): string`
 
@@ -89,7 +106,7 @@ expression and each subsequent segment is a filter call.
 
 ---
 
-### processCondition() · [source](../../src/Engine/Tokenizer.php#L173)
+### processCondition() · [source](../../src/Engine/Tokenizer.php#L194)
 
 `public function processCondition(string $expression): string`
 
@@ -110,7 +127,7 @@ structure conditions (if, for, set) where auto-escape is meaningless.
 
 ---
 
-### processLvalue() · [source](../../src/Engine/Tokenizer.php#L192)
+### processLvalue() · [source](../../src/Engine/Tokenizer.php#L213)
 
 `public function processLvalue(string $var): string`
 
@@ -132,7 +149,7 @@ Used for the left-hand side of {% set var = ... %}.
 
 ---
 
-### convertVarsAndOps() · [source](../../src/Engine/Tokenizer.php#L295)
+### convertVarsAndOps() · [source](../../src/Engine/Tokenizer.php#L316)
 
 `public function convertVarsAndOps(string $expr): string`
 
@@ -158,7 +175,7 @@ identifiers/var-chains, operators, punctuation) and process each atom.
 
 ---
 
-### varChainToPhp() · [source](../../src/Engine/Tokenizer.php#L1009)
+### varChainToPhp() · [source](../../src/Engine/Tokenizer.php#L1024)
 
 `public function varChainToPhp(string $chain): string`
 
@@ -184,24 +201,7 @@ a.b[c.d].e    → $vars['a']['b'][$vars['c']['d']]['e']
 
 ---
 
-### setFilterRegistry() · [source](../../src/Engine/Tokenizer.php#L1045)
-
-`public function setFilterRegistry(Clarity\Engine\FunctionRegistry $registry): void`
-
-**🧭 Parameters**
-
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `$registry` | [FunctionRegistry](Clarity_Engine_FunctionRegistry.md) | - |  |
-
-**➡️ Return value**
-
-- Type: void
-
-
----
-
-### buildFilterCall() · [source](../../src/Engine/Tokenizer.php#L1121)
+### buildFilterCall() · [source](../../src/Engine/Tokenizer.php#L1211)
 
 `public function buildFilterCall(string $filterSegment, string $phpValue): string`
 
@@ -226,25 +226,6 @@ arguments (`identifier: phpExpr`). PHP validates names and arity at runtime.
 
 - Type: string
 - Description: PHP call expression.
-
-
----
-
-### filterName() · [source](../../src/Engine/Tokenizer.php#L1296)
-
-`public function filterName(string $filterSegment): string`
-
-Extract just the filter name from a filter segment string (e.g. 'number(2)' → 'number').
-
-**🧭 Parameters**
-
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `$filterSegment` | string | - |  |
-
-**➡️ Return value**
-
-- Type: string
 
 
 

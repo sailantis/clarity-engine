@@ -30,7 +30,7 @@ and error mapping — no file I/O needed on warm paths (OPcache serves them).
 
 ## 🚀 Public methods
 
-### __construct() · [source](../../src/Engine/Compiler.php#L73)
+### __construct() · [source](../../src/Engine/Compiler.php#L75)
 
 `public function __construct(): mixed`
 
@@ -41,15 +41,15 @@ and error mapping — no file I/O needed on warm paths (OPcache serves them).
 
 ---
 
-### setFilterRegistry() · [source](../../src/Engine/Compiler.php#L78)
+### setRegistry() · [source](../../src/Engine/Compiler.php#L80)
 
-`public function setFilterRegistry(Clarity\Engine\FunctionRegistry $registry): static`
+`public function setRegistry(Clarity\Engine\Registry $registry): static`
 
 **🧭 Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
-| `$registry` | [FunctionRegistry](Clarity_Engine_FunctionRegistry.md) | - |  |
+| `$registry` | [Registry](Clarity_Engine_Registry.md) | - |  |
 
 **➡️ Return value**
 
@@ -58,7 +58,7 @@ and error mapping — no file I/O needed on warm paths (OPcache serves them).
 
 ---
 
-### setBasePath() · [source](../../src/Engine/Compiler.php#L88)
+### setBasePath() · [source](../../src/Engine/Compiler.php#L91)
 
 `public function setBasePath(string $path): static`
 
@@ -75,7 +75,7 @@ and error mapping — no file I/O needed on warm paths (OPcache serves them).
 
 ---
 
-### setExtension() · [source](../../src/Engine/Compiler.php#L94)
+### setExtension() · [source](../../src/Engine/Compiler.php#L97)
 
 `public function setExtension(string $ext): static`
 
@@ -92,7 +92,7 @@ and error mapping — no file I/O needed on warm paths (OPcache serves them).
 
 ---
 
-### setNamespaces() · [source](../../src/Engine/Compiler.php#L100)
+### setNamespaces() · [source](../../src/Engine/Compiler.php#L103)
 
 `public function setNamespaces(array $namespaces): static`
 
@@ -109,7 +109,7 @@ and error mapping — no file I/O needed on warm paths (OPcache serves them).
 
 ---
 
-### compile() · [source](../../src/Engine/Compiler.php#L116)
+### compile() · [source](../../src/Engine/Compiler.php#L119)
 
 `public function compile(string $sourcePath): Clarity\Engine\CompiledTemplate`
 

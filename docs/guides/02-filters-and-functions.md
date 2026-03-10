@@ -301,8 +301,8 @@ greater than 10 #} {# Without callable: remove falsy values #} {{ [0, 1, false,
 Reduce array to single value (see [Lambda Expressions](#lambda-expressions)):
 
 ```twig
-{{ [1, 2, 3, 4] |> reduce(sum => sum + value, 0) }} {# Output: 10 #} {{ words |>
-reduce(acc => acc ~ ' ' ~ value) }} {# Join with spaces #}
+{{ [1, 2, 3, 4] |> reduce(sum, value => sum + value, 0) }} {# Output: 10 #} {{ words |>
+reduce(acc, word => acc ~ ' ' ~ word) }} {# Join with spaces #}
 ```
 
 ### General Purpose Filters
@@ -382,6 +382,12 @@ Lambdas allow inline transformation logic for `map`, `filter`, and `reduce` filt
 parameter => expression
 ```
 
+For `reduce`, declare both the accumulator and current item:
+
+```
+accumulator, item => expression
+```
+
 ### Map Examples
 
 Extract a field from objects:
@@ -429,21 +435,21 @@ Multiple conditions:
 Sum numbers:
 
 ```twig
-{{ numbers |> reduce(sum => sum + value, 0) }}
+{{ numbers |> reduce(sum, value => sum + value, 0) }}
 ```
 
-> **Note:** In `reduce`, the lambda parameter is the accumulator (e.g., `sum`), and the current element is always available as `value`.
+> **Note:** In `reduce`, the lambda must declare both the accumulator (e.g., `sum`) and the current element (e.g., `value`).
 
 Build a string:
 
 ```twig
-{{ words |> reduce(result => result ~ ' ' ~ value, '') }}
+{{ words |> reduce(result, word => result ~ ' ' ~ word, '') }}
 ```
 
 Calculate total price:
 
 ```twig
-{{ cart.items |> reduce(total => total + (value.price * value.quantity), 0) |>
+{{ cart.items |> reduce(total, item => total + (item.price * item.quantity), 0) |>
 number(2) }}
 ```
 
@@ -701,31 +707,31 @@ $engine->render('products', ['products' => $expensiveElectronics]);
 
 ## Filter Reference Quick Table
 
-| Filter             | Purpose                | Example                                    |
-| ------------------ | ---------------------- | ------------------------------------------ |
-| `trim`             | Remove whitespace      | `{{ text \|> trim }}`                      |
-| `upper`            | Uppercase              | `{{ name \|> upper }}`                     |
-| `lower`            | Lowercase              | `{{ email \|> lower }}`                    |
-| `capitalize`       | Capitalize first char  | `{{ word \|> capitalize }}`                |
-| `title`            | Title case             | `{{ heading \|> title }}`                  |
-| `truncate(len)`    | Truncate string        | `{{ text \|> truncate(100) }}`             |
-| `number(dec)`      | Format number          | `{{ price \|> number(2) }}`                |
-| `date(fmt)`        | Format date            | `{{ time \|> date('Y-m-d') }}`             |
-| `first`            | First element/char     | `{{ items \|> first }}`                    |
-| `last`             | Last element/char      | `{{ items \|> last }}`                     |
-| `join(glue)`       | Join array             | `{{ tags \|> join(', ') }}`                |
-| `split(delim)`     | Split string           | `{{ csv \|> split(',') }}`                 |
-| `slice(start,len)` | Extract portion        | `{{ items \|> slice(0, 10) }}`             |
-| `map(fn)`          | Transform each element | `{{ items \|> map(i => i.name) }}`         |
-| `filter(fn)`       | Filter elements        | `{{ items \|> filter(i => i.active) }}`    |
-| `reduce(fn,init)`  | Reduce to single value | `{{ nums \|> reduce(s => s + value, 0) }}` |
-| `reverse`          | Reverse array/string   | `{{ items \|> reverse }}`                  |
-| `sort`             | Sort array             | `{{ items \|> sort }}`                     |
-| `length`           | Count/length           | `{{ items \|> length }}`                   |
-| `default(val)`     | Fallback value         | `{{ name \|> default('Guest') }}`          |
-| `json`             | JSON encode            | `{{ data \|> json \|> raw }}`              |
-| `escape/esc`       | HTML escape            | `{{ html \|> escape }}`                    |
-| `raw`              | Disable auto-escaping  | `{{ html \|> raw }}`                       |
+| Filter             | Purpose                | Example                                               |
+| ------------------ | ---------------------- | ----------------------------------------------------- |
+| `trim`             | Remove whitespace      | `{{ text \|> trim }}`                                 |
+| `upper`            | Uppercase              | `{{ name \|> upper }}`                                |
+| `lower`            | Lowercase              | `{{ email \|> lower }}`                               |
+| `capitalize`       | Capitalize first char  | `{{ word \|> capitalize }}`                           |
+| `title`            | Title case             | `{{ heading \|> title }}`                             |
+| `truncate(len)`    | Truncate string        | `{{ text \|> truncate(100) }}`                        |
+| `number(dec)`      | Format number          | `{{ price \|> number(2) }}`                           |
+| `date(fmt)`        | Format date            | `{{ time \|> date('Y-m-d') }}`                        |
+| `first`            | First element/char     | `{{ items \|> first }}`                               |
+| `last`             | Last element/char      | `{{ items \|> last }}`                                |
+| `join(glue)`       | Join array             | `{{ tags \|> join(', ') }}`                           |
+| `split(delim)`     | Split string           | `{{ csv \|> split(',') }}`                            |
+| `slice(start,len)` | Extract portion        | `{{ items \|> slice(0, 10) }}`                        |
+| `map(fn)`          | Transform each element | `{{ items \|> map(i => i.name) }}`                    |
+| `filter(fn)`       | Filter elements        | `{{ items \|> filter(i => i.active) }}`               |
+| `reduce(fn,init)`  | Reduce to single value | `{{ nums \|> reduce(sum, value => sum + value, 0) }}` |
+| `reverse`          | Reverse array/string   | `{{ items \|> reverse }}`                             |
+| `sort`             | Sort array             | `{{ items \|> sort }}`                                |
+| `length`           | Count/length           | `{{ items \|> length }}`                              |
+| `default(val)`     | Fallback value         | `{{ name \|> default('Guest') }}`                     |
+| `json`             | JSON encode            | `{{ data \|> json \|> raw }}`                         |
+| `escape/esc`       | HTML escape            | `{{ html \|> escape }}`                               |
+| `raw`              | Disable auto-escaping  | `{{ html \|> raw }}`                                  |
 
 ## Next Steps
 

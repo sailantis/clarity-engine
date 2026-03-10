@@ -70,14 +70,17 @@ class Compiler
     /** @var string[] */
     private array $compileStack = [];
 
+    private ?Registry $registry = null;
+
     public function __construct()
     {
         $this->tokenizer = new Tokenizer();
     }
 
-    public function setFilterRegistry(FunctionRegistry $registry): static
+    public function setRegistry(Registry $registry): static
     {
-        $this->tokenizer->setFilterRegistry($registry);
+        $this->registry = $registry;
+        $this->tokenizer->setRegistry($registry);
         return $this;
     }
 
@@ -374,7 +377,7 @@ class Compiler
                         );
                         break;
 
-                    case Tokenizer::OUTPUT_TAG:
+                    case Tokenizer::OUTPUT:
                         $phpExpr = $this->tokenizer->processExpression(
                             $seg[Tokenizer::KEY_CONTENT]
                         );
@@ -386,7 +389,7 @@ class Compiler
                         );
                         break;
 
-                    case Tokenizer::BLOCK_TAG:
+                    case Tokenizer::BLOCK:
                         $compiled = $this->compileBlock(
                             $seg[Tokenizer::KEY_CONTENT],
                             $sourcePath,
@@ -443,7 +446,15 @@ class Compiler
             // extends/block/endblock/include are handled before this stage; if seen here → ignore
             'extends', 'block', 'endblock' => '',
             'include' => $this->compileInclude($rest, $sourcePath, $tplLine, $lines),
-            default => throw new ClarityException(
+            default => $this->registry->hasBlock($keyword)
+            ? $this->registry->compileBlock(
+                $keyword,
+                $rest,
+                $sourcePath,
+                $tplLine,
+                fn(string $e) => $this->tokenizer->processCondition($e)
+            )
+            : throw new ClarityException(
                 "Unknown directive '{$keyword}'",
                 $sourcePath,
                 $tplLine
@@ -758,11 +769,14 @@ class Compiler
 
             /** @param array<string,callable> \$__fl Filter registry */
             /** @param array<string,callable> \$__fn Function registry */
-            /** @param callable \$__cast Cast custom function/filter results to scalars/arrays — prevents object leakage. */
-            public function __construct(private array \$__fl, private array \$__fn, private mixed \$__cast) {}
+            /** @param array<string,callable> \$__sv Service registry */
+            public function __construct(private array \$__fl, private array \$__fn, private array \$__sv) {}
 
             public function render(array \$vars): string
             {
+                \$__fl = \$this->__fl;
+                \$__fn = \$this->__fn;
+                \$__sv = \$this->__sv;
                 ob_start();
                 try {
         {$indented}

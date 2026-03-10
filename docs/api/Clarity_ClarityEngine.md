@@ -92,7 +92,7 @@ Templates are sandboxed and cannot:
 
 ## 🚀 Public methods
 
-### __construct() · [source](../../src/ClarityEngine.php#L119)
+### __construct() · [source](../../src/ClarityEngine.php#L111)
 
 `public function __construct(array $vars = []): mixed`
 
@@ -111,7 +111,7 @@ Create a new ClarityEngine instance.
 
 ---
 
-### setExtension() · [source](../../src/ClarityEngine.php#L136)
+### setExtension() · [source](../../src/ClarityEngine.php#L123)
 
 `public function setExtension(string $ext): static`
 
@@ -130,7 +130,7 @@ Set the view file extension for this instance.
 
 ---
 
-### getExtension() · [source](../../src/ClarityEngine.php#L150)
+### getExtension() · [source](../../src/ClarityEngine.php#L137)
 
 `public function getExtension(): string`
 
@@ -144,7 +144,7 @@ Get the effective file extension used when resolving templates.
 
 ---
 
-### addNamespace() · [source](../../src/ClarityEngine.php#L164)
+### addNamespace() · [source](../../src/ClarityEngine.php#L151)
 
 `public function addNamespace(string $name, string $path): static`
 
@@ -166,7 +166,7 @@ Views can be referenced using the syntax "namespace::view.name".
 
 ---
 
-### getNamespaces() · [source](../../src/ClarityEngine.php#L175)
+### getNamespaces() · [source](../../src/ClarityEngine.php#L162)
 
 `public function getNamespaces(): array`
 
@@ -180,7 +180,7 @@ Get the currently registered view namespaces.
 
 ---
 
-### setViewPath() · [source](../../src/ClarityEngine.php#L187)
+### setViewPath() · [source](../../src/ClarityEngine.php#L174)
 
 `public function setViewPath(string $path): static`
 
@@ -199,7 +199,7 @@ Set the base path for resolving relative view names.
 
 ---
 
-### getViewPath() · [source](../../src/ClarityEngine.php#L198)
+### getViewPath() · [source](../../src/ClarityEngine.php#L185)
 
 `public function getViewPath(): string`
 
@@ -213,7 +213,7 @@ Get the currently configured base path for view resolution.
 
 ---
 
-### setLayout() · [source](../../src/ClarityEngine.php#L212)
+### setLayout() · [source](../../src/ClarityEngine.php#L199)
 
 `public function setLayout(string|null $layout): static`
 
@@ -235,7 +235,7 @@ rendered view output.
 
 ---
 
-### getLayout() · [source](../../src/ClarityEngine.php#L223)
+### getLayout() · [source](../../src/ClarityEngine.php#L210)
 
 `public function getLayout(): string|null`
 
@@ -249,7 +249,7 @@ Get the currently configured layout view name.
 
 ---
 
-### setVar() · [source](../../src/ClarityEngine.php#L235)
+### setVar() · [source](../../src/ClarityEngine.php#L222)
 
 `public function setVar(string $name, mixed $value): static`
 
@@ -269,7 +269,7 @@ Set a single view variable.
 
 ---
 
-### setVars() · [source](../../src/ClarityEngine.php#L249)
+### setVars() · [source](../../src/ClarityEngine.php#L236)
 
 `public function setVars(array $vars): static`
 
@@ -290,7 +290,129 @@ Later values override earlier ones for the same keys.
 
 ---
 
-### addFilter() · [source](../../src/ClarityEngine.php#L304)
+### use() · [source](../../src/ClarityEngine.php#L42)
+
+`public function use(Clarity\Module $module): static`
+
+Register a module, granting it access to this engine instance so it can
+self-register filters, functions, services, and block directives.
+
+Modules are the recommended way to bundle related features (e.g. a full
+localization set with filters, a locale stack, and `with_locale` blocks).
+
+```php
+$engine->use(new \Clarity\LocalizationModule([
+    'locale'            => 'de_DE',
+    'translations_path' => __DIR__ . '/locales',
+]));
+```
+
+**🧭 Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$module` | [Module](Clarity_Module.md) | - | Module to register. |
+
+**➡️ Return value**
+
+- Type: static
+
+
+---
+
+### addInlineFilter() · [source](../../src/ClarityEngine.php#L70)
+
+`public function addInlineFilter(string $name, array $definition): static`
+
+Register an inline filter definition that is compiled directly into the
+generated PHP render body (zero runtime call overhead).
+
+The definition must follow the same format as the built-in inline filters:
+```php
+$engine->addInlineFilter('my_upper', [
+    'php' => '\mb_strtoupper((string) {1})',
+]);
+$engine->addInlineFilter('my_substr', [
+    'php' => '\mb_substr((string) {1}, {2}, {3})',
+    'params' => ['start', 'length'],
+    'defaults' => ['length' => null],
+]);
+```
+Template placeholders: `{1}` for the piped value, `{2}`, `{3}`, … for
+additional parameters are declared in `params`.
+
+**🧭 Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$name` | string | - | Filter name. |
+| `$definition` | array | - |  |
+
+**➡️ Return value**
+
+- Type: static
+
+
+---
+
+### addBlock() · [source](../../src/ClarityEngine.php#L95)
+
+`public function addBlock(string $keyword, callable $handler): static`
+
+Register a handler for a custom block directive (e.g. `with_locale`).
+
+The handler is a callable that receives the raw text after the keyword,
+source path and line for error messages, and a `$processExpr` callable
+that converts a Clarity expression string to a PHP expression string.
+It must return a PHP statement string.
+
+```php
+$engine->addBlock('with_locale', function(string $rest, string $path, int $line, callable $expr): string {
+    return "\$__sv['locale']->push({$expr(trim($rest))});"
+});
+$engine->addBlock('endwith_locale', fn(...) => "\$__sv['locale']->pop();");
+```
+
+**🧭 Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$keyword` | string | - | The directive keyword in lowercase (e.g. 'with_locale'). |
+| `$handler` | callable | - | See [`Registry`](Clarity_Engine_Registry.md) for the expected signature. |
+
+**➡️ Return value**
+
+- Type: static
+
+
+---
+
+### addService() · [source](../../src/ClarityEngine.php#L113)
+
+`public function addService(string $name, mixed $service): static`
+
+Store a non-callable service object in the registry so that
+compiled template render bodies can access it via `$__sv['key']`.
+
+This is primarily used by modules that need shared mutable state (e.g. a
+locale stack) accessible both from closures that close over the object
+*and* from inline filter PHP templates using `$__sv['key']->method()`.
+
+**🧭 Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$name` | string | - | Key under which the service is accessible. |
+| `$service` | mixed | - | Service value (not required to be callable). |
+
+**➡️ Return value**
+
+- Type: static
+
+
+---
+
+### addFilter() · [source](../../src/ClarityEngine.php#L168)
 
 `public function addFilter(string $name, callable $fn): static`
 
@@ -334,9 +456,9 @@ Template usage:
 **Built-in filters:**
 - Text: `upper`, `lower`, `trim`, `truncate`, `escape`, `raw`
 - Numbers: `number`, `abs`, `round`, `ceil`, `floor`
-- Arrays: `join`, `length`, `first`, `last`, `map`, `filter`, `reduce`
-- Dates: `date`
-- Other: `json`, `default`
+- Arrays: `join`, `length`, `first`, `last`, `keys`, `values`, `map`, `filter`, `reduce`
+- Dates: `date`, `date_modify`, `format_datetime`
+- Other: `json`, `default`, `unicode`
 
 **🧭 Parameters**
 
@@ -353,7 +475,7 @@ Template usage:
 
 ---
 
-### addFunction() · [source](../../src/ClarityEngine.php#L320)
+### addFunction() · [source](../../src/ClarityEngine.php#L184)
 
 `public function addFunction(string $name, callable $fn): static`
 
@@ -376,7 +498,7 @@ This is distinct from filters, which transform a piped value.
 
 ---
 
-### setCachePath() · [source](../../src/ClarityEngine.php#L332)
+### setCachePath() · [source](../../src/ClarityEngine.php#L196)
 
 `public function setCachePath(string $path): static`
 
@@ -395,7 +517,7 @@ Set the directory where compiled templates should be cached.
 
 ---
 
-### getCachePath() · [source](../../src/ClarityEngine.php#L343)
+### getCachePath() · [source](../../src/ClarityEngine.php#L207)
 
 `public function getCachePath(): string`
 
@@ -409,7 +531,7 @@ Get the currently configured cache directory.
 
 ---
 
-### flushCache() · [source](../../src/ClarityEngine.php#L353)
+### flushCache() · [source](../../src/ClarityEngine.php#L217)
 
 `public function flushCache(): static`
 
@@ -422,7 +544,7 @@ Flush all cached compiled templates.
 
 ---
 
-### render() · [source](../../src/ClarityEngine.php#L403)
+### render() · [source](../../src/ClarityEngine.php#L267)
 
 `public function render(string $view, array $vars = []): string`
 
@@ -483,7 +605,7 @@ $html = $engine->render('admin::dashboard', $data);
 
 ---
 
-### renderPartial() · [source](../../src/ClarityEngine.php#L421)
+### renderPartial() · [source](../../src/ClarityEngine.php#L285)
 
 `public function renderPartial(string $view, array $vars = []): string`
 
@@ -504,7 +626,7 @@ Render a partial view (without applying a layout) and return the output.
 
 ---
 
-### renderLayout() · [source](../../src/ClarityEngine.php#L451)
+### renderLayout() · [source](../../src/ClarityEngine.php#L315)
 
 `public function renderLayout(string $layout, string $content, array $vars = []): string`
 
@@ -524,6 +646,33 @@ The layout receives the rendered view in the `content` variable.
 
 - Type: string
 - Description: Rendered layout output.
+
+
+---
+
+### castToArray() · [source](../../src/ClarityEngine.php#L574)
+
+`public static function castToArray(mixed $value): mixed`
+
+Recursively cast values to arrays so templates never receive live
+objects and cannot call methods.
+
+Precedence:
+1. JsonSerializable → jsonSerialize() then recurse
+2. Objects with toArray() → toArray() then recurse
+3. Other objects → get_object_vars() then recurse
+4. Arrays → recurse element by element
+5. Scalars / null → pass through
+
+**🧭 Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$value` | mixed | - |  |
+
+**➡️ Return value**
+
+- Type: mixed
 
 
 
