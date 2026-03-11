@@ -58,11 +58,43 @@ class Compiler
     /** @var array<string, string>  namespace → path */
     private array $namespaces = [];
 
-    /** @var list<'for'|'foreach'>  stack tracking loop types for endfor compilation */
+    /**
+     * @var list<array{type:string, restore:array<string,string|null>}>
+     * Stack tracking loop types and compiler-scope variable bindings to restore on endfor.
+     */
     private array $forStack = [];
 
     /** Counter for generating unique temp-variable names in compiled range loops */
     private int $rangeCounter = 0;
+
+    /** Whether to emit debug-only assertions (range checks) in generated code */
+    private bool $debugMode = false;
+
+    /**
+     * @var array<string, string>  templateVarName → PHP variable string for locally-bound loop vars.
+     * Checked first during expression resolution; falls back to $vars[name] when absent.
+     * Simple mapping: 'item' → '$item', 'key' → '$key', etc.
+     */
+    private array $localVars = [];
+
+    /**
+     * Macros defined in the current template (after pre-scan).
+     * @var array<string, array{params: list<string>, body: string}>
+     */
+    private array $macros = [];
+
+    /**
+     * Stack of macro names currently being expanded (for cycle detection).
+     * @var list<string>
+     */
+    private array $macroExpansionStack = [];
+
+    /**
+     * Current output-escaping context tracked during compilation.
+     * Updated automatically by scanning TEXT tokens for <script>/<style> boundaries
+     * and by explicit {# @context js #} / {# @context html #} / {# @context css #} hints.
+     */
+    private string $context = 'html';
 
     /** @var string[] */
     private array $extendsStack = [];
@@ -106,6 +138,12 @@ class Compiler
         return $this;
     }
 
+    public function setDebugMode(bool $debug): static
+    {
+        $this->debugMode = $debug;
+        return $this;
+    }
+
     // -------------------------------------------------------------------------
     // Public API
     // -------------------------------------------------------------------------
@@ -125,6 +163,12 @@ class Compiler
         $this->phpLine = 0;
         $this->forStack = [];
         $this->rangeCounter = 0;
+        $this->localVars = [];
+        $this->tokenizer->setLocalVars([]);
+        $this->macros = [];
+        $this->macroExpansionStack = [];
+        $this->context = 'html';
+        $this->tokenizer->setEscapeContext('html');
         $this->extendsStack = [];
         $this->compileStack = [];
 
@@ -136,6 +180,9 @@ class Compiler
 
         // Resolve extends before anything else
         $source = $this->resolveExtends($source, $sourcePath);
+
+        // Pre-scan: extract macro definitions and strip them from source.
+        $this->extractMacros($source);
 
         // Unique class name prevents redeclaration collisions in long-running
         // processes (Swoole, RoadRunner, etc.) when a template is recompiled
@@ -369,12 +416,18 @@ class Compiler
                         if ($seg[Tokenizer::KEY_CONTENT] === '') {
                             break;
                         }
+                        // Update escaping context based on <script>/<style> boundaries.
+                        $this->updateContextFromText($seg[Tokenizer::KEY_CONTENT]);
                         $this->addPhpLines(
                             $lines,
                             $this->textToPhp($seg[Tokenizer::KEY_CONTENT]),
                             $tplLine,
                             $sourcePath
                         );
+                        break;
+
+                    case Tokenizer::COMMENT:
+                        $this->processComment($seg[Tokenizer::KEY_CONTENT]);
                         break;
 
                     case Tokenizer::OUTPUT:
@@ -412,6 +465,24 @@ class Compiler
         }
     }
 
+    private function processComment(string $content): void
+    {
+        $inner = trim($content);
+        if (str_starts_with($inner, '@context ')) {
+            // Handle {# @context <name> #} hints.
+            static $validContexts = [
+            'html' => true,
+            'js' => true,
+            'css' => true
+            ];
+            $ctx = strtolower(trim(substr($inner, 9)));
+            if (isset($validContexts[$ctx])) {
+                $this->context = $ctx;
+                $this->tokenizer->setEscapeContext($ctx);
+            }
+        }
+    }
+
     /**
      * Compile a single {% … %} directive to PHP.
      *
@@ -426,6 +497,15 @@ class Compiler
         int $tplLine,
         array &$lines
     ): string {
+        // Macro call: {% @name(arg1, arg2) %}
+        if ($content !== '' && $content[0] === '@') {
+            if (!\preg_match('/^@([a-zA-Z_][a-zA-Z0-9_]*)\s*\((.*)\)\s*$/s', $content, $mc)) {
+                throw new ClarityException("Invalid macro call syntax: '{$content}'", $sourcePath, $tplLine);
+            }
+            $this->compileMacroCall($mc[1], $mc[2], $sourcePath, $tplLine, $lines);
+            return '';
+        }
+
         // Split on first whitespace to get the keyword
         $parts = \preg_split(
             '/\s+/',
@@ -462,6 +542,136 @@ class Compiler
         };
     }
 
+
+    // -------------------------------------------------------------------------
+    // Macros
+    // -------------------------------------------------------------------------
+
+    /**
+     * Scan $source for {% macro @name(params) %}...{% endmacro %} definitions,
+     * store them in $this->macros, and strip the definitions from the source.
+     */
+    private function extractMacros(string &$source): void
+    {
+        $pattern = '/\{%-?\s*macro\s+@([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*-?%\}(.*?)\{%-?\s*endmacro\s*-?%\}/s';
+        $source = (string) \preg_replace_callback($pattern, function (array $m): string {
+            $name = $m[1];
+            $params = $m[2] !== '' ? \array_map('trim', \explode(',', $m[2])) : [];
+            $this->macros[$name] = ['params' => $params, 'body' => $m[3]];
+            return '';
+        }, $source);
+    }
+
+    /**
+     * Inline a macro call into the current output.
+     * Params become PHP locals ($__m_paramName) scoped to the macro body.
+     */
+    private function compileMacroCall(
+        string $name,
+        string $argsRaw,
+        string $sourcePath,
+        int $tplLine,
+        array &$lines
+    ): void {
+        if (!isset($this->macros[$name])) {
+            throw new ClarityException("Call to undefined macro '@{$name}'", $sourcePath, $tplLine);
+        }
+
+        // Cycle detection: if this macro is already on the expansion stack, we have a cycle.
+        if (\in_array($name, $this->macroExpansionStack, true)) {
+            $cycle = [...$this->macroExpansionStack, $name];
+            throw new ClarityException(
+                'Macro cycle detected: @' . \implode(' → @', $cycle),
+                $sourcePath,
+                $tplLine
+            );
+        }
+
+        $macro = $this->macros[$name];
+        $params = $macro['params'];
+        $args = $argsRaw !== '' ? $this->splitArgList($argsRaw) : [];
+
+        if (\count($args) !== \count($params)) {
+            throw new ClarityException(
+                "Macro '@{$name}' expects " . \count($params) . " argument(s), got " . \count($args),
+                $sourcePath,
+                $tplLine
+            );
+        }
+
+        // Assign each argument to a unique PHP local; save compile-scope for restore.
+        $restore = [];
+        foreach ($params as $idx => $param) {
+            $phpVar = '$__m_' . $param;
+            $phpExpr = $this->tokenizer->processCondition(\trim($args[$idx]));
+            $this->addPhpLines($lines, $phpVar . ' = ' . $phpExpr . ';', $tplLine, $sourcePath);
+            $restore[$param] = $this->localVars[$param] ?? null;
+            $this->localVars[$param] = $phpVar;
+        }
+        $this->tokenizer->setLocalVars($this->localVars);
+
+        // Push to expansion stack, compile the macro body inline, then pop.
+        $this->macroExpansionStack[] = $name;
+        try {
+            $this->compileSourceInto($macro['body'], $sourcePath . '#macro@' . $name, $lines);
+        } finally {
+            \array_pop($this->macroExpansionStack);
+        }
+
+        // Restore compile-scope.
+        foreach ($restore as $param => $old) {
+            if ($old === null) {
+                unset($this->localVars[$param]);
+            } else {
+                $this->localVars[$param] = $old;
+            }
+        }
+        $this->tokenizer->setLocalVars($this->localVars);
+    }
+
+    /**
+     * Split a comma-separated argument list, respecting nested parentheses and quoted strings.
+     *
+     * @return list<string>
+     */
+    private function splitArgList(string $input): array
+    {
+        $parts = [];
+        $depth = 0;
+        $start = 0;
+        $len = \strlen($input);
+        $inSingle = false;
+        $inDouble = false;
+
+        for ($i = 0; $i < $len; $i++) {
+            $ch = $input[$i];
+            if (($inSingle || $inDouble) && $ch === '\\' && $i + 1 < $len) {
+                $i++;
+                continue;
+            }
+            if ($ch === "'" && !$inDouble) {
+                $inSingle = !$inSingle;
+                continue;
+            }
+            if ($ch === '"' && !$inSingle) {
+                $inDouble = !$inDouble;
+                continue;
+            }
+            if (!$inSingle && !$inDouble) {
+                if ($ch === '(' || $ch === '[') {
+                    $depth++;
+                } elseif ($ch === ')' || $ch === ']') {
+                    $depth--;
+                } elseif ($ch === ',' && $depth === 0) {
+                    $parts[] = \substr($input, $start, $i - $start);
+                    $start = $i + 1;
+                }
+            }
+        }
+        $parts[] = \substr($input, $start);
+        return $parts;
+    }
+
     private const RE_FOR_IN = '/^([a-zA-Z_][a-zA-Z0-9_.]*)(?:\s*,\s*([a-zA-Z_][a-zA-Z0-9_]*))?\s+in\s+(.+?)(?:(\.\.\.?)(.+?)(?:\s+step\s+(.+))?)?$/s';
 
     /**
@@ -484,7 +694,7 @@ class Compiler
 
         // Range syntax: varName in startExpr(..|...)endExpr [step stepExpr]
         if (isset($m[4]) && $m[4] !== '') {
-            $item = $this->tokenizer->processLvalue($m[1]);
+            // Evaluate bounds in the current (outer) scope before registering the loop var
             $start = $this->tokenizer->processCondition(trim($m[3]));
             $inclusive = ($m[4] === '..');
             $end = $this->tokenizer->processCondition(trim($m[5]));
@@ -496,44 +706,102 @@ class Compiler
             $re = "\$__re{$n}";
             $rs = "\$__rs{$n}";
 
-            $srcLabel = addslashes($sourcePath . ':' . $tplLine);
+            // Allocate a local PHP variable for the iteration variable (same name as template var)
+            $itemTplName = trim($m[1]);
+            $itemPhpVar = '$' . $itemTplName;
+            $restore = [$itemTplName => $this->localVars[$itemTplName] ?? null];
+            $this->localVars[$itemTplName] = $itemPhpVar;
+            $this->tokenizer->setLocalVars($this->localVars);
 
-            $this->forStack[] = 'for';
-            return implode("\n", [
-                "{$rb} = {$start}; {$re} = {$end}; {$rs} = {$step};",
-                "if ({$rs} === 0) { throw new \\RuntimeException('Clarity: range step cannot be zero ({$srcLabel})'); }",
-                "if (({$re} - {$rb}) * {$rs} < 0) { throw new \\RuntimeException('Clarity: range step moves away from end, would produce an infinite loop ({$srcLabel})'); }",
-                "for ({$item} = {$rb}; {$item} {$cmp} {$re}; {$item} += {$rs}):",
-            ]);
+            $this->forStack[] = ['type' => 'for', 'restore' => $restore];
+            $rangeLines = ["{$rb} = {$start}; {$re} = {$end}; {$rs} = {$step};"];
+            if ($this->debugMode) {
+                $srcLabel = addslashes($sourcePath . ':' . $tplLine);
+                $rangeLines[] = "if ({$rs} === 0) { throw new \\RuntimeException('Clarity: range step cannot be zero ({$srcLabel})'); }";
+                $rangeLines[] = "if (({$re} - {$rb}) * {$rs} < 0) { throw new \\RuntimeException('Clarity: range step moves away from end, would produce an infinite loop ({$srcLabel})'); }";
+            }
+            $rangeLines[] = "for ({$itemPhpVar} = {$rb}; {$itemPhpVar} {$cmp} {$re}; {$itemPhpVar} += {$rs}):";
+            return implode("\n", $rangeLines);
         }
 
-        // Standard foreach
-        $item = $this->tokenizer->processLvalue($m[1]);
+        // Standard foreach — evaluate list in the current (outer) scope first
         $listExpr = $this->tokenizer->processCondition(trim($m[3]));
 
-        // Optional key
+        $itemTplName = trim($m[1]);
+        $itemPhpVar = '$' . $itemTplName;
+        $restore = [$itemTplName => $this->localVars[$itemTplName] ?? null];
+        $this->localVars[$itemTplName] = $itemPhpVar;
+
+        // Optional key variable
         if (isset($m[2]) && $m[2] !== '') {
-            $idx = $this->tokenizer->processLvalue($m[2]);
-            $this->forStack[] = 'foreach';
-            return "foreach ({$listExpr} as {$idx} => {$item}):";
+            $keyTplName = trim($m[2]);
+            $keyPhpVar = '$' . $keyTplName;
+            $restore[$keyTplName] = $this->localVars[$keyTplName] ?? null;
+            $this->localVars[$keyTplName] = $keyPhpVar;
+            $this->tokenizer->setLocalVars($this->localVars);
+            $this->forStack[] = ['type' => 'foreach', 'restore' => $restore];
+            return "foreach ({$listExpr} as {$keyPhpVar} => {$itemPhpVar}):";
         }
 
-        // No key
-        $this->forStack[] = 'foreach';
-        return "foreach ({$listExpr} as {$item}):";
+        $this->tokenizer->setLocalVars($this->localVars);
+        $this->forStack[] = ['type' => 'foreach', 'restore' => $restore];
+        return "foreach ({$listExpr} as {$itemPhpVar}):";
     }
 
     /**
      * Compile {% endfor %} → the correct PHP closing keyword based on the
      * matching opening loop (native `for` vs `foreach`).
      */
+    /**
+     * Scan a TEXT segment for <script>/<style> open/close tags and update $this->context
+     * to reflect the escaping context that applies AFTER this text block.
+     * Uses the last boundary found so that a segment containing both open and close
+     * (e.g. an inline <script>…</script>) correctly ends back in 'html'.
+     */
+    private function updateContextFromText(string $text): void
+    {
+        $lastPos = -1;
+        $newCtx = null;
+
+        $boundaries = [
+            '/<script[\s>\/]/i' => 'js',
+            '/<\/script>/i' => 'html',
+            '/<style[\s>\/]/i' => 'css',
+            '/<\/style>/i' => 'html',
+        ];
+
+        foreach ($boundaries as $pattern => $ctx) {
+            if (\preg_match_all($pattern, $text, $m, PREG_OFFSET_CAPTURE)) {
+                $last = \end($m[0]);
+                if ($last[1] > $lastPos) {
+                    $lastPos = $last[1];
+                    $newCtx = $ctx;
+                }
+            }
+        }
+
+        if ($newCtx !== null && $newCtx !== $this->context) {
+            $this->context = $newCtx;
+            $this->tokenizer->setEscapeContext($newCtx);
+        }
+    }
+
     private function compileEndFor(string $sourcePath, int $tplLine): string
     {
-        $type = array_pop($this->forStack);
-        if ($type === null) {
+        $entry = array_pop($this->forStack);
+        if ($entry === null) {
             throw new ClarityException("Unexpected 'endfor' without matching 'for'", $sourcePath, $tplLine);
         }
-        return $type === 'for' ? 'endfor;' : 'endforeach;';
+        // Restore compile-time local var bindings to what they were before this loop
+        foreach ($entry['restore'] as $name => $oldValue) {
+            if ($oldValue === null) {
+                unset($this->localVars[$name]);
+            } else {
+                $this->localVars[$name] = $oldValue;
+            }
+        }
+        $this->tokenizer->setLocalVars($this->localVars);
+        return $entry['type'] === 'for' ? 'endfor;' : 'endforeach;';
     }
 
     private const RE_SET = '/^(.+?)\s*=\s*(.+)$/s';
@@ -754,6 +1022,25 @@ class Compiler
         $depsExport = var_export($this->dependencies, true);
         $filesExport = var_export($this->sourceFiles, true);
         $mapExport = var_export($this->sourceMap, true);
+        $debugFlag = $this->debugMode ? 'true' : 'false';
+
+        // Detect which registries are actually referenced in the compiled body.
+        // The constructor always accepts all three (so the caller stays simple),
+        // but render() only unpacks the ones that are actually used.
+        $usesFilters = \str_contains($body, '$__fl');
+        $usesFunctions = \str_contains($body, '$__fn');
+        $usesServices = \str_contains($body, '$__sv');
+
+        $unpacks = '';
+        if ($usesFilters) {
+            $unpacks .= "                \$__fl = \$this->__fl;\n";
+        }
+        if ($usesFunctions) {
+            $unpacks .= "                \$__fn = \$this->__fn;\n";
+        }
+        if ($usesServices) {
+            $unpacks .= "                \$__sv = \$this->__sv;\n";
+        }
 
         return <<<PHP
         class {$className}
@@ -767,6 +1054,9 @@ class Compiler
             /** @var list<array{int,int,int}> source-map ranges: [phpLineStart, fileIndex, templateLine] */
             public static array \$sourceMap = {$mapExport};
 
+            /** @var bool  whether this template was compiled with debug mode enabled */
+            public static bool \$debugCompiled = {$debugFlag};
+
             /** @param array<string,callable> \$__fl Filter registry */
             /** @param array<string,callable> \$__fn Function registry */
             /** @param array<string,callable> \$__sv Service registry */
@@ -774,10 +1064,7 @@ class Compiler
 
             public function render(array \$vars): string
             {
-                \$__fl = \$this->__fl;
-                \$__fn = \$this->__fn;
-                \$__sv = \$this->__sv;
-                ob_start();
+        {$unpacks}                ob_start();
                 try {
         {$indented}
                     return (string) ob_get_clean();

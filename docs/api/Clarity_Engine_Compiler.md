@@ -30,7 +30,7 @@ and error mapping — no file I/O needed on warm paths (OPcache serves them).
 
 ## 🚀 Public methods
 
-### __construct() · [source](../../src/Engine/Compiler.php#L75)
+### __construct() · [source](../../src/Engine/Compiler.php#L107)
 
 `public function __construct(): mixed`
 
@@ -41,7 +41,7 @@ and error mapping — no file I/O needed on warm paths (OPcache serves them).
 
 ---
 
-### setRegistry() · [source](../../src/Engine/Compiler.php#L80)
+### setRegistry() · [source](../../src/Engine/Compiler.php#L112)
 
 `public function setRegistry(Clarity\Engine\Registry $registry): static`
 
@@ -58,7 +58,7 @@ and error mapping — no file I/O needed on warm paths (OPcache serves them).
 
 ---
 
-### setBasePath() · [source](../../src/Engine/Compiler.php#L91)
+### setBasePath() · [source](../../src/Engine/Compiler.php#L123)
 
 `public function setBasePath(string $path): static`
 
@@ -75,7 +75,7 @@ and error mapping — no file I/O needed on warm paths (OPcache serves them).
 
 ---
 
-### setExtension() · [source](../../src/Engine/Compiler.php#L97)
+### setExtension() · [source](../../src/Engine/Compiler.php#L129)
 
 `public function setExtension(string $ext): static`
 
@@ -92,7 +92,7 @@ and error mapping — no file I/O needed on warm paths (OPcache serves them).
 
 ---
 
-### setNamespaces() · [source](../../src/Engine/Compiler.php#L103)
+### setNamespaces() · [source](../../src/Engine/Compiler.php#L135)
 
 `public function setNamespaces(array $namespaces): static`
 
@@ -109,7 +109,24 @@ and error mapping — no file I/O needed on warm paths (OPcache serves them).
 
 ---
 
-### compile() · [source](../../src/Engine/Compiler.php#L119)
+### setDebugMode() · [source](../../src/Engine/Compiler.php#L141)
+
+`public function setDebugMode(bool $debug): static`
+
+**🧭 Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$debug` | bool | - |  |
+
+**➡️ Return value**
+
+- Type: static
+
+
+---
+
+### compile() · [source](../../src/Engine/Compiler.php#L157)
 
 `public function compile(string $sourcePath): Clarity\Engine\CompiledTemplate`
 

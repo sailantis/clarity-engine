@@ -321,4 +321,47 @@ class RenderingTest extends BaseTestCase
         $result = $this->renderPartial('mns::hello', ['x' => '42']);
         $this->assertSame('ns:42', $result);
     }
+
+    // =========================================================================
+    // Context-aware escaping
+    // =========================================================================
+
+    public function testJsContextAutoDetectEncodesAsJson(): void
+    {
+        self::tpl('ctx_js_auto', '<script>var x = {{ name }};</script>');
+        $result = self::render('ctx_js_auto', ['name' => 'O\'Reilly <b>']);
+        // json_encode wraps strings in quotes and escapes < (HEX_TAG) and ' (HEX_APOS)
+        $this->assertStringContainsString('var x = ', $result);
+        $this->assertStringNotContainsString("O'Reilly", $result); // apostrophe escaped
+        $this->assertStringNotContainsString('<b>', $result);       // < escaped
+    }
+
+    public function testHtmlContextAfterScriptClose(): void
+    {
+        self::tpl('ctx_html_after', '<script></script>{{ name }}');
+        $result = self::render('ctx_html_after', ['name' => '<b>bold</b>']);
+        $this->assertSame('<script></script>&lt;b&gt;bold&lt;/b&gt;', $result);
+    }
+
+    public function testContextHintJs(): void
+    {
+        self::tpl('ctx_hint_js', '{# @context js #}{{ name }}');
+        $result = self::render('ctx_hint_js', ['name' => '<script>']);
+        // json_encode with HEX_TAG encodes < and > as unicode escapes
+        $this->assertStringNotContainsString('<script>', $result);
+    }
+
+    public function testContextHintHtmlRestores(): void
+    {
+        self::tpl('ctx_hint_restore', '{# @context js #}{# @context html #}{{ name }}');
+        $result = self::render('ctx_hint_restore', ['name' => '<b>']);
+        $this->assertSame('&lt;b&gt;', $result);
+    }
+
+    public function testCssContextRaw(): void
+    {
+        self::tpl('ctx_css', '<style>body { color: {{ color }}; }</style>');
+        $result = self::render('ctx_css', ['color' => 'red']);
+        $this->assertSame('<style>body { color: red; }</style>', $result);
+    }
 }

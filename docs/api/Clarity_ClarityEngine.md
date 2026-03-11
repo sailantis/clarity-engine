@@ -290,7 +290,44 @@ Later values override earlier ones for the same keys.
 
 ---
 
-### use() · [source](../../src/ClarityEngine.php#L42)
+### setDebugMode() · [source](../../src/ClarityEngine.php#L37)
+
+`public function setDebugMode(bool $debug): static`
+
+Enable or disable debug mode.
+
+In debug mode, compiled templates include additional runtime assertions
+(e.g. range-loop safety checks) and the compiled class records
+`$debugCompiled = true`.  When this flag changes, any cached template
+compiled under the opposite mode is automatically recompiled on next use.
+
+**🧭 Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$debug` | bool | - | True to enable, false to disable. |
+
+**➡️ Return value**
+
+- Type: static
+
+
+---
+
+### isDebugMode() · [source](../../src/ClarityEngine.php#L46)
+
+`public function isDebugMode(): bool`
+
+Return whether debug mode is currently enabled.
+
+**➡️ Return value**
+
+- Type: bool
+
+
+---
+
+### use() · [source](../../src/ClarityEngine.php#L68)
 
 `public function use(Clarity\ModuleInterface $module): static`
 
@@ -320,7 +357,7 @@ $engine->use(new \Clarity\LocalizationModule([
 
 ---
 
-### addInlineFilter() · [source](../../src/ClarityEngine.php#L70)
+### addInlineFilter() · [source](../../src/ClarityEngine.php#L96)
 
 `public function addInlineFilter(string $name, array $definition): static`
 
@@ -355,7 +392,7 @@ additional parameters are declared in `params`.
 
 ---
 
-### addBlock() · [source](../../src/ClarityEngine.php#L95)
+### addBlock() · [source](../../src/ClarityEngine.php#L121)
 
 `public function addBlock(string $keyword, callable $handler): static`
 
@@ -387,7 +424,7 @@ $engine->addBlock('endwith_locale', fn(...) => "\$__sv['locale']->pop();");
 
 ---
 
-### addService() · [source](../../src/ClarityEngine.php#L113)
+### addService() · [source](../../src/ClarityEngine.php#L139)
 
 `public function addService(string $name, mixed $service): static`
 
@@ -412,7 +449,7 @@ locale stack) accessible both from closures that close over the object
 
 ---
 
-### hasService() · [source](../../src/ClarityEngine.php#L122)
+### hasService() · [source](../../src/ClarityEngine.php#L148)
 
 `public function hasService(string $name): bool`
 
@@ -431,7 +468,7 @@ Return true if a service with the given key has been registered.
 
 ---
 
-### getService() · [source](../../src/ClarityEngine.php#L132)
+### getService() · [source](../../src/ClarityEngine.php#L158)
 
 `public function getService(string $name): mixed`
 
@@ -454,7 +491,7 @@ Retrieve a previously registered service.
 
 ---
 
-### addFilter() · [source](../../src/ClarityEngine.php#L186)
+### addFilter() · [source](../../src/ClarityEngine.php#L212)
 
 `public function addFilter(string $name, callable $fn): static`
 
@@ -517,7 +554,7 @@ Template usage:
 
 ---
 
-### addFunction() · [source](../../src/ClarityEngine.php#L202)
+### addFunction() · [source](../../src/ClarityEngine.php#L228)
 
 `public function addFunction(string $name, callable $fn): static`
 
@@ -540,7 +577,7 @@ This is distinct from filters, which transform a piped value.
 
 ---
 
-### setCachePath() · [source](../../src/ClarityEngine.php#L214)
+### setCachePath() · [source](../../src/ClarityEngine.php#L240)
 
 `public function setCachePath(string $path): static`
 
@@ -559,7 +596,7 @@ Set the directory where compiled templates should be cached.
 
 ---
 
-### getCachePath() · [source](../../src/ClarityEngine.php#L225)
+### getCachePath() · [source](../../src/ClarityEngine.php#L251)
 
 `public function getCachePath(): string`
 
@@ -573,7 +610,7 @@ Get the currently configured cache directory.
 
 ---
 
-### flushCache() · [source](../../src/ClarityEngine.php#L235)
+### flushCache() · [source](../../src/ClarityEngine.php#L261)
 
 `public function flushCache(): static`
 
@@ -586,7 +623,7 @@ Flush all cached compiled templates.
 
 ---
 
-### render() · [source](../../src/ClarityEngine.php#L285)
+### render() · [source](../../src/ClarityEngine.php#L311)
 
 `public function render(string $view, array $vars = []): string`
 
@@ -647,7 +684,7 @@ $html = $engine->render('admin::dashboard', $data);
 
 ---
 
-### renderPartial() · [source](../../src/ClarityEngine.php#L303)
+### renderPartial() · [source](../../src/ClarityEngine.php#L329)
 
 `public function renderPartial(string $view, array $vars = []): string`
 
@@ -668,7 +705,7 @@ Render a partial view (without applying a layout) and return the output.
 
 ---
 
-### renderLayout() · [source](../../src/ClarityEngine.php#L333)
+### renderLayout() · [source](../../src/ClarityEngine.php#L359)
 
 `public function renderLayout(string $layout, string $content, array $vars = []): string`
 
@@ -692,7 +729,7 @@ The layout receives the rendered view in the `content` variable.
 
 ---
 
-### castToArray() · [source](../../src/ClarityEngine.php#L592)
+### castToArray() · [source](../../src/ClarityEngine.php#L716)
 
 `public static function castToArray(mixed $value): mixed`
 

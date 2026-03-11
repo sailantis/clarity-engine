@@ -39,13 +39,14 @@ Named arguments
 - **TEXT** = `1`
 - **OUTPUT** = `2`
 - **BLOCK** = `3`
+- **COMMENT** = `4`
 - **KEY_TYPE** = `0`
 - **KEY_CONTENT** = `1`
 - **KEY_LINE** = `2`
 
 ## 🚀 Public methods
 
-### setRegistry() · [source](../../src/Engine/Tokenizer.php#L67)
+### setRegistry() · [source](../../src/Engine/Tokenizer.php#L81)
 
 `public function setRegistry(Clarity\Engine\Registry $registry): void`
 
@@ -62,7 +63,30 @@ Named arguments
 
 ---
 
-### tokenize() · [source](../../src/Engine/Tokenizer.php#L84)
+### setLocalVars() · [source](../../src/Engine/Tokenizer.php#L95)
+
+`public function setLocalVars(array $localVars): void`
+
+Update the compile-time local variable context.
+
+Called by the Compiler when entering or exiting a loop scope so that
+variable resolution inside the loop uses direct PHP local variables
+($__lv_item_0) rather than $vars['item'] array lookups.
+
+**🧭 Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$localVars` | array | - | templateVarName → PHP variable string |
+
+**➡️ Return value**
+
+- Type: void
+
+
+---
+
+### tokenize() · [source](../../src/Engine/Tokenizer.php#L115)
 
 `public function tokenize(string $source): array`
 
@@ -83,30 +107,45 @@ Each element is:  ['type' => TEXT|OUTPUT|BLOCK, 'content' => string, 'line' => i
 
 ---
 
-### processExpression() · [source](../../src/Engine/Tokenizer.php#L168)
+### setEscapeContext() · [source](../../src/Engine/Tokenizer.php#L206)
 
-`public function processExpression(string $expression): string`
+`public function setEscapeContext(string $context): void`
 
-Convert a Clarity expression string to a PHP expression string.
+Set the output-escaping context for the next processExpression() call.
 
-The pipeline (|>) is processed first; the leftmost segment is the
-expression and each subsequent segment is a filter call.
+Called by the Compiler as it tracks the current position in the template.
 
 **🧭 Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
-| `$expression` | string | - | Raw expression from inside {{ ... }} or the<br>right-hand side of {% set var = ... %}. |
+| `$context` | string | - | 'html' | 'js' | 'css' |
 
 **➡️ Return value**
 
-- Type: string
-- Description: PHP expression (no leading <?= or trailing ?>).
+- Type: void
 
 
 ---
 
-### processCondition() · [source](../../src/Engine/Tokenizer.php#L194)
+### processExpression() · [source](../../src/Engine/Tokenizer.php#L211)
+
+`public function processExpression(string $expression): string`
+
+**🧭 Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$expression` | string | - |  |
+
+**➡️ Return value**
+
+- Type: string
+
+
+---
+
+### processCondition() · [source](../../src/Engine/Tokenizer.php#L241)
 
 `public function processCondition(string $expression): string`
 
@@ -127,7 +166,7 @@ structure conditions (if, for, set) where auto-escape is meaningless.
 
 ---
 
-### processLvalue() · [source](../../src/Engine/Tokenizer.php#L213)
+### processLvalue() · [source](../../src/Engine/Tokenizer.php#L260)
 
 `public function processLvalue(string $var): string`
 
@@ -149,7 +188,7 @@ Used for the left-hand side of {% set var = ... %}.
 
 ---
 
-### convertVarsAndOps() · [source](../../src/Engine/Tokenizer.php#L316)
+### convertVarsAndOps() · [source](../../src/Engine/Tokenizer.php#L363)
 
 `public function convertVarsAndOps(string $expr): string`
 
@@ -175,7 +214,7 @@ identifiers/var-chains, operators, punctuation) and process each atom.
 
 ---
 
-### varChainToPhp() · [source](../../src/Engine/Tokenizer.php#L1024)
+### varChainToPhp() · [source](../../src/Engine/Tokenizer.php#L1115)
 
 `public function varChainToPhp(string $chain): string`
 
@@ -201,7 +240,7 @@ a.b[c.d].e    → $vars['a']['b'][$vars['c']['d']]['e']
 
 ---
 
-### buildFilterCall() · [source](../../src/Engine/Tokenizer.php#L1211)
+### buildFilterCall() · [source](../../src/Engine/Tokenizer.php#L1302)
 
 `public function buildFilterCall(string $filterSegment, string $phpValue): string`
 

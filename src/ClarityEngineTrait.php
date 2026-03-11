@@ -13,6 +13,7 @@ trait ClarityEngineTrait
     protected ?Compiler $compiler = null;
     /** @var string[] */
     protected array $renderStack = [];
+    protected bool $debugMode = false;
 
     protected function initializeClarityEngine(): void
     {
@@ -20,6 +21,31 @@ trait ClarityEngineTrait
             fn(string $view, array $vars = []): string => $this->renderPartial($view, $vars)
         );
         $this->cache = new Cache();
+    }
+
+    /**
+     * Enable or disable debug mode.
+     *
+     * In debug mode, compiled templates include additional runtime assertions
+     * (e.g. range-loop safety checks) and the compiled class records
+     * `$debugCompiled = true`.  When this flag changes, any cached template
+     * compiled under the opposite mode is automatically recompiled on next use.
+     *
+     * @param bool $debug True to enable, false to disable.
+     * @return $this
+     */
+    public function setDebugMode(bool $debug): static
+    {
+        $this->debugMode = $debug;
+        return $this;
+    }
+
+    /**
+     * Return whether debug mode is currently enabled.
+     */
+    public function isDebugMode(): bool
+    {
+        return $this->debugMode;
     }
 
     /**
@@ -374,13 +400,19 @@ trait ClarityEngineTrait
             // Install error handler to map PHP errors → template lines
             set_error_handler(
                 $this->buildErrorHandler($sourcePath),
-                E_ALL
+                E_ALL & ~E_DEPRECATED & ~E_USER_DEPRECATED
+            );
+
+            // Install exception handler to catch uncaught exceptions (e.g. type errors) and map them to template lines as well.
+            set_exception_handler(
+                $this->buildExceptionHandler($sourcePath)
             );
 
             try {
                 $output = $template->render($vars);
             } finally {
                 restore_error_handler();
+                restore_exception_handler();
             }
         } finally {
             unset($this->renderStack[$sourcePath]);
@@ -407,7 +439,13 @@ trait ClarityEngineTrait
                 $className = null;
             }
             if ($className !== null) {
-                return $className;
+                // Recompile if debug mode changed since the template was last compiled
+                $compiledDebug = $className::$debugCompiled ?? false;
+                if ($compiledDebug !== $this->debugMode) {
+                    $this->cache->invalidate($sourcePath);
+                } else {
+                    return $className;
+                }
             }
         }
 
@@ -418,7 +456,8 @@ trait ClarityEngineTrait
             ->setBasePath($this->viewPath)
             ->setExtension($this->extension)
             ->setNamespaces($this->namespaces)
-            ->setRegistry($this->registry);
+            ->setRegistry($this->registry)
+            ->setDebugMode($this->debugMode);
         $compiled = $this->compiler->compile($sourcePath);
         try {
             return $this->cache->writeAndLoad($sourcePath, $compiled);
@@ -516,13 +555,97 @@ trait ClarityEngineTrait
         $cacheFile = $this->cache->cacheFilePath($sourcePath);
 
         return function (int $errno, string $errstr, string $errfile, int $errline) use ($sourcePath, $cacheFile): bool {
+
+            // Error comes from a different file → pass through to the next handler
             if (realpath($errfile) !== realpath($cacheFile)) {
-                // Error is not in our compiled file – let it propagate normally
                 return false;
             }
 
+            if (!(error_reporting() & $errno))
+                return false;
+
+            // Determine template position
             [$tplFile, $tplLine] = $this->resolveTemplateLine($sourcePath, $errline);
-            throw new ClarityException($errstr, $tplFile ?? $sourcePath, $tplLine);
+
+            // 1) Undefined array key "foo"
+            if (preg_match('/Undefined array key "([^"]+)"/', $errstr, $m)) {
+                $varName = $m[1];
+                throw new ClarityException(
+                    "Variable \"$varName\" is not defined in this context",
+                    $tplFile,
+                    $tplLine
+                );
+            }
+
+            // 2) Trying to access array offset on value of type null
+            if (str_starts_with($errstr, 'Trying to access array offset')) {
+                throw new ClarityException(
+                    "Trying to access array offset on null – probably a missing variable or null value",
+                    $tplFile,
+                    $tplLine
+                );
+            }
+
+            if (preg_match('/Undefined variable: (\S+)/', $errstr, $m)) {
+                $varName = $m[1];
+                throw new ClarityException(
+                    "Variable \"$varName\" is not defined in this context",
+                    $tplFile,
+                    $tplLine
+                );
+            }
+
+            // Other errors (e.g. division by zero, type errors) are retriggered with the original message but mapped to the template line.
+            //throw new ClarityException($errstr, $tplFile ?? $sourcePath, $tplLine);
+            $newMessage = "$errstr in $tplFile:$tplLine";
+            trigger_error($newMessage, $errno);
+            return true;
+        };
+    }
+
+    /**
+     * Build an exception-handler closure that maps uncaught exceptions in the compiled cache file back to the original template file and line.
+     *
+     * @param string $sourcePath The entry template source path.
+     * @return callable
+     */
+    private function buildExceptionHandler(string $sourcePath): callable
+    {
+        $cacheFile = $this->cache->cacheFilePath($sourcePath);
+
+        return function (\Throwable $e) use ($sourcePath, $cacheFile) {
+            $cachePath = realpath($cacheFile);
+
+            // First, check the exception's own file (fast path)
+            $exFile = $e->getFile();
+            if ($exFile !== null && realpath($exFile) === $cachePath) {
+                $exLine = $e->getLine();
+            } else {
+                // Fallback: inspect the trace for frames that originate from the cache file
+                foreach ($e->getTrace() as $frame) {
+                    if (isset($frame['file']) && realpath($frame['file']) === $cachePath) {
+                        $exLine = $frame['line'] ?? 0;
+                        break;
+                    }
+                }
+            }
+
+            if (!isset($exLine)) {
+                // No frame from the cache file found → rethrow normally
+                throw $e;
+            }
+
+            [$tplFile, $mappedLine] = $this->resolveTemplateLine(
+                $sourcePath,
+                $exLine
+            );
+
+            throw new ClarityException(
+                $e->getMessage(),
+                $tplFile ?? $sourcePath,
+                $mappedLine,
+                previous: $e
+            );
         };
     }
 
@@ -531,7 +654,8 @@ trait ClarityEngineTrait
      * template file and line number using the $sourceMap static property on
      * the compiled class — no file I/O required.
      *
-     * The source map is a list of ranges: [phpLineStart, fileIndex, templateLine].
+     * The source map is a list of ranges: [phpLineStart, fileIndex, 
+     * templateLine].
      * The matching range is the last entry whose phpLineStart ≤ $phpLine.
      * File paths are resolved from the parallel $files static property.
      *

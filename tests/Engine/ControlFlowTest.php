@@ -3,6 +3,7 @@ namespace Clarity\Tests\Engine;
 
 use Clarity\ClarityException;
 use Clarity\Tests\BaseTestCase;
+use Clarity\Tests\TestEnvironment;
 
 class ControlFlowTest extends BaseTestCase
 {
@@ -233,25 +234,40 @@ class ControlFlowTest extends BaseTestCase
     public function testRangeZeroStepThrows(): void
     {
         self::tpl('range_zero_step', '{% for i in 1..5 step s %}{{ i }}{% endfor %}');
-        $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessageMatches('/step cannot be zero/');
-        self::render('range_zero_step', ['s' => 0]);
+        TestEnvironment::engine()->setDebugMode(true);
+        try {
+            $this->expectException(\RuntimeException::class);
+            $this->expectExceptionMessageMatches('/step cannot be zero/');
+            self::render('range_zero_step', ['s' => 0]);
+        } finally {
+            TestEnvironment::engine()->setDebugMode(false);
+        }
     }
 
     public function testRangeWrongDirectionThrows(): void
     {
         self::tpl('range_bad_dir', '{% for i in 10..1 %}{{ i }}{% endfor %}');
-        $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessageMatches('/infinite loop/');
-        self::render('range_bad_dir');
+        TestEnvironment::engine()->setDebugMode(true);
+        try {
+            $this->expectException(\RuntimeException::class);
+            $this->expectExceptionMessageMatches('/infinite loop/');
+            self::render('range_bad_dir');
+        } finally {
+            TestEnvironment::engine()->setDebugMode(false);
+        }
     }
 
     public function testRangeNegativeStepWrongDirectionThrows(): void
     {
         self::tpl('range_neg_bad', '{% for i in 1...10 step s %}{{ i }}{% endfor %}');
-        $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessageMatches('/infinite loop/');
-        self::render('range_neg_bad', ['s' => -1]);
+        TestEnvironment::engine()->setDebugMode(true);
+        try {
+            $this->expectException(\RuntimeException::class);
+            $this->expectExceptionMessageMatches('/infinite loop/');
+            self::render('range_neg_bad', ['s' => -1]);
+        } finally {
+            TestEnvironment::engine()->setDebugMode(false);
+        }
     }
 
     // =========================================================================
@@ -262,5 +278,121 @@ class ControlFlowTest extends BaseTestCase
     {
         self::tpl('set_var', '{% set x = count %}double={{ x }}');
         $this->assertSame('double=5', self::render('set_var', ['count' => 5]));
+    }
+
+    // =========================================================================
+    // Macros
+    // =========================================================================
+
+    public function testMacroBasic(): void
+    {
+        self::tpl(
+            'macro_basic',
+            '{% macro @greet(name) %}Hello {{ name }}!{% endmacro %}' .
+            '{% @greet(user) %}'
+        );
+        $this->assertSame('Hello World!', self::render('macro_basic', ['user' => 'World']));
+    }
+
+    public function testMacroMultipleParams(): void
+    {
+        self::tpl(
+            'macro_multi',
+            '{% macro @field(label, value) %}<label>{{ label }}: {{ value }}</label>{% endmacro %}' .
+            '{% @field(name, email) %}'
+        );
+        $result = self::render('macro_multi', ['name' => 'Name', 'email' => 'test@example.com']);
+        $this->assertSame('<label>Name: test@example.com</label>', $result);
+    }
+
+    public function testMacroCalledMultipleTimes(): void
+    {
+        self::tpl(
+            'macro_repeat',
+            '{% macro @item(label) %}<li>{{ label }}</li>{% endmacro %}' .
+            '{% @item(a) %}{% @item(b) %}'
+        );
+        $result = self::render('macro_repeat', ['a' => 'First', 'b' => 'Second']);
+        $this->assertSame('<li>First</li><li>Second</li>', $result);
+    }
+
+    public function testMacroParamIsolatedFromOuterScope(): void
+    {
+        // The macro param 'x' must not leak after the macro ends.
+        // After the macro call, {{ x }} should resolve from $vars['x'].
+        self::tpl(
+            'macro_isolate',
+            '{% macro @show(x) %}[{{ x }}]{% endmacro %}' .
+            '{% @show(a) %}{{ x }}'
+        );
+        $result = self::render('macro_isolate', ['a' => 'macro', 'x' => 'outer']);
+        $this->assertSame('[macro]outer', $result);
+    }
+
+    public function testMacroWithLoopVar(): void
+    {
+        self::tpl(
+            'macro_loop',
+            '{% macro @row(item) %}<tr>{{ item }}</tr>{% endmacro %}' .
+            '{% for row in rows %}{% @row(row) %}{% endfor %}'
+        );
+        $result = self::render('macro_loop', ['rows' => ['a', 'b', 'c']]);
+        $this->assertSame('<tr>a</tr><tr>b</tr><tr>c</tr>', $result);
+    }
+
+    public function testMacroUndefinedThrows(): void
+    {
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/undefined macro/i');
+        self::tpl('macro_undef', '{% @missing(x) %}');
+        self::render('macro_undef', ['x' => 'v']);
+    }
+
+    public function testMacroArgCountMismatchThrows(): void
+    {
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/expects 2 argument/i');
+        self::tpl(
+            'macro_arity',
+            '{% macro @field(label, value) %}{{ label }}{{ value }}{% endmacro %}' .
+            '{% @field(only_one) %}'
+        );
+        self::render('macro_arity', ['only_one' => 'x']);
+    }
+
+    public function testMacroCallsAnotherMacro(): void
+    {
+        self::tpl(
+            'macro_chain',
+            '{% macro @a(x) %}<div>{% @b(x) %}</div>{% endmacro %}' .
+            '{% macro @b(y) %}<span>{{ y }}</span>{% endmacro %}' .
+            '{% @a(val) %}'
+        );
+        $this->assertSame('<div><span>hello</span></div>', self::render('macro_chain', ['val' => 'hello']));
+    }
+
+    public function testMacroDirectRecursionThrows(): void
+    {
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/cycle/i');
+        self::tpl(
+            'macro_self_recurse',
+            '{% macro @loop(x) %}{% @loop(x) %}{% endmacro %}' .
+            '{% @loop(val) %}'
+        );
+        self::render('macro_self_recurse', ['val' => 1]);
+    }
+
+    public function testMacroIndirectRecursionThrows(): void
+    {
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/cycle/i');
+        self::tpl(
+            'macro_indirect_recurse',
+            '{% macro @a(x) %}{% @b(x) %}{% endmacro %}' .
+            '{% macro @b(y) %}{% @a(y) %}{% endmacro %}' .
+            '{% @a(val) %}'
+        );
+        self::render('macro_indirect_recurse', ['val' => 1]);
     }
 }

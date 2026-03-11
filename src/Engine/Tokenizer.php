@@ -41,6 +41,7 @@ class Tokenizer
     public const TEXT = 1;
     public const OUTPUT = 2;
     public const BLOCK = 3;
+    public const COMMENT = 4;
 
     public const KEY_TYPE = 0;
     public const KEY_CONTENT = 1;
@@ -48,9 +49,22 @@ class Tokenizer
 
     private bool $autoEscape = true;
 
+    /** Output-escaping context: 'html' | 'js' | 'css' */
+    private string $escapeContext = 'html';
+
     private ?Registry $registry = null;
 
     private array $varChainCache = [];
+
+    /**
+     * Compile-time local variable context: templateVarName → PHP variable string.
+     * Set by the Compiler when entering/leaving loop scopes so that expressions
+     * inside loops resolve loop variables to direct PHP local variables instead
+     * of $vars['name'] lookups.
+     *
+     * @var array<string, string>
+     */
+    private array $localVars = [];
     private const IDENT_RE = '/^[A-Za-z_][A-Za-z0-9_]*$/';
     private const CHAIN_RE = '/^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$/';
 
@@ -67,6 +81,23 @@ class Tokenizer
     public function setRegistry(Registry $registry): void
     {
         $this->registry = $registry;
+    }
+
+    /**
+     * Update the compile-time local variable context.
+     *
+     * Called by the Compiler when entering or exiting a loop scope so that
+     * variable resolution inside the loop uses direct PHP local variables
+     * ($__lv_item_0) rather than $vars['item'] array lookups.
+     *
+     * @param array<string, string> $localVars  templateVarName → PHP variable string
+     */
+    public function setLocalVars(array $localVars): void
+    {
+        $this->localVars = $localVars;
+        // Invalidate the cache: cached chain strings may reference identifiers
+        // whose resolution changes when the local-var context changes.
+        $this->varChainCache = [];
     }
 
     // -------------------------------------------------------------------------
@@ -113,13 +144,14 @@ class Tokenizer
             $len = \strlen($match);
             $inner = \trim(\substr($match, 2, $len - 4));
             switch ($match[1]) {
-                case '#':
-                    continue 2; // comment tag: skip
+                case '{':
+                    $type = self::OUTPUT;
+                    break;
                 case '%':
                     $type = self::BLOCK;
                     break;
-                case '{':
-                    $type = self::OUTPUT;
+                case '#':
+                    $type = self::COMMENT;
                     break;
                 default:
                     throw new ClarityException("Unexpected tag type in match: {$match[0]}");
@@ -165,6 +197,17 @@ class Tokenizer
      *                           wraps the whole result in htmlspecialchars().
      * @return string PHP expression (no leading <?= or trailing ?>).
      */
+    /**
+     * Set the output-escaping context for the next processExpression() call.
+     * Called by the Compiler as it tracks the current position in the template.
+     *
+     * @param string $context  'html' | 'js' | 'css'
+     */
+    public function setEscapeContext(string $context): void
+    {
+        $this->escapeContext = $context;
+    }
+
     public function processExpression(string $expression): string
     {
         $this->autoEscape = true;
@@ -178,7 +221,11 @@ class Tokenizer
         }
 
         if ($this->autoEscape) {
-            $phpExpr = "\\htmlspecialchars((string)({$phpExpr}), 11, 'UTF-8')";
+            $phpExpr = match ($this->escapeContext) {
+                'js' => '\\json_encode(' . $phpExpr . ', 271)', // HEX_TAG|HEX_AMP|HEX_APOS|HEX_QUOT|UNESCAPED_UNICODE
+                'css' => '(string)(' . $phpExpr . ')',           // raw — CSS values are not HTML-escaped
+                default => "\\htmlspecialchars((string)({$phpExpr}), 11, 'UTF-8')",
+            };
         }
 
         return $phpExpr;
@@ -442,6 +489,13 @@ class Tokenizer
                         throw new ClarityException("Call to unregistered function in context '{$context}'. Register it via addFunction() first.");
                     }
 
+                    // Check local vars (loop variables) before the cache: a locally-bound
+                    // variable must resolve to its PHP local var, not to $vars['name'].
+                    if (isset($this->localVars[$token])) {
+                        $out .= $this->localVars[$token];
+                        continue;
+                    }
+
                     if (isset($this->varChainCache[$token])) {
                         $out .= $this->varChainCache[$token];
                     } else {
@@ -475,7 +529,12 @@ class Tokenizer
                     $context = \substr($expr, \max(0, $start - 10), \min(60, $len - $start + 10));
                     throw new ClarityException("Method calls are not allowed in expressions: '{$token}(...)' in context '{$context}'");
                 }
-                $out .= $this->varChainToPhpWithSegments($token, $segments);
+                // Check if the chain root is a locally-bound variable (loop var)
+                if (isset($this->localVars[$segments[0]['value']])) {
+                    $out .= $this->buildVarChainPhpWithLocalRoot($segments);
+                } else {
+                    $out .= $this->varChainToPhpWithSegments($token, $segments);
+                }
                 continue;
             }
 
@@ -1008,6 +1067,38 @@ class Tokenizer
 
         $php = $this->buildVarChainPhp($segments);
         $this->varChainCache[$chain] = $php;
+        return $php;
+    }
+
+    /**
+     * Like buildVarChainPhp() but uses the local-var PHP variable for the root segment.
+     * Called when the chain root is a locally-bound loop variable (e.g. $item.foo).
+     *
+     * @param array<int,array{type:string,value:string}> $segments
+     */
+    private function buildVarChainPhpWithLocalRoot(array $segments): string
+    {
+        $first = $segments[0]['value'];
+        $php = $this->localVars[$first]; // e.g. '$item'
+        $n = \count($segments);
+
+        for ($k = 1; $k < $n; $k++) {
+            $seg = $segments[$k];
+            $value = $seg['value'];
+
+            if ($seg['type'] === 'key') {
+                $php .= '[\'' . $value . '\']';
+                continue;
+            }
+
+            // index segment — use convertVarsAndOps so nested local vars resolve correctly
+            if ($value !== '' && \ctype_digit($value)) {
+                $php .= '[' . $value . ']';
+            } else {
+                $php .= '[' . $this->convertVarsAndOps($value) . ']';
+            }
+        }
+
         return $php;
     }
 
