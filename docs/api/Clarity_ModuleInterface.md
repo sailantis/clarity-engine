@@ -1,6 +1,6 @@
-# 🔌 Interface: Module
+# 🔌 Interface: ModuleInterface
 
-**Full name:** [Clarity\Module](../../src/Module.php)
+**Full name:** [Clarity\ModuleInterface](../../src/ModuleInterface.php)
 
 Contract for Clarity engine modules.
 
@@ -10,17 +10,15 @@ and registers them all in one call via [`ClarityEngine::use()`](Clarity_ClarityE
 Example
 -------
 ```php
-$clarity->use(new LocalizationModule([
-    'locale'            => 'de_DE',
-    'fallback_locale'   => 'en_US',
-    'translations_path' => __DIR__ . '/locales',
+$clarity->use(new IntlFormatModule([
+    'locale'            => 'jp_JP',
 ]));
 ```
 
 Implementing a module
 ---------------------
 ```php
-class MyModule implements Module
+class MyModule implements ModuleInterface
 {
     public function register(ClarityEngine $engine): void
     {
@@ -32,7 +30,7 @@ class MyModule implements Module
 
 ## 🚀 Public methods
 
-### register() · [source](../../src/Module.php#L45)
+### register() · [source](../../src/ModuleInterface.php#L43)
 
 `public function register(Clarity\ClarityEngine $engine): void`
 

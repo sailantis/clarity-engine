@@ -6,7 +6,7 @@
 
 - [ClarityEngine](Clarity_ClarityEngine.md) `Clarity\ClarityEngine`
 - [ClarityException](Clarity_ClarityException.md) `Clarity\ClarityException`
-- [Module](Clarity_Module.md) `Clarity\Module`
+- [ModuleInterface](Clarity_ModuleInterface.md) `Clarity\ModuleInterface`
 
 ### `Clarity\Engine`
 
@@ -19,7 +19,8 @@
 
 ### `Clarity\Localization`
 
-- [LocaleStack](Clarity_Localization_LocaleStack.md) `Clarity\Localization\LocaleStack`
-- [LocalizationModule](Clarity_Localization_LocalizationModule.md) `Clarity\Localization\LocalizationModule`
-- [TranslationLoader](Clarity_Localization_TranslationLoader.md) `Clarity\Localization\TranslationLoader`
+- [IntlFormatModule](Clarity_Localization_IntlFormatModule.md) `Clarity\Localization\IntlFormatModule`
+- [LocaleService](Clarity_Localization_LocaleService.md) `Clarity\Localization\LocaleService`
+- [TranslationModule](Clarity_Localization_TranslationModule.md) `Clarity\Localization\TranslationModule`
+- [YamlParser](Clarity_Localization_YamlParser.md) `Clarity\Localization\YamlParser`
 

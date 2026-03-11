@@ -292,7 +292,7 @@ Later values override earlier ones for the same keys.
 
 ### use() · [source](../../src/ClarityEngine.php#L42)
 
-`public function use(Clarity\Module $module): static`
+`public function use(Clarity\ModuleInterface $module): static`
 
 Register a module, granting it access to this engine instance so it can
 self-register filters, functions, services, and block directives.
@@ -311,7 +311,7 @@ $engine->use(new \Clarity\LocalizationModule([
 
 | Name | Type | Default | Description |
 |---|---|---|---|
-| `$module` | [Module](Clarity_Module.md) | - | Module to register. |
+| `$module` | [ModuleInterface](Clarity_ModuleInterface.md) | - | Module to register. |
 
 **➡️ Return value**
 
@@ -412,7 +412,49 @@ locale stack) accessible both from closures that close over the object
 
 ---
 
-### addFilter() · [source](../../src/ClarityEngine.php#L168)
+### hasService() · [source](../../src/ClarityEngine.php#L122)
+
+`public function hasService(string $name): bool`
+
+Return true if a service with the given key has been registered.
+
+**🧭 Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$name` | string | - |  |
+
+**➡️ Return value**
+
+- Type: bool
+
+
+---
+
+### getService() · [source](../../src/ClarityEngine.php#L132)
+
+`public function getService(string $name): mixed`
+
+Retrieve a previously registered service.
+
+**🧭 Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$name` | string | - |  |
+
+**➡️ Return value**
+
+- Type: mixed
+
+**⚠️ Throws**
+
+- RuntimeException  if no service with that name exists.
+
+
+---
+
+### addFilter() · [source](../../src/ClarityEngine.php#L186)
 
 `public function addFilter(string $name, callable $fn): static`
 
@@ -475,7 +517,7 @@ Template usage:
 
 ---
 
-### addFunction() · [source](../../src/ClarityEngine.php#L184)
+### addFunction() · [source](../../src/ClarityEngine.php#L202)
 
 `public function addFunction(string $name, callable $fn): static`
 
@@ -498,7 +540,7 @@ This is distinct from filters, which transform a piped value.
 
 ---
 
-### setCachePath() · [source](../../src/ClarityEngine.php#L196)
+### setCachePath() · [source](../../src/ClarityEngine.php#L214)
 
 `public function setCachePath(string $path): static`
 
@@ -517,7 +559,7 @@ Set the directory where compiled templates should be cached.
 
 ---
 
-### getCachePath() · [source](../../src/ClarityEngine.php#L207)
+### getCachePath() · [source](../../src/ClarityEngine.php#L225)
 
 `public function getCachePath(): string`
 
@@ -531,7 +573,7 @@ Get the currently configured cache directory.
 
 ---
 
-### flushCache() · [source](../../src/ClarityEngine.php#L217)
+### flushCache() · [source](../../src/ClarityEngine.php#L235)
 
 `public function flushCache(): static`
 
@@ -544,7 +586,7 @@ Flush all cached compiled templates.
 
 ---
 
-### render() · [source](../../src/ClarityEngine.php#L267)
+### render() · [source](../../src/ClarityEngine.php#L285)
 
 `public function render(string $view, array $vars = []): string`
 
@@ -605,7 +647,7 @@ $html = $engine->render('admin::dashboard', $data);
 
 ---
 
-### renderPartial() · [source](../../src/ClarityEngine.php#L285)
+### renderPartial() · [source](../../src/ClarityEngine.php#L303)
 
 `public function renderPartial(string $view, array $vars = []): string`
 
@@ -626,7 +668,7 @@ Render a partial view (without applying a layout) and return the output.
 
 ---
 
-### renderLayout() · [source](../../src/ClarityEngine.php#L315)
+### renderLayout() · [source](../../src/ClarityEngine.php#L333)
 
 `public function renderLayout(string $layout, string $content, array $vars = []): string`
 
@@ -650,7 +692,7 @@ The layout receives the rendered view in the `content` variable.
 
 ---
 
-### castToArray() · [source](../../src/ClarityEngine.php#L574)
+### castToArray() · [source](../../src/ClarityEngine.php#L592)
 
 `public static function castToArray(mixed $value): mixed`
 

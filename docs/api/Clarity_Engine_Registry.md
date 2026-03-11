@@ -287,7 +287,30 @@ Check whether a named service is registered.
 
 ---
 
-### allServices() · [source](../../src/Engine/Registry.php#L421)
+### getService() · [source](../../src/Engine/Registry.php#L418)
+
+`public function getService(string $name): mixed`
+
+Retrieve a named service.
+
+**🧭 Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$name` | string | - |  |
+
+**➡️ Return value**
+
+- Type: mixed
+
+**⚠️ Throws**
+
+- RuntimeException  if the service is not registered.
+
+
+---
+
+### allServices() · [source](../../src/Engine/Registry.php#L434)
 
 `public function allServices(): array`
 
@@ -303,7 +326,7 @@ The returned array includes callable filters, inline-filter markers
 
 ---
 
-### allFilters() · [source](../../src/Engine/Registry.php#L434)
+### allFilters() · [source](../../src/Engine/Registry.php#L447)
 
 `public function allFilters(): array`
 
@@ -319,7 +342,7 @@ The returned array includes callable filters, inline-filter markers
 
 ---
 
-### addFunction() · [source](../../src/Engine/Registry.php#L446)
+### addFunction() · [source](../../src/Engine/Registry.php#L459)
 
 `public function addFunction(string $name, callable $fn): static`
 
@@ -339,7 +362,7 @@ Register a user-defined function.
 
 ---
 
-### hasFunction() · [source](../../src/Engine/Registry.php#L455)
+### hasFunction() · [source](../../src/Engine/Registry.php#L468)
 
 `public function hasFunction(string $name): bool`
 
@@ -358,7 +381,7 @@ Check whether a named function is registered.
 
 ---
 
-### allFunctions() · [source](../../src/Engine/Registry.php#L465)
+### allFunctions() · [source](../../src/Engine/Registry.php#L478)
 
 `public function allFunctions(): array`
 
@@ -371,7 +394,7 @@ Get all registered functions as a name → callable map.
 
 ---
 
-### addBlock() · [source](../../src/Engine/Registry.php#L645)
+### addBlock() · [source](../../src/Engine/Registry.php#L658)
 
 `public function addBlock(string $keyword, callable $handler): static`
 
@@ -413,7 +436,7 @@ $engine->addBlock('endwith_locale', fn(...) => "\$this->__fl['__locale']->pop();
 
 ---
 
-### hasBlock() · [source](../../src/Engine/Registry.php#L654)
+### hasBlock() · [source](../../src/Engine/Registry.php#L667)
 
 `public function hasBlock(string $keyword): bool`
 
@@ -432,7 +455,7 @@ Check whether a handler is registered for the given keyword.
 
 ---
 
-### compileBlock() · [source](../../src/Engine/Registry.php#L670)
+### compileBlock() · [source](../../src/Engine/Registry.php#L683)
 
 `public function compileBlock(string $keyword, string $rest, string $sourcePath, int $tplLine, callable $processExpr): string`
 

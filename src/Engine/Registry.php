@@ -228,7 +228,7 @@ class Registry
             'params' => ['decimals'],
             'defaults' => ['decimals' => '2'],
         ],
-        'format' => [
+        'sprintf' => [
             'php' => '\sprintf',
             'params' => ['args'],
             'variadic' => true,
@@ -408,6 +408,19 @@ class Registry
     public function hasService(string $name): bool
     {
         return isset($this->services[$name]);
+    }
+
+    /**
+     * Retrieve a named service.
+     *
+     * @throws \RuntimeException if the service is not registered.
+     */
+    public function getService(string $name): mixed
+    {
+        if (!isset($this->services[$name])) {
+            throw new \RuntimeException("Service '{$name}' is not registered.");
+        }
+        return $this->services[$name];
     }
 
     /**

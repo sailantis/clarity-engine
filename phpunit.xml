@@ -8,4 +8,7 @@
     </testsuites>
     <coverage/>
     <logging/>
+    <extensions>
+        <extension class="Clarity\Tests\BootstrapExtension" />
+    </extensions>
 </phpunit>

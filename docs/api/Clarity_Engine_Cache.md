@@ -158,7 +158,7 @@ loaded in this process.
 
 ---
 
-### invalidate() · [source](../../src/Engine/Cache.php#L176)
+### invalidate() · [source](../../src/Engine/Cache.php#L180)
 
 `public function invalidate(string $sourcePath): void`
 
@@ -178,7 +178,7 @@ remove it from the in-process registry.
 
 ---
 
-### flush() · [source](../../src/Engine/Cache.php#L193)
+### flush() · [source](../../src/Engine/Cache.php#L197)
 
 `public function flush(): void`
 
@@ -192,7 +192,7 @@ registry so stale class names do not prevent recompilation.
 
 ---
 
-### classNameFor() · [source](../../src/Engine/Cache.php#L227)
+### classNameFor() · [source](../../src/Engine/Cache.php#L231)
 
 `public function classNameFor(string $sourcePath): string`
 
@@ -215,7 +215,7 @@ to obtain the real class name after a template has been loaded.
 
 ---
 
-### getLoadedClassName() · [source](../../src/Engine/Cache.php#L236)
+### getLoadedClassName() · [source](../../src/Engine/Cache.php#L240)
 
 `public function getLoadedClassName(string $sourcePath): string|null`
 
@@ -235,7 +235,7 @@ given source path, or null if the template has not been loaded yet.
 
 ---
 
-### cacheFilePath() · [source](../../src/Engine/Cache.php#L251)
+### cacheFilePath() · [source](../../src/Engine/Cache.php#L255)
 
 `public function cacheFilePath(string $sourcePath): string`
 

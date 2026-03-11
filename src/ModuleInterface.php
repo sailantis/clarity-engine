@@ -11,17 +11,15 @@ namespace Clarity;
  * Example
  * -------
  * ```php
- * $clarity->use(new LocalizationModule([
- *     'locale'            => 'de_DE',
- *     'fallback_locale'   => 'en_US',
- *     'translations_path' => __DIR__ . '/locales',
+ * $clarity->use(new IntlFormatModule([
+ *     'locale'            => 'jp_JP',
  * ]));
  * ```
  *
  * Implementing a module
  * ---------------------
  * ```php
- * class MyModule implements Module
+ * class MyModule implements ModuleInterface
  * {
  *     public function register(ClarityEngine $engine): void
  *     {
@@ -31,7 +29,7 @@ namespace Clarity;
  * }
  * ```
  */
-interface Module
+interface ModuleInterface
 {
     /**
      * Register all filters, functions, services, and block directives that

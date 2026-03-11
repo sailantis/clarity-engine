@@ -157,10 +157,14 @@ class Cache
         }
 
         $code = "<?php\n" . $compiled->code . "\n";
-        file_put_contents($cacheFile, $code, LOCK_EX);
-        clearstatcache(true, $cacheFile);
-        if (\function_exists('opcache_invalidate')) {
-            @\opcache_invalidate($cacheFile, true);
+
+        $tmp = $cacheFile . '.tmp.' . \getmypid();
+        if (\file_put_contents($tmp, $code, \LOCK_EX) !== false) {
+            \rename($tmp, $cacheFile);
+            \clearstatcache(true, $cacheFile);
+            if (\function_exists('opcache_invalidate')) {
+                @\opcache_invalidate($cacheFile, true);
+            }
         }
 
         $className = require $cacheFile;

@@ -36,10 +36,10 @@ trait ClarityEngineTrait
      * ]));
      * ```
      *
-     * @param Module $module Module to register.
+     * @param ModuleInterface $module Module to register.
      * @return $this
      */
-    public function use(Module $module): static
+    public function use(ModuleInterface $module): static
     {
         $module->register($this);
         return $this;
@@ -114,6 +114,24 @@ trait ClarityEngineTrait
     {
         $this->registry->addService($name, $service);
         return $this;
+    }
+
+    /**
+     * Return true if a service with the given key has been registered.
+     */
+    public function hasService(string $name): bool
+    {
+        return $this->registry->hasService($name);
+    }
+
+    /**
+     * Retrieve a previously registered service.
+     *
+     * @throws \RuntimeException if no service with that name exists.
+     */
+    public function getService(string $name): mixed
+    {
+        return $this->registry->getService($name);
     }
 
     /**
