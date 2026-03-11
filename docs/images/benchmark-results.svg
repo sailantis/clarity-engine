@@ -45,16 +45,16 @@
      ry="7" />
   <line
      x1="100"
-     y1="32"
+     y1="36"
      x2="100"
-     y2="192"
+     y2="196"
      class="axis"
      id="line1" />
   <line
      x1="100"
-     y1="192"
+     y1="196"
      x2="670.28363"
-     y2="192"
+     y2="196"
      class="axis"
      id="line2" />
   <!-- labels -->
@@ -70,103 +70,109 @@
      class="label"
      id="text3"
      style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:12px;line-height:normal;font-family:sans-serif">Mean render time (ms)</text>
+  <text
+     x="96.558189"
+     y="210.97792"
+     class="label"
+     id="text3-4"
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:10px;line-height:normal;font-family:sans-serif;fill:#666666">native is a template engine inside the merlin mvc framework similar to plates</text>
   <!-- data -->
-  <!-- scale: max value 1.23847 -> width available 480px -->
-  <!-- helper: width = round((value / 1.23847) * 480) -->
-  <!-- native: 0.45566 ms -> width=177 -->
+  <!-- scale: max value 0.616565 -> width available 480px -->
+  <!-- helper: width = round((value / 0.616565) * 480) -->
+  <!-- native: 0.23194 ms -> width=181 -->
   <text
      x="20"
-     y="52"
+     y="84"
      class="label"
      id="text4"
      style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:12px;line-height:normal;font-family:sans-serif">native</text>
   <rect
      x="130"
-     y="40"
-     width="177"
+     y="72"
+     width="181"
      height="18"
      rx="3"
      class="bar-native"
      id="rect4" />
   <text
-     x="313"
-     y="54"
+     x="319"
+     y="86"
      class="value"
      id="text5"
-     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:11px;line-height:normal;font-family:monospace">0.456 ms</text>
-  <!-- clarity: 0.45929 ms -> width=178 -->
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:11px;line-height:normal;font-family:monospace">0.232 ms</text>
+  <!-- clarity: 0.21786 ms -> width=170 -->
   <text
      x="20"
-     y="82"
+     y="52"
      class="label"
      id="text6"
      style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:12px;line-height:normal;font-family:sans-serif">clarity</text>
   <rect
      x="130"
-     y="70"
-     width="178"
+     y="40"
+     width="170"
      height="18"
      rx="3"
      class="bar-clarity"
      id="rect6" />
   <text
-     x="314"
-     y="84"
+     x="308"
+     y="54"
      class="value"
      id="text7"
-     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:11px;line-height:normal;font-family:monospace">0.459 ms</text>
-  <!-- plates: 0.54309 ms -> width=211 -->
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:11px;line-height:normal;font-family:monospace">0.218 ms</text>
+  <!-- plates: 0.27663 ms -> width=215 -->
   <text
      x="20"
-     y="112"
+     y="116"
      class="label"
      id="text8"
      style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:12px;line-height:normal;font-family:sans-serif">plates</text>
   <rect
      x="130"
-     y="100"
-     width="211"
+     y="104"
+     width="215"
      height="18"
      rx="3"
      class="bar-plates"
      id="rect8" />
   <text
-     x="347"
-     y="114"
+     x="351"
+     y="118"
      class="value"
      id="text9"
-     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:11px;line-height:normal;font-family:monospace">0.543 ms</text>
-  <!-- blade: 0.70305 ms -> width=272 -->
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:11px;line-height:normal;font-family:monospace">0.277 ms</text>
+  <!-- blade: 0.35385 ms -> width=276 -->
   <text
      x="20"
-     y="142"
+     y="146"
      class="label"
      id="text10"
      style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:12px;line-height:normal;font-family:sans-serif">blade</text>
   <rect
      x="130"
-     y="130"
-     width="272"
+     y="134"
+     width="276"
      height="18"
      rx="3"
      class="bar-blade"
      id="rect10" />
   <text
-     x="408"
-     y="144"
+     x="412"
+     y="148"
      class="value"
      id="text11"
-     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:11px;line-height:normal;font-family:monospace">0.703 ms</text>
-  <!-- twig: 1.23847 ms -> width=480 -->
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:11px;line-height:normal;font-family:monospace">0.354 ms</text>
+  <!-- twig: 0.61657 ms -> width=480 -->
   <text
      x="20"
-     y="172"
+     y="176"
      class="label"
      id="text12"
      style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:12px;line-height:normal;font-family:sans-serif">twig</text>
   <rect
      x="130"
-     y="160"
+     y="164"
      width="480"
      height="18"
      rx="3"
@@ -174,10 +180,10 @@
      id="rect12" />
   <text
      x="616"
-     y="174"
+     y="178"
      class="value"
      id="text13"
-     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:11px;line-height:normal;font-family:monospace;fill:#000000;fill-opacity:1">1.238 ms</text>
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:11px;line-height:normal;font-family:monospace;fill:#000000;fill-opacity:1">0.617 ms</text>
   <metadata
      id="metadata13">
     <rdf:RDF>

@@ -2,20 +2,16 @@
 <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
 <svg width="100%" height="100%" viewBox="0 0 1754 549" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" xmlns:serif="http://www.serif.com/" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;">
     <g transform="matrix(1,0,0,1,-914.342,-1171.67)">
-        <g transform="matrix(1.05497,0,0,1.05497,-84.548,648.887)">
-            <g transform="matrix(434.45,0,0,434.45,2617.37,842.101)">
-            </g>
-            <text x="1427.72px" y="842.101px" style="font-family:'Belanosima-Regular', 'Belanosima', sans-serif;font-size:434.45px;fill:rgb(66,79,248);">Clarity</text>
+        <g transform="matrix(1.05497,0,0,1.05497,1421.65,1537.28)">
+            <text x="0px" y="0px" style="font-family:'Belanosima-Regular', 'Belanosima', sans-serif;font-size:434.45px;fill:rgb(68,100,249);stroke:rgb(18,58,247);stroke-width:0.95px;">Clarity</text>
         </g>
-        <g id="mvc-framework-text" transform="matrix(0.982001,0,0,0.982001,1601.19,1694)">
-            <g transform="matrix(127.291,0,0,127.291,668.915,0)">
+        <g transform="matrix(0.982001,0,0,0.982001,1509.19,1694)">
+            <g id="mvc-framework-text">
+                <text x="0px" y="0px" style="font-family:'BaiJamjuree-Regular', 'Bai Jamjuree';font-size:127.291px;fill:rgb(68,100,249);stroke:rgb(18,58,247);stroke-width:1.55px;">T<tspan x="58.808px " y="0px ">e</tspan>mplat<tspan x="460.539px " y="0px ">e</tspan> Engine</text>
             </g>
-            <text x="0px" y="0px" style="font-family:'BaiJamjuree-Regular', 'Bai Jamjuree';font-size:127.291px;fill:rgb(66,79,248);stroke:rgb(31,40,207);stroke-width:1.55px;">DSL Engine</text>
         </g>
-        <g transform="matrix(2.68015,0,0,6.72265,-977.948,-7545.44)">
-            <g transform="matrix(170.444,0,0,170.444,873.413,1368.09)">
-            </g>
-            <text x="699.561px" y="1368.09px" style="font-family:'Xscale', 'xscale';font-weight:700;font-size:170.444px;fill:rgb(66,79,248);">{|&gt;</text>
+        <g transform="matrix(2.68015,0,0,6.72265,896.98,1651.75)">
+            <text x="0px" y="0px" style="font-family:'Xscale', 'xscale';font-weight:700;font-size:170.444px;fill:rgb(68,100,249);stroke:rgb(18,58,247);stroke-width:0.2px;">{|&gt;</text>
         </g>
     </g>
 </svg>

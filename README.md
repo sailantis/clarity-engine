@@ -250,15 +250,15 @@ Clarity is designed for speed. Templates compile to native PHP classes and lever
 
 | Engine  | Warm (ms) | Mean (ms) | P95 (ms) |
 | ------- | --------- | --------- | -------- |
-| Native  | 0.676     | 0.456     | 0.514    |
-| Clarity | 0.676     | 0.459     | 0.520    |
-| Plates  | 2.552     | 0.543     | 0.617    |
-| Blade   | 25.98     | 0.703     | 0.797    |
-| Twig    | 34.87     | 1.238     | 1.399    |
+| Clarity | 0.445     | 0.218     | 0.250    |
+| Native  | 0.530     | 0.232     | 0.265    |
+| Plates  | 2.212     | 0.277     | 0.319    |
+| Blade   | 17.553    | 0.354     | 0.408    |
+| Twig    | 11.753    | 0.617     | 0.706    |
 
 ![Benchmark Results](docs/images/benchmark-results.svg)
 
-_30 runs × 10,000 iterations, PHP 8.3.6 with OPcache enabled_
+_30 runs × 10,000 iterations, PHP 8.3.6 with OPcache enabled on a high performance server at Hetzner (Link to the Benchmark follows)_
 
 📖 **[Performance optimization guide →](docs/05-best-practices.md#performance)**
 
