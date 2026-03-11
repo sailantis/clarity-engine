@@ -43,7 +43,7 @@ class ControlFlowTest extends BaseTestCase
 
     public function testRangeLoop(): void
     {
-        self::tpl('range', '{% for i in 1...3 %}{{ i }}{% endfor %}');
+        self::tpl('range', '{% for i in 1..3 %}{{ i }}{% endfor %}');
         $this->assertSame('123', self::render('range'));
     }
 
@@ -176,56 +176,56 @@ class ControlFlowTest extends BaseTestCase
 
     public function testRangeExclusive(): void
     {
-        self::tpl('range_excl', '{% for i in 1..5 %}{{ i }},{% endfor %}');
+        self::tpl('range_excl', '{% for i in 1...5 %}{{ i }},{% endfor %}');
         $this->assertSame('1,2,3,4,', self::render('range_excl'));
     }
 
     public function testRangeInclusive(): void
     {
-        self::tpl('range_incl', '{% for i in 1...5 %}{{ i }},{% endfor %}');
+        self::tpl('range_incl', '{% for i in 1..5 %}{{ i }},{% endfor %}');
         $this->assertSame('1,2,3,4,5,', self::render('range_incl'));
     }
 
     public function testRangeWithStep(): void
     {
-        self::tpl('range_step', '{% for i in 1..10 step 3 %}{{ i }},{% endfor %}');
+        self::tpl('range_step', '{% for i in 1...10 step 3 %}{{ i }},{% endfor %}');
         $this->assertSame('1,4,7,', self::render('range_step'));
     }
 
     public function testRangeInclusiveWithStep(): void
     {
-        self::tpl('range_incl_step', '{% for i in 0...8 step 4 %}{{ i }},{% endfor %}');
+        self::tpl('range_incl_step', '{% for i in 0..8 step 4 %}{{ i }},{% endfor %}');
         $this->assertSame('0,4,8,', self::render('range_incl_step'));
     }
 
     public function testRangeFromVariables(): void
     {
-        self::tpl('range_vars', '{% for i in start...end %}{{ i }},{% endfor %}');
+        self::tpl('range_vars', '{% for i in start..end %}{{ i }},{% endfor %}');
         $this->assertSame('3,4,5,', self::render('range_vars', ['start' => 3, 'end' => 5]));
     }
 
     public function testRangeStepFromVariable(): void
     {
-        self::tpl('range_step_var', '{% for i in 0..10 step s %}{{ i }},{% endfor %}');
+        self::tpl('range_step_var', '{% for i in 0...10 step s %}{{ i }},{% endfor %}');
         $this->assertSame('0,5,', self::render('range_step_var', ['s' => 5]));
     }
 
     public function testRangeZeroBased(): void
     {
-        self::tpl('range_zero', '{% for i in 0..3 %}{{ i }},{% endfor %}');
+        self::tpl('range_zero', '{% for i in 0...3 %}{{ i }},{% endfor %}');
         $this->assertSame('0,1,2,', self::render('range_zero'));
     }
 
     public function testNestedRangeLoop(): void
     {
-        $tpl = "{% for r in 1...2 %}\n{% for c in 1...2 %}{{ r }}{{ c }},{% endfor %}\n{% endfor %}";
+        $tpl = "{% for r in 1..2 %}\n{% for c in 1..2 %}{{ r }}{{ c }},{% endfor %}\n{% endfor %}";
         self::tpl('range_nested', $tpl);
         $this->assertSame('11,12,21,22,', self::render('range_nested'));
     }
 
     public function testMixedRangeAndForeach(): void
     {
-        $tpl = '{% for item in list %}{% for i in 1...2 %}{{ item }}{{ i }},{% endfor %}{% endfor %}';
+        $tpl = '{% for item in list %}{% for i in 1..2 %}{{ item }}{{ i }},{% endfor %}{% endfor %}';
         self::tpl('range_mixed', $tpl);
         $this->assertSame('a1,a2,b1,b2,', self::render('range_mixed', ['list' => ['a', 'b']]));
     }

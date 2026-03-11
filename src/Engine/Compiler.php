@@ -486,7 +486,7 @@ class Compiler
         if (isset($m[4]) && $m[4] !== '') {
             $item = $this->tokenizer->processLvalue($m[1]);
             $start = $this->tokenizer->processCondition(trim($m[3]));
-            $inclusive = ($m[4] === '...');
+            $inclusive = ($m[4] === '..');
             $end = $this->tokenizer->processCondition(trim($m[5]));
             $step = isset($m[6]) && $m[6] !== '' ? $this->tokenizer->processCondition(trim($m[6])) : '1';
             $cmp = $inclusive ? '<=' : '<';
