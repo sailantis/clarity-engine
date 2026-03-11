@@ -796,5 +796,5 @@ $engine->render('page', ['user' => $request->getUser()]);
 ## Next Steps
 
 - **[Troubleshooting](06-troubleshooting.md)** — Common errors and solutions
-- **[Examples](../examples/README.md)** — See best practices in action
+- **[Examples](examples/README.md)** — See best practices in action
 - **[Advanced Topics](04-advanced-topics.md)** — Deep dives into features

@@ -132,6 +132,35 @@ $engine->addFunction('asset', function(string $path) {
 // Use in template: {{ asset('images/logo.png') }}
 ```
 
+### Using Modules
+
+Modules bundle related filters, functions, and directives into a single plug-in call:
+
+```php
+use Clarity\Localization\IntlFormatModule;
+use Clarity\Localization\TranslationModule;
+
+// Locale-aware number, date, and currency filters (requires intl extension)
+$engine->use(new IntlFormatModule(['locale' => 'en_US']));
+
+// Translation filter (t) with file-based catalogs
+$engine->use(new TranslationModule([
+    'locale'            => 'en_US',
+    'translations_path' => __DIR__ . '/locales',
+]));
+```
+
+📖 **[Module reference →](04-advanced-topics.md#modules)**
+
+### Debug Mode
+
+Enable extra runtime safety checks (range-loop validation, etc.) in development:
+
+```php
+$engine->setDebugMode(true); // enable
+$engine->setDebugMode(false); // disable (default)
+```
+
 ### Named Namespaces
 
 Register directories with namespaces for organized template resolution:
@@ -316,7 +345,7 @@ Now that you have Clarity up and running, explore these topics:
 - **[Template Syntax](01-template-syntax.md)** — Learn all directives, operators, and expressions
 - **[Filters and Functions](02-filters-and-functions.md)** — Master data transformation
 - **[Layout Inheritance](03-layout-inheritance.md)** — Build reusable page structures
-- **[Examples](../examples/README.md)** — See complete working examples
+- **[Examples](xamples/README.md)** — See complete working examples
 
 ## Common Questions
 

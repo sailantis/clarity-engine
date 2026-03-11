@@ -12,8 +12,10 @@
 - **🔒 Secure Sandbox** – No arbitrary PHP execution; templates are strictly sandboxed with controlled access
 - **🎨 Expressive Syntax** – Clean, readable template syntax inspired by modern template engines
 - **📦 Template Inheritance** – Reusable layouts with `extends` and `blocks` for DRY template architecture
-- **🔧 Extensible** – Custom filters, functions, and namespaces for flexible template organization
-- **⚡ Auto-escaping** – Built-in XSS protection with automatic HTML escaping
+- **� Macros** – Define reusable template fragments with parameters and call them inline
+- **🔧 Extensible** – Custom filters, functions, inline filters, block directives, and namespaces
+- **🧩 Modules** – Bundle filters, functions, and directives into self-registering plug-ins
+- **⚡ Auto-escaping** – Built-in XSS protection with context-aware automatic HTML/JS/CSS escaping
 - **🌍 Unicode Support** – Full multibyte string handling with transparent normalization
 - **🎯 Zero Dependencies** – Standalone engine with no external dependencies beyond PHP 8.1+
 
@@ -78,24 +80,24 @@ That's it! Clarity automatically compiles and caches your template.
 
 Start here if you're writing templates:
 
-- **[Getting Started](docs/guides/00-getting-started.md)** – Installation, setup, and your first template
-- **[Template Syntax](docs/guides/01-template-syntax.md)** – Variables, directives, operators, and control flow
-- **[Filters & Functions](docs/guides/02-filters-and-functions.md)** – Transform data with built-in and custom filters
-- **[Layout Inheritance](docs/guides/03-layout-inheritance.md)** – Reusable layouts with extends and blocks
+- **[Getting Started](docs/00-getting-started.md)** – Installation, setup, and your first template
+- **[Template Syntax](docs/01-template-syntax.md)** – Variables, directives, operators, and control flow
+- **[Filters & Functions](docs/02-filters-and-functions.md)** – Transform data with built-in and custom filters
+- **[Layout Inheritance](docs/03-layout-inheritance.md)** – Reusable layouts with extends and blocks
 
 ### For Developers
 
 Integration and advanced topics:
 
-- **[Advanced Topics](docs/guides/04-advanced-topics.md)** – Namespaces, caching, auto-escaping, and Unicode
-- **[Best Practices](docs/guides/05-best-practices.md)** – Organization, security, performance, and testing
-- **[Troubleshooting](docs/guides/06-troubleshooting.md)** – Common errors and debugging techniques
+- **[Advanced Topics](docs/04-advanced-topics.md)** – Namespaces, caching, auto-escaping, and Unicode
+- **[Best Practices](docs/05-best-practices.md)** – Organization, security, performance, and testing
+- **[Troubleshooting](docs/06-troubleshooting.md)** – Common errors and debugging techniques
 
 ### Reference
 
 - **[API Documentation](docs/api/)** – Auto-generated API reference for all classes
 - **[Examples](docs/examples/)** – Runnable template examples demonstrating features
-- **[Guide Index](docs/guides/README.md)** – Complete documentation index
+- **[Guide Index](docs/README.md)** – Complete documentation index
 
 ---
 
@@ -118,11 +120,26 @@ Integration and advanced topics:
   {{ item.name }}
 {% endfor %}
 
-{% for i in 1..10 %}{{ i }}{% endfor %}        {# Range: 1 to 9 #}
-{% for i in 1...10 %}{{ i }}{% endfor %}       {# Range: 1 to 10 #}
-{% for i in 0...100 step 10 %}{{ i }}{% endfor %} {# With step #}
+{% for value, key in assocArray %}         {# Loop with key variable #}
+  {{ key }}: {{ value }}
+{% endfor %}
+
+{% for i in 1..10 %}{{ i }}{% endfor %}        {# Range: 1 to 10 (inclusive) #}
+{% for i in 1...10 %}{{ i }}{% endfor %}       {# Range: 1 to 9 (exclusive) #}
+{% for i in 0..100 step 10 %}{{ i }}{% endfor %} {# With step #}
 
 {% set total = items |> length %}
+```
+
+### Macros
+
+```twig
+{% macro @card(title, body) %}
+<div class="card"><h3>{{ title }}</h3><p>{{ body }}</p></div>
+{% endmacro %}
+
+{% @card("Welcome", intro) %}
+{% @card(article.title, article.excerpt) %}
 ```
 
 ### Filters
@@ -131,14 +148,17 @@ Integration and advanced topics:
 {{ text |> upper }}
 {{ price |> number(2) }}
 {{ timestamp |> date('Y-m-d H:i') }}
+{{ "Hello, %s!" |> sprintf(user.name) }}
 {{ tags |> join(', ') }}
 {{ users |> map(u => u.name) |> join(', ') }} {# Lambda expression #}
 {{ items |> filter(i => i.active) |> length }}
+{{ title |> slug }}                           {# URL-friendly slug #}
+{{ html |> striptags }}                       {# Strip HTML tags #}
 ```
 
-Common filters: `upper`, `lower`, `trim`, `length`, `number`, `date`, `json`, `join`, `map`, `filter`, `reduce`, `default`, `escape`, `raw`
+Common filters: `upper`, `lower`, `trim`, `length`, `number`, `date`, `sprintf`, `json`, `join`, `split`, `slug`, `map`, `filter`, `reduce`, `default`, `empty`, `striptags`, `escape`, `raw`
 
-📖 **[See all filters and detailed syntax →](docs/guides/02-filters-and-functions.md)**
+📖 **[See all filters and detailed syntax →](docs/02-filters-and-functions.md)**
 
 ### Template Inheritance
 
@@ -169,7 +189,7 @@ Common filters: `upper`, `lower`, `trim`, `length`, `number`, `date`, `json`, `j
 {{ include("widgets/card", { title: "Hi" }) }} {# Dynamic include with context #}
 ```
 
-📖 **[Full syntax reference →](docs/guides/01-template-syntax.md)**
+📖 **[Full syntax reference →](docs/01-template-syntax.md)**
 
 ---
 
@@ -188,10 +208,18 @@ $engine->setCachePath(__DIR__ . '/cache');
 $engine->setExtension('.tpl.html');           // Default: .clarity.html
 $engine->addFilter('currency', fn($v) => '€ ' . number_format($v, 2));
 $engine->addNamespace('admin', '/path/to/admin/templates');
+$engine->setDebugMode(true);                  // Runtime safety checks (dev only)
 $engine->flushCache();                        // Clear compiled templates
+
+// Modules: bundle filters, functions, and directives
+$engine->use(new \Clarity\Localization\IntlFormatModule(['locale' => 'en_US']));
+$engine->use(new \Clarity\Localization\TranslationModule([
+    'locale'            => 'en_US',
+    'translations_path' => __DIR__ . '/locales',
+]));
 ```
 
-📖 **[Configuration guide →](docs/guides/00-getting-started.md#configuration)**
+📖 **[Configuration guide →](docs/00-getting-started.md#configuration)**
 
 ---
 
@@ -205,7 +233,7 @@ Clarity provides a secure sandbox environment:
 - ✅ **Object safety** – Objects are converted to arrays, preventing method calls from templates
 - ✅ **Controlled lambdas** – Lambda expressions can only use registered filters
 
-📖 **[Security best practices →](docs/guides/05-best-practices.md#security)**
+📖 **[Security best practices →](docs/05-best-practices.md#security)**
 
 ---
 
@@ -232,7 +260,7 @@ Clarity is designed for speed. Templates compile to native PHP classes and lever
 
 _30 runs × 10,000 iterations, PHP 8.3.6 with OPcache enabled_
 
-📖 **[Performance optimization guide →](docs/guides/05-best-practices.md#performance)**
+📖 **[Performance optimization guide →](docs/05-best-practices.md#performance)**
 
 ---
 
@@ -263,7 +291,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🔗 Links
 
-- **[Documentation](docs/guides/README.md)** – Complete guide index
+- **[Documentation](docs/README.md)** – Complete guide index
 - **[Examples](docs/examples/)** – Runnable example templates
 - **[API Reference](docs/api/)** – Auto-generated API documentation
 - **[GitHub Issues](https://github.com/clarity/engine/issues)** – Report bugs or request features

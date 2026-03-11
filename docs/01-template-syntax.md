@@ -104,37 +104,23 @@ Iterate over arrays:
 </ul>
 ```
 
-#### Loop with Index
+#### Loop with Key Variable
 
-Access the loop index (0-based):
+Access both value and key in a single loop using the two-variable syntax. The **first** name is the value and the **second** is the key:
 
 ```twig
-{% for product in products %}
-<div>Item #{{ loop.index }}: {{ product.name }}</div>
+{# Indexed array: value, index #}
+{% for item, idx in items %}
+<li>{{ idx }}: {{ item.name }}</li>
+{% endfor %}
+
+{# Associative array: value, key #}
+{% for v, k in settings %}
+<p>{{ k }}: {{ v }}</p>
 {% endfor %}
 ```
 
-Available loop variables:
-
-| Variable      | Description                 |
-| ------------- | --------------------------- |
-| `loop.index`  | Current iteration (0-based) |
-| `loop.index1` | Current iteration (1-based) |
-| `loop.first`  | True if first iteration     |
-| `loop.last`   | True if last iteration      |
-| `loop.length` | Total number of items       |
-
-Example using loop variables:
-
-```twig
-<ul>
-  {% for user in users %}
-  <li class="{{ loop.first ? 'first' : '' }} {{ loop.last ? 'last' : '' }}">
-    {{ loop.index1 }}. {{ user.name }}
-  </li>
-  {% endfor %}
-</ul>
-```
+This compiles directly to PHP's `foreach ($items as $idx => $item)`.
 
 #### Range Loops
 
@@ -161,6 +147,53 @@ Example using loop variables:
 
 ```twig
 {% for i in start...end step increment %} {{ i }} {% endfor %}
+```
+
+### Macros
+
+Macros are reusable template fragments defined once and called multiple times within a template.
+
+#### Defining a Macro
+
+```twig
+{% macro @card(title, body) %}
+<div class="card">
+  <h3>{{ title }}</h3>
+  <p>{{ body }}</p>
+</div>
+{% endmacro %}
+```
+
+#### Calling a Macro
+
+Use `{% @macroName(arg1, arg2) %}` to invoke a macro:
+
+```twig
+{% @card("Welcome", "Hello from Clarity!") %}
+{% @card(article.title, article.excerpt) %}
+```
+
+#### Macro Rules
+
+- Macros are defined with `{% macro @name(param1, param2) %}...{% endmacro %}`
+- Macro names are prefixed with `@` and must not conflict with template variables
+- Macros are expanded **inline at compile time** — zero runtime overhead
+- Parameters can reference any expression available at the call site
+- Macros cannot call themselves recursively (cycle detection throws a compile error)
+- Macros are scoped to the current template (they are not available in included or extended templates)
+
+#### Multi-Parameter Example
+
+```twig
+{% macro @avatar(name, size, href) %}
+<a href="{{ href }}" class="avatar avatar--{{ size }}">
+  <span>{{ name |> upper |> slice(0, 2) }}</span>
+</a>
+{% endmacro %}
+
+{% for user in team %}
+  {% @avatar(user.name, "md", "/users/" ~ user.id) %}
+{% endfor %}
 ```
 
 ### Variable Assignment
@@ -406,9 +439,32 @@ See [Filters and Functions](02-filters-and-functions.md) for custom functions.
 Comments are removed during compilation and don't appear in output:
 
 ```twig
-{# This is a comment #} {# Multi-line comment Useful for documentation #} {#
-TODO: Add pagination here #}
+{# This is a comment #}
+{# Multi-line comment
+   Useful for documentation #}
+{# TODO: Add pagination here #}
 ```
+
+### Context Hints
+
+Special `@context` annotations inside comments instruct the compiler to switch the auto-escaping mode for all output expressions that follow. Clarity also auto-detects context when scanning `<script>` and `<style>` tags, but you can override it explicitly:
+
+```twig
+{# @context js #}
+  var userData = {{ user |> json }};   {# JSON-encodes and hex-escapes for JS safety #}
+{# @context html #}
+  <p>{{ message }}</p>                 {# Back to standard HTML escaping #}
+```
+
+Available contexts:
+
+| Context | Escaping applied to output expressions                 |
+| ------- | ------------------------------------------------------ |
+| `html`  | `htmlspecialchars()` (default)                         |
+| `js`    | `json_encode()` with hex escaping (safe for inline JS) |
+| `css`   | Cast to `(string)` — no HTML escaping                  |
+
+> **Tip:** Clarity automatically switches context when it encounters `<script>` or `<style>` tags in the template. Use `{# @context … #}` when the auto-detection isn't sufficient (e.g. inside a string literal that contains a tag-like pattern).
 
 ## Complex Examples
 
@@ -515,20 +571,25 @@ Clarity is sandboxed for security. The following are **not permitted**:
 
 ### Directive Summary
 
-| Directive                           | Purpose                  |
-| ----------------------------------- | ------------------------ |
-| `{% if condition %}`                | Conditional rendering    |
-| `{% elseif condition %}`            | Alternative condition    |
-| `{% else %}`                        | Fallback case            |
-| `{% endif %}`                       | End conditional          |
-| `{% for item in array %}`           | Loop over array          |
-| `{% for i in start...end %}`        | Range loop               |
-| `{% endfor %}`                      | End loop                 |
-| `{% set variable = value %}`        | Variable assignment      |
-| `{% extends "template" %}`          | Inherit from layout      |
-| `{% block name %}...{% endblock %}` | Define/override block    |
-| `{% include "template" %}`          | Include another template |
-| `{# comment #}`                     | Template comment         |
+| Directive                                    | Purpose                    |
+| -------------------------------------------- | -------------------------- |
+| `{% if condition %}`                         | Conditional rendering      |
+| `{% elseif condition %}`                     | Alternative condition      |
+| `{% else %}`                                 | Fallback case              |
+| `{% endif %}`                                | End conditional            |
+| `{% for item in array %}`                    | Loop over array            |
+| `{% for value, key in array %}`              | Loop with key variable     |
+| `{% for i in start...end %}`                 | Range loop (inclusive)     |
+| `{% for i in start..end %}`                  | Range loop (exclusive end) |
+| `{% endfor %}`                               | End loop                   |
+| `{% set variable = value %}`                 | Variable assignment        |
+| `{% extends "template" %}`                   | Inherit from layout        |
+| `{% block name %}...{% endblock %}`          | Define/override block      |
+| `{% include "template" %}`                   | Include another template   |
+| `{% macro @name(params) %}...{% endmacro %}` | Define a reusable macro    |
+| `{% @name(args) %}`                          | Call a macro               |
+| `{# comment #}`                              | Template comment           |
+| `{# @context js\|css\|html #}`               | Switch escaping context    |
 
 ### Operator Summary
 

@@ -286,18 +286,25 @@ The `raw` filter is a **compile-time marker** that disables the auto-escape wrap
 ✅ **Safe uses:**
 
 ```twig
-{# 1. Sanitized HTML from a WYSIWYG editor #} {{ article.sanitizedBody |> raw }}
-{# 2. Pre-rendered HTML fragments from your application #} {{ renderedWidget |>
-raw }} {# 3. JSON output #} {{ data |> json |> raw }} {# 4. HTML-generating
-filters like nl2br #} {{ description |> nl2br |> raw }}
+{# 1. Sanitized HTML from a WYSIWYG editor #}
+{{ article.sanitizedBody |> raw }}
+{# 2. Pre-rendered HTML fragments from your application #}
+{{ renderedWidget |> raw }}
+{# 3. JSON output #}
+{{ data |> json |> raw }}
+{# 4. HTML-generating filters like nl2br #}
+{{ description |> nl2br |> raw }}
 ```
 
 ❌ **Dangerous uses:**
 
 ```twig
-{# NEVER use raw with user input #} {{ userInput |> raw }} {# ⚠️ XSS
-VULNERABILITY #} {# NEVER use raw with untrusted data #} {{ $_GET['name'] |> raw
-}} {# ⚠️ DANGER #}
+{# NEVER use raw with user input #}
+{{ userInput |> raw }}
+{# ⚠️ XSS VULNERABILITY #}
+{# NEVER use raw with untrusted data #}
+{{ $_GET['name'] |> raw }}
+{# ⚠️ DANGER #}
 ```
 
 ### Safe HTML Generation
@@ -724,8 +731,259 @@ echo $engine->render('pages/home', [
 ]);
 ```
 
+## Modules
+
+Modules are the recommended way to bundle related filters, functions, block directives, and services into a single reusable unit.
+
+### Registering a Module
+
+```php
+use Clarity\ClarityEngine;
+use Clarity\Localization\IntlFormatModule;
+use Clarity\Localization\TranslationModule;
+
+$engine = new ClarityEngine();
+
+// Register a built-in module
+$engine->use(new IntlFormatModule([
+    'locale'   => 'de_DE',
+    'timezone' => 'Europe/Berlin',
+]));
+
+$engine->use(new TranslationModule([
+    'locale'            => 'de_DE',
+    'fallback_locale'   => 'en_US',
+    'translations_path' => __DIR__ . '/locales',
+]));
+```
+
+### Writing a Custom Module
+
+Implement `Clarity\ModuleInterface`:
+
+```php
+use Clarity\ClarityEngine;
+use Clarity\ModuleInterface;
+
+class MyModule implements ModuleInterface
+{
+    public function register(ClarityEngine $engine): void
+    {
+        $engine->addFilter('shout', fn($v) => strtoupper($v) . '!');
+        $engine->addFunction('now', fn() => date('Y-m-d H:i:s'));
+    }
+}
+
+$engine->use(new MyModule());
+```
+
+### Built-in Modules
+
+#### IntlFormatModule
+
+Provides locale-aware number, currency, date, and text filters backed by PHP's `intl` extension. Requires `intl` to be installed; filters degrade gracefully otherwise.
+
+```php
+$engine->use(new \Clarity\Localization\IntlFormatModule([
+    'locale'   => 'en_US',
+    'timezone' => 'America/New_York',
+]));
+```
+
+Registered filters: `format_number`, `format_currency`, `currency_name`, `currency_symbol`, `percent`, `scientific`, `spellout`, `ordinal`, `format_date`, `format_time`, `format_datetime`, `format_relative`, `country_name`, `language_name`, `locale_name`, `transliterate`, `format_message`.
+
+```twig
+{{ 1234567.89 |> format_number(2) }}
+{{ price |> format_currency('USD') }}
+{{ 0.75 |> percent }}
+{{ 42 |> spellout }}
+{{ 1 |> ordinal }}
+{{ order.created_at |> format_date('long') }}
+{{ order.created_at |> format_relative }}
+{{ "DE" |> country_name }}
+{{ "{count, plural, one{# item} other{# items}}" |> format_message({count: n}) }}
+```
+
+#### TranslationModule
+
+Provides a `t` filter for looking up translations from domain-separated locale files (PHP, JSON, or YAML).
+
+```php
+$engine->use(new \Clarity\Localization\TranslationModule([
+    'locale'            => 'de_DE',
+    'fallback_locale'   => 'en_US',
+    'translations_path' => __DIR__ . '/locales',
+    'default_domain'    => 'messages',
+]));
+```
+
+```twig
+{# Simple key lookup #}
+{{ "logout" |> t }}
+
+{# With placeholder substitution #}
+{{ "greeting" |> t({name: user.name}) }}
+
+{# Specific domain #}
+{{ "title" |> t({}, domain:"common") }}
+{{ "overview" |> t(domain:"books") }}
+
+{# Switch domain for a block #}
+{% with_t_domain "emails" %}
+    {{ "subject" |> t }}
+{% endwith_t_domain %}
+```
+
+Translation files use the naming convention `{domain}.{locale}.{ext}`:
+
+```
+locales/
+├── messages.de_DE.yaml
+├── messages.en_US.php
+└── common.de_DE.json
+```
+
+#### LocaleService
+
+Provides a push/pop locale stack for switching locales within templates. Both `IntlFormatModule` and `TranslationModule` auto-bootstrap it; register it explicitly if you need fine-grained control:
+
+```php
+$engine->use(new \Clarity\Localization\LocaleService(['locale' => 'de_DE']));
+```
+
+The `with_locale` block directive (registered by `TranslationModule`) allows per-block locale switching:
+
+```twig
+{% with_locale user.preferredLocale %}
+    {{ "welcome" |> t }}
+{% endwith_locale %}
+```
+
+## Debug Mode
+
+Enable debug mode to add runtime safety checks in compiled templates:
+
+```php
+$engine->setDebugMode(true);
+```
+
+When active:
+
+- Range loop steps are validated at runtime: a step of `0` throws a `RuntimeException`
+- A step that moves away from the end (which would produce an infinite loop) also throws
+- The compiled class records `$debugCompiled = true` so that cache files compiled under debug mode are automatically recompiled when the flag changes
+
+```php
+// Check whether debug mode is currently on
+$engine->isDebugMode(); // bool
+```
+
+> **Tip:** Enable debug mode in development and disable it in production to keep generated code lean.
+
+## Inline Filters
+
+Inline filters are compiled **directly into the generated PHP expression** — no callable is invoked at runtime, making them zero-overhead alternatives to regular filters.
+
+### Registering an Inline Filter
+
+```php
+$engine->addInlineFilter('dollars', [
+    'php'     => '\number_format((float) {1}, 2, ".", ",") . " USD"',
+]);
+```
+
+### With Parameters
+
+```php
+$engine->addInlineFilter('pad', [
+    'php'      => '\str_pad((string) {1}, {2}, {3}, \STR_PAD_LEFT)',
+    'params'   => ['length', 'char'],
+    'defaults' => ['char' => "' '"],
+]);
+```
+
+The template:
+
+```twig
+{{ invoiceNumber |> pad(8, '0') }}
+```
+
+Compiles to: `\str_pad((string) $vars['invoiceNumber'], 8, '0', \STR_PAD_LEFT)` — no function lookup at runtime.
+
+### Template Syntax
+
+| Placeholder | Meaning                           |
+| ----------- | --------------------------------- |
+| `{1}`       | The piped value                   |
+| `{2}`       | First additional parameter        |
+| `{3}`       | Second additional parameter, etc. |
+
+## Custom Block Directives
+
+Block directives extend the template compiler with custom `{% keyword %}` tags. They are compiled at build time and emit raw PHP code.
+
+### Registering Block Pairs
+
+```php
+$engine->addBlock('cache', function(string $rest, string $path, int $line, callable $expr): string {
+    $key = $expr(trim($rest));
+    return "if (!\$__cache->has({$key})): ob_start();";
+});
+
+$engine->addBlock('endcache', function(string $rest, string $path, int $line, callable $expr): string {
+    return "\$__cache->set(\$__cacheKey, ob_get_clean()); endif;";
+});
+```
+
+Use the `$expr` callable to convert any Clarity expression (variable or literal) to a PHP expression string.
+
+### Handler Signature
+
+```php
+function (
+    string   $rest,        // text after the keyword inside {% … %}
+    string   $sourcePath,  // source file path (for error messages)
+    int      $tplLine,     // template line number (for error messages)
+    callable $processExpr  // fn(string): string — converts Clarity expr → PHP expr
+): string                  // must return PHP statement(s) to emit
+```
+
+## Services
+
+Services are arbitrary objects registered into the engine and made available inside compiled templates via `$__sv['key']`. They're primarily used by modules to share mutable state (e.g. a locale stack or cache object) between registered filters/directives and inline filter PHP templates.
+
+### Registering a Service
+
+```php
+$myService = new MyStatefulService();
+
+$engine->addService('my_service', $myService);
+```
+
+### Checking and Retrieving Services
+
+```php
+if ($engine->hasService('my_service')) {
+    $svc = $engine->getService('my_service');
+}
+```
+
+### Accessing Services in Inline Filters
+
+Inline filter PHP templates can reference services via `$__sv['key']`:
+
+```php
+$engine->addInlineFilter('t', [
+    'php'     => "\$__sv['translator']->get(\$__sv['locale']->current(), {1})",
+    'params'  => ['vars'],
+    'defaults'=> ['vars' => 'null'],
+]);
+```
+
+> **Note:** Services are primarily an infrastructure tool for module authors. Application code that only registers filters and functions does not need to use services directly.
+
 ## Next Steps
 
 - **[Best Practices](05-best-practices.md)** — Organization, naming, security
 - **[Troubleshooting](06-troubleshooting.md)** — Common errors and solutions
-- **[Examples](../examples/README.md)** — See advanced features in action
+- **[Examples](examples/README.md)** — See advanced features in action

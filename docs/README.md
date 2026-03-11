@@ -23,14 +23,15 @@ Learn the essential features:
 Deep dives into specialized features:
 
 5. **[Advanced Topics](04-advanced-topics.md)** — Namespaces, caching, auto-escaping, error handling, Unicode
-6. **[Best Practices](05-best-practices.md)** — Organization, naming, security, testing, and debugging
-7. **[Troubleshooting](06-troubleshooting.md)** — Common errors and how to fix them
+6. **[Modules](07-modules.md)** — Module system, LocaleService, TranslationModule, IntlFormatModule
+7. **[Best Practices](05-best-practices.md)** — Organization, naming, security, testing, and debugging
+8. **[Troubleshooting](06-troubleshooting.md)** — Common errors and how to fix them
 
 ## 🔗 Additional Resources
 
-- **[Main README](../../README.md)** — Quick reference and overview
+- **[Main README](../README.md)** — Quick reference and overview
 - **[API Documentation](../api/README.md)** — Auto-generated API reference
-- **[Examples](../examples/README.md)** — Runnable template examples
+- **[Examples](examples/README.md)** — Runnable template examples
 
 ## 💡 Suggested Reading Order
 

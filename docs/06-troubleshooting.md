@@ -759,4 +759,4 @@ Before reporting an issue, verify:
 
 - **[Best Practices](05-best-practices.md)** — Avoid common pitfalls
 - **[Advanced Topics](04-advanced-topics.md)** — Deep dives
-- **[Examples](../examples/README.md)** — Working examples
+- **[Examples](examples/README.md)** — Working examples

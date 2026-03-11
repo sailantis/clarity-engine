@@ -208,7 +208,7 @@ $engine->flushCache();
 
 ## Next Steps
 
-- **[Getting Started Guide](../guides/00-getting-started.md)** — Complete setup guide
-- **[Template Syntax Reference](../guides/01-template-syntax.md)** — All syntax features
-- **[Filters Reference](../guides/02-filters-and-functions.md)** — Complete filter list
-- **[Best Practices](../guides/05-best-practices.md)** — Code organization tips
+- **[Getting Started Guide](../00-getting-started.md)** — Complete setup guide
+- **[Template Syntax Reference](../01-template-syntax.md)** — All syntax features
+- **[Filters Reference](../02-filters-and-functions.md)** — Complete filter list
+- **[Best Practices](../05-best-practices.md)** — Code organization tips

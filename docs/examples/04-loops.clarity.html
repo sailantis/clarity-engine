@@ -120,27 +120,27 @@
     <div class="section">
       <h2>Range Loops</h2>
 
-      <h3>Exclusive Range (1..10)</h3>
-      <p>
-        Numbers: {% for i in 1..10 %}{{ i }}{{ loop.last ? '' : ', ' }}{% endfor
-        %}
-      </p>
-
-      <h3>Inclusive Range (1...10)</h3>
+      <h3>Exclusive Range (1...10)</h3>
       <p>
         Numbers: {% for i in 1...10 %}{{ i }}{{ loop.last ? '' : ', ' }}{%
         endfor %}
       </p>
 
-      <h3>Range with Step (0...100 step 10)</h3>
+      <h3>Inclusive Range (1..10)</h3>
       <p>
-        Numbers: {% for i in 0...100 step 10 %}{{ i }}{{ loop.last ? '' : ', '
+        Numbers: {% for i in 1..10 %}{{ i }}{{ loop.last ? '' : ', ' }}{% endfor
+        %}
+      </p>
+
+      <h3>Range with Step (0..100 step 10)</h3>
+      <p>
+        Numbers: {% for i in 0..100 step 10 %}{{ i }}{{ loop.last ? '' : ', '
         }}{% endfor %}
       </p>
 
-      <h3>Countdown (10...1 step -1)</h3>
+      <h3>Countdown (10..1 step -1)</h3>
       <p>
-        Countdown: {% for i in 10...1 step -1 %}{{ i }}{{ loop.last ? '!' : ', '
+        Countdown: {% for i in 10..1 step -1 %}{{ i }}{{ loop.last ? '!' : ', '
         }}{% endfor %}
       </p>
     </div>

@@ -642,4 +642,4 @@ base.clarity.html           → Everything shares this
 
 - **[Advanced Topics](04-advanced-topics.md)** — Namespaces, caching, error handling
 - **[Best Practices](05-best-practices.md)** — Organization and patterns
-- **[Examples](../examples/README.md)** — See complete layout examples
+- **[Examples](examples/README.md)** — See complete layout examples
