@@ -22,7 +22,7 @@ class SecurityErrorMappingTest extends BaseTestCase
         try {
             self::render('warn_undef');
         } catch (ClarityException $e) {
-            $this->assertStringContainsString('warn_undef.clarity.html', $e->getMessage());
+            $this->assertStringContainsString('warn_undef', $e->getMessage());
             throw $e;
         }
     }

@@ -30,7 +30,7 @@ and error mapping — no file I/O needed on warm paths (OPcache serves them).
 
 ## 🚀 Public methods
 
-### __construct() · [source](../../src/Engine/Compiler.php#L107)
+### __construct() · [source](../../src/Engine/Compiler.php#L105)
 
 `public function __construct(): mixed`
 
@@ -41,7 +41,7 @@ and error mapping — no file I/O needed on warm paths (OPcache serves them).
 
 ---
 
-### setRegistry() · [source](../../src/Engine/Compiler.php#L112)
+### setRegistry() · [source](../../src/Engine/Compiler.php#L110)
 
 `public function setRegistry(Clarity\Engine\Registry $registry): static`
 
@@ -58,24 +58,7 @@ and error mapping — no file I/O needed on warm paths (OPcache serves them).
 
 ---
 
-### setBasePath() · [source](../../src/Engine/Compiler.php#L123)
-
-`public function setBasePath(string $path): static`
-
-**🧭 Parameters**
-
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `$path` | string | - |  |
-
-**➡️ Return value**
-
-- Type: static
-
-
----
-
-### setExtension() · [source](../../src/Engine/Compiler.php#L129)
+### setExtension() · [source](../../src/Engine/Compiler.php#L121)
 
 `public function setExtension(string $ext): static`
 
@@ -92,24 +75,7 @@ and error mapping — no file I/O needed on warm paths (OPcache serves them).
 
 ---
 
-### setNamespaces() · [source](../../src/Engine/Compiler.php#L135)
-
-`public function setNamespaces(array $namespaces): static`
-
-**🧭 Parameters**
-
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `$namespaces` | array | - |  |
-
-**➡️ Return value**
-
-- Type: static
-
-
----
-
-### setDebugMode() · [source](../../src/Engine/Compiler.php#L141)
+### setDebugMode() · [source](../../src/Engine/Compiler.php#L127)
 
 `public function setDebugMode(bool $debug): static`
 
@@ -126,17 +92,18 @@ and error mapping — no file I/O needed on warm paths (OPcache serves them).
 
 ---
 
-### compile() · [source](../../src/Engine/Compiler.php#L157)
+### compile() · [source](../../src/Engine/Compiler.php#L145)
 
-`public function compile(string $sourcePath): Clarity\Engine\CompiledTemplate`
+`public function compile(string $templateName, Clarity\Template\TemplateLoader $loader): Clarity\Engine\CompiledTemplate`
 
-Compile a template file and return a CompiledTemplate value object.
+Compile a template and return a CompiledTemplate value object.
 
 **🧭 Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
-| `$sourcePath` | string | - | Absolute path to the .clarity.html file. |
+| `$templateName` | string | - | Logical template name (e.g. 'home', 'admin::dashboard'). |
+| `$loader` | [TemplateLoader](Clarity_Template_TemplateLoader.md) | - | Loader used to fetch source for this template and its<br>dependencies (extends parents, includes). |
 
 **➡️ Return value**
 

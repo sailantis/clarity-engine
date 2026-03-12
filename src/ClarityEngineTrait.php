@@ -4,6 +4,7 @@ namespace Clarity;
 use Clarity\Engine\Cache;
 use Clarity\Engine\Compiler;
 use Clarity\Engine\Registry;
+use Clarity\Template\TemplateLoader;
 use ParseError;
 
 trait ClarityEngineTrait
@@ -11,6 +12,7 @@ trait ClarityEngineTrait
     protected Registry $registry;
     protected Cache $cache;
     protected ?Compiler $compiler = null;
+    protected ?TemplateLoader $loader = null;
     /** @var string[] */
     protected array $renderStack = [];
     protected bool $debugMode = false;
@@ -328,17 +330,11 @@ trait ClarityEngineTrait
      */
     public function renderPartial(string $view, array $vars = []): string
     {
-        $sourcePath = $this->resolveView($view);
-
-        if (!is_file($sourcePath)) {
-            throw new ClarityException("Template not found: {$sourcePath}", $sourcePath);
-        }
-
         $this->renderDepth++;
         try {
             $merged = [...$this->vars, ...$vars];
             $cast = self::castToArray($merged);
-            $output = $this->renderFile($sourcePath, $cast);
+            $output = $this->renderFile($view, $cast);
         } finally {
             $this->renderDepth--;
         }
@@ -367,28 +363,28 @@ trait ClarityEngineTrait
     // -------------------------------------------------------------------------
 
     /**
-     * Compile (if needed) and render a single template file.
+     * Compile (if needed) and render a single template.
      *
-     * @param string $sourcePath Absolute path to the .clarity.html file.
-     * @param array  $vars  Already-cast variables array.
+     * @param string $templateName Logical template name (e.g. 'home', 'layouts/base').
+     * @param array  $vars         Already-cast variables array.
      * @return string Rendered output.
      * @throws ClarityException On compile or runtime errors.
      */
-    private function renderFile(string $sourcePath, array $vars): string
+    private function renderFile(string $templateName, array $vars): string
     {
-        if (isset($this->renderStack[$sourcePath])) {
-            $chain = [...array_keys($this->renderStack), $sourcePath];
+        if (isset($this->renderStack[$templateName])) {
+            $chain = [...array_keys($this->renderStack), $templateName];
             throw new ClarityException(
                 'Recursive template rendering detected: ' . \implode(' -> ', $chain),
-                $sourcePath
+                $templateName
             );
         }
 
-        $this->renderStack[$sourcePath] = true;
+        $this->renderStack[$templateName] = true;
 
         // Ensure compiled class is loaded
         try {
-            $className = $this->loadCachedClass($sourcePath);
+            $className = $this->loadCachedClass($templateName);
 
             // Instantiate with filter and function registries
             $template = new $className(
@@ -399,13 +395,13 @@ trait ClarityEngineTrait
 
             // Install error handler to map PHP errors → template lines
             set_error_handler(
-                $this->buildErrorHandler($sourcePath),
+                $this->buildErrorHandler($templateName),
                 E_ALL & ~E_DEPRECATED & ~E_USER_DEPRECATED
             );
 
             // Install exception handler to catch uncaught exceptions (e.g. type errors) and map them to template lines as well.
             set_exception_handler(
-                $this->buildExceptionHandler($sourcePath)
+                $this->buildExceptionHandler($templateName)
             );
 
             try {
@@ -415,7 +411,7 @@ trait ClarityEngineTrait
                 restore_exception_handler();
             }
         } finally {
-            unset($this->renderStack[$sourcePath]);
+            unset($this->renderStack[$templateName]);
         }
 
         return $output;
@@ -426,23 +422,25 @@ trait ClarityEngineTrait
      *
      * @return class-string
      */
-    private function loadCachedClass(string $sourcePath): string
+    private function loadCachedClass(string $templateName): string
     {
-        if ($this->cache->isFresh($sourcePath)) {
+        $loader = $this->getLoader();
+
+        if ($this->cache->isFresh($templateName, static fn(string $n) => $loader->load($n)->revision)) {
             try {
-                $className = $this->cache->load($sourcePath);
+                $className = $this->cache->load($templateName);
             } catch (ParseError) {
                 // A previously-written cache file contains invalid PHP (e.g. a
                 // template that was broken at write time and not yet cleaned up).
                 // Delete it so the next step triggers a fresh compile.
-                $this->cache->invalidate($sourcePath);
+                $this->cache->invalidate($templateName);
                 $className = null;
             }
             if ($className !== null) {
                 // Recompile if debug mode changed since the template was last compiled
                 $compiledDebug = $className::$debugCompiled ?? false;
                 if ($compiledDebug !== $this->debugMode) {
-                    $this->cache->invalidate($sourcePath);
+                    $this->cache->invalidate($templateName);
                 } else {
                     return $className;
                 }
@@ -453,30 +451,28 @@ trait ClarityEngineTrait
         // using plain `require` so the new versioned class is always declared.
         $this->compiler ??= new Compiler();
         $this->compiler
-            ->setBasePath($this->viewPath)
             ->setExtension($this->extension)
-            ->setNamespaces($this->namespaces)
             ->setRegistry($this->registry)
             ->setDebugMode($this->debugMode);
-        $compiled = $this->compiler->compile($sourcePath);
+        $compiled = $this->compiler->compile($templateName, $loader);
         try {
-            return $this->cache->writeAndLoad($sourcePath, $compiled);
+            return $this->cache->writeAndLoad($templateName, $compiled);
         } catch (ParseError $e) {
             // The compiled PHP contains a syntax error (e.g. a malformed expression
             // in the template).  Delete the broken cache file so the next request
             // does not serve an unloadable file, then map the error back to the
             // original template line using the source map we already have.
-            $this->cache->invalidate($sourcePath);
+            $this->cache->invalidate($templateName);
             [$tplFile, $tplLine] = $this->mapCompiledErrorLine(
                 $e->getLine(),
                 $compiled->code,
                 $compiled->sourceMap,
                 $compiled->sourceFiles,
-                $sourcePath
+                $templateName
             );
             throw new ClarityException(
                 'Syntax error in template: ' . $e->getMessage(),
-                $tplFile ?? $sourcePath,
+                $tplFile ?? $templateName,
                 $tplLine,
                 $e
             );
@@ -497,11 +493,11 @@ trait ClarityEngineTrait
      * @param int      $fileLine     1-based line number reported by the ParseError.
      * @param string   $compiledCode The compiled PHP code from CompiledTemplate (no leading <?php).
      * @param array    $sourceMap    Source map from the CompiledTemplate.
-     * @param string[] $files        Source file paths (indexed by the integers in $sourceMap).
-     * @param string   $sourcePath   Fallback template file path.
-     * @return array{0: string|null, 1: int}  [templateFile|null, templateLine]
+     * @param string[] $files        Logical template names (indexed by the integers in $sourceMap).
+     * @param string   $templateName Fallback logical template name.
+     * @return array{0: string|null, 1: int}  [templateName|null, templateLine]
      */
-    private function mapCompiledErrorLine(int $fileLine, string $compiledCode, array $sourceMap, array $files, string $sourcePath): array
+    private function mapCompiledErrorLine(int $fileLine, string $compiledCode, array $sourceMap, array $files, string $templateName): array
     {
         if ($sourceMap === []) {
             return [null, 0];
@@ -545,16 +541,16 @@ trait ClarityEngineTrait
 
     /**
      * Build an error-handler closure that maps a PHP error in the compiled
-     * cache file back to the original template file and line.
+     * cache file back to the original template name and line.
      *
-     * @param string $sourcePath The entry template source path.
+     * @param string $templateName The logical entry template name.
      * @return callable
      */
-    private function buildErrorHandler(string $sourcePath): callable
+    private function buildErrorHandler(string $templateName): callable
     {
-        $cacheFile = $this->cache->cacheFilePath($sourcePath);
+        $cacheFile = $this->cache->cacheFilePath($templateName);
 
-        return function (int $errno, string $errstr, string $errfile, int $errline) use ($sourcePath, $cacheFile): bool {
+        return function (int $errno, string $errstr, string $errfile, int $errline) use ($templateName, $cacheFile): bool {
 
             // Error comes from a different file → pass through to the next handler
             if (realpath($errfile) !== realpath($cacheFile)) {
@@ -565,7 +561,7 @@ trait ClarityEngineTrait
                 return false;
 
             // Determine template position
-            [$tplFile, $tplLine] = $this->resolveTemplateLine($sourcePath, $errline);
+            [$tplFile, $tplLine] = $this->resolveTemplateLine($templateName, $errline);
 
             // 1) Undefined array key "foo"
             if (preg_match('/Undefined array key "([^"]+)"/', $errstr, $m)) {
@@ -596,7 +592,7 @@ trait ClarityEngineTrait
             }
 
             // Other errors (e.g. division by zero, type errors) are retriggered with the original message but mapped to the template line.
-            //throw new ClarityException($errstr, $tplFile ?? $sourcePath, $tplLine);
+            //throw new ClarityException($errstr, $tplFile ?? $templateName, $tplLine);
             $newMessage = "$errstr in $tplFile:$tplLine";
             trigger_error($newMessage, $errno);
             return true;
@@ -604,16 +600,16 @@ trait ClarityEngineTrait
     }
 
     /**
-     * Build an exception-handler closure that maps uncaught exceptions in the compiled cache file back to the original template file and line.
+     * Build an exception-handler closure that maps uncaught exceptions in the compiled cache file back to the original template name and line.
      *
-     * @param string $sourcePath The entry template source path.
+     * @param string $templateName The logical entry template name.
      * @return callable
      */
-    private function buildExceptionHandler(string $sourcePath): callable
+    private function buildExceptionHandler(string $templateName): callable
     {
-        $cacheFile = $this->cache->cacheFilePath($sourcePath);
+        $cacheFile = $this->cache->cacheFilePath($templateName);
 
-        return function (\Throwable $e) use ($sourcePath, $cacheFile) {
+        return function (\Throwable $e) use ($templateName, $cacheFile) {
             $cachePath = realpath($cacheFile);
 
             // First, check the exception's own file (fast path)
@@ -636,13 +632,13 @@ trait ClarityEngineTrait
             }
 
             [$tplFile, $mappedLine] = $this->resolveTemplateLine(
-                $sourcePath,
+                $templateName,
                 $exLine
             );
 
             throw new ClarityException(
                 $e->getMessage(),
-                $tplFile ?? $sourcePath,
+                $tplFile ?? $templateName,
                 $mappedLine,
                 previous: $e
             );
@@ -651,21 +647,20 @@ trait ClarityEngineTrait
 
     /**
      * Map a PHP line number in the compiled cache file back to the original
-     * template file and line number using the $sourceMap static property on
+     * template name and line number using the $sourceMap static property on
      * the compiled class — no file I/O required.
      *
-     * The source map is a list of ranges: [phpLineStart, fileIndex, 
-     * templateLine].
+     * The source map is a list of ranges: [phpLineStart, fileIndex, templateLine].
      * The matching range is the last entry whose phpLineStart ≤ $phpLine.
-     * File paths are resolved from the parallel $files static property.
+     * Template names are resolved from the parallel $sourceFiles static property.
      *
-     * @param string $sourcePath Absolute path to the entry template.
-     * @param int    $phpLine    Line number of the error in the compiled file.
-     * @return array{0: string|null, 1: int}  [templateFile|null, templateLine]
+     * @param string $templateName Logical name of the entry template.
+     * @param int    $phpLine      Line number of the error in the compiled file.
+     * @return array{0: string|null, 1: int}  [templateName|null, templateLine]
      */
-    private function resolveTemplateLine(string $sourcePath, int $phpLine): array
+    private function resolveTemplateLine(string $templateName, int $phpLine): array
     {
-        $className = $this->cache->getLoadedClassName($sourcePath);
+        $className = $this->cache->getLoadedClassName($templateName);
         if ($className === null) {
             return [null, 0];
         }

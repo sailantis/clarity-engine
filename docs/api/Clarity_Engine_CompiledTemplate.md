@@ -2,7 +2,7 @@
 
 **Full name:** [Clarity\Engine\CompiledTemplate](../../src/Engine/CompiledTemplate.php)
 
-Value object produced by the Clarity Compiler for a single template file.
+Value object produced by the Clarity Compiler for a single template.
 
 ## 🔐 Public Properties
 
@@ -25,8 +25,8 @@ Value object produced by the Clarity Compiler for a single template file.
 | `$className` | string | - | Generated class name (e.g. __Clarity_f1f1fde8ef8cc7825f199f1b7bf3ad0e). |
 | `$code` | string | - | Full PHP source of the compiled file. |
 | `$sourceMap` | array | - | [phpLine, fileIndex, templateLine] mapping. |
-| `$dependencies` | array | - | [absolutePath => mtime] for cache invalidation. |
-| `$sourceFiles` | array | `[]` | Unique source file paths (parallel to $sourceMap file indices). |
+| `$dependencies` | array | - | [logicalName => revision] for cache invalidation. |
+| `$sourceFiles` | array | `[]` | Unique logical template names (parallel to $sourceMap file indices). |
 
 **➡️ Return value**
 

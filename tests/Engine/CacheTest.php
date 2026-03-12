@@ -67,9 +67,12 @@ class CacheTest extends BaseTestCase
         self::tpl('cachefile', 'hi');
         self::render('cachefile');
 
-        $sourcePath = self::normalizedSourcePath('cachefile');
+        $engine = TestEnvironment::engine();
         $cache = new Cache(TestEnvironment::cacheDir());
-        $this->assertTrue($cache->isFresh($sourcePath), 'Expected a fresh cache entry after first render');
+        $this->assertTrue(
+            $cache->isFresh('cachefile', static fn(string $n) => $engine->getLoader()->load($n)->revision),
+            'Expected a fresh cache entry after first render'
+        );
     }
 
     public function testInlineFilterCompilesWithoutRuntimeRegistryLookup(): void
@@ -77,9 +80,8 @@ class CacheTest extends BaseTestCase
         self::tpl('inline_upper_cache', '{{ name |> upper }}');
         self::render('inline_upper_cache', ['name' => 'alice']);
 
-        $sourcePath = self::normalizedSourcePath('inline_upper_cache');
         $cache = new Cache(TestEnvironment::cacheDir());
-        $compiled = file_get_contents($cache->cacheFilePath($sourcePath));
+        $compiled = file_get_contents($cache->cacheFilePath('inline_upper_cache'));
 
         $this->assertIsString($compiled);
         $this->assertStringContainsString('mb_strtoupper', $compiled);
@@ -92,34 +94,34 @@ class CacheTest extends BaseTestCase
         file_put_contents($file, 'first');
         touch($file, time() - 100);
 
-        $sourcePath = self::normalizedSourcePath('changing');
+        $engine = TestEnvironment::engine();
         $cache = new Cache(TestEnvironment::cacheDir());
-        $cache->invalidate($sourcePath);
+        $cache->invalidate('changing');
 
         $this->assertSame('first', self::render('changing'));
-        $this->assertTrue($cache->isFresh($sourcePath));
+        $this->assertTrue($cache->isFresh('changing', static fn(string $n) => $engine->getLoader()->load($n)->revision));
 
         file_put_contents($file, 'second');
         touch($file, filemtime($file) + 2);
 
-        $this->assertFalse($cache->isFresh($sourcePath));
+        $this->assertFalse($cache->isFresh('changing', static fn(string $n) => $engine->getLoader()->load($n)->revision));
         $this->assertSame('second', self::render('changing'));
     }
 
     public function testClassNameForIsDeterministic(): void
     {
         $cache = new Cache(TestEnvironment::cacheDir());
-        $path = '/some/template.clarity.html';
-        $this->assertSame($cache->classNameFor($path), $cache->classNameFor($path));
-        $this->assertSame('__Clarity_' . md5($path), $cache->classNameFor($path));
+        $name = 'some/template';
+        $this->assertSame($cache->classNameFor($name), $cache->classNameFor($name));
+        $this->assertSame('__Clarity_' . md5($name), $cache->classNameFor($name));
     }
 
     public function testClassNameForIsUniquePerPath(): void
     {
         $cache = new Cache(TestEnvironment::cacheDir());
         $this->assertNotSame(
-            $cache->classNameFor('/a/template.clarity.html'),
-            $cache->classNameFor('/b/template.clarity.html')
+            $cache->classNameFor('a/template'),
+            $cache->classNameFor('b/template')
         );
     }
 
@@ -128,9 +130,9 @@ class CacheTest extends BaseTestCase
         self::tpl('freshtest', 'ok');
         self::render('freshtest');
 
-        $sourcePath = self::normalizedSourcePath('freshtest');
+        $engine = TestEnvironment::engine();
         $cache = new Cache(TestEnvironment::cacheDir());
-        $this->assertTrue($cache->isFresh($sourcePath));
+        $this->assertTrue($cache->isFresh('freshtest', static fn(string $n) => $engine->getLoader()->load($n)->revision));
     }
 
     /**

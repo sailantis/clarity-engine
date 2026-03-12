@@ -5,11 +5,11 @@
 Read/write cache for Clarity compiled template classes.
 
 Each compiled template is stored as a single `.php` file.  The cache
-filename is derived deterministically from `md5($sourcePath)` so lookups
+filename is derived deterministically from `md5($templateName)` so lookups
 never require reading the directory.
 
-Cache filename : md5($sourcePath).php
-Class name     : __Clarity_<md5($sourcePath)>_<uniqid>   (versioned per compile)
+Cache filename : md5($templateName).php
+Class name     : __Clarity_<md5($templateName)>_<uniqid>   (versioned per compile)
 
 Versioned class names allow multiple compiled versions of the same template
 to coexist in memory across recompilations — eliminating redeclaration
@@ -20,14 +20,14 @@ it returns the exact class name without any file re-reading or regex.
 
 In-process class name registry
 --------------------------------
-`Cache::$classNames` maps sourcePath → loaded class name for the current
+`Cache::$classNames` maps templateName → loaded class name for the current
 process.  This lets warm-path calls to `isFresh()` and `load()` operate
 purely from memory (OPcache + static array) with zero file I/O.
 
 Compiled class static properties
 ---------------------------------
-$dependencies – array<string,int>  absolutePath => mtime
-$sourceMap    – list<[phpLineStart, templateFile, templateLine]>  ranges
+$dependencies – array<string,int|string>  logicalName => revision
+$sourceMap    – list<[phpLineStart, fileIndex, templateLine]>  ranges
 
 ## 🚀 Public methods
 
@@ -78,28 +78,29 @@ Change the cache directory at runtime.
 
 ---
 
-### isFresh() · [source](../../src/Engine/Cache.php#L83)
+### isFresh() · [source](../../src/Engine/Cache.php#L86)
 
-`public function isFresh(string $sourcePath): bool`
+`public function isFresh(string $templateName, callable $revisionFor): bool`
 
 Check whether a valid (non-stale) cached file exists for the given
-source template path.
+logical template name.
 
 Freshness rules
 ---------------
-1. A compiled class for this source path is known (either from a previous
-   load in this process, or by loading the cache file now).
-2. Every file listed in the class's $dependencies still has the same mtime
-   as recorded at compile time (covers layouts and partials too).
+1. A compiled class for this template name is known (either loaded in
+   this process already, or loadable from the cache file).
+2. Every entry in the class's $dependencies still has the same revision
+   as recorded at compile time, as determined by calling $revisionFor.
 
 On warm paths the class is already in memory; `readDeps()` reflects
-`$dependencies` directly — zero file I/O.
+`$dependencies` directly — zero file I/O from this method.
 
 **🧭 Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
-| `$sourcePath` | string | - | Absolute path to the source .clarity.html file. |
+| `$templateName` | string | - | Logical template name (e.g. 'home', 'layouts/base'). |
+| `$revisionFor` | callable | - | fn(string $name): int|string — returns the current<br>revision for a dependency name. The engine passes a<br>closure that calls the active TemplateLoader. |
 
 **➡️ Return value**
 
@@ -108,9 +109,9 @@ On warm paths the class is already in memory; `readDeps()` reflects
 
 ---
 
-### load() · [source](../../src/Engine/Cache.php#L117)
+### load() · [source](../../src/Engine/Cache.php#L125)
 
-`public function load(string $sourcePath): string|null`
+`public function load(string $templateName): string|null`
 
 Return the class name for a loaded (or loadable) compiled template.
 
@@ -122,7 +123,7 @@ is OPcache-eligible) and registers the returned class name.
 
 | Name | Type | Default | Description |
 |---|---|---|---|
-| `$sourcePath` | string | - | Absolute path to the source template. |
+| `$templateName` | string | - | Logical template name. |
 
 **➡️ Return value**
 
@@ -132,22 +133,22 @@ is OPcache-eligible) and registers the returned class name.
 
 ---
 
-### writeAndLoad() · [source](../../src/Engine/Cache.php#L151)
+### writeAndLoad() · [source](../../src/Engine/Cache.php#L159)
 
-`public function writeAndLoad(string $sourcePath, Clarity\Engine\CompiledTemplate $compiled): string`
+`public function writeAndLoad(string $templateName, Clarity\Engine\CompiledTemplate $compiled): string`
 
 Write a compiled template to the cache, immediately require it, and
 return the class name.
 
 Using `require` (not `require_once`) ensures the new versioned class is
-declared even if an older compiled version of the same file is already
+declared even if an older compiled version of the same template is already
 loaded in this process.
 
 **🧭 Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
-| `$sourcePath` | string | - | Absolute source template path. |
+| `$templateName` | string | - | Logical template name. |
 | `$compiled` | [CompiledTemplate](Clarity_Engine_CompiledTemplate.md) | - | Result from the compiler. |
 
 **➡️ Return value**
@@ -158,18 +159,18 @@ loaded in this process.
 
 ---
 
-### invalidate() · [source](../../src/Engine/Cache.php#L180)
+### invalidate() · [source](../../src/Engine/Cache.php#L188)
 
-`public function invalidate(string $sourcePath): void`
+`public function invalidate(string $templateName): void`
 
-Delete the cached file for the given source path (if it exists) and
+Delete the cached file for the given template name (if it exists) and
 remove it from the in-process registry.
 
 **🧭 Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
-| `$sourcePath` | string | - |  |
+| `$templateName` | string | - |  |
 
 **➡️ Return value**
 
@@ -178,7 +179,7 @@ remove it from the in-process registry.
 
 ---
 
-### flush() · [source](../../src/Engine/Cache.php#L197)
+### flush() · [source](../../src/Engine/Cache.php#L205)
 
 `public function flush(): void`
 
@@ -192,11 +193,11 @@ registry so stale class names do not prevent recompilation.
 
 ---
 
-### classNameFor() · [source](../../src/Engine/Cache.php#L231)
+### classNameFor() · [source](../../src/Engine/Cache.php#L239)
 
-`public function classNameFor(string $sourcePath): string`
+`public function classNameFor(string $templateName): string`
 
-Return the base class-name prefix for a source path.
+Return the base class-name prefix for a template name.
 
 Note: the actual in-memory class name includes a unique compile-time
 suffix to prevent redeclaration collisions.  Use `getLoadedClassName()`
@@ -206,7 +207,7 @@ to obtain the real class name after a template has been loaded.
 
 | Name | Type | Default | Description |
 |---|---|---|---|
-| `$sourcePath` | string | - |  |
+| `$templateName` | string | - |  |
 
 **➡️ Return value**
 
@@ -215,18 +216,18 @@ to obtain the real class name after a template has been loaded.
 
 ---
 
-### getLoadedClassName() · [source](../../src/Engine/Cache.php#L240)
+### getLoadedClassName() · [source](../../src/Engine/Cache.php#L248)
 
-`public function getLoadedClassName(string $sourcePath): string|null`
+`public function getLoadedClassName(string $templateName): string|null`
 
 Return the class name that is currently live in this process for the
-given source path, or null if the template has not been loaded yet.
+given template name, or null if the template has not been loaded yet.
 
 **🧭 Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
-| `$sourcePath` | string | - |  |
+| `$templateName` | string | - |  |
 
 **➡️ Return value**
 
@@ -235,25 +236,24 @@ given source path, or null if the template has not been loaded yet.
 
 ---
 
-### cacheFilePath() · [source](../../src/Engine/Cache.php#L255)
+### cacheFilePath() · [source](../../src/Engine/Cache.php#L263)
 
-`public function cacheFilePath(string $sourcePath): string`
+`public function cacheFilePath(string $templateName): string`
 
-Compute the cache file path for a given source path.
+Compute the cache file path for a given logical template name.
 
 Files are stored under a 2-character hex subdirectory derived from the
-first two characters of the source path's MD5 hash.  This limits the
+first two characters of the template name's MD5 hash.  This limits the
 number of files per directory to at most 256 buckets × N templates,
 keeping directory listings manageable even for large applications.
 
-Example:  md5('/var/www/views/home/index.clarity.html') = 'a3f…'
-          → {cachePath}/a3/a3f….php
+Example:  md5('home') = 'b026...'  →  {cachePath}/b0/b026....php
 
 **🧭 Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
-| `$sourcePath` | string | - |  |
+| `$templateName` | string | - |  |
 
 **➡️ Return value**
 

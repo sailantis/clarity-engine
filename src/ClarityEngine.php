@@ -1,6 +1,9 @@
 <?php
 namespace Clarity;
 
+use Clarity\Template\FileLoader;
+use Clarity\Template\TemplateLoader;
+
 /**
  * Clarity Template Engine
  *
@@ -175,6 +178,9 @@ class ClarityEngine
             $ext = '.' . $ext;
         }
         $this->extension = $ext;
+        if ($this->loader instanceof FileLoader) {
+            $this->loader->setExtension($ext);
+        }
         return $this;
     }
 
@@ -199,7 +205,10 @@ class ClarityEngine
      */
     public function addNamespace(string $name, string $path): static
     {
-        $this->namespaces[$name] = \rtrim($path, '/');
+        $this->namespaces[$name] = \rtrim($path, '/\\');
+        if ($this->loader instanceof FileLoader) {
+            $this->loader->addNamespace($name, $path);
+        }
         return $this;
     }
 
@@ -215,14 +224,17 @@ class ClarityEngine
 
 
     /**
-     * Set the base path for resolving relative view names.
+     * Set the base path for resolving relative template names.
      *
-     * @param string $path Base directory for views.
+     * @param string $path Base directory for templates.
      * @return $this
      */
     public function setViewPath(string $path): static
     {
-        $this->viewPath = rtrim($path, '/');
+        $this->viewPath = rtrim($path, '/\\');
+        if ($this->loader instanceof FileLoader) {
+            $this->loader->setBasePath($this->viewPath);
+        }
         return $this;
     }
 
@@ -289,7 +301,34 @@ class ClarityEngine
     }
 
     /**
+     * Set a custom template loader, replacing the default FileLoader.
+     *
+     * @param TemplateLoader $loader The loader to use.
+     * @return static
+     */
+    public function setLoader(TemplateLoader $loader): static
+    {
+        $this->loader = $loader;
+        return $this;
+    }
+
+    /**
+     * Return the active template loader, lazily creating a FileLoader if none
+     * has been set explicitly.
+     */
+    public function getLoader(): TemplateLoader
+    {
+        return $this->loader ??= new FileLoader(
+            $this->viewPath,
+            $this->extension,
+            $this->namespaces
+        );
+    }
+
+    /**
      * Resolve a view name to an actual file path on the filesystem.
+     *
+     * @deprecated Use getLoader()->load($name) instead. Kept for backward compatibility.
      * @param string $view View name to resolve.
      * @throws \RuntimeException If the view cannot be resolved.
      * @return string Resolved file path.

@@ -2,6 +2,7 @@
 namespace Clarity\Engine;
 
 use Clarity\ClarityException;
+use Clarity\Template\TemplateLoader;
 
 /**
  * Compiles a single Clarity template source file into a PHP class.
@@ -34,29 +35,26 @@ class Compiler
 {
     private Tokenizer $tokenizer;
 
-    /** @var array<string, int>  absolutePath → mtime collected during this compilation */
+    /** @var array<string, int|string>  templateName → revision collected during this compilation */
     private array $dependencies = [];
 
     /** @var array<int, int>  phpOutputLine → templateLine source map */
     private array $sourceMap = [];
 
-    /** @var string[]  de-duplicated list of source file paths, in order of first appearance */
+    /** @var string[]  de-duplicated list of logical template names, in order of first appearance */
     private array $sourceFiles = [];
 
-    /** @var array<string,int>  path → index in $sourceFiles */
+    /** @var array<string,int>  logicalName → index in $sourceFiles */
     private array $sourceFileIndex = [];
 
     /** Current PHP output line counter (tracks lines emitted to the render body) */
     private int $phpLine = 0;
 
-    /** View base path used to resolve relative extends/include paths */
-    private string $basePath = '';
-
-    /** View extension (e.g. '.clarity.html') */
+    /** View extension (e.g. '.clarity.html') — used only to strip extension from template refs */
     private string $extension = '.clarity.html';
 
-    /** @var array<string, string>  namespace → path */
-    private array $namespaces = [];
+    /** Active loader for this compilation (set at start of compile()) */
+    private ?TemplateLoader $loader = null;
 
     /**
      * @var list<array{type:string, restore:array<string,string|null>}>
@@ -120,21 +118,9 @@ class Compiler
     // Configuration
     // -------------------------------------------------------------------------
 
-    public function setBasePath(string $path): static
-    {
-        $this->basePath = rtrim($path, '/\\');
-        return $this;
-    }
-
     public function setExtension(string $ext): static
     {
         $this->extension = $ext[0] === '.' ? $ext : '.' . $ext;
-        return $this;
-    }
-
-    public function setNamespaces(array $namespaces): static
-    {
-        $this->namespaces = $namespaces;
         return $this;
     }
 
@@ -149,13 +135,16 @@ class Compiler
     // -------------------------------------------------------------------------
 
     /**
-     * Compile a template file and return a CompiledTemplate value object.
+     * Compile a template and return a CompiledTemplate value object.
      *
-     * @param string $sourcePath Absolute path to the .clarity.html file.
+     * @param string         $templateName Logical template name (e.g. 'home', 'admin::dashboard').
+     * @param TemplateLoader $loader       Loader used to fetch source for this template and its
+     *                                    dependencies (extends parents, includes).
      * @throws ClarityException On compilation errors.
      */
-    public function compile(string $sourcePath): CompiledTemplate
+    public function compile(string $templateName, TemplateLoader $loader): CompiledTemplate
     {
+        $this->loader = $loader;
         $this->dependencies = [];
         $this->sourceMap = [];
         $this->sourceFiles = [];
@@ -172,25 +161,25 @@ class Compiler
         $this->extendsStack = [];
         $this->compileStack = [];
 
-        if (!is_file($sourcePath)) {
-            throw new ClarityException("Template file not found: {$sourcePath}", $sourcePath);
+        try {
+            $source = $this->readWithDep($templateName);
+        } catch (\RuntimeException $e) {
+            throw new ClarityException($e->getMessage(), $templateName);
         }
 
-        $source = $this->readWithDep($sourcePath);
-
         // Resolve extends before anything else
-        $source = $this->resolveExtends($source, $sourcePath);
+        $source = $this->resolveExtends($source, $templateName);
 
         // Pre-scan: extract macro definitions and strip them from source.
         $this->extractMacros($source);
 
         // Unique class name prevents redeclaration collisions in long-running
         // processes (Swoole, RoadRunner, etc.) when a template is recompiled
-        // mid-flight. The md5 prefix keeps it identifiable per source file.
-        $className = '__Clarity_' . \md5($sourcePath) . '_' . \substr(\str_replace('.', '', \uniqid('', true)), -12);
+        // mid-flight. The md5 prefix keeps it identifiable per logical name.
+        $className = '__Clarity_' . \md5($templateName) . '_' . \substr(\str_replace('.', '', \uniqid('', true)), -12);
 
         // Compile the render body
-        $body = $this->compileSource($source, $sourcePath);
+        $body = $this->compileSource($source, $templateName);
 
         // Build the complete class code (no leading <?php – Cache adds it)
         $code = $this->buildClass($className, $body);
@@ -212,21 +201,21 @@ class Compiler
      * If the source contains {% extends "…" %}, load the parent, merge blocks,
      * and return the merged source.  Recursive: parent may itself extend.
      *
-     * @param string $source      Full source of the child template.
-     * @param string $sourcePath  Absolute path of the child (for error reporting).
+     * @param string $source       Full source of the child template.
+     * @param string $currentName  Logical name of the child template (for error reporting).
      * @return string Merged source ready for compilation.
      */
-    private function resolveExtends(string $source, string $sourcePath): string
+    private function resolveExtends(string $source, string $currentName): string
     {
-        if (\in_array($sourcePath, $this->extendsStack, true)) {
-            $chain = [...$this->extendsStack, $sourcePath];
+        if (\in_array($currentName, $this->extendsStack, true)) {
+            $chain = [...$this->extendsStack, $currentName];
             throw new ClarityException(
                 'Recursive template inheritance detected: ' . \implode(' -> ', $chain),
-                $sourcePath
+                $currentName
             );
         }
 
-        $this->extendsStack[] = $sourcePath;
+        $this->extendsStack[] = $currentName;
 
         try {
             // Match {% extends "path" %} or {% extends 'path' %}
@@ -235,16 +224,12 @@ class Compiler
             }
 
             $layoutRef = $m[1];
-            $layoutPath = $this->resolvePath($layoutRef, $sourcePath);
+            $layoutName = $this->resolveLogicalName($layoutRef, $currentName);
 
-            if (!is_file($layoutPath)) {
-                throw new ClarityException("Layout file not found: {$layoutPath}", $sourcePath);
-            }
-
-            $layoutSource = $this->readWithDep($layoutPath);
+            $layoutSource = $this->readWithDep($layoutName);
 
             // Recursively resolve the layout's own extends
-            $layoutSource = $this->resolveExtends($layoutSource, $layoutPath);
+            $layoutSource = $this->resolveExtends($layoutSource, $layoutName);
 
             // Extract child blocks: {% block name %}...{% endblock %}
             $childBlocks = $this->extractBlocks($source);
@@ -825,42 +810,38 @@ class Compiler
     private const RE_INCLUDE = '/^["\']([^"\']+)["\']\s*$/';
 
     /**
-     * Compile {% include "path" %} by recursively compiling the included file
+     * Compile {% include "name" %} by recursively compiling the included template
      * and writing its output directly into $outLines, preserving source-map
      * accuracy (no double-counting of PHP lines).
      *
-     * @param string $rest      Everything after the 'include' keyword.
-     * @param string $sourcePath Absolute path of the including file.
-     * @param int    $tplLine   Template line of the include directive.
-     * @param array  $outLines  Accumulator to write the compiled lines into (mutated).
+     * @param string $rest        Everything after the 'include' keyword.
+     * @param string $currentName Logical name of the including template.
+     * @param int    $tplLine     Template line of the include directive.
+     * @param array  $outLines    Accumulator to write the compiled lines into (mutated).
      */
-    private function compileInclude(string $rest, string $sourcePath, int $tplLine, array &$outLines): string
+    private function compileInclude(string $rest, string $currentName, int $tplLine, array &$outLines): string
     {
         if (!\preg_match(self::RE_INCLUDE, trim($rest), $m)) {
-            throw new ClarityException("Malformed include directive: 'include {$rest}'", $sourcePath, $tplLine);
+            throw new ClarityException("Malformed include directive: 'include {$rest}'", $currentName, $tplLine);
         }
 
-        $includePath = $this->resolvePath($m[1], $sourcePath);
+        $includeName = $this->resolveLogicalName($m[1], $currentName);
 
-        if (\in_array($includePath, $this->compileStack, true)) {
-            $chain = [...$this->compileStack, $includePath];
+        if (\in_array($includeName, $this->compileStack, true)) {
+            $chain = [...$this->compileStack, $includeName];
             throw new ClarityException(
                 'Recursive static include detected: ' . \implode(' -> ', $chain),
-                $sourcePath,
+                $currentName,
                 $tplLine
             );
         }
 
-        if (!is_file($includePath)) {
-            throw new ClarityException("Included file not found: {$includePath}", $sourcePath, $tplLine);
-        }
-
-        $includeSource = $this->readWithDep($includePath);
-        $includeSource = $this->resolveExtends($includeSource, $includePath);
+        $includeSource = $this->readWithDep($includeName);
+        $includeSource = $this->resolveExtends($includeSource, $includeName);
 
         // Inline directly into the caller's accumulator so PHP line counts remain
         // contiguous and each line is attributed to the correct source file.
-        $this->compileSourceInto($includeSource, $includePath, $outLines);
+        $this->compileSourceInto($includeSource, $includeName, $outLines);
         return '';
     }
 
@@ -928,80 +909,77 @@ class Compiler
     }
 
     /**
-     * Resolve a template reference to an absolute filesystem path.
+     * Resolve a template reference from inside a template to a logical name.
      *
      * Accepted forms
      * --------------
-     * - Relative:   "layouts/main", "partials.header", "user_profile"
-     *               Dots and forward slashes are both valid directory separators;
-     *               dots are normalized to slashes before path construction.
-     * - Namespace:  "admin::dashboard.index"  (namespace registered via setNamespaces())
+     * - Relative:   "layouts/main", "partials.header"
+     *               Dots are normalized to slashes. No basePath — the loader handles that.
+     * - Namespace:  "admin::dashboard.index"  (FileLoader uses the ns → path mapping.)
      *               The part after '::' follows the same dot/slash normalization.
      *
+     * Security: only safe characters are allowed (letters, digits, underscores,
+     * hyphens, dots, slashes) to prevent template injection or traversal.
+     * Dots are converted to slashes before returning so callers receive normalized names.
      *
-     * @param string $ref        Reference from the template (e.g. "layouts/main", "admin::layout").
-     * @param string $sourcePath Absolute path of the currently-compiling file (for error reporting).
-     * @throws ClarityException On traversal attempts, absolute paths, or invalid characters.
+     * @param string $ref         Reference from the template (e.g. "layouts/main", "admin::layout").
+     * @param string $currentName Logical name of the currently-compiling template (for errors).
+     * @throws ClarityException On invalid characters.
      */
-    private function resolvePath(string $ref, string $sourcePath): string
+    private function resolveLogicalName(string $ref, string $currentName): string
     {
         $ref = trim($ref);
 
         if ($ref === '') {
-            throw new ClarityException("Template reference must not be empty.", $sourcePath);
+            throw new ClarityException("Template reference must not be empty.", $currentName);
         }
 
-        $addExtension = !str_ends_with($ref, $this->extension);
+        // Strip extension so logical names never include it.
+        if ($this->extension !== '' && str_ends_with($ref, $this->extension)) {
+            $ref = substr($ref, 0, -strlen($this->extension));
+        }
 
         $ns = \strstr($ref, '::', true);
         if ($ns !== false) {
-            // ----- Namespace path: "ns::segment.or/path" -----
-
+            // Namespace path: "ns::segment.or/path"
             $name = \substr($ref, \strlen($ns) + 2);
 
-            if (!isset($this->namespaces[$ns])) {
-                throw new ClarityException("Unknown view namespace '{$ns}'", $sourcePath);
-            }
-
-            // Validate the path portion (alphanumeric, underscores, hyphens, dots, slashes)
+            // Validate the name portion (alphanumeric, underscores, hyphens, dots);
+            // slashes are not allowed in the name part of a namespace reference.
             if (!\preg_match('/^[\w_.\-]+$/u', $name)) {
                 throw new ClarityException(
                     "Template reference '{$ref}' contains invalid characters in the name portion.",
-                    $sourcePath
+                    $currentName
                 );
             }
 
-            // Dots and slashes are both accepted as separators; normalise to slashes.
-            $path = $this->namespaces[$ns] . '/' . str_replace('.', '/', $name);
-        } else {
-            // ----- Relative path: "layouts/main", "partials.header" -----
-
-            // Allow only safe characters: letters, digits, underscores, hyphens, dots, slashes.
-            if (!\preg_match('/^[\w_.\-\/]+$/u', $ref)) {
-                throw new ClarityException(
-                    "Template reference '{$ref}' contains invalid characters.",
-                    $sourcePath
-                );
-            }
-
-            // Dots and slashes are both accepted as separators; normalise to slashes.
-            $path = $this->basePath . '/' . str_replace('.', '/', $ref);
+            // Return canonical logical name: namespace kept, dots in name → slashes.
+            return $ns . '::' . str_replace('.', '/', $name);
         }
 
-        if ($addExtension) {
-            $path .= $this->extension;
+        // Relative path: "layouts/main", "partials.header"
+        // Allow only safe characters: letters, digits, underscores, hyphens, dots, slashes.
+        if (!\preg_match('/^[\w_.\-\/]+$/u', $ref)) {
+            throw new ClarityException(
+                "Template reference '{$ref}' contains invalid characters.",
+                $currentName
+            );
         }
 
-        return $path;
+        // Normalize: dots → slashes, so 'layouts.base' and 'layouts/base' are equivalent.
+        return str_replace('.', '/', $ref);
     }
 
     /**
-     * Read a file's contents and record it as a dependency.
+     * Load a template's source via the active loader and record revision as a dependency.
+     *
+     * @param string $name Logical template name.
      */
-    private function readWithDep(string $absolutePath): string
+    private function readWithDep(string $name): string
     {
-        $this->dependencies[$absolutePath] = (int) filemtime($absolutePath);
-        return file_get_contents($absolutePath);
+        $src = $this->loader->load($name);
+        $this->dependencies[$name] = $src->revision;
+        return $src->getCode();
     }
 
     /**
@@ -1045,7 +1023,7 @@ class Compiler
         return <<<PHP
         class {$className}
         {
-            /** @var array<string,int> absolutePath => mtime for every file read during compilation */
+            /** @var array<string,int|string> logicalName => revision for every template read during compilation */
             public static array \$dependencies = {$depsExport};
 
             /** @var string[] source file paths, indexed by the integer used in \$sourceMap */

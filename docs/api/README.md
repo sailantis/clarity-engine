@@ -28,3 +28,11 @@
 - [TranslationModule](Clarity_Localization_TranslationModule.md) `Clarity\Localization\TranslationModule`
 - [YamlParser](Clarity_Localization_YamlParser.md) `Clarity\Localization\YamlParser`
 
+### `Clarity\Template`
+
+- [ArrayLoader](Clarity_Template_ArrayLoader.md) `Clarity\Template\ArrayLoader`
+- [FileLoader](Clarity_Template_FileLoader.md) `Clarity\Template\FileLoader`
+- [StringLoader](Clarity_Template_StringLoader.md) `Clarity\Template\StringLoader`
+- [TemplateLoader](Clarity_Template_TemplateLoader.md) `Clarity\Template\TemplateLoader`
+- [TemplateSource](Clarity_Template_TemplateSource.md) `Clarity\Template\TemplateSource`
+
