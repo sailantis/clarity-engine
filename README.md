@@ -8,16 +8,16 @@
 
 ## ✨ Features
 
-- **🚀 Compiled & Cached** – Templates compile to PHP classes and leverage OPcache for blazing-fast rendering
-- **🔒 Secure Sandbox** – No arbitrary PHP execution; templates are strictly sandboxed with controlled access
-- **🎨 Expressive Syntax** – Clean, readable template syntax inspired by modern template engines
-- **📦 Template Inheritance** – Reusable layouts with `extends` and `blocks` for DRY template architecture
-- **� Macros** – Define reusable template fragments with parameters and call them inline
-- **🔧 Extensible** – Custom filters, functions, inline filters, block directives, and namespaces
-- **🧩 Modules** – Bundle filters, functions, and directives into self-registering plug-ins
-- **⚡ Auto-escaping** – Built-in XSS protection with context-aware automatic HTML/JS/CSS escaping
-- **🌍 Unicode Support** – Full multibyte string handling with transparent normalization
-- **🎯 Zero Dependencies** – Standalone engine with no external dependencies beyond PHP 8.1+
+- **Compiled & Cached** – Templates compile to PHP classes and leverage OPcache for blazing-fast rendering
+- **Secure Sandbox** – No arbitrary PHP execution; templates are strictly sandboxed with controlled access
+- **Expressive Syntax** – Clean, readable template syntax inspired by modern template engines
+- **Template Inheritance** – Reusable layouts with `extends` and `blocks` for DRY template architecture
+- **Macros** – Define reusable template fragments with parameters and call them inline
+- **Extensible** – Custom filters, functions, inline filters, block directives, and namespaces
+- **Modules** – Bundle filters, functions, and directives into self-registering plug-ins
+- **Auto-escaping** – Built-in XSS protection with context-aware automatic HTML/JS/CSS escaping
+- **Unicode Support** – Full multibyte string handling with transparent normalization
+- **Zero Dependencies** – Standalone engine with no external dependencies beyond PHP 8.1+
 
 ---
 
@@ -42,9 +42,9 @@ require_once 'vendor/autoload.php';
 use Clarity\ClarityEngine;
 
 // Initialize the engine
-$engine = new ClarityEngine();
-$engine->setViewPath(__DIR__ . '/templates');
-$engine->setCachePath(__DIR__ . '/cache');
+$engine = new ClarityEngine([
+    'viewPath' => __DIR__ . '/templates',
+]);
 
 // Render a template
 echo $engine->render('welcome', [
@@ -198,18 +198,26 @@ Common filters: `upper`, `lower`, `trim`, `length`, `number`, `date`, `sprintf`,
 Configure the engine with these methods:
 
 ```php
-$engine = new ClarityEngine();
+// Initialize with config array
+$engine = new ClarityEngine([
+    'viewPath' => __DIR__ . '/templates',
+    'cachePath' => __DIR__ . '/cache',
+]);
 
-// Required configuration
-$engine->setViewPath(__DIR__ . '/templates');
-$engine->setCachePath(__DIR__ . '/cache');
+// Or configure via setters
+$engine = ClarityEngine::create()
+    ->setViewPath(__DIR__ . '/templates')
+    ->setCachePath(__DIR__ . '/cache'); // Default: sys temp + /clarity_cache
 
-// Optional configuration
+// Additional configuration
 $engine->setExtension('.tpl.html');           // Default: .clarity.html
-$engine->addFilter('currency', fn($v) => '€ ' . number_format($v, 2));
 $engine->addNamespace('admin', '/path/to/admin/templates');
 $engine->setDebugMode(true);                  // Runtime safety checks (dev only)
-$engine->flushCache();                        // Clear compiled templates
+
+// Add custom filter
+$engine->addFilter('currency', fn($v) => '€ ' . number_format($v, 2));
+// Clear compiled templates
+$engine->flushCache();
 
 // Modules: bundle filters, functions, and directives
 $engine->use(new \Clarity\Localization\IntlFormatModule(['locale' => 'en_US']));
@@ -259,6 +267,8 @@ Clarity is designed for speed. Templates compile to native PHP classes and lever
 ![Benchmark Results](docs/images/benchmark-results.svg)
 
 _30 runs × 10,000 iterations, PHP 8.3.6 with OPcache enabled on a high performance server at Hetzner (Link to the Benchmark follows)_
+
+_The reason Clarity is slightly faster than the Native engine is that Native uses the handy esc_html() function for escaping._
 
 📖 **[Performance optimization guide →](docs/05-best-practices.md#performance)**
 

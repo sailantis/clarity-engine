@@ -23,9 +23,14 @@ Basic Usage
 ```php
 use Clarity\ClarityEngine;
 
-$engine = new ClarityEngine();
-$engine->setViewPath(__DIR__ . '/templates');
-$engine->setCachePath(__DIR__ . '/cache');
+$engine = new ClarityEngine([
+   'viewPath' => __DIR__ . '/templates',
+   'cachePath' => __DIR__ . '/cache',
+]);
+# or configure via setters:
+$engine = ClarityEngine::create()
+   ->setViewPath(__DIR__ . '/templates')
+   ->setCachePath(__DIR__ . '/cache');
 
 // Register a custom filter
 $engine->addFilter('currency', fn($v, string $symbol = '€') =>
@@ -92,17 +97,26 @@ Templates are sandboxed and cannot:
 
 ## 🚀 Public methods
 
-### __construct() · [source](../../src/ClarityEngine.php#L111)
+### __construct() · [source](../../src/ClarityEngine.php#L125)
 
-`public function __construct(array $vars = []): mixed`
+`public function __construct(array $config = []): mixed`
 
 Create a new ClarityEngine instance.
+
+This constructor accepts a single configuration array. Common keys:
+- `vars`: array of initial variables available to all views
+- `viewPath`: base path for views
+- `extension`: file extension (with or without leading dot)
+- `layout`: default layout name or null
+- `namespaces`: associative array of namespace => path
+- `cachePath`: path to compiled template cache (applied after init)
+- `debug`: bool to enable debug mode
 
 **🧭 Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
-| `$vars` | array | `[]` | Initial variables available to all views. |
+| `$config` | array | `[]` | Configuration options for the engine. |
 
 **➡️ Return value**
 
@@ -111,7 +125,24 @@ Create a new ClarityEngine instance.
 
 ---
 
-### setExtension() · [source](../../src/ClarityEngine.php#L123)
+### create() · [source](../../src/ClarityEngine.php#L161)
+
+`public static function create(array $config = []): self`
+
+**🧭 Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$config` | array | `[]` |  |
+
+**➡️ Return value**
+
+- Type: self
+
+
+---
+
+### setExtension() · [source](../../src/ClarityEngine.php#L172)
 
 `public function setExtension(string $ext): static`
 
@@ -130,7 +161,7 @@ Set the view file extension for this instance.
 
 ---
 
-### getExtension() · [source](../../src/ClarityEngine.php#L137)
+### getExtension() · [source](../../src/ClarityEngine.php#L186)
 
 `public function getExtension(): string`
 
@@ -144,7 +175,7 @@ Get the effective file extension used when resolving templates.
 
 ---
 
-### addNamespace() · [source](../../src/ClarityEngine.php#L151)
+### addNamespace() · [source](../../src/ClarityEngine.php#L200)
 
 `public function addNamespace(string $name, string $path): static`
 
@@ -166,7 +197,7 @@ Views can be referenced using the syntax "namespace::view.name".
 
 ---
 
-### getNamespaces() · [source](../../src/ClarityEngine.php#L162)
+### getNamespaces() · [source](../../src/ClarityEngine.php#L211)
 
 `public function getNamespaces(): array`
 
@@ -180,7 +211,7 @@ Get the currently registered view namespaces.
 
 ---
 
-### setViewPath() · [source](../../src/ClarityEngine.php#L174)
+### setViewPath() · [source](../../src/ClarityEngine.php#L223)
 
 `public function setViewPath(string $path): static`
 
@@ -199,7 +230,7 @@ Set the base path for resolving relative view names.
 
 ---
 
-### getViewPath() · [source](../../src/ClarityEngine.php#L185)
+### getViewPath() · [source](../../src/ClarityEngine.php#L234)
 
 `public function getViewPath(): string`
 
@@ -213,7 +244,7 @@ Get the currently configured base path for view resolution.
 
 ---
 
-### setLayout() · [source](../../src/ClarityEngine.php#L199)
+### setLayout() · [source](../../src/ClarityEngine.php#L248)
 
 `public function setLayout(string|null $layout): static`
 
@@ -235,7 +266,7 @@ rendered view output.
 
 ---
 
-### getLayout() · [source](../../src/ClarityEngine.php#L210)
+### getLayout() · [source](../../src/ClarityEngine.php#L259)
 
 `public function getLayout(): string|null`
 
@@ -249,7 +280,7 @@ Get the currently configured layout view name.
 
 ---
 
-### setVar() · [source](../../src/ClarityEngine.php#L222)
+### setVar() · [source](../../src/ClarityEngine.php#L271)
 
 `public function setVar(string $name, mixed $value): static`
 
@@ -269,7 +300,7 @@ Set a single view variable.
 
 ---
 
-### setVars() · [source](../../src/ClarityEngine.php#L236)
+### setVars() · [source](../../src/ClarityEngine.php#L285)
 
 `public function setVars(array $vars): static`
 

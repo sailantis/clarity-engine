@@ -30,7 +30,7 @@ use Locale;
  *
  * Template usage
  * --------------
- * ```clarity
+ * ```twig
  * {% with_locale "fr_FR" %}
  *     {{ price |> format_currency("EUR") }}
  *     {{ "greeting" |> t }}

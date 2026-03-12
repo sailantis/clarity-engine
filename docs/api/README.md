@@ -19,8 +19,12 @@
 
 ### `Clarity\Localization`
 
+- [ChainTranslationLoader](Clarity_Localization_ChainTranslationLoader.md) `Clarity\Localization\ChainTranslationLoader`
+- [FileTranslationLoader](Clarity_Localization_FileTranslationLoader.md) `Clarity\Localization\FileTranslationLoader`
 - [IntlFormatModule](Clarity_Localization_IntlFormatModule.md) `Clarity\Localization\IntlFormatModule`
 - [LocaleService](Clarity_Localization_LocaleService.md) `Clarity\Localization\LocaleService`
+- [RedisCachingLoader](Clarity_Localization_RedisCachingLoader.md) `Clarity\Localization\RedisCachingLoader`
+- [TranslationLoaderInterface](Clarity_Localization_TranslationLoaderInterface.md) `Clarity\Localization\TranslationLoaderInterface`
 - [TranslationModule](Clarity_Localization_TranslationModule.md) `Clarity\Localization\TranslationModule`
 - [YamlParser](Clarity_Localization_YamlParser.md) `Clarity\Localization\YamlParser`
 

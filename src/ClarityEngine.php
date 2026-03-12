@@ -23,9 +23,14 @@ namespace Clarity;
  * ```php
  * use Clarity\ClarityEngine;
  * 
- * $engine = new ClarityEngine();
- * $engine->setViewPath(__DIR__ . '/templates');
- * $engine->setCachePath(__DIR__ . '/cache');
+ * $engine = new ClarityEngine([
+ *    'viewPath' => __DIR__ . '/templates',
+ *    'cachePath' => __DIR__ . '/cache',
+ * ]);
+ * # or configure via setters:
+ * $engine = ClarityEngine::create()
+ *    ->setViewPath(__DIR__ . '/templates')
+ *    ->setCachePath(__DIR__ . '/cache');
  * 
  * // Register a custom filter
  * $engine->addFilter('currency', fn($v, string $symbol = '€') => 
@@ -106,12 +111,56 @@ class ClarityEngine
     /**
      * Create a new ClarityEngine instance.
      *
-     * @param array $vars Initial variables available to all views.
+     * This constructor accepts a single configuration array. Common keys:
+     * - `vars`: array of initial variables available to all views
+     * - `viewPath`: base path for views
+     * - `extension`: file extension (with or without leading dot)
+     * - `layout`: default layout name or null
+     * - `namespaces`: associative array of namespace => path
+     * - `cachePath`: path to compiled template cache (applied after init)
+     * - `debug`: bool to enable debug mode
+     *
+     * @param array $config Configuration options for the engine.
      */
-    public function __construct(array $vars = [])
+    public function __construct(array $config = [])
     {
-        $this->vars = $vars;
+        if (isset($config['vars']) && is_array($config['vars'])) {
+            $this->vars = $config['vars'];
+        }
+
+        if (isset($config['viewPath']) && \is_string($config['viewPath'])) {
+            $this->setViewPath($config['viewPath']);
+        }
+
+        if (isset($config['extension']) && \is_string($config['extension'])) {
+            $this->setExtension($config['extension']);
+        }
+
+        if (isset($config['layout']) && \is_string($config['layout'])) {
+            $this->setLayout($config['layout']);
+        }
+
+        if (isset($config['namespaces']) && \is_array($config['namespaces'])) {
+            // Normalize paths (no trailing slash)
+            foreach ($config['namespaces'] as $k => $p) {
+                $this->addNamespace($k, $p);
+            }
+        }
+
         $this->initializeClarityEngine();
+
+        // Post-init config that requires the registry/cache to exist
+        if (isset($config['cachePath']) && \is_string($config['cachePath'])) {
+            $this->setCachePath($config['cachePath']);
+        }
+        if (isset($config['debug'])) {
+            $this->setDebugMode((bool) $config['debug']);
+        }
+    }
+
+    public static function create(array $config = []): self
+    {
+        return new self($config);
     }
 
     /**
@@ -150,7 +199,7 @@ class ClarityEngine
      */
     public function addNamespace(string $name, string $path): static
     {
-        $this->namespaces[$name] = rtrim($path, '/');
+        $this->namespaces[$name] = \rtrim($path, '/');
         return $this;
     }
 

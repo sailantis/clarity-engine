@@ -33,7 +33,7 @@ $engine->use(new TranslationModule([
 
 Template usage
 --------------
-```clarity
+```twig
 {# Simple lookup (default domain = messages) #}
 {{ "logout" |> t }}
 
@@ -52,7 +52,7 @@ Template usage
 
 ## 🚀 Public methods
 
-### __construct() · [source](../../src/Localization/TranslationModule.php#L75)
+### __construct() · [source](../../src/Localization/TranslationModule.php#L76)
 
 `public function __construct(array $config = []): mixed`
 
@@ -69,7 +69,7 @@ Template usage
 
 ---
 
-### register() · [source](../../src/Localization/TranslationModule.php#L101)
+### register() · [source](../../src/Localization/TranslationModule.php#L108)
 
 `public function register(Clarity\ClarityEngine $engine): void`
 
@@ -86,7 +86,7 @@ Template usage
 
 ---
 
-### get() · [source](../../src/Localization/TranslationModule.php#L161)
+### get() · [source](../../src/Localization/TranslationModule.php#L168)
 
 `public function get(string $locale, string $key, array|null $vars = null, string|null $domain = null): string`
 
@@ -108,7 +108,7 @@ Look up a translation key with optional placeholder substitution.
 
 ---
 
-### pushDomain() · [source](../../src/Localization/TranslationModule.php#L235)
+### pushDomain() · [source](../../src/Localization/TranslationModule.php#L242)
 
 `public function pushDomain(string|null $domain): void`
 
@@ -144,7 +144,7 @@ In this example, the first `t` filter looks up `welcome_subject` in the
 
 ---
 
-### popDomain() · [source](../../src/Localization/TranslationModule.php#L244)
+### popDomain() · [source](../../src/Localization/TranslationModule.php#L251)
 
 `public function popDomain(): void`
 

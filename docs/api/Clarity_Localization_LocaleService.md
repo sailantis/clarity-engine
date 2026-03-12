@@ -25,7 +25,7 @@ The `with_locale` blocks are then registered by whichever module runs first.
 
 Template usage
 --------------
-```clarity
+```twig
 {% with_locale "fr_FR" %}
     {{ price |> format_currency("EUR") }}
     {{ "greeting" |> t }}

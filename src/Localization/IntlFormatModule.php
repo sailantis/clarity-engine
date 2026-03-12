@@ -22,7 +22,7 @@ use MessageFormatter;
  *
  * $engine->use(new IntlFormatModule([
  *     'locale'    => 'de_DE',   // default locale (inherits from LocaleService if registered first)
- *     'timezone'  => 'Europe/Berlin',  // default timezone for date/time formatting
+ *     'timezone'  => 'Europe/Dublin',  // default timezone for date/time formatting
  * ]));
  * ```
  *
@@ -42,27 +42,35 @@ use MessageFormatter;
  * | `format_time`     | `format_time($v [, $style='medium'] [, $loc] [, $tz])` | Locale-aware time                                |
  * | `format_datetime` | `format_datetime($v [, $ds='medium'] [, $ts='medium'] [, $loc] [, $tz])` | Date + time               |
  * | `format_relative` | `format_relative($v [, $loc])`                         | Relative time ("3 minutes ago")                  |
- * | `country_name`    | `country_name($code [, $displayLocale] [, $loc])`      | ISO country code → display name                  |
- * | `language_name`   | `language_name($code [, $displayLocale] [, $loc])`     | Language code → display name                     |
- * | `locale_name`     | `locale_name($id [, $displayLocale] [, $loc])`         | Locale identifier → display name                 |
  * | `transliterate`   | `transliterate($v [, $rules='Any-Latin; Latin-ASCII'])` | Transliterate text                               |
  * | `format_message`  | `format_message($pattern [, $vars=[]] [, $loc])`       | ICU MessageFormat (plurals, selects, …)          |
  *
+ * Registered functions
+ * --------------------
+ * | Function          | Signature                                              | Description                                      |
+ * |-------------------|--------------------------------------------------------|--------------------------------------------------|
+ * | `country_name`    | `country_name($code [, $displayLocale] [, $loc])`      | ISO country code → display name                  |
+ * | `language_name`   | `language_name($code [, $displayLocale] [, $loc])`     | Language code → display name                     |
+ * | `locale_name`     | `locale_name($id [, $displayLocale] [, $loc])`         | Locale identifier → display name                 |
+ * | `timezone_name`   | `timezone_name($tz [, $displayLocale])`                | Timezone identifier → display name               |
+ *
  * Template usage
  * --------------
- * ```clarity
+ * ```twig
  * {{ 1234567.89 |> format_number(2) }}
  * {{ price |> format_currency("USD") }}
- * {{ "USD" |> currency_name }}
  * {{ 0.1234 |> percent }}
  * {{ 42 |> spellout }}
  * {{ 1 |> ordinal }}
  * {{ order.created_at |> format_date("long") }}
  * {{ order.created_at |> format_relative }}
- * {{ "DE" |> country_name }}
- * {{ "de" |> language_name }}
  * {{ "Hëllo Wörld" |> transliterate }}
  * {{ "{count, plural, one{# item} other{# items}}" |> format_message({count: n}) }}
+ * {{ currency_name("USD") }}
+ * {{ country_name("DE") }}
+ * {{ language_name("de") }}
+ * {{ locale_name("en_US") }}
+ * {{ timezone_name("America/New_York") }}
  * ```
  */
 class IntlFormatModule implements ModuleInterface
@@ -79,6 +87,16 @@ class IntlFormatModule implements ModuleInterface
         'full' => \IntlDateFormatter::FULL,
     ];
 
+    /**
+     * Create a new IntlFormatModule instance.
+     * ```php
+     * Config options: {
+     *     string|null $locale   Default locale (e.g. "en_US"). Inherits from LocaleService if omitted.
+     *     string|null $timezone Default timezone (e.g. "UTC" or "Europe/Berlin").
+     * }
+     * ```
+     * @param array $config Configuration options for the module.
+     */
     public function __construct(array $config = [])
     {
         $this->intlAvailable = \extension_loaded('intl');
@@ -86,6 +104,7 @@ class IntlFormatModule implements ModuleInterface
         $this->timezone = $config['timezone'] ?? null;
     }
 
+    /** @inheritDoc */
     public function register(ClarityEngine $engine): void
     {
         // Bootstrap the locale service (uses existing one if LocaleService was already registered)
