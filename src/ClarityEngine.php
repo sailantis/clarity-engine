@@ -2,7 +2,6 @@
 namespace Clarity;
 
 use Clarity\Template\FileLoader;
-use Clarity\Template\TemplateLoader;
 
 /**
  * Clarity Template Engine
@@ -298,31 +297,6 @@ class ClarityEngine
     {
         $this->vars = [...$this->vars, ...$vars];
         return $this;
-    }
-
-    /**
-     * Set a custom template loader, replacing the default FileLoader.
-     *
-     * @param TemplateLoader $loader The loader to use.
-     * @return static
-     */
-    public function setLoader(TemplateLoader $loader): static
-    {
-        $this->loader = $loader;
-        return $this;
-    }
-
-    /**
-     * Return the active template loader, lazily creating a FileLoader if none
-     * has been set explicitly.
-     */
-    public function getLoader(): TemplateLoader
-    {
-        return $this->loader ??= new FileLoader(
-            $this->viewPath,
-            $this->extension,
-            $this->namespaces
-        );
     }
 
     /**

@@ -4,6 +4,7 @@ namespace Clarity;
 use Clarity\Engine\Cache;
 use Clarity\Engine\Compiler;
 use Clarity\Engine\Registry;
+use Clarity\Template\FileLoader;
 use Clarity\Template\TemplateLoader;
 use ParseError;
 
@@ -234,6 +235,31 @@ trait ClarityEngineTrait
     }
 
     /**
+     * Set a custom template loader, replacing the default FileLoader.
+     *
+     * @param TemplateLoader $loader The loader to use.
+     * @return static
+     */
+    public function setLoader(TemplateLoader $loader): static
+    {
+        $this->loader = $loader;
+        return $this;
+    }
+
+    /**
+     * Return the active template loader, lazily creating a FileLoader if none
+     * has been set explicitly.
+     */
+    public function getLoader(): TemplateLoader
+    {
+        return $this->loader ??= new FileLoader(
+            $this->viewPath,
+            $this->extension,
+            $this->namespaces
+        );
+    }
+
+    /**
      * Set the directory where compiled templates should be cached.
      *
      * @param string $path Absolute path to the cache directory.
@@ -357,6 +383,8 @@ trait ClarityEngineTrait
         $vars['content'] = $content;
         return $this->renderPartial($layout, $vars);
     }
+
+
 
     // -------------------------------------------------------------------------
     // Internal rendering
