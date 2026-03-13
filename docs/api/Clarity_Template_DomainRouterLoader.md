@@ -46,7 +46,74 @@ echo $engine->render('other');
 
 ---
 
-### load() · [source](../../src/Template/DomainRouterLoader.php#L48)
+### addDomainLoader() · [source](../../src/Template/DomainRouterLoader.php#L48)
+
+`public function addDomainLoader(string $domain, Clarity\Template\TemplateLoader $loader): void`
+
+Add or replace a domain loader at runtime.
+
+**🧭 Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$domain` | string | - | Domain prefix to route (e.g. "app"). |
+| `$loader` | [TemplateLoader](Clarity_Template_TemplateLoader.md) | - | Loader to handle templates for this domain. |
+
+**➡️ Return value**
+
+- Type: void
+
+
+---
+
+### setFallbackLoader() · [source](../../src/Template/DomainRouterLoader.php#L58)
+
+`public function setFallbackLoader(Clarity\Template\TemplateLoader|null $loader): void`
+
+Set or replace the fallback loader for templates without a domain prefix.
+
+**🧭 Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$loader` | [TemplateLoader](Clarity_Template_TemplateLoader.md)\|null | - | Loader to handle templates without a domain, or null to disable. |
+
+**➡️ Return value**
+
+- Type: void
+
+
+---
+
+### getDomainLoaders() · [source](../../src/Template/DomainRouterLoader.php#L68)
+
+`public function getDomainLoaders(): array`
+
+Get the currently configured domain loaders.
+
+**➡️ Return value**
+
+- Type: array
+- Description: Associative array of domain => loader mappings.
+
+
+---
+
+### getFallbackLoader() · [source](../../src/Template/DomainRouterLoader.php#L78)
+
+`public function getFallbackLoader(): Clarity\Template\TemplateLoader|null`
+
+Get the currently configured fallback loader.
+
+**➡️ Return value**
+
+- Type: [TemplateLoader](Clarity_Template_TemplateLoader.md)|null
+- Description: The fallback loader, or null if none is set.
+
+
+---
+
+### load() · [source](../../src/Template/DomainRouterLoader.php#L86)
 
 `public function load(string $name): Clarity\Template\TemplateSource|null`
 
@@ -71,13 +138,13 @@ The revision ({@see \TemplateSource::$revision}) must be available immediately w
 
 ---
 
-### getSubLoaders() · [source](../../src/Template/DomainRouterLoader.php#L69)
+### getSubLoaders() · [source](../../src/Template/DomainRouterLoader.php#L107)
 
 `public function getSubLoaders(): array`
 
 Return the list of loaders wrapped by this loader, if any.
 
-Used for introspection and debugging; not used by the engine itself.
+Used by the engine to traverse loader hierarchies (e.g. DomainRouterLoader → FileLoader) and apply configuration changes like setExtension() to all relevant loaders.
 
 **➡️ Return value**
 

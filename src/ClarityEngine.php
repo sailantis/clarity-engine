@@ -1,9 +1,6 @@
 <?php
 namespace Clarity;
 
-use Clarity\Template\FileLoader;
-use Clarity\Template\TemplateLoader;
-
 /**
  * Clarity Template Engine
  *
@@ -105,10 +102,11 @@ class ClarityEngine
     use ClarityEngineTrait;
 
     protected string $viewPath = __DIR__ . '/../../../views';
+    protected ?string $extension = null;
+    protected array $namespaces = [];
     protected int $renderDepth = 0;
     protected ?string $layout = null;
     protected array $vars = [];
-    protected ?string $extension = null;
 
     /**
      * Create a new ClarityEngine instance.
@@ -138,6 +136,14 @@ class ClarityEngine
             $this->setExtension($config['extension']);
         }
 
+        if (isset($config['namespaces']) && \is_array($config['namespaces'])) {
+            foreach ($config['namespaces'] as $ns => $path) {
+                if (\is_string($ns) && \is_string($path)) {
+                    $this->addNamespace($ns, $path);
+                }
+            }
+        }
+
         if (isset($config['layout']) && \is_string($config['layout'])) {
             $this->setLayout($config['layout']);
         }
@@ -156,59 +162,6 @@ class ClarityEngine
     public static function create(array $config = []): self
     {
         return new self($config);
-    }
-
-    /**
-     * Set the view file extension for this instance.
-     *
-     * @param string $ext Extension with or without a leading dot.
-     * @return $this
-     */
-    public function setExtension(string $ext): static
-    {
-        if ($ext !== '' && $ext[0] !== '.') {
-            $ext = '.' . $ext;
-        }
-        $this->extension = $ext;
-        if ($this->loader !== null) {
-            self::applyExtensionToLoader($this->loader, $ext);
-        }
-        return $this;
-    }
-
-    /**
-     * Get the effective file extension used when resolving templates.
-     *
-     * @return string Extension including leading dot or empty string.
-     */
-    public function getExtension(): string
-    {
-        return $this->extension;
-    }
-
-    /**
-     * Set the base path for resolving relative template names.
-     *
-     * @param string $path Base directory for templates.
-     * @return $this
-     */
-    public function setViewPath(string $path): static
-    {
-        $this->viewPath = rtrim($path, '/\\');
-        if ($this->loader instanceof FileLoader) {
-            $this->loader->setBasePath($this->viewPath);
-        }
-        return $this;
-    }
-
-    /**
-     * Get the currently configured base path for view resolution.
-     *
-     * @return string Base directory for views.
-     */
-    public function getViewPath(): string
-    {
-        return $this->viewPath;
     }
 
     /**

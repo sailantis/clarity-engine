@@ -31,7 +31,7 @@ interface TemplateLoader
     /**
      * Return the list of loaders wrapped by this loader, if any.
      *
-     * Used for introspection and debugging; not used by the engine itself.
+     * Used by the engine to traverse loader hierarchies (e.g. DomainRouterLoader → FileLoader) and apply configuration changes like setExtension() to all relevant loaders.
      *
      * @return TemplateLoader[] List of loaders wrapped by this loader, or an empty array if this loader is not a wrapper.
      */

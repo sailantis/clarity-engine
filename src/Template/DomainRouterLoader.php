@@ -35,11 +35,49 @@ final class DomainRouterLoader implements TemplateLoader
 
     public function __construct(array $domainLoaders, ?TemplateLoader $fallback = null)
     {
-        if (empty($domainLoaders)) {
-            throw new \InvalidArgumentException('At least one domain loader must be provided');
-        }
         $this->domainLoaders = $domainLoaders;
         $this->fallback = $fallback;
+    }
+
+    /**
+     * Add or replace a domain loader at runtime.
+     *
+     * @param string $domain Domain prefix to route (e.g. "app").
+     * @param TemplateLoader $loader Loader to handle templates for this domain.
+     */
+    public function addDomainLoader(string $domain, TemplateLoader $loader): void
+    {
+        $this->domainLoaders[$domain] = $loader;
+    }
+
+    /**
+     * Set or replace the fallback loader for templates without a domain prefix.
+     *
+     * @param TemplateLoader|null $loader Loader to handle templates without a domain, or null to disable.
+     */
+    public function setFallbackLoader(?TemplateLoader $loader): void
+    {
+        $this->fallback = $loader;
+    }
+
+    /**
+     * Get the currently configured domain loaders.
+     *
+     * @return array<string, TemplateLoader> Associative array of domain => loader mappings.
+     */
+    public function getDomainLoaders(): array
+    {
+        return $this->domainLoaders;
+    }
+
+    /**
+     * Get the currently configured fallback loader.
+     *
+     * @return TemplateLoader|null The fallback loader, or null if none is set.
+     */
+    public function getFallbackLoader(): ?TemplateLoader
+    {
+        return $this->fallback;
     }
 
     /**

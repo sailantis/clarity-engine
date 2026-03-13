@@ -4,6 +4,7 @@ namespace Clarity;
 use Clarity\Engine\Cache;
 use Clarity\Engine\Compiler;
 use Clarity\Engine\Registry;
+use Clarity\Template\DomainRouterLoader;
 use Clarity\Template\FileLoader;
 use Clarity\Template\TemplateLoader;
 use ParseError;
@@ -49,6 +50,112 @@ trait ClarityEngineTrait
     public function isDebugMode(): bool
     {
         return $this->debugMode;
+    }
+
+    /**
+     * Set the base path for resolving relative template names.
+     *
+     * @param string $path Base directory for templates.
+     * @return $this
+     */
+    public function setViewPath(string $path): static
+    {
+        $this->viewPath = rtrim($path, '/\\');
+
+        if ($this->loader instanceof FileLoader) {
+            $this->loader->setBasePath($this->viewPath);
+            return $this;
+        }
+
+        if ($this->loader instanceof DomainRouterLoader) {
+            // Update the fallback FileLoader if it exists
+            $fallback = $this->loader->getFallbackLoader();
+            if ($fallback instanceof FileLoader) {
+                $fallback->setBasePath($this->viewPath);
+            }
+            return $this;
+        }
+
+        return $this;
+    }
+
+    /**
+     * Get the currently configured base path for view resolution.
+     *
+     * @return string Base directory for views.
+     */
+    public function getViewPath(): string
+    {
+        return $this->viewPath;
+    }
+
+    /**
+     * Set the view file extension for this instance.
+     *
+     * @param string $ext Extension with or without a leading dot.
+     * @return $this
+     */
+    public function setExtension(string $ext): static
+    {
+        if ($ext !== '' && $ext[0] !== '.') {
+            $ext = '.' . $ext;
+        }
+        $this->extension = $ext;
+        if ($this->loader !== null) {
+            self::applyExtensionToLoader($this->loader, $ext);
+        }
+        return $this;
+    }
+
+    /**
+     * Get the effective file extension used when resolving templates.
+     *
+     * @return string Extension including leading dot or empty string.
+     */
+    public function getExtension(): string
+    {
+        return $this->extension;
+    }
+
+    /**
+     * Add a namespace for view resolution.
+     *
+     * Views can be referenced using the syntax "namespace::view.name".
+     *
+     * @param string $name Namespace name to register.
+     * @param string $path Filesystem path corresponding to the namespace.
+     * @return $this
+     */
+    public function addNamespace(string $name, string $path): static
+    {
+        $path = rtrim($path, '/');
+        $this->namespaces[$name] = $path;
+
+        // Ensure we have a DomainRouterLoader
+        if (!$this->loader instanceof DomainRouterLoader) {
+            $fallback = $this->loader ?? new FileLoader($this->viewPath, $this->extension);
+            $this->loader = new DomainRouterLoader([], fallback: $fallback);
+        }
+
+        if ($this->loader instanceof DomainRouterLoader) {
+            // Add domain → FileLoader
+            $this->loader->addDomainLoader(
+                $name,
+                new FileLoader($path, $this->extension)
+            );
+        }
+
+        return $this;
+    }
+
+    /**
+     * Get the currently registered view namespaces.
+     *
+     * @return array Associative array of namespace => path mappings.
+     */
+    public function getNamespaces(): array
+    {
+        return $this->namespaces;
     }
 
     /**
@@ -255,6 +362,20 @@ trait ClarityEngineTrait
      */
     public function getLoader(): TemplateLoader
     {
+        // If namespaces exist but no loader yet → create DomainRouterLoader
+        if ($this->loader === null && !empty($this->namespaces)) {
+            $routes = [];
+            foreach ($this->namespaces as $ns => $path) {
+                $routes[$ns] = new FileLoader($path, $this->extension);
+            }
+
+            $this->loader = new DomainRouterLoader(
+                $routes,
+                fallback: new FileLoader($this->viewPath, $this->extension)
+            );
+        }
+
+        // If no loader and no namespaces → simple FileLoader
         return $this->loader ??= new FileLoader(
             $this->viewPath,
             $this->extension
