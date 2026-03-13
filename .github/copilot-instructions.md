@@ -18,6 +18,7 @@
 - **Cache handling:** src/Engine/Cache.php
 - **Filter, function & block registry:** src/Engine/Registry.php
 - **Module interface:** src/ModuleInterface.php
+- **Template loaders:** src/Template/FileLoader.php, DomainRouterLoader.php, CompositeLoader.php, ArrayLoader.php, StringLoader.php
 - **Built-in localization modules:** src/Localization/IntlFormatModule.php, TranslationModule.php, LocaleService.php
 - **Tests:** tests/Engine/ (ControlFlowTest, FiltersFunctionsTest, RenderingTest, ModulesTest, LocalizationTest, …)
 
@@ -33,6 +34,7 @@
 - **Custom block directives:** `$engine->addBlock(keyword, callable)` — extend the compiler
 - **Services:** `$engine->addService(key, object)` — shared mutable state for modules
 - **Localization:** IntlFormatModule (intl-backed), TranslationModule (YAML/JSON/PHP catalogs)
+- **Template loaders:** `TemplateLoader` interface has `load(?TemplateSource)` and `getSubLoaders()` (no `exists()`). `FileLoader` handles plain names only — no `namespace::` routing. Domain routing is done by `DomainRouterLoader`; first-match chaining by `CompositeLoader`. `setExtension()` on the engine propagates to all nested `FileLoader` instances automatically.
 
 **Coding Conventions & Guidance**
 

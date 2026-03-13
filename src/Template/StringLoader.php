@@ -30,21 +30,27 @@ final class StringLoader implements TemplateLoader
         $this->revision = hash('fnv1a64', $code);
     }
 
-    public function exists(string $name): bool
-    {
-        return $name === $this->name;
-    }
-
-    public function load(string $name): TemplateSource
+    /**
+     * @inheritDoc
+     */
+    public function load(string $name): ?TemplateSource
     {
         if ($name !== $this->name) {
-            throw new \RuntimeException("Template not found: {$name}");
+            return null;
         }
         $code = $this->code;
         return new TemplateSource(
             revision: $this->revision,
             codeLoader: static fn(): string => $code,
         );
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function getSubLoaders(): array
+    {
+        return [];
     }
 
     /**

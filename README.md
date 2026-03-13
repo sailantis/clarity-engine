@@ -13,7 +13,7 @@
 - **Expressive Syntax** – Clean, readable template syntax inspired by modern template engines
 - **Template Inheritance** – Reusable layouts with `extends` and `blocks` for DRY template architecture
 - **Macros** – Define reusable template fragments with parameters and call them inline
-- **Extensible** – Custom filters, functions, inline filters, block directives, and namespaces
+- **Extensible** — Custom filters, functions, inline filters, block directives, and loader plugins
 - **Modules** – Bundle filters, functions, and directives into self-registering plug-ins
 - **Auto-escaping** – Built-in XSS protection with context-aware automatic HTML/JS/CSS escaping
 - **Unicode Support** – Full multibyte string handling with transparent normalization
@@ -211,7 +211,11 @@ $engine = ClarityEngine::create()
 
 // Additional configuration
 $engine->setExtension('.tpl.html');           // Default: .clarity.html
-$engine->addNamespace('admin', '/path/to/admin/templates');
+// Route prefixed names to separate directories:
+$engine->setLoader(new \Clarity\Template\DomainRouterLoader(
+    ['admin' => new \Clarity\Template\FileLoader('/path/to/admin/templates')],
+    fallback: new \Clarity\Template\FileLoader('/path/to/templates'),
+));
 $engine->setDebugMode(true);                  // Runtime safety checks (dev only)
 
 // Add custom filter

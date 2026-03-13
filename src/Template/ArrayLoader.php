@@ -13,7 +13,7 @@ namespace Clarity\Template;
  * ```php
  * $loader = new ArrayLoader([
  *     'home'         => '<h1>Hello {{ name }}</h1>',
- *     'layouts/base' => '<!DOCTYPE html><body>{% block content %}{% endblock %}</body>',
+ *     'layouts.base' => '<!DOCTYPE html><body>{% block content %}{% endblock %}</body>',
  * ]);
  * $engine->setLoader($loader);
  * ```
@@ -31,21 +31,27 @@ final class ArrayLoader implements TemplateLoader
         $this->templates = $templates;
     }
 
-    public function exists(string $name): bool
-    {
-        return isset($this->templates[$name]);
-    }
-
-    public function load(string $name): TemplateSource
+    /**
+     * @inheritDoc
+     */
+    public function load(string $name): ?TemplateSource
     {
         if (!isset($this->templates[$name])) {
-            throw new \RuntimeException("Template not found: {$name}");
+            return null;
         }
         $code = $this->templates[$name];
         return new TemplateSource(
             revision: hash('fnv1a64', $code),
             codeLoader: static fn(): string => $code,
         );
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function getSubLoaders(): array
+    {
+        return [];
     }
 
     /**

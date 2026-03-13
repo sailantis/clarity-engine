@@ -1,8 +1,11 @@
 <?php
+
 namespace Clarity\Engine;
 
 use Clarity\ClarityException;
+use Clarity\Template\FileLoader;
 use Clarity\Template\TemplateLoader;
+use SebastianBergmann\CodeCoverage\Node\File;
 
 /**
  * Compiles a single Clarity template source file into a PHP class.
@@ -51,7 +54,7 @@ class Compiler
     private int $phpLine = 0;
 
     /** View extension (e.g. '.clarity.html') — used only to strip extension from template refs */
-    private string $extension = '.clarity.html';
+    private string $extension = FileLoader::DEFAULT_EXTENSION;
 
     /** Active loader for this compilation (set at start of compile()) */
     private ?TemplateLoader $loader = null;
@@ -118,9 +121,9 @@ class Compiler
     // Configuration
     // -------------------------------------------------------------------------
 
-    public function setExtension(string $ext): static
+    public function setExtension(string $extension): static
     {
-        $this->extension = $ext[0] === '.' ? $ext : '.' . $ext;
+        $this->extension = $extension[0] === '.' ? $extension : '.' . $extension;
         return $this;
     }
 
@@ -456,9 +459,9 @@ class Compiler
         if (str_starts_with($inner, '@context ')) {
             // Handle {# @context <name> #} hints.
             static $validContexts = [
-            'html' => true,
-            'js' => true,
-            'css' => true
+                'html' => true,
+                'js' => true,
+                'css' => true
             ];
             $ctx = strtolower(trim(substr($inner, 9)));
             if (isset($validContexts[$ctx])) {
@@ -512,18 +515,18 @@ class Compiler
             'extends', 'block', 'endblock' => '',
             'include' => $this->compileInclude($rest, $sourcePath, $tplLine, $lines),
             default => $this->registry->hasBlock($keyword)
-            ? $this->registry->compileBlock(
-                $keyword,
-                $rest,
-                $sourcePath,
-                $tplLine,
-                fn(string $e) => $this->tokenizer->processCondition($e)
-            )
-            : throw new ClarityException(
-                "Unknown directive '{$keyword}'",
-                $sourcePath,
-                $tplLine
-            ),
+                ? $this->registry->compileBlock(
+                    $keyword,
+                    $rest,
+                    $sourcePath,
+                    $tplLine,
+                    fn(string $e) => $this->tokenizer->processCondition($e)
+                )
+                : throw new ClarityException(
+                    "Unknown directive '{$keyword}'",
+                    $sourcePath,
+                    $tplLine
+                ),
         };
     }
 
@@ -908,23 +911,17 @@ class Compiler
         }
     }
 
+   
     /**
-     * Resolve a template reference from inside a template to a logical name.
+     * Resolve a logical template reference to a normalized logical name.
      *
-     * Accepted forms
-     * --------------
-     * - Relative:   "layouts/main", "partials.header"
-     *               Dots are normalized to slashes. No basePath — the loader handles that.
-     * - Namespace:  "admin::dashboard.index"  (FileLoader uses the ns → path mapping.)
-     *               The part after '::' follows the same dot/slash normalization.
+     * This is where namespace logic and extension stripping would go if we
+     * supported those features.  For now, we just trim whitespace and validate
+     * that the name contains only safe characters.
      *
-     * Security: only safe characters are allowed (letters, digits, underscores,
-     * hyphens, dots, slashes) to prevent template injection or traversal.
-     * Dots are converted to slashes before returning so callers receive normalized names.
-     *
-     * @param string $ref         Reference from the template (e.g. "layouts/main", "admin::layout").
-     * @param string $currentName Logical name of the currently-compiling template (for errors).
-     * @throws ClarityException On invalid characters.
+     * @param string $ref         The raw template reference (e.g. from an extends/include tag).
+     * @param string $currentName The logical name of the template containing this reference (for error messages).
+     * @return string Normalized logical name to use for loader lookup.
      */
     private function resolveLogicalName(string $ref, string $currentName): string
     {
@@ -934,40 +931,24 @@ class Compiler
             throw new ClarityException("Template reference must not be empty.", $currentName);
         }
 
-        // Strip extension so logical names never include it.
-        if ($this->extension !== '' && str_ends_with($ref, $this->extension)) {
+        // Strip extension if the engine has an explicit extension configured
+        if (
+            $this->extension !== null
+            && $this->extension !== ''
+            && str_ends_with($ref, $this->extension)
+        ) {
             $ref = substr($ref, 0, -strlen($this->extension));
         }
 
-        $ns = \strstr($ref, '::', true);
-        if ($ns !== false) {
-            // Namespace path: "ns::segment.or/path"
-            $name = \substr($ref, \strlen($ns) + 2);
-
-            // Validate the name portion (alphanumeric, underscores, hyphens, dots);
-            // slashes are not allowed in the name part of a namespace reference.
-            if (!\preg_match('/^[\w_.\-]+$/u', $name)) {
-                throw new ClarityException(
-                    "Template reference '{$ref}' contains invalid characters in the name portion.",
-                    $currentName
-                );
-            }
-
-            // Return canonical logical name: namespace kept, dots in name → slashes.
-            return $ns . '::' . str_replace('.', '/', $name);
-        }
-
-        // Relative path: "layouts/main", "partials.header"
-        // Allow only safe characters: letters, digits, underscores, hyphens, dots, slashes.
-        if (!\preg_match('/^[\w_.\-\/]+$/u', $ref)) {
+        // Allow only safe characters: letters, digits, underscores, hyphens, dots, slashes, and ::
+        if (!preg_match('/^[\w.\-\/:]+$/u', $ref)) {
             throw new ClarityException(
                 "Template reference '{$ref}' contains invalid characters.",
                 $currentName
             );
         }
 
-        // Normalize: dots → slashes, so 'layouts.base' and 'layouts/base' are equivalent.
-        return str_replace('.', '/', $ref);
+        return $ref; // no normalization, no namespace logic
     }
 
     /**
@@ -978,6 +959,9 @@ class Compiler
     private function readWithDep(string $name): string
     {
         $src = $this->loader->load($name);
+        if ($src === null) {
+            throw new ClarityException("Template '{$name}' not found by loader.");
+        }
         $this->dependencies[$name] = $src->revision;
         return $src->getCode();
     }

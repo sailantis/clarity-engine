@@ -30,7 +30,7 @@ and error mapping — no file I/O needed on warm paths (OPcache serves them).
 
 ## 🚀 Public methods
 
-### __construct() · [source](../../src/Engine/Compiler.php#L105)
+### __construct() · [source](../../src/Engine/Compiler.php#L108)
 
 `public function __construct(): mixed`
 
@@ -41,7 +41,7 @@ and error mapping — no file I/O needed on warm paths (OPcache serves them).
 
 ---
 
-### setRegistry() · [source](../../src/Engine/Compiler.php#L110)
+### setRegistry() · [source](../../src/Engine/Compiler.php#L113)
 
 `public function setRegistry(Clarity\Engine\Registry $registry): static`
 
@@ -58,15 +58,15 @@ and error mapping — no file I/O needed on warm paths (OPcache serves them).
 
 ---
 
-### setExtension() · [source](../../src/Engine/Compiler.php#L121)
+### setExtension() · [source](../../src/Engine/Compiler.php#L124)
 
-`public function setExtension(string $ext): static`
+`public function setExtension(string $extension): static`
 
 **🧭 Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
-| `$ext` | string | - |  |
+| `$extension` | string | - |  |
 
 **➡️ Return value**
 
@@ -75,7 +75,7 @@ and error mapping — no file I/O needed on warm paths (OPcache serves them).
 
 ---
 
-### setDebugMode() · [source](../../src/Engine/Compiler.php#L127)
+### setDebugMode() · [source](../../src/Engine/Compiler.php#L130)
 
 `public function setDebugMode(bool $debug): static`
 
@@ -92,7 +92,7 @@ and error mapping — no file I/O needed on warm paths (OPcache serves them).
 
 ---
 
-### compile() · [source](../../src/Engine/Compiler.php#L145)
+### compile() · [source](../../src/Engine/Compiler.php#L148)
 
 `public function compile(string $templateName, Clarity\Template\TemplateLoader $loader): Clarity\Engine\CompiledTemplate`
 

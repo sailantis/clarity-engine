@@ -1,6 +1,9 @@
 <?php
 namespace Clarity\Tests\Engine;
 
+use Clarity\Template\ArrayLoader;
+use Clarity\Template\CompositeLoader;
+use Clarity\Template\DomainRouterLoader;
 use Clarity\Template\FileLoader;
 use PHPUnit\Framework\TestCase;
 
@@ -37,14 +40,36 @@ class TemplateLoaderArchitectureTest extends TestCase
         $this->assertSame('/views/a/home.twig', $loader->resolveName('home'));
     }
 
-    public function testResolveNameCacheInvalidatesOnNamespaceChange(): void
+    public function testDomainRouterLoaderExposesSubLoaders(): void
     {
-        $loader = new FileLoader('/views/base', '.clarity.html', ['admin' => '/views/admin/v1']);
+        $adminLoader = new FileLoader('/views/admin');
+        $baseLoader  = new FileLoader('/views/base');
+        $router      = new DomainRouterLoader(['admin' => $adminLoader], $baseLoader);
 
-        $this->assertSame('/views/admin/v1/dashboard.clarity.html', $loader->resolveName('admin::dashboard'));
+        $this->assertContains($adminLoader, $router->getSubLoaders());
+        $this->assertContains($baseLoader,  $router->getSubLoaders());
+    }
 
-        $loader->addNamespace('admin', '/views/admin/v2');
+    public function testDomainRouterLoaderThrowsOnUnknownDomain(): void
+    {
+        $router = new DomainRouterLoader(['app' => new FileLoader('/views/app')]);
 
-        $this->assertSame('/views/admin/v2/dashboard.clarity.html', $loader->resolveName('admin::dashboard'));
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessageMatches("/Unknown template domain 'unknown'/");
+        $router->load('unknown::page');
+    }
+
+    public function testCompositeLoaderTriesLoadersInOrder(): void
+    {
+        $first     = new ArrayLoader(['home' => 'from-first']);
+        $second    = new ArrayLoader(['home' => 'from-second', 'about' => 'from-second']);
+        $composite = new CompositeLoader($first, $second);
+
+        // 'home' is found in first — first loader wins
+        $this->assertSame('from-first', $composite->load('home')?->getCode());
+        // 'about' is not in first — falls through to second
+        $this->assertSame('from-second', $composite->load('about')?->getCode());
+        // unknown name — all loaders miss, returns null
+        $this->assertNull($composite->load('unknown'));
     }
 }

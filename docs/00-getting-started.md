@@ -161,14 +161,23 @@ $engine->setDebugMode(true); // enable
 $engine->setDebugMode(false); // disable (default)
 ```
 
-### Named Namespaces
+### Domain Router and Composite Loaders
 
-Register directories with namespaces for organized template resolution:
+Use `DomainRouterLoader` to route `domain::localName` prefixes to separate template directories, and `CompositeLoader` to chain multiple sources:
 
 ```php
-// Register a namespace
-$engine->addNamespace('admin', __DIR__ . '/views/admin');
-$engine->addNamespace('emails', __DIR__ . '/views/emails');
+use Clarity\Template\DomainRouterLoader;
+use Clarity\Template\FileLoader;
+
+// Route 'admin::...' and 'emails::...' to dedicated directories,
+// with the base views folder as fallback for unprefixed names.
+$engine->setLoader(new DomainRouterLoader(
+    [
+        'admin'  => new FileLoader(__DIR__ . '/views/admin'),
+        'emails' => new FileLoader(__DIR__ . '/views/emails'),
+    ],
+    fallback: new FileLoader(__DIR__ . '/views'),
+));
 
 // Use in templates:
 // {% include "admin::sidebar" %}

@@ -2,6 +2,7 @@
 namespace Clarity;
 
 use Clarity\Template\FileLoader;
+use Clarity\Template\TemplateLoader;
 
 /**
  * Clarity Template Engine
@@ -103,12 +104,11 @@ class ClarityEngine
 {
     use ClarityEngineTrait;
 
-    protected array $namespaces = [];
     protected string $viewPath = __DIR__ . '/../../../views';
     protected int $renderDepth = 0;
     protected ?string $layout = null;
     protected array $vars = [];
-    protected string $extension = '.clarity.html';
+    protected ?string $extension = null;
 
     /**
      * Create a new ClarityEngine instance.
@@ -126,7 +126,7 @@ class ClarityEngine
      */
     public function __construct(array $config = [])
     {
-        if (isset($config['vars']) && is_array($config['vars'])) {
+        if (isset($config['vars']) && \is_array($config['vars'])) {
             $this->vars = $config['vars'];
         }
 
@@ -140,13 +140,6 @@ class ClarityEngine
 
         if (isset($config['layout']) && \is_string($config['layout'])) {
             $this->setLayout($config['layout']);
-        }
-
-        if (isset($config['namespaces']) && \is_array($config['namespaces'])) {
-            // Normalize paths (no trailing slash)
-            foreach ($config['namespaces'] as $k => $p) {
-                $this->addNamespace($k, $p);
-            }
         }
 
         $this->initializeClarityEngine();
@@ -177,8 +170,8 @@ class ClarityEngine
             $ext = '.' . $ext;
         }
         $this->extension = $ext;
-        if ($this->loader instanceof FileLoader) {
-            $this->loader->setExtension($ext);
+        if ($this->loader !== null) {
+            self::applyExtensionToLoader($this->loader, $ext);
         }
         return $this;
     }
@@ -192,35 +185,6 @@ class ClarityEngine
     {
         return $this->extension;
     }
-
-    /**
-     * Add a namespace for view resolution.
-     *
-     * Views can be referenced using the syntax "namespace::view.name".
-     *
-     * @param string $name Namespace name to register.
-     * @param string $path Filesystem path corresponding to the namespace.
-     * @return $this
-     */
-    public function addNamespace(string $name, string $path): static
-    {
-        $this->namespaces[$name] = \rtrim($path, '/\\');
-        if ($this->loader instanceof FileLoader) {
-            $this->loader->addNamespace($name, $path);
-        }
-        return $this;
-    }
-
-    /**
-     * Get the currently registered view namespaces.
-     *
-     * @return array Associative array of namespace => path mappings.
-     */
-    public function getNamespaces(): array
-    {
-        return $this->namespaces;
-    }
-
 
     /**
      * Set the base path for resolving relative template names.
@@ -297,64 +261,6 @@ class ClarityEngine
     {
         $this->vars = [...$this->vars, ...$vars];
         return $this;
-    }
-
-    /**
-     * Resolve a view name to an actual file path on the filesystem.
-     *
-     * @deprecated Use getLoader()->load($name) instead. Kept for backward compatibility.
-     * @param string $view View name to resolve.
-     * @throws \RuntimeException If the view cannot be resolved.
-     * @return string Resolved file path.
-     */
-    protected function resolveView(string $view): string
-    {
-        if ($view === '') {
-            throw new \RuntimeException("Empty view name");
-        }
-
-        $ns = \strstr($view, '::', true);
-        if ($ns !== false) {
-            // namespaced view
-            $name = \substr($view, \strlen($ns) + 2);
-
-            if (!isset($this->namespaces[$ns])) {
-                throw new \RuntimeException("Unknown view namespace: $ns");
-            }
-
-            return $this->namespaces[$ns] . '/' . \str_replace('.', '/', $name) . $this->extension;
-        }
-
-        $len = \strlen($view);
-
-        $addExtension = !\str_ends_with($view, $this->extension);
-
-        if ($view[0] === '/') {
-            // absolute unix path
-            $path = $view;
-
-        } elseif ($view[1] === ':' && $len >= 3 && ($view[2] === '/' || $view[2] === '\\') && \ctype_alpha($view[0])) {
-            // absolute windows path: C:/foo or C:\foo
-            $path = $view;
-
-        } elseif ($view[0] === '\\' && $len >= 2 && $view[1] === '\\') {
-            // absolute UNC path: \\server\share
-            $path = $view;
-
-        } elseif ($view[0] === '.') {
-            // treat as literal relative path: ./partials/header or ../shared/footer
-            $path = $this->viewPath . '/' . $view;
-
-        } else {
-            // relative view name, resolve to path using dot-notation
-            $relative = \str_replace('.', '/', $view);
-            $path = $this->viewPath . '/' . $relative;
-        }
-
-        if ($addExtension) {
-            $path .= $this->extension;
-        }
-        return $path;
     }
 
 }

@@ -20,24 +20,20 @@ interface TemplateLoader
     /**
      * Load a template by its logical name and return source with revision metadata.
      *
-     * The revision ({@see TemplateSource::$revision}) must be available immediately
-     * with minimal I/O (e.g. a filemtime() call for file-based loaders); the actual
-     * template source could be fetched lazily via {@see TemplateSource::getCode()}
-     * only when the engine determines compilation is needed.
+     * The revision ({@see TemplateSource::$revision}) must be available immediately with minimal I/O (e.g. a filemtime() call for file-based loaders); the actual template source could be fetched lazily via {@see TemplateSource::getCode()} only when the engine determines compilation is needed.
      *
      * @param string $name Logical template name, e.g. 'home', 'admin::dashboard',
      *                     'layouts/base'. Must not be empty.
      * @throws \RuntimeException If the template cannot be found or loaded.
      */
-    public function load(string $name): TemplateSource;
+    public function load(string $name): ?TemplateSource;
 
     /**
-     * Check whether a template with the given logical name is available.
+     * Return the list of loaders wrapped by this loader, if any.
      *
-     * Must not read template content — only confirm availability using cheap
-     * metadata operations (e.g. is_file(), array key check).
+     * Used for introspection and debugging; not used by the engine itself.
      *
-     * @param string $name Logical template name.
+     * @return TemplateLoader[] List of loaders wrapped by this loader, or an empty array if this loader is not a wrapper.
      */
-    public function exists(string $name): bool;
+    public function getSubLoaders(): array;
 }

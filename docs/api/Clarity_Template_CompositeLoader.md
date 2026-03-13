@@ -1,23 +1,46 @@
-# 🔌 Interface: TemplateLoader
+# 🧩 Class: CompositeLoader
 
-**Full name:** [Clarity\Template\TemplateLoader](../../src/Template/TemplateLoader.php)
+**Full name:** [Clarity\Template\CompositeLoader](../../src/Template/CompositeLoader.php)
 
-Abstraction over template sources.
+TemplateLoader that tries multiple loaders in sequence until one returns a result.
 
-A loader translates a logical template name (e.g. 'home', 'admin::dashboard',
-'layouts/base') into a [`TemplateSource`](Clarity_Template_TemplateSource.md) containing the revision metadata
-and, lazily, the raw source code.
+Useful for layering multiple sources of templates, e.g. an ArrayLoader for dynamic templates
+on top of a FilesystemLoader for static templates.
 
-Implementations:
- - [`FileLoader`](Clarity_Template_FileLoader.md)   — reads from the filesystem (default)
- - [`ArrayLoader`](Clarity_Template_ArrayLoader.md)  — serves templates from an in-memory array
- - [`StringLoader`](Clarity_Template_StringLoader.md) — wraps a single hardcoded template string
+```php
+$loader = new CompositeLoader(
+    new ArrayLoader(['dynamic' => '<p>{{ message }}</p>']),
+    new FilesystemLoader('/path/to/static/templates'),
+);
+$engine->setLoader($loader);
 
-Custom loaders may source templates from databases, remote APIs, PHAR archives, etc.
+// Resolves to the ArrayLoader template
+echo $engine->render('dynamic', ['message' => 'Hello!']);
+
+// Resolves to /path/to/static/templates/home.html
+echo $engine->render('home');
+```
 
 ## 🚀 Public methods
 
-### load() · [source](../../src/Template/TemplateLoader.php#L29)
+### __construct() · [source](../../src/Template/CompositeLoader.php#L29)
+
+`public function __construct(Clarity\Template\TemplateLoader ...$loaders): mixed`
+
+**🧭 Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$loaders` | [TemplateLoader](Clarity_Template_TemplateLoader.md) | - |  |
+
+**➡️ Return value**
+
+- Type: mixed
+
+
+---
+
+### load() · [source](../../src/Template/CompositeLoader.php#L37)
 
 `public function load(string $name): Clarity\Template\TemplateSource|null`
 
@@ -42,7 +65,7 @@ The revision ({@see \TemplateSource::$revision}) must be available immediately w
 
 ---
 
-### getSubLoaders() · [source](../../src/Template/TemplateLoader.php#L38)
+### getSubLoaders() · [source](../../src/Template/CompositeLoader.php#L51)
 
 `public function getSubLoaders(): array`
 

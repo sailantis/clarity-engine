@@ -3,6 +3,8 @@ namespace Clarity\Tests\Engine;
 
 use Clarity\ClarityEngine;
 use Clarity\ClarityException;
+use Clarity\Template\DomainRouterLoader;
+use Clarity\Template\FileLoader;
 use Clarity\Tests\BaseTestCase;
 use Clarity\Tests\TestEnvironment;
 
@@ -11,17 +13,25 @@ class LocalizationTest extends BaseTestCase
     public function testNamespacedViewResolution(): void
     {
         $viewDir = TestEnvironment::viewDir();
-        // create a namespace subdir
-        $nsDir = $viewDir . '/admin';
+        $nsDir   = $viewDir . '/admin';
         if (!is_dir($nsDir)) {
             mkdir($nsDir, 0755, true);
         }
 
         file_put_contents($nsDir . '/hello.clarity.html', 'ns-hello');
 
-        TestEnvironment::engine()->addNamespace('admin', $viewDir . '/admin');
+        $engine = TestEnvironment::engine();
+        $originalLoader = $engine->getLoader();
+        $engine->setLoader(new DomainRouterLoader(
+            ['admin' => new FileLoader($nsDir)],
+            new FileLoader($viewDir),
+        ));
 
-        $this->assertSame('ns-hello', TestEnvironment::engine()->render('admin::hello'));
+        try {
+            $this->assertSame('ns-hello', $engine->render('admin::hello'));
+        } finally {
+            $engine->setLoader($originalLoader);
+        }
     }
 
     // =========================================================================

@@ -2,6 +2,8 @@
 namespace Clarity\Tests\Engine;
 
 use Clarity\ClarityException;
+use Clarity\Template\DomainRouterLoader;
+use Clarity\Template\FileLoader;
 use Clarity\Tests\BaseTestCase;
 use Clarity\Tests\TestEnvironment;
 
@@ -280,10 +282,21 @@ class RenderingTest extends BaseTestCase
         $nsPath = TestEnvironment::viewDir() . DIRECTORY_SEPARATOR . 'namespaced';
         @mkdir($nsPath, 0755, true);
         file_put_contents($nsPath . DIRECTORY_SEPARATOR . 'badge.clarity.html', '<span>{{ label }}</span>');
-        TestEnvironment::engine()->addNamespace('ui', $nsPath);
 
         self::tpl('dynamic_include_ns', '{{ include("ui::badge", { label: "ok" }) }}');
-        $this->assertSame('<span>ok</span>', self::render('dynamic_include_ns'));
+
+        $engine = TestEnvironment::engine();
+        $originalLoader = $engine->getLoader();
+        $engine->setLoader(new DomainRouterLoader(
+            ['ui' => new FileLoader($nsPath)],
+            new FileLoader(TestEnvironment::viewDir()),
+        ));
+
+        try {
+            $this->assertSame('<span>ok</span>', self::render('dynamic_include_ns'));
+        } finally {
+            $engine->setLoader($originalLoader);
+        }
     }
 
     public function testDynamicIncludeRecursionThrows(): void
@@ -316,10 +329,20 @@ class RenderingTest extends BaseTestCase
         $nsDir = TestEnvironment::viewDir() . DIRECTORY_SEPARATOR . 'ns';
         @mkdir($nsDir, 0755, true);
         file_put_contents($nsDir . DIRECTORY_SEPARATOR . 'hello.clarity.html', 'ns:{{ x }}');
-        TestEnvironment::engine()->addNamespace('mns', $nsDir);
 
-        $result = $this->renderPartial('mns::hello', ['x' => '42']);
-        $this->assertSame('ns:42', $result);
+        $engine = TestEnvironment::engine();
+        $originalLoader = $engine->getLoader();
+        $engine->setLoader(new DomainRouterLoader(
+            ['mns' => new FileLoader($nsDir)],
+            new FileLoader(TestEnvironment::viewDir()),
+        ));
+
+        try {
+            $result = $this->renderPartial('mns::hello', ['x' => '42']);
+            $this->assertSame('ns:42', $result);
+        } finally {
+            $engine->setLoader($originalLoader);
+        }
     }
 
     // =========================================================================

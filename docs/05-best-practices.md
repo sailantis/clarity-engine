@@ -63,11 +63,19 @@ views/
         └── show.clarity.html
 ```
 
-**Use namespaces for separation:**
+**Use `DomainRouterLoader` for separation:**
 
 ```php
-$engine->addNamespace('products', __DIR__ . '/views/products');
-$engine->addNamespace('admin', __DIR__ . '/views/admin');
+use Clarity\Template\DomainRouterLoader;
+use Clarity\Template\FileLoader;
+
+$engine->setLoader(new DomainRouterLoader(
+    [
+        'products' => new FileLoader(__DIR__ . '/views/products'),
+        'admin'    => new FileLoader(__DIR__ . '/views/admin'),
+    ],
+    fallback: new FileLoader(__DIR__ . '/views'),
+));
 ```
 
 ### Layouts vs. Partials

@@ -21,40 +21,45 @@ namespace Clarity\Template;
  */
 final class FileLoader implements TemplateLoader
 {
+    public const DEFAULT_EXTENSION = '.clarity.html';
+
     private string $basePath;
+
     private string $extension;
-    /** @var array<string,string> namespace → base directory */
-    private array $namespaces;
+    
     /** @var array<string,string> logical name → resolved absolute path */
     private array $resolvedNameCache = [];
 
     /**
      * @param string               $basePath   Base directory for template resolution.
-     * @param string               $extension  File extension with or without leading dot.
+     * @param ?string               $extension  File extension with or without leading dot.
      * @param array<string,string> $namespaces Namespace alias → base path map.
      */
     public function __construct(
         string $basePath,
-        string $extension = '.clarity.html',
-        array $namespaces = [],
+        ?string $extension = null,
     ) {
         $this->basePath = rtrim($basePath, '/\\');
-        $this->extension = ($extension !== '' && $extension[0] !== '.') ? '.' . $extension : $extension;
-        $this->namespaces = $namespaces;
+        if ($extension === null) {
+            $extension = self::DEFAULT_EXTENSION;
+        } elseif ($extension !== '' && $extension[0] !== '.') {
+            $extension = '.' . $extension;
+        }
+        $this->extension = $extension;
     }
 
     /**
      * Set the view file extension for this instance.
      *
-     * @param string $ext Extension with or without a leading dot.
+     * @param string $extension Extension with or without a leading dot.
      * @return $this
      */
-    public function setExtension(string $ext): static
+    public function setExtension(string $extension): static
     {
-        if ($ext !== '' && $ext[0] !== '.') {
-            $ext = '.' . $ext;
+        if ($extension !== '' && $extension[0] !== '.') {
+            $extension = '.' . $extension;
         }
-        $this->extension = $ext;
+        $this->extension = $extension;
         $this->resolvedNameCache = [];
         return $this;
     }
@@ -68,33 +73,6 @@ final class FileLoader implements TemplateLoader
     {
         return $this->extension;
     }
-
-    /**
-     * Add a namespace for view resolution.
-     *
-     * Views can be referenced using the syntax "namespace::view.name".
-     *
-     * @param string $name Namespace name to register.
-     * @param string $path Filesystem path corresponding to the namespace.
-     * @return $this
-     */
-    public function addNamespace(string $name, string $path): static
-    {
-        $this->namespaces[$name] = \rtrim($path, '/\\');
-        $this->resolvedNameCache = [];
-        return $this;
-    }
-
-    /**
-     * Get the currently registered view namespaces.
-     *
-     * @return array Associative array of namespace => path mappings.
-     */
-    public function getNamespaces(): array
-    {
-        return $this->namespaces;
-    }
-
 
     /**
      * Set the base path for resolving relative template names.
@@ -119,18 +97,16 @@ final class FileLoader implements TemplateLoader
         return $this->basePath;
     }
 
-    public function exists(string $name): bool
-    {
-        return is_file($this->resolveName($name));
-    }
-
-    public function load(string $name): TemplateSource
+    /**
+     * @inheritDoc
+     */
+    public function load(string $name): ?TemplateSource
     {
         $path = $this->resolveName($name);
         $mtime = @filemtime($path);
 
         if ($mtime === false) {
-            throw new \RuntimeException("Template not found: {$name} (resolved to: {$path})");
+            return null;
         }
 
         return new TemplateSource(
@@ -156,16 +132,7 @@ final class FileLoader implements TemplateLoader
             return $this->resolvedNameCache[$name];
         }
 
-        $addExtension = $this->extension !== '' && !str_ends_with($name, $this->extension);
-
-        $ns = strstr($name, '::', true);
-        if ($ns !== false) {
-            if (!isset($this->namespaces[$ns])) {
-                throw new \RuntimeException("Unknown view namespace: {$ns}");
-            }
-            $part = substr($name, strlen($ns) + 2);
-            $path = rtrim($this->namespaces[$ns], '/\\') . '/' . str_replace('.', '/', $part);
-        } elseif ($name !== '' && $name[0] === '/') {
+        if ($name !== '' && $name[0] === '/') {
             // Absolute Unix path
             $path = $name;
         } elseif (
@@ -187,10 +154,17 @@ final class FileLoader implements TemplateLoader
             $path = $this->basePath . '/' . str_replace('.', '/', $name);
         }
 
-        if ($addExtension) {
-            $path .= $this->extension;
-        }
+        $path .= $this->extension;
 
         return $this->resolvedNameCache[$name] = $path;
+    }
+
+
+    /**
+     * @inheritDoc
+     */
+    public function getSubLoaders(): array
+    {
+        return [];
     }
 }

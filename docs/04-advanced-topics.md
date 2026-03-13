@@ -1,79 +1,67 @@
 # Advanced Topics
 
-This guide covers advanced Clarity features including namespaces, caching, auto-escaping, error handling, and Unicode support.
+This guide covers advanced Clarity features including template loaders, caching, auto-escaping, error handling, and Unicode support.
 
-## Named Namespaces
+## Template Loaders
 
-Namespaces allow you to organize templates into logical directories and reference them with a clean prefix syntax.
+Clarity resolves template names through a pluggable loader system. The default `FileLoader` handles straightforward file-based resolution. Two additional loaders cover more advanced scenarios.
 
-### Registering Namespaces
+### DomainRouterLoader
 
-Register a namespace in PHP:
+`DomainRouterLoader` dispatches template resolution based on a `domain::localName` prefix. This is the recommended way to organise templates across multiple directories or packages.
 
 ```php
-$engine->addNamespace('admin', __DIR__ . '/views/admin');
-$engine->addNamespace('emails', __DIR__ . '/views/emails');
-$engine->addNamespace('components', __DIR__ . '/views/components');
+use Clarity\Template\DomainRouterLoader;
+use Clarity\Template\FileLoader;
+
+$engine->setLoader(new DomainRouterLoader(
+    [
+        'admin'      => new FileLoader(__DIR__ . '/views/admin'),
+        'emails'     => new FileLoader(__DIR__ . '/views/emails'),
+        'components' => new FileLoader(__DIR__ . '/views/components'),
+    ],
+    fallback: new FileLoader(__DIR__ . '/views'),  // handles names without a prefix
+));
 ```
 
-### Using Namespaces in Templates
-
-Reference templates using the `namespace::path` syntax:
+Templates are referenced using the `domain::path` syntax:
 
 ```twig
-{% include "admin::sidebar" %} {% extends "admin::layouts/base" %} {{
-include("emails::welcome", { userName: user.name }) }}
+{% include "admin::sidebar" %}
+{% extends "admin::layouts/base" %}
+{{ include("emails::welcome", { userName: user.name }) }}
 ```
 
-### Path Separators
-
-Both dots and slashes work as path separators:
+Dots and slashes are interchangeable as path separators within the local name:
 
 ```twig
-{% include "admin::partials.sidebar" %} {% include "admin::partials/sidebar" %}
+{% include "admin::partials.sidebar" %}
+{% include "admin::partials/sidebar" %}
 {# Both are equivalent #}
 ```
 
-### Nested Directories
+If no `::` prefix is present and a fallback loader is configured, the name is passed to the fallback unchanged. If no fallback is configured, `load()` returns `null` (template not found).
 
-Namespaces can contain nested directories:
-
-```php
-$engine->addNamespace('components', __DIR__ . '/views/components');
-```
-
-```twig
-{% include "components::buttons/primary" %} {% include
-"components::cards/user-card" %} {% include "components::forms/input-field" %}
-```
-
-### Benefits of Namespaces
-
-1. **Organization** — Separate concerns (admin, public, emails, etc.)
-2. **Portability** — Move template directories without changing template code
-3. **Clarity** — Self-documenting template paths
-4. **Modularity** — Package reusable components
-
-### Example Structure
+#### Example Structure
 
 ```
 views/
 ├── layouts/
-│   └── main.clarity.html
+│   └── main.clarity.html           (fallback)
 ├── pages/
-│   ├── home.clarity.html
-│   └── about.clarity.html
-├── admin/                    (namespace: admin)
+│   ├── home.clarity.html           (fallback)
+│   └── about.clarity.html          (fallback)
+├── admin/                          (domain: admin)
 │   ├── layouts/
 │   │   └── admin.clarity.html
 │   └── pages/
 │       └── users.clarity.html
-├── components/               (namespace: components)
+├── components/                     (domain: components)
 │   ├── buttons/
 │   │   └── primary.clarity.html
 │   └── cards/
 │       └── user-card.clarity.html
-└── emails/                   (namespace: emails)
+└── emails/                         (domain: emails)
     ├── layouts/
     │   └── email-base.clarity.html
     └── welcome.clarity.html
@@ -82,19 +70,52 @@ views/
 **Configuration:**
 
 ```php
-$engine->setViewPath(__DIR__ . '/views');
-$engine->addNamespace('admin', __DIR__ . '/views/admin');
-$engine->addNamespace('components', __DIR__ . '/views/components');
-$engine->addNamespace('emails', __DIR__ . '/views/emails');
+$engine->setLoader(new DomainRouterLoader(
+    [
+        'admin'      => new FileLoader(__DIR__ . '/views/admin'),
+        'components' => new FileLoader(__DIR__ . '/views/components'),
+        'emails'     => new FileLoader(__DIR__ . '/views/emails'),
+    ],
+    fallback: new FileLoader(__DIR__ . '/views'),
+));
 ```
 
-**Usage:**
+**Usage in templates:**
 
 ```twig
-{# Main site pages (no namespace) #} {% extends "layouts/main" %} {# Admin area
-#} {% include "admin::partials/header" %} {# Reusable components #} {% include
-"components::buttons/primary" %} {# Email templates #} {% extends
-"emails::layouts/email-base" %}
+{# Main site pages (no prefix, hits the fallback) #}
+{% extends "layouts/main" %}
+{# Admin area #}
+{% include "admin::partials/header" %}
+{# Reusable components #}
+{% include "components::buttons/primary" %}
+{# Email templates #}
+{% extends "emails::layouts/email-base" %}
+```
+
+### CompositeLoader
+
+`CompositeLoader` chains multiple loaders and returns the first non-`null` result. It is useful for overlaying a dynamic source (e.g. database or array) on top of a file-based one:
+
+```php
+use Clarity\Template\CompositeLoader;
+use Clarity\Template\ArrayLoader;
+use Clarity\Template\FileLoader;
+
+$engine->setLoader(new CompositeLoader(
+    new ArrayLoader(['promo' => '<p>{{ offer }}</p>']),  // checked first
+    new FileLoader(__DIR__ . '/views'),                   // fallback
+));
+```
+
+The loaders are tried in the order they are passed to the constructor. The first loader that returns a non-`null` `TemplateSource` wins.
+
+### setExtension() and Loaders
+
+When `setExtension()` is called on the engine it automatically propagates to all `FileLoader` instances inside any composite or domain-router loader:
+
+```php
+$engine->setExtension('.tpl.html');  // applies to every nested FileLoader
 ```
 
 ## Caching
@@ -694,7 +715,7 @@ opcache.revalidate_freq=2
 | `flushCache(): void`                        | Delete all cached files                   |
 | `addFilter(string $name, callable $fn)`     | Register custom filter                    |
 | `addFunction(string $name, callable $fn)`   | Register custom function                  |
-| `addNamespace(string $ns, string $path)`    | Register named namespace                  |
+| `setLoader(TemplateLoader $loader)`         | Set custom template loader                |
 | `render(string $view, array $vars): string` | Render template and return HTML           |
 
 ### Example: Complete Setup
@@ -711,9 +732,14 @@ $engine->setCachePath(__DIR__ . '/cache/clarity');
 // Default layout
 $engine->setLayout('layouts/main');
 
-// Namespaces
-$engine->addNamespace('admin', __DIR__ . '/views/admin');
-$engine->addNamespace('emails', __DIR__ . '/views/emails');
+// Domain-based loader (admin:: and emails:: prefixes, plus fallback)
+$engine->setLoader(new \Clarity\Template\DomainRouterLoader(
+    [
+        'admin'  => new \Clarity\Template\FileLoader(__DIR__ . '/views/admin'),
+        'emails' => new \Clarity\Template\FileLoader(__DIR__ . '/views/emails'),
+    ],
+    fallback: new \Clarity\Template\FileLoader(__DIR__ . '/views'),
+));
 
 // Custom filters
 $engine->addFilter('currency', fn($v) => '€ ' . number_format($v, 2));

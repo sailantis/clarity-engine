@@ -31,6 +31,8 @@
 ### `Clarity\Template`
 
 - [ArrayLoader](Clarity_Template_ArrayLoader.md) `Clarity\Template\ArrayLoader`
+- [CompositeLoader](Clarity_Template_CompositeLoader.md) `Clarity\Template\CompositeLoader`
+- [DomainRouterLoader](Clarity_Template_DomainRouterLoader.md) `Clarity\Template\DomainRouterLoader`
 - [FileLoader](Clarity_Template_FileLoader.md) `Clarity\Template\FileLoader`
 - [StringLoader](Clarity_Template_StringLoader.md) `Clarity\Template\StringLoader`
 - [TemplateLoader](Clarity_Template_TemplateLoader.md) `Clarity\Template\TemplateLoader`

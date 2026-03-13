@@ -243,6 +243,9 @@ trait ClarityEngineTrait
     public function setLoader(TemplateLoader $loader): static
     {
         $this->loader = $loader;
+        if ($this->extension !== null) {
+            self::applyExtensionToLoader($loader, $this->extension);
+        }
         return $this;
     }
 
@@ -254,9 +257,19 @@ trait ClarityEngineTrait
     {
         return $this->loader ??= new FileLoader(
             $this->viewPath,
-            $this->extension,
-            $this->namespaces
+            $this->extension
         );
+    }
+
+    protected static function applyExtensionToLoader(TemplateLoader $loader, string $extension): void
+    {
+        if ($loader instanceof FileLoader) {
+            $loader->setExtension($extension);
+        } else {
+            foreach ($loader->getSubLoaders() as $subLoader) {
+                self::applyExtensionToLoader($subLoader, $extension);
+            }
+        }
     }
 
     /**
@@ -454,7 +467,7 @@ trait ClarityEngineTrait
     {
         $loader = $this->getLoader();
 
-        if ($this->cache->isFresh($templateName, static fn(string $n) => $loader->load($n)->revision)) {
+        if ($this->cache->isFresh($templateName, static fn(string $n) => $loader->load($n)?->revision)) {
             try {
                 $className = $this->cache->load($templateName);
             } catch (ParseError) {
@@ -479,7 +492,7 @@ trait ClarityEngineTrait
         // using plain `require` so the new versioned class is always declared.
         $this->compiler ??= new Compiler();
         $this->compiler
-            ->setExtension($this->extension)
+            ->setExtension($this->extension ?? FileLoader::DEFAULT_EXTENSION)
             ->setRegistry($this->registry)
             ->setDebugMode($this->debugMode);
         $compiled = $this->compiler->compile($templateName, $loader);

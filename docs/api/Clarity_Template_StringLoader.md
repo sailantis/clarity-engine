@@ -33,41 +33,48 @@ echo $engine->render('dynamic', ['message' => 'Hello!']);
 
 ---
 
-### exists() · [source](../../src/Template/StringLoader.php#L33)
+### load() · [source](../../src/Template/StringLoader.php#L36)
 
-`public function exists(string $name): bool`
+`public function load(string $name): Clarity\Template\TemplateSource|null`
 
-**🧭 Parameters**
+Load a template by its logical name and return source with revision metadata.
 
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `$name` | string | - |  |
-
-**➡️ Return value**
-
-- Type: bool
-
-
----
-
-### load() · [source](../../src/Template/StringLoader.php#L38)
-
-`public function load(string $name): Clarity\Template\TemplateSource`
+The revision ({@see \TemplateSource::$revision}) must be available immediately with minimal I/O (e.g. a filemtime() call for file-based loaders); the actual template source could be fetched lazily via [`TemplateSource::getCode()`](Clarity_Template_TemplateSource.md#getcode) only when the engine determines compilation is needed.
 
 **🧭 Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
-| `$name` | string | - |  |
+| `$name` | string | - | Logical template name, e.g. 'home', 'admin::dashboard',<br>'layouts/base'. Must not be empty. |
 
 **➡️ Return value**
 
-- Type: [TemplateSource](Clarity_Template_TemplateSource.md)
+- Type: [TemplateSource](Clarity_Template_TemplateSource.md)|null
+
+**⚠️ Throws**
+
+- RuntimeException  If the template cannot be found or loaded.
 
 
 ---
 
-### update() · [source](../../src/Template/StringLoader.php#L55)
+### getSubLoaders() · [source](../../src/Template/StringLoader.php#L51)
+
+`public function getSubLoaders(): array`
+
+Return the list of loaders wrapped by this loader, if any.
+
+Used for introspection and debugging; not used by the engine itself.
+
+**➡️ Return value**
+
+- Type: array
+- Description: List of loaders wrapped by this loader, or an empty array if this loader is not a wrapper.
+
+
+---
+
+### update() · [source](../../src/Template/StringLoader.php#L61)
 
 `public function update(string $code): static`
 
