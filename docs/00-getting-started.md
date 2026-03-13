@@ -96,6 +96,37 @@ $engine->setLayout('layouts/main');
 $engine->setExtension('.tpl.html');
 ```
 
+### Registering Template Namespaces
+
+Namespaces let you reference templates from additional directories using the `namespace::path` syntax:
+
+```php
+// Register a named template directory
+$engine->addNamespace('admin',      __DIR__ . '/views/admin');
+$engine->addNamespace('emails',     __DIR__ . '/views/emails');
+$engine->addNamespace('components', __DIR__ . '/views/components');
+
+// Reference in templates:
+// {% include "admin::sidebar" %}
+// {% extends "emails::layouts/base" %}
+// {{ include("components::card", { title: item.title }) }}
+```
+
+Namespaces can also be passed in the constructor alongside other options:
+
+```php
+$engine = new ClarityEngine([
+    'viewPath'  => __DIR__ . '/views',
+    'cachePath' => __DIR__ . '/cache',
+    'namespaces' => [
+        'admin'  => __DIR__ . '/views/admin',
+        'emails' => __DIR__ . '/views/emails',
+    ],
+]);
+```
+
+Unprefixed template names continue to resolve against the base `viewPath`. Each call to `addNamespace()` is chainable and returns `$this`.
+
 ### Cache Management
 
 ```php
@@ -163,14 +194,15 @@ $engine->setDebugMode(false); // disable (default)
 
 ### Domain Router and Composite Loaders
 
-Use `DomainRouterLoader` to route `domain::localName` prefixes to separate template directories, and `CompositeLoader` to chain multiple sources:
+For most projects, use `addNamespace()` (see above) — it manages the underlying `DomainRouterLoader` automatically.
+
+For advanced setups that require extra control (e.g. multiple fallback chains or dynamic loaders), you can set the loader directly:
 
 ```php
 use Clarity\Template\DomainRouterLoader;
 use Clarity\Template\FileLoader;
 
-// Route 'admin::...' and 'emails::...' to dedicated directories,
-// with the base views folder as fallback for unprefixed names.
+// Full manual setup:
 $engine->setLoader(new DomainRouterLoader(
     [
         'admin'  => new FileLoader(__DIR__ . '/views/admin'),
@@ -178,11 +210,9 @@ $engine->setLoader(new DomainRouterLoader(
     ],
     fallback: new FileLoader(__DIR__ . '/views'),
 ));
-
-// Use in templates:
-// {% include "admin::sidebar" %}
-// {% extends "emails::layouts/base" %}
 ```
+
+See [Advanced Topics → Template Loaders](04-advanced-topics.md#template-loaders) for the full loader API.
 
 ## Quick Template Syntax Overview
 

@@ -43,7 +43,11 @@ use Clarity\ClarityEngine;
 
 // Initialize the engine
 $engine = new ClarityEngine([
-    'viewPath' => __DIR__ . '/templates',
+    'viewPath'   => __DIR__ . '/templates',
+    'namespaces' => [
+        'admin'  => __DIR__ . '/templates/admin',
+        'emails' => __DIR__ . '/templates/emails',
+    ],
 ]);
 
 // Render a template
@@ -211,7 +215,17 @@ $engine = ClarityEngine::create()
 
 // Additional configuration
 $engine->setExtension('.tpl.html');           // Default: .clarity.html
-// Route prefixed names to separate directories:
+
+// Register named namespaces (convenience method)
+$engine->addNamespace('admin',  __DIR__ . '/templates/admin');
+$engine->addNamespace('emails', __DIR__ . '/templates/emails');
+// Templates with a namespace prefix: {% include "admin::sidebar" %}
+// Unprefixed templates still resolve via the base viewPath.
+
+// Namespaces can also be passed in the constructor:
+// new ClarityEngine(['namespaces' => ['admin' => __DIR__ . '/templates/admin']]);
+
+// For advanced multi-source setups, set a loader directly:
 $engine->setLoader(new \Clarity\Template\DomainRouterLoader(
     ['admin' => new \Clarity\Template\FileLoader('/path/to/admin/templates')],
     fallback: new \Clarity\Template\FileLoader('/path/to/templates'),

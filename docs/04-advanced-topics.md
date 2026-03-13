@@ -6,6 +6,45 @@ This guide covers advanced Clarity features including template loaders, caching,
 
 Clarity resolves template names through a pluggable loader system. The default `FileLoader` handles straightforward file-based resolution. Two additional loaders cover more advanced scenarios.
 
+### Named Namespaces (`addNamespace`)
+
+The easiest way to organise templates across multiple directories is the `addNamespace()` convenience method. Each namespace is a short alias that maps to a filesystem path; templates reference it with the `namespace::path` syntax.
+
+```php
+// Register namespaces individually
+$engine->addNamespace('admin',      __DIR__ . '/views/admin');
+$engine->addNamespace('emails',     __DIR__ . '/views/emails');
+$engine->addNamespace('components', __DIR__ . '/views/components');
+
+// Or pass them all at once in the constructor
+$engine = new ClarityEngine([
+    'viewPath'   => __DIR__ . '/views',
+    'namespaces' => [
+        'admin'      => __DIR__ . '/views/admin',
+        'emails'     => __DIR__ . '/views/emails',
+        'components' => __DIR__ . '/views/components',
+    ],
+]);
+```
+
+Use the namespace prefix inside templates:
+
+```twig
+{% include "admin::partials/sidebar" %}
+{% extends "emails::layouts/base" %}
+{{ include("components::card", { title: item.title }) }}
+{# Unprefixed names resolve against the base viewPath: #}
+{% extends "layouts/main" %}
+```
+
+`addNamespace()` returns `$this` and is fully chainable. Internally it sets up a `DomainRouterLoader` with the base `viewPath` as the fallback, so unprefixed template names continue to work as before.
+
+To inspect registered namespaces at runtime:
+
+```php
+$map = $engine->getNamespaces(); // ['admin' => '/path/to/views/admin', ...]
+```
+
 ### DomainRouterLoader
 
 `DomainRouterLoader` dispatches template resolution based on a `domain::localName` prefix. This is the recommended way to organise templates across multiple directories or packages.
