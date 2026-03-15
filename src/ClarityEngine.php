@@ -154,8 +154,8 @@ class ClarityEngine
         if (isset($config['cachePath']) && \is_string($config['cachePath'])) {
             $this->setCachePath($config['cachePath']);
         }
-        if (isset($config['debug'])) {
-            $this->setDebugMode((bool) $config['debug']);
+        if (!empty($config['debug'])) {
+            $this->enableDebug();
         }
     }
 

@@ -311,6 +311,35 @@ class Registry
      */
     private array $services = [];
 
+    /**
+     * Optional closure that handles dump() output when enableDebug() is called.
+     * Receives (string $ctx, mixed ...$args): string.
+     * Null = use the built-in print_r fallback.
+     */
+    private ?\Closure $dumpHandler = null;
+
+    /**
+     * Optional closure that handles dd() output (always active, never null-checked
+     * before falling back to var_dump + exit).
+     * Receives (string $ctx, mixed ...$args): never.
+     */
+    private ?\Closure $ddHandler = null;
+
+    /**
+     * Install context-aware dump/dd handlers produced by enableDebug().
+     *
+     * Called internally — not part of the public engine API.
+     */
+    public function setDumpHandler(\Closure $fn): void
+    {
+        $this->dumpHandler = $fn;
+    }
+
+    public function setDdHandler(\Closure $fn): void
+    {
+        $this->ddHandler = $fn;
+    }
+
     public function __construct(?callable $includeRenderer = null)
     {
         $this->includeRenderer = $includeRenderer;
@@ -507,14 +536,40 @@ class Registry
             );
         };
 
-        $this->functions['dump'] = static function (mixed ...$args): string {
-            $result = '';
-            foreach ($args as $index => $arg) {
-                $result .= "[$index] ";
-                $result .= print_r($arg, true);
-                $result .= "\n";
+        // dump(): only called in debug mode (compiler prunes it to '' in production).
+        // When enableDebug() has been called the dumpHandler does all the work;
+        // otherwise we fall back to a minimal print_r-based HTML block.
+        $this->functions['dump'] = function (string $ctx, mixed ...$args): string {
+            if ($this->dumpHandler !== null) {
+                return ($this->dumpHandler)($ctx, ...$args);
             }
-            return $result;
+            // Minimal fallback — debug mode without enableDebug() (e.g. setDebugMode(true))
+            $out = '<pre style="background:#f7f7f9;padding:8px;border:1px solid #ddd;'
+                . 'font-family:monospace;font-size:13px;overflow:auto">';
+            foreach ($args as $i => $v) {
+                $out .= \htmlspecialchars(
+                    "[{$i}] " . \print_r($v, true),
+                    \ENT_QUOTES | \ENT_SUBSTITUTE,
+                    'UTF-8'
+                );
+            }
+            return $out . '</pre>';
+        };
+
+        // dd(): always active regardless of debug mode — dump and die.
+        $this->functions['dd'] = function (string $ctx, mixed ...$args): never {
+            if ($this->ddHandler !== null) {
+                ($this->ddHandler)($ctx, ...$args);
+                // ddHandler must exit(); this is a safety net:
+            }
+            // Minimal fallback
+            if (\PHP_SAPI !== 'cli' && \PHP_SAPI !== 'phpdbg') {
+                \header('Content-Type: text/plain; charset=utf-8');
+            }
+            foreach ($args as $v) {
+                \var_dump($v);
+            }
+            exit(1);
         };
 
         $this->functions['keys'] = static fn(mixed $v): array =>

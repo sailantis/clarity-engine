@@ -77,6 +77,33 @@ class Tokenizer
      */
     private const CALLABLE_ARG_FILTERS = ['map' => true, 'filter' => true, 'reduce' => true];
 
+    /**
+     * Function names that are compiled to the literal '' (eliminated at compile
+     * time).  Used to prune dump() in production mode with zero runtime cost.
+     *
+     * @var array<string, true>
+     */
+    private array $prunedFunctions = [];
+
+    /**
+     * Function names that receive the current escape context ('html'|'js'|'css')
+     * as an extra first string argument in the emitted PHP call.
+     *
+     * @var array<string, true>
+     */
+    private array $contextInjectedFunctions = [];
+
+    /** @param array<string, true> $names */
+    public function setPrunedFunctions(array $names): void
+    {
+        $this->prunedFunctions = $names;
+    }
+
+    /** @param array<string, true> $names */
+    public function setContextInjectedFunctions(array $names): void
+    {
+        $this->contextInjectedFunctions = $names;
+    }
 
     public function setRegistry(Registry $registry): void
     {
@@ -871,6 +898,11 @@ class Tokenizer
         $argsRaw = \substr($expr, $argStart, $i - $argStart);
         $i++; // consume closing ')'
 
+        // Pruned function: compile to '' at template compile time (e.g. dump in production).
+        if (isset($this->prunedFunctions[$name])) {
+            return ["''", $i];
+        }
+
         switch ($name) {
             case 'context':
                 if (\trim($argsRaw) !== '') {
@@ -883,6 +915,23 @@ class Tokenizer
         }
 
         $safeName = "'" . \addslashes($name) . "'";
+
+        // Context-injected function: prepend compile-time escape context as a
+        // string literal first argument (e.g. dump/dd receive 'html'|'js'|'css').
+        // These functions return raw HTML/JS markup — disable auto-escaping so
+        // their output is never passed through htmlspecialchars/json_encode.
+        if (isset($this->contextInjectedFunctions[$name])) {
+            $this->autoEscape = false;
+            $contextLit = "'" . $this->escapeContext . "'";
+            $call = "\$__fn[{$safeName}]({$contextLit}";
+            if (\trim($argsRaw) !== '') {
+                $argList = $this->splitRespectingStrings($argsRaw, ',');
+                $call .= ', ' . \implode(', ', $this->compileArgList($argList));
+            }
+            $call .= ')';
+            return [$call, $i];
+        }
+
         $call = "\$__fn[{$safeName}](";
 
         if (\trim($argsRaw) !== '') {

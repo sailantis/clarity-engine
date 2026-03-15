@@ -130,6 +130,17 @@ class Compiler
     public function setDebugMode(bool $debug): static
     {
         $this->debugMode = $debug;
+
+        // Production: prune dump() to '' (zero runtime overhead).
+        // Debug: inject compile-time context string as first arg to dump() and dd().
+        // dd() always gets the context arg regardless of debug mode (always active).
+        $this->tokenizer->setPrunedFunctions(
+            $debug ? [] : ['dump' => true]
+        );
+        $this->tokenizer->setContextInjectedFunctions(
+            $debug ? ['dump' => true, 'dd' => true] : ['dd' => true]
+        );
+
         return $this;
     }
 
@@ -459,9 +470,9 @@ class Compiler
         if (str_starts_with($inner, '@context ')) {
             // Handle {# @context <name> #} hints.
             static $validContexts = [
-                'html' => true,
-                'js' => true,
-                'css' => true
+            'html' => true,
+            'js' => true,
+            'css' => true
             ];
             $ctx = strtolower(trim(substr($inner, 9)));
             if (isset($validContexts[$ctx])) {
@@ -515,18 +526,18 @@ class Compiler
             'extends', 'block', 'endblock' => '',
             'include' => $this->compileInclude($rest, $sourcePath, $tplLine, $lines),
             default => $this->registry->hasBlock($keyword)
-                ? $this->registry->compileBlock(
-                    $keyword,
-                    $rest,
-                    $sourcePath,
-                    $tplLine,
-                    fn(string $e) => $this->tokenizer->processCondition($e)
-                )
-                : throw new ClarityException(
-                    "Unknown directive '{$keyword}'",
-                    $sourcePath,
-                    $tplLine
-                ),
+            ? $this->registry->compileBlock(
+                $keyword,
+                $rest,
+                $sourcePath,
+                $tplLine,
+                fn(string $e) => $this->tokenizer->processCondition($e)
+            )
+            : throw new ClarityException(
+                "Unknown directive '{$keyword}'",
+                $sourcePath,
+                $tplLine
+            ),
         };
     }
 
@@ -911,7 +922,7 @@ class Compiler
         }
     }
 
-   
+
     /**
      * Resolve a logical template reference to a normalized logical name.
      *

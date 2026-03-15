@@ -1,6 +1,12 @@
 <?php
 namespace Clarity;
 
+use Clarity\Debug\CliDumpRenderer;
+use Clarity\Debug\DebugEventBus;
+use Clarity\Debug\DumpOptions;
+use Clarity\Debug\HtmlDebugPanel;
+use Clarity\Debug\HtmlDumpRenderer;
+use Clarity\Debug\JsDumpRenderer;
 use Clarity\Engine\Cache;
 use Clarity\Engine\Compiler;
 use Clarity\Engine\Registry;
@@ -18,6 +24,8 @@ trait ClarityEngineTrait
     /** @var string[] */
     protected array $renderStack = [];
     protected bool $debugMode = false;
+    protected ?DebugEventBus $debugBus = null;
+    protected ?HtmlDebugPanel $debugPanel = null;
 
     protected function initializeClarityEngine(): void
     {
@@ -28,12 +36,12 @@ trait ClarityEngineTrait
     }
 
     /**
-     * Enable or disable debug mode.
+     * Enable or disable debug mode (low-level toggle).
      *
-     * In debug mode, compiled templates include additional runtime assertions
-     * (e.g. range-loop safety checks) and the compiled class records
-     * `$debugCompiled = true`.  When this flag changes, any cached template
-     * compiled under the opposite mode is automatically recompiled on next use.
+     * Prefer enableDebug() for the full debug experience (context-aware dump(),
+     * dd(), DebugEventBus, optional HTML panel).  setDebugMode(true) only
+     * activates compiler-level assertions (range-loop safety checks) and makes
+     * dump() resolve at runtime instead of being pruned to ''.
      *
      * @param bool $debug True to enable, false to disable.
      * @return $this
@@ -50,6 +58,102 @@ trait ClarityEngineTrait
     public function isDebugMode(): bool
     {
         return $this->debugMode;
+    }
+
+    /**
+     * Enable full debug mode: context-aware dump()/dd(), DebugEventBus for
+     * loader/compile/render tracing, and optionally an HTML debug panel.
+     *
+     * dump() is pruned to '' at compile time in production (zero overhead).
+     * dd() is always active regardless of debug mode.
+     *
+     * ```php
+     * $engine->enableDebug();   // default options
+     * $engine->enableDebug(new DumpOptions(showPanel: true, maxDepth: 4));
+     * ```
+     *
+     * @param DumpOptions|null $opts Customise depth, masking, panel, etc.
+     * @return $this
+     */
+    public function enableDebug(?DumpOptions $opts = null): static
+    {
+        $opts = $opts ?? new DumpOptions();
+
+        $this->debugMode = true;
+        $this->debugBus = new DebugEventBus();
+        $this->debugPanel = null;
+
+        $htmlRenderer = new HtmlDumpRenderer();
+        $cliRenderer = new CliDumpRenderer();
+        $jsRenderer = new JsDumpRenderer();
+
+        // Install context-aware dump handler
+        $this->registry->setDumpHandler(
+            static function (string $ctx, mixed ...$args) use ($htmlRenderer, $jsRenderer, $opts): string {
+                $value = \count($args) === 1 ? $args[0] : $args;
+
+                if ($ctx === 'js') {
+                    return $jsRenderer->render($value, $opts);
+                }
+                return $htmlRenderer->render($value, $opts);
+            }
+        );
+
+        // Install dd handler (always active, exits after dump)
+        $this->registry->setDdHandler(
+            static function (string $ctx, mixed ...$args) use ($htmlRenderer, $cliRenderer, $jsRenderer, $opts): never {
+                $value = \count($args) === 1 ? $args[0] : $args;
+                $isCli = \PHP_SAPI === 'cli' || \PHP_SAPI === 'phpdbg';
+
+                if ($isCli) {
+                    $out = $cliRenderer->renderForced($value, $opts);
+                    \fwrite(\STDOUT, $out);
+                    exit(1);
+                }
+                if ($ctx === 'js') {
+                    echo $jsRenderer->render($value, $opts);
+                    exit(1);
+                }
+                echo $htmlRenderer->render($value, $opts);
+                exit(1);
+            }
+        );
+
+        if ($opts->showPanel) {
+            $this->debugPanel = new HtmlDebugPanel();
+            $this->debugBus->subscribe($this->debugPanel);
+        }
+
+        return $this;
+    }
+
+    /**
+     * Disable debug mode and tear down the event bus and debug panel.
+     *
+     * @return $this
+     */
+    public function disableDebug(): static
+    {
+        $this->debugMode = false;
+        $this->debugBus = null;
+        $this->debugPanel = null;
+        return $this;
+    }
+
+    /**
+     * Return the active DebugEventBus, or null when debug mode is off.
+     */
+    public function getDebugBus(): ?DebugEventBus
+    {
+        return $this->debugBus;
+    }
+
+    /**
+     * Return the active HtmlDebugPanel, or null when disabled.
+     */
+    public function getDebugPanel(): ?HtmlDebugPanel
+    {
+        return $this->debugPanel;
     }
 
     /**
@@ -478,6 +582,10 @@ trait ClarityEngineTrait
             $content = $this->renderLayout($this->layout, $content, $vars);
         }
 
+        if ($this->debugPanel !== null) {
+            $content .= $this->debugPanel->getHtml();
+        }
+
         return $content;
     }
 
@@ -566,11 +674,18 @@ trait ClarityEngineTrait
                 $this->buildExceptionHandler($templateName)
             );
 
+            $renderStart = $this->debugMode ? \microtime(true) : 0.0;
             try {
                 $output = $template->render($vars);
             } finally {
                 restore_error_handler();
                 restore_exception_handler();
+                if ($this->debugMode) {
+                    $this->debugBus?->emit('template.render', [
+                        'template' => $templateName,
+                        'duration_ms' => \round((\microtime(true) - $renderStart) * 1000, 3),
+                    ]);
+                }
             }
         } finally {
             unset($this->renderStack[$templateName]);
@@ -588,6 +703,13 @@ trait ClarityEngineTrait
     {
         $loader = $this->getLoader();
 
+        if ($this->debugMode) {
+            $this->debugBus?->emit('template.resolve', [
+                'template' => $templateName,
+                'loader' => \get_class($loader),
+            ]);
+        }
+
         if ($this->cache->isFresh($templateName, static fn(string $n) => $loader->load($n)?->revision)) {
             try {
                 $className = $this->cache->load($templateName);
@@ -604,6 +726,9 @@ trait ClarityEngineTrait
                 if ($compiledDebug !== $this->debugMode) {
                     $this->cache->invalidate($templateName);
                 } else {
+                    if ($this->debugMode) {
+                        $this->debugBus?->emit('template.cached', ['template' => $templateName]);
+                    }
                     return $className;
                 }
             }
@@ -616,7 +741,14 @@ trait ClarityEngineTrait
             ->setExtension($this->extension ?? FileLoader::DEFAULT_EXTENSION)
             ->setRegistry($this->registry)
             ->setDebugMode($this->debugMode);
+        $compileStart = $this->debugMode ? \microtime(true) : 0.0;
         $compiled = $this->compiler->compile($templateName, $loader);
+        if ($this->debugMode) {
+            $this->debugBus?->emit('template.compile', [
+                'template' => $templateName,
+                'duration_ms' => \round((\microtime(true) - $compileStart) * 1000, 3),
+            ]);
+        }
         try {
             return $this->cache->writeAndLoad($templateName, $compiled);
         } catch (ParseError $e) {

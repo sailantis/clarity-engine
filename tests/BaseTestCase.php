@@ -39,7 +39,7 @@ abstract class BaseTestCase extends PHPUnitTestCase
         return TestEnvironment::viewDir() . '/' . $view . '.clarity.html';
     }
 
-    protected static function removeDir(string $dir): void
+    public static function removeDir(string $dir): void
     {
         if (!is_dir($dir)) {
             return;

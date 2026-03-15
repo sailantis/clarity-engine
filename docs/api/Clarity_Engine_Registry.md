@@ -100,7 +100,45 @@ Template usage:
 
 ## 🚀 Public methods
 
-### __construct() · [source](../../src/Engine/Registry.php#L314)
+### setDumpHandler() · [source](../../src/Engine/Registry.php#L333)
+
+`public function setDumpHandler(Closure $fn): void`
+
+Install context-aware dump/dd handlers produced by enableDebug().
+
+Called internally — not part of the public engine API.
+
+**🧭 Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$fn` | Closure | - |  |
+
+**➡️ Return value**
+
+- Type: void
+
+
+---
+
+### setDdHandler() · [source](../../src/Engine/Registry.php#L338)
+
+`public function setDdHandler(Closure $fn): void`
+
+**🧭 Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$fn` | Closure | - |  |
+
+**➡️ Return value**
+
+- Type: void
+
+
+---
+
+### __construct() · [source](../../src/Engine/Registry.php#L343)
 
 `public function __construct(callable|null $includeRenderer = null): mixed`
 
@@ -117,7 +155,7 @@ Template usage:
 
 ---
 
-### addFilter() · [source](../../src/Engine/Registry.php#L328)
+### addFilter() · [source](../../src/Engine/Registry.php#L357)
 
 `public function addFilter(string $name, callable $fn): static`
 
@@ -137,7 +175,7 @@ Register a user-defined filter.
 
 ---
 
-### hasFilter() · [source](../../src/Engine/Registry.php#L337)
+### hasFilter() · [source](../../src/Engine/Registry.php#L366)
 
 `public function hasFilter(string $name): bool`
 
@@ -156,7 +194,7 @@ Check whether a named filter is registered.
 
 ---
 
-### addInlineFilter() · [source](../../src/Engine/Registry.php#L356)
+### addInlineFilter() · [source](../../src/Engine/Registry.php#L385)
 
 `public function addInlineFilter(string $name, array $definition): void`
 
@@ -184,7 +222,7 @@ The definition must follow the same structure as the built-in entries:
 
 ---
 
-### hasInlineFilter() · [source](../../src/Engine/Registry.php#L365)
+### hasInlineFilter() · [source](../../src/Engine/Registry.php#L394)
 
 `public function hasInlineFilter(string $name): bool`
 
@@ -203,7 +241,7 @@ Check whether a named inline filter is registered.
 
 ---
 
-### getInlineFilter() · [source](../../src/Engine/Registry.php#L373)
+### getInlineFilter() · [source](../../src/Engine/Registry.php#L402)
 
 `public function getInlineFilter(string $name): array|null`
 
@@ -222,7 +260,7 @@ Get the definition of a named inline filter.
 
 ---
 
-### registerInlineFilter() · [source](../../src/Engine/Registry.php#L384)
+### registerInlineFilter() · [source](../../src/Engine/Registry.php#L413)
 
 `public function registerInlineFilter(string $name): void`
 
@@ -244,7 +282,7 @@ hasFilter() returns true for the new name.
 
 ---
 
-### addService() · [source](../../src/Engine/Registry.php#L399)
+### addService() · [source](../../src/Engine/Registry.php#L428)
 
 `public function addService(string $name, mixed $service): static`
 
@@ -268,7 +306,7 @@ real filter names (e.g. `__locale`, `__translator`).
 
 ---
 
-### hasService() · [source](../../src/Engine/Registry.php#L408)
+### hasService() · [source](../../src/Engine/Registry.php#L437)
 
 `public function hasService(string $name): bool`
 
@@ -287,7 +325,7 @@ Check whether a named service is registered.
 
 ---
 
-### getService() · [source](../../src/Engine/Registry.php#L418)
+### getService() · [source](../../src/Engine/Registry.php#L447)
 
 `public function getService(string $name): mixed`
 
@@ -310,7 +348,7 @@ Retrieve a named service.
 
 ---
 
-### allServices() · [source](../../src/Engine/Registry.php#L434)
+### allServices() · [source](../../src/Engine/Registry.php#L463)
 
 `public function allServices(): array`
 
@@ -326,7 +364,7 @@ The returned array includes callable filters, inline-filter markers
 
 ---
 
-### allFilters() · [source](../../src/Engine/Registry.php#L447)
+### allFilters() · [source](../../src/Engine/Registry.php#L476)
 
 `public function allFilters(): array`
 
@@ -342,7 +380,7 @@ The returned array includes callable filters, inline-filter markers
 
 ---
 
-### addFunction() · [source](../../src/Engine/Registry.php#L459)
+### addFunction() · [source](../../src/Engine/Registry.php#L488)
 
 `public function addFunction(string $name, callable $fn): static`
 
@@ -362,7 +400,7 @@ Register a user-defined function.
 
 ---
 
-### hasFunction() · [source](../../src/Engine/Registry.php#L468)
+### hasFunction() · [source](../../src/Engine/Registry.php#L497)
 
 `public function hasFunction(string $name): bool`
 
@@ -381,7 +419,7 @@ Check whether a named function is registered.
 
 ---
 
-### allFunctions() · [source](../../src/Engine/Registry.php#L478)
+### allFunctions() · [source](../../src/Engine/Registry.php#L507)
 
 `public function allFunctions(): array`
 
@@ -394,7 +432,7 @@ Get all registered functions as a name → callable map.
 
 ---
 
-### addBlock() · [source](../../src/Engine/Registry.php#L658)
+### addBlock() · [source](../../src/Engine/Registry.php#L713)
 
 `public function addBlock(string $keyword, callable $handler): static`
 
@@ -436,7 +474,7 @@ $engine->addBlock('endwith_locale', fn(...) => "\$this->__fl['__locale']->pop();
 
 ---
 
-### hasBlock() · [source](../../src/Engine/Registry.php#L667)
+### hasBlock() · [source](../../src/Engine/Registry.php#L722)
 
 `public function hasBlock(string $keyword): bool`
 
@@ -455,7 +493,7 @@ Check whether a handler is registered for the given keyword.
 
 ---
 
-### compileBlock() · [source](../../src/Engine/Registry.php#L683)
+### compileBlock() · [source](../../src/Engine/Registry.php#L738)
 
 `public function compileBlock(string $keyword, string $rest, string $sourcePath, int $tplLine, callable $processExpr): string`
 
