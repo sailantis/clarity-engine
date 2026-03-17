@@ -1,5 +1,5 @@
 {
-  "name": "simsaai/clarity-engine",
+  "name": "sailantis/clarity-engine",
   "description": "A fast and powerful Template engine for PHP inspired by Twig.",
   "type": "library",
   "require": {

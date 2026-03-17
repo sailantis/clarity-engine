@@ -24,7 +24,7 @@
 ## 📦 Installation
 
 ```bash
-composer require simsaai/clarity-engine
+composer require sailantis/clarity-engine
 ```
 
 **Requirements:** PHP 8.1 or higher
