@@ -414,7 +414,7 @@ class IntlFormatModule implements ModuleInterface
     // Text transformation filters
     // =========================================================================
 
-    private function registerTextFilters(ClarityEngine $engine, LocaleService $localeService): void
+    protected function registerTextFilters(ClarityEngine $engine, LocaleService $localeService): void
     {
         $intl = $this->intlAvailable;
 
@@ -528,7 +528,6 @@ class IntlFormatModule implements ModuleInterface
             return $result;
         };
 
-
         $engine->addFilter('format', $formatMessage);
     }
 
@@ -570,7 +569,7 @@ class IntlFormatModule implements ModuleInterface
             'short' => $includeDate && $includeTime ? 'n/j/y H:i' : ($includeDate ? 'n/j/y' : 'H:i'),
             'long' => $includeDate && $includeTime ? 'F j, Y H:i:s' : ($includeDate ? 'F j, Y' : 'g:i:s A'),
             'full' => $includeDate && $includeTime ? 'l, F j, Y H:i:s T' : ($includeDate ? 'l, F j, Y' : 'g:i:s A T'),
-            default => $includeDate && $includeTime ? 'M j, Y H:i' : ($includeDate ? 'M j, Y' : 'H:i'),
+            default => $includeDate && $includeTime ? 'M j, Y H:i' : ($includeDate ? 'M j, Y' : 'H:i')
         };
 
         return $dt->format($fmt);
@@ -589,7 +588,7 @@ class IntlFormatModule implements ModuleInterface
             $abs < 604800 => [\round($abs / 86400), 'day'],
             $abs < 2592000 => [\round($abs / 604800), 'week'],
             $abs < 31536000 => [\round($abs / 2592000), 'month'],
-            default => [\round($abs / 31536000), 'year'],
+            default => [\round($abs / 31536000), 'year']
         };
 
         $unit .= $val !== 1.0 ? 's' : '';

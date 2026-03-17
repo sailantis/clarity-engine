@@ -18,6 +18,9 @@ class CacheTest extends BaseTestCase
         $out = self::render('cache1');
         $this->assertSame('ok', $out);
 
+        $x = 1;    // first comment
+        $yyyy = 2; // second comment
+
         $files = [];
         $it = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($cacheDir, \FilesystemIterator::SKIP_DOTS));
         foreach ($it as $f) {

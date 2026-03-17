@@ -22,6 +22,13 @@ class ControlFlowTest extends BaseTestCase
         $this->assertSame('low', self::render('if_elseif', ['a' => 1]));
     }
 
+    public function testIfGroupedPipelineComparison(): void
+    {
+        self::tpl('if_grouped_pipeline', '{% if (devices |> length) > 0 %}yes{% else %}no{% endif %}');
+        $this->assertSame('yes', self::render('if_grouped_pipeline', ['devices' => ['a']]));
+        $this->assertSame('no', self::render('if_grouped_pipeline', ['devices' => []]));
+    }
+
     public function testForLoopSimple(): void
     {
         self::tpl('for_simple', '{% for i in items %}{{ i }}-{% endfor %}');
@@ -66,6 +73,61 @@ class ControlFlowTest extends BaseTestCase
         self::tpl('layout', 'header-{% block content %}{% endblock %}-footer');
         self::tpl('page', '{% extends "layout" %}{% block content %}content{% endblock %}');
         $this->assertSame('header-content-footer', self::render('page'));
+    }
+
+    public function testExtendsCarriesLeadingSetIntoParentBlock(): void
+    {
+        self::tpl(
+            'layout_with_title',
+            '<title>{% block title %}{{ sectionTitle }}{% endblock %}</title><main>{% block content %}{% endblock %}</main>'
+        );
+        self::tpl(
+            'page_with_title',
+            '{% extends "layout_with_title" %}' .
+            "\n{% set sectionTitle = \"The PHP IDE Extension\" %}" .
+            "\n{% block content %}body{% endblock %}"
+        );
+
+        $this->assertSame(
+            '<title>The PHP IDE Extension</title><main>body</main>',
+            self::render('page_with_title')
+        );
+    }
+
+    public function testNestedExtendsApplyLeadingSetAfterParentPreamble(): void
+    {
+        self::tpl(
+            'base_meta',
+            '{% set sectionTitle = "Base" %}<title>{% block title %}{{ sectionTitle }}{% endblock %}</title>{% block body %}{% endblock %}'
+        );
+        self::tpl(
+            'section_meta',
+            '{% extends "base_meta" %}' .
+            '{% set sectionTitle = "Section" %}' .
+            '{% block body %}[{% block page %}section-body{% endblock %}]{% endblock %}'
+        );
+        self::tpl(
+            'page_meta_nested',
+            '{% extends "section_meta" %}' .
+            '{% set sectionTitle = "Child" %}' .
+            '{% block page %}content{% endblock %}'
+        );
+
+        $this->assertSame('<title>Child</title>[content]', self::render('page_meta_nested'));
+    }
+
+    public function testExtendsStillIgnoresRenderedChildContentOutsideBlocks(): void
+    {
+        self::tpl('layout_ignore_text', '[{% block content %}{% endblock %}]');
+        self::tpl(
+            'page_ignore_text',
+            '{% extends "layout_ignore_text" %}' .
+            '{% set sectionTitle = "Ignored" %}' .
+            '<p>IGNORED</p>' .
+            '{% block content %}body{% endblock %}'
+        );
+
+        $this->assertSame('[body]', self::render('page_ignore_text'));
     }
 
     public function testNestedBlocksOverride(): void

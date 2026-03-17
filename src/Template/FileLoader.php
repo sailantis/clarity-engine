@@ -26,19 +26,19 @@ final class FileLoader implements TemplateLoader
     private string $basePath;
 
     private string $extension;
-    
+
     /** @var array<string,string> logical name → resolved absolute path */
     private array $resolvedNameCache = [];
 
     /**
      * @param string               $basePath   Base directory for template resolution.
      * @param ?string               $extension  File extension with or without leading dot.
-     * @param array<string,string> $namespaces Namespace alias → base path map.
      */
     public function __construct(
         string $basePath,
         ?string $extension = null,
-    ) {
+    )
+    {
         $this->basePath = rtrim($basePath, '/\\');
         if ($extension === null) {
             $extension = self::DEFAULT_EXTENSION;
@@ -56,6 +56,12 @@ final class FileLoader implements TemplateLoader
      */
     public function setExtension(string $extension): static
     {
+        // commentary: We normalize the extension to always include a leading dot for consistency, but we allow empty string to disable extensions entirely.
+        // Fixme do something important!
+        // Todo: Clear the resolved name cache since the extension change affects all paths.
+        // Note: We allow empty string as a special case to disable extensions entirely.
+        // Deprecated this behavior in favor of an explicit "no extension" mode if it causes confusion.
+        // optimize some edge cases where the extension is empty or already has a leading dot to avoid unnecessary string concatenation.
         if ($extension !== '' && $extension[0] !== '.') {
             $extension = '.' . $extension;
         }
@@ -158,7 +164,6 @@ final class FileLoader implements TemplateLoader
 
         return $this->resolvedNameCache[$name] = $path;
     }
-
 
     /**
      * @inheritDoc

@@ -35,11 +35,11 @@ final class YamlParser
     }
 
     /**
-     * Parse a YAML string and return a flat key → string map.
-     * Nested mappings are flattened using dot notation.
-     *
-     * @return array<string, string>
-     */
+    * Parse a YAML string and return a flat key → string map.
+    * Nested mappings are flattened using dot notation.
+    *
+    * @return array<string, string>
+    */
     public static function parse(string $yaml): array
     {
         if (\trim($yaml) === '') {
@@ -54,8 +54,8 @@ final class YamlParser
     // -------------------------------------------------------------------------
 
     /**
-     * @return array<string, string>
-     */
+    * @return array<string, string>
+    */
     private function parseBlock(int $indent, string $prefix): array
     {
         $result = [];
@@ -167,7 +167,7 @@ final class YamlParser
         }
 
         $clip = \str_ends_with($indicator, '-'); // |- or >-
-        $fold = $indicator[0] === '>';            // > or >-
+        $fold = $indicator[0] === '>';           // > or >-
 
         if ($fold) {
             return $this->foldLines($blockLines, $clip);
@@ -179,11 +179,11 @@ final class YamlParser
     }
 
     /**
-     * Fold block scalar lines: consecutive non-empty lines → single space-joined line;
-     * blank lines → paragraph breaks.
-     *
-     * @param string[] $lines
-     */
+    * Fold block scalar lines: consecutive non-empty lines → single space-joined line;
+    * blank lines → paragraph breaks.
+    *
+    * @param string[] $lines
+    */
     private function foldLines(array $lines, bool $clip): string
     {
         $text = '';
@@ -248,8 +248,8 @@ final class YamlParser
     // -------------------------------------------------------------------------
 
     /**
-     * @return array{0: string|null, 1: string|null}
-     */
+    * @return array{0: string|null, 1: string|null}
+    */
     private function splitMapping(string $content): array
     {
         // YAML mapping indicator: ": " (colon space) or ":" at end of line.

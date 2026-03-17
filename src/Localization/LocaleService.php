@@ -71,7 +71,6 @@ class LocaleService
         return 'en_US';
     }
 
-
     /**
      * Push a locale onto the stack.
      *

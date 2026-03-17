@@ -43,8 +43,8 @@ class TemplateLoaderArchitectureTest extends TestCase
     public function testDomainRouterLoaderExposesSubLoaders(): void
     {
         $adminLoader = new FileLoader('/views/admin');
-        $baseLoader  = new FileLoader('/views/base');
-        $router      = new DomainRouterLoader(['admin' => $adminLoader], $baseLoader);
+        $baseLoader = new FileLoader('/views/base');
+        $router = new DomainRouterLoader(['admin' => $adminLoader], $baseLoader);
 
         $this->assertContains($adminLoader, $router->getSubLoaders());
         $this->assertContains($baseLoader,  $router->getSubLoaders());
@@ -61,8 +61,8 @@ class TemplateLoaderArchitectureTest extends TestCase
 
     public function testCompositeLoaderTriesLoadersInOrder(): void
     {
-        $first     = new ArrayLoader(['home' => 'from-first']);
-        $second    = new ArrayLoader(['home' => 'from-second', 'about' => 'from-second']);
+        $first = new ArrayLoader(['home' => 'from-first']);
+        $second = new ArrayLoader(['home' => 'from-second', 'about' => 'from-second']);
         $composite = new CompositeLoader($first, $second);
 
         // 'home' is found in first — first loader wins

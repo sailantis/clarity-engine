@@ -86,7 +86,7 @@ Template usage
 
 ---
 
-### get() · [source](../../src/Localization/TranslationModule.php#L162)
+### get() · [source](../../src/Localization/TranslationModule.php#L161)
 
 `public function get(string $key, array|null $vars = null, string|null $domain = null): string`
 
@@ -107,7 +107,7 @@ Look up a translation key with optional placeholder substitution.
 
 ---
 
-### pushDomain() · [source](../../src/Localization/TranslationModule.php#L236)
+### pushDomain() · [source](../../src/Localization/TranslationModule.php#L235)
 
 `public function pushDomain(string|null $domain): void`
 
@@ -143,7 +143,7 @@ In this example, the first `t` filter looks up `welcome_subject` in the
 
 ---
 
-### popDomain() · [source](../../src/Localization/TranslationModule.php#L245)
+### popDomain() · [source](../../src/Localization/TranslationModule.php#L244)
 
 `public function popDomain(): void`
 

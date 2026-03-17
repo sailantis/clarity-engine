@@ -2,3 +2,6 @@
 temp/
 /vendor/
 /conversation.txt
+/cache/
+/logs/
+/temp/

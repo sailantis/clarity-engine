@@ -13,7 +13,7 @@ class LocalizationTest extends BaseTestCase
     public function testNamespacedViewResolution(): void
     {
         $viewDir = TestEnvironment::viewDir();
-        $nsDir   = $viewDir . '/admin';
+        $nsDir = $viewDir . '/admin';
         if (!is_dir($nsDir)) {
             mkdir($nsDir, 0755, true);
         }
@@ -81,11 +81,13 @@ class LocalizationTest extends BaseTestCase
         mkdir($dir);
         file_put_contents($dir . '/messages.en_US.php', '<?php return ' . \var_export(['greeting' => 'Hello, {name}!'], true) . ';');
 
-        $loader = new \Clarity\Localization\TranslationModule([
-            'locale' => 'en_US',
-            'fallback_locale' => 'en_US',
-            'translations_path' => $dir,
-        ]);
+        $loader = new \Clarity\Localization\TranslationModule(
+            [
+                'locale' => 'en_US',
+                'fallback_locale' => 'en_US',
+                'translations_path' => $dir,
+            ]
+        );
         $result = $loader->get('greeting', ['name' => 'Alice']);
         $this->assertSame('Hello, Alice!', $result);
 
@@ -99,11 +101,13 @@ class LocalizationTest extends BaseTestCase
         mkdir($dir);
         file_put_contents($dir . '/messages.en_US.php', '<?php return ' . \var_export(['save' => 'Save'], true) . ';');
 
-        $loader = new \Clarity\Localization\TranslationModule([
-            'locale' => 'en_US',
-            'fallback_locale' => 'en_US',
-            'translations_path' => $dir,
-        ]);
+        $loader = new \Clarity\Localization\TranslationModule(
+            [
+                'locale' => 'en_US',
+                'fallback_locale' => 'en_US',
+                'translations_path' => $dir,
+            ]
+        );
         $result = $loader->get('save');
         $this->assertSame('Save', $result);
 
@@ -113,11 +117,13 @@ class LocalizationTest extends BaseTestCase
 
     public function testTranslationLoaderFallsBackToKeyWhenMissing(): void
     {
-        $loader = new \Clarity\Localization\TranslationModule([
-            'locale' => 'en_US',
-            'fallback_locale' => 'en_US',
-            'translations_path' => null,
-        ]);
+        $loader = new \Clarity\Localization\TranslationModule(
+            [
+                'locale' => 'en_US',
+                'fallback_locale' => 'en_US',
+                'translations_path' => null,
+            ]
+        );
         $result = $loader->get('some.missing.key');
         $this->assertSame('some.missing.key', $result);
     }

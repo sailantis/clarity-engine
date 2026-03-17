@@ -141,7 +141,7 @@ Each element is:  ['type' => TEXT|OUTPUT|BLOCK, 'content' => string, 'line' => i
 
 ---
 
-### setEscapeContext() · [source](../../src/Engine/Tokenizer.php#L233)
+### setEscapeContext() · [source](../../src/Engine/Tokenizer.php#L232)
 
 `public function setEscapeContext(string $context): void`
 
@@ -162,7 +162,7 @@ Called by the Compiler as it tracks the current position in the template.
 
 ---
 
-### processExpression() · [source](../../src/Engine/Tokenizer.php#L238)
+### processExpression() · [source](../../src/Engine/Tokenizer.php#L237)
 
 `public function processExpression(string $expression): string`
 
@@ -179,7 +179,7 @@ Called by the Compiler as it tracks the current position in the template.
 
 ---
 
-### processCondition() · [source](../../src/Engine/Tokenizer.php#L268)
+### processCondition() · [source](../../src/Engine/Tokenizer.php#L267)
 
 `public function processCondition(string $expression): string`
 
@@ -200,7 +200,7 @@ structure conditions (if, for, set) where auto-escape is meaningless.
 
 ---
 
-### processLvalue() · [source](../../src/Engine/Tokenizer.php#L287)
+### processLvalue() · [source](../../src/Engine/Tokenizer.php#L286)
 
 `public function processLvalue(string $var): string`
 
@@ -248,7 +248,7 @@ identifiers/var-chains, operators, punctuation) and process each atom.
 
 ---
 
-### varChainToPhp() · [source](../../src/Engine/Tokenizer.php#L1164)
+### varChainToPhp() · [source](../../src/Engine/Tokenizer.php#L1170)
 
 `public function varChainToPhp(string $chain): string`
 
@@ -274,7 +274,7 @@ a.b[c.d].e    → $vars['a']['b'][$vars['c']['d']]['e']
 
 ---
 
-### buildFilterCall() · [source](../../src/Engine/Tokenizer.php#L1351)
+### buildFilterCall() · [source](../../src/Engine/Tokenizer.php#L1357)
 
 `public function buildFilterCall(string $filterSegment, string $phpValue): string`
 

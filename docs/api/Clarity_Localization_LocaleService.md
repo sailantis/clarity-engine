@@ -45,7 +45,7 @@ Template usage
 
 ---
 
-### push() · [source](../../src/Localization/LocaleService.php#L81)
+### push() · [source](../../src/Localization/LocaleService.php#L80)
 
 `public function push(string|null $locale): void`
 
@@ -67,7 +67,7 @@ that may be null do not corrupt the stack.
 
 ---
 
-### pop() · [source](../../src/Localization/LocaleService.php#L94)
+### pop() · [source](../../src/Localization/LocaleService.php#L93)
 
 `public function pop(): void`
 
@@ -82,7 +82,7 @@ Calling this when the stack is empty is a no-op.
 
 ---
 
-### current() · [source](../../src/Localization/LocaleService.php#L106)
+### current() · [source](../../src/Localization/LocaleService.php#L105)
 
 `public function current(): string|null`
 
@@ -96,7 +96,7 @@ locale when the stack is empty.
 
 ---
 
-### registerBlocks() · [source](../../src/Localization/LocaleService.php#L117)
+### registerBlocks() · [source](../../src/Localization/LocaleService.php#L116)
 
 `public static function registerBlocks(Clarity\ClarityEngine $engine): void`
 
@@ -118,7 +118,7 @@ and `IntlFormatModule` when they need to self-bootstrap the service.
 
 ---
 
-### bootstrap() · [source](../../src/Localization/LocaleService.php#L151)
+### bootstrap() · [source](../../src/Localization/LocaleService.php#L150)
 
 `public static function bootstrap(Clarity\ClarityEngine $engine): static`
 

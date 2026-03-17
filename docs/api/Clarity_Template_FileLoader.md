@@ -25,7 +25,7 @@ file_get_contents() until getCode() is called — zero I/O on warm cache paths.
 
 ## 🚀 Public methods
 
-### __construct() · [source](../../src/Template/FileLoader.php#L38)
+### __construct() · [source](../../src/Template/FileLoader.php#L37)
 
 `public function __construct(string $basePath, string|null $extension = null): mixed`
 
@@ -62,7 +62,7 @@ Set the view file extension for this instance.
 
 ---
 
-### getExtension() · [source](../../src/Template/FileLoader.php#L72)
+### getExtension() · [source](../../src/Template/FileLoader.php#L78)
 
 `public function getExtension(): string`
 
@@ -76,7 +76,7 @@ Get the effective file extension used when resolving templates.
 
 ---
 
-### setBasePath() · [source](../../src/Template/FileLoader.php#L83)
+### setBasePath() · [source](../../src/Template/FileLoader.php#L89)
 
 `public function setBasePath(string $path): static`
 
@@ -95,7 +95,7 @@ Set the base path for resolving relative template names.
 
 ---
 
-### getBasePath() · [source](../../src/Template/FileLoader.php#L95)
+### getBasePath() · [source](../../src/Template/FileLoader.php#L101)
 
 `public function getBasePath(): string`
 
@@ -109,7 +109,7 @@ Get the currently configured base path for template resolution.
 
 ---
 
-### load() · [source](../../src/Template/FileLoader.php#L103)
+### load() · [source](../../src/Template/FileLoader.php#L109)
 
 `public function load(string $name): Clarity\Template\TemplateSource|null`
 
@@ -134,7 +134,7 @@ The revision ({@see \TemplateSource::$revision}) must be available immediately w
 
 ---
 
-### resolveName() · [source](../../src/Template/FileLoader.php#L129)
+### resolveName() · [source](../../src/Template/FileLoader.php#L135)
 
 `public function resolveName(string $name): string`
 
@@ -155,7 +155,7 @@ Public so it can be used for diagnostic/debugging purposes.
 
 ---
 
-### getSubLoaders() · [source](../../src/Template/FileLoader.php#L166)
+### getSubLoaders() · [source](../../src/Template/FileLoader.php#L171)
 
 `public function getSubLoaders(): array`
 

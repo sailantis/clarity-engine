@@ -11,6 +11,7 @@ require __DIR__ . '/../../vendor/autoload.php';
 
 use Clarity\ClarityEngine;
 
+
 // Initialize Clarity Engine
 $engine = new ClarityEngine();
 $engine->setViewPath(__DIR__);
@@ -38,7 +39,6 @@ $exampleData = [
         'unsafeHtml' => '<script>alert("This is safely escaped!")</script>',
         'colors' => ['Red', 'Green', 'Blue']
     ],
-
     '02-filters' => [
         'text' => 'hello world',
         'messyText' => '   spaces everywhere   ',
@@ -57,7 +57,6 @@ $exampleData = [
         'emptyValue' => '',
         'data' => ['name' => 'John', 'age' => 30]
     ],
-
     '03-conditionals' => [
         'user' => [
             'isLoggedIn' => true,
@@ -79,7 +78,6 @@ $exampleData = [
         'customMessage' => null,
         'products' => ['Product 1', 'Product 2', 'Product 3']
     ],
-
     '04-loops' => [
         'items' => ['Apple', 'Banana', 'Cherry', 'Date', 'Elderberry'],
         'users' => [
@@ -113,7 +111,6 @@ $exampleData = [
         ],
         'emptyArray' => []
     ],
-
     '05-page' => [
         'pageTitle' => 'Template Inheritance Example',
         'pageDescription' => 'Demonstrating layout inheritance with blocks and sections',
@@ -148,11 +145,13 @@ $exampleData = [
             ['title' => 'Getting Started', 'url' => '/docs/getting-started'],
             ['title' => 'API Reference', 'url' => '/docs/api'],
             ['title' => 'Examples', 'url' => '/examples'],
-            ['title' => 'GitHub', 'url' => 'https://github.com/clarity/engine']
+            [
+                'title' => 'GitHub',
+                'url' => 'https://github.com/clarity/engine'
+            ]
         ],
         'lastUpdated' => time()
     ],
-
     '06-complex' => [
         'articles' => [
             [
@@ -290,3 +289,68 @@ if ($renderAll) {
 
     renderExample($engine, $example, $exampleData[$example]);
 }
+
+?>
+<html>
+<head>
+    <title>Clarity Template Engine Examples</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        h1 {
+            color: #333;
+        }
+        .example {
+            margin-bottom: 40px;
+        }
+        .example h2 {
+            color: #555;
+        }
+        .example pre {
+            background: #f4f4f4;
+            padding: 10px;
+            border-radius: 5px;
+        }
+    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/default.min.css">
+</head>
+<body>
+    <h1>Clarity Template Engine Examples</h1>
+    <p>
+        Run the <code>render.php</code> script from the command line to generate HTML files for each example. The rendered files will be saved in the <code>output/</code> directory.
+    </p>
+    <div class="example">
+        <?= 124 ?>
+        <h2>Example 01: Hello World</h2>
+        <pre><code>{{ message }} Welcome, {{ userName }}!</code></pre>
+    </div>
+    <div class="example">
+        <h2>Example 02: Filters</h2>
+        <pre><code>{{ text | upper }} - {{ price | currency }}</code></pre>
+    </div>
+    <div class="example">
+        <h2>Example 03: Conditionals</h2>
+        <pre><code>{% if user.isLoggedIn %}Hello, {{ user.name }}!{% endif %}</code></pre>
+    </div>
+    <div class="example">
+        <h2>Example 04: Loops</h2>
+        <pre><code>{% for item in items %}{{ item }} {% endfor %}</code></pre>
+    </div>
+    <div class="example">
+        <h2>Example 05: Page Layouts</h2>
+        <pre><code>{% extends "base.html" %} {% block content %}...{% endblock %}</code></pre>
+    </div>
+    <div class="example">
+        <h2>Example 06: Complex Data Structures</h2>
+        <pre><code>{% for article in articles %}{{ article.title }} - {{ article.excerpt }}{% endfor %}</code></pre>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js">
+
+    </script>
+    <script>
+        hljs.highlightAll();
+    </script>
+</body>
+</html>

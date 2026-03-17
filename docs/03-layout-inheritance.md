@@ -389,6 +389,25 @@ In a child template, only content **inside blocks** is rendered:
 {# Inside a block #} {% endblock %}
 ```
 
+### Leading Set Directives Are Preserved
+
+Child templates may define leading `{% set %}` directives immediately after
+`{% extends %}`. These assignments run before the merged layout is compiled, so
+parent blocks can use them for page-level metadata:
+
+```twig
+{% extends "layouts/main" %}
+{% set sectionTitle = "Dashboard" %}
+
+{% block title %}{{ sectionTitle }} - Admin{% endblock %}
+{% block content %}
+<h1>Dashboard</h1>
+{% endblock %}
+```
+
+This exception is intentionally narrow: rendered HTML/text and other top-level
+child directives still do not become part of the layout output.
+
 ### Block Names Must Match
 
 Block names must match exactly (case-sensitive):
@@ -625,7 +644,7 @@ base.clarity.html           → Everything shares this
 
 **Problem:** Content in child template doesn't appear.
 
-**Solution:** Ensure content is **inside a block**. Content outside blocks in child templates is ignored.
+**Solution:** Ensure rendered content is **inside a block**. Leading `{% set %}` directives may appear after `{% extends %}` for layout metadata, but HTML/text outside blocks in child templates is ignored.
 
 ### Layout Not Applied
 

@@ -155,7 +155,6 @@ class TranslationModule implements ModuleInterface
      * Look up a translation key with optional placeholder substitution.
      *
      * @param string              $key    Translation key.
-     * @param ?string             $locale Active locale (e.g. 'de_DE').
      * @param ?array<string,mixed> $vars   Placeholder values for `{name}` substitution.
      * @param string|null         $domain Override the default domain.
      */
