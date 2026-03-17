@@ -42,22 +42,9 @@ class LocaleService
     /** @var string[] */
     private array $localeStack = [];
 
-    private string $currentLocale;
+    private ?string $currentLocale = null;
 
-    /**
-     * @param string $defaultLocale  Locale returned when the stack is empty.
-     *                               Defaults to PHP's Locale::getDefault(), or
-     *                               'en_US' if that is unset.
-     */
-    public function __construct(private string $defaultLocale = '')
-    {
-        if ($this->defaultLocale === '') {
-            $this->defaultLocale = self::detectLocale();
-        }
-        $this->currentLocale = $this->defaultLocale;
-    }
-
-    private static function detectLocale(): string
+    public static function detectLocale(): string
     {
         // 1. intl
         if (extension_loaded('intl')) {
@@ -108,7 +95,7 @@ class LocaleService
     {
         \array_pop($this->localeStack);
         $this->currentLocale = empty($this->localeStack)
-            ? $this->defaultLocale
+            ? null
             : \end($this->localeStack);
     }
 
@@ -116,17 +103,9 @@ class LocaleService
      * Return the currently active locale (top of the stack), or the default
      * locale when the stack is empty.
      */
-    public function current(): string
+    public function current(): ?string
     {
         return $this->currentLocale;
-    }
-
-    /**
-     * Change the default locale used when the stack is empty.
-     */
-    public function setDefault(string $locale): void
-    {
-        $this->defaultLocale = $locale;
     }
 
     /**
@@ -169,10 +148,10 @@ class LocaleService
      *
      * @return static The shared locale stack instance.
      */
-    public static function bootstrap(ClarityEngine $engine, string $defaultLocale): static
+    public static function bootstrap(ClarityEngine $engine): static
     {
         if (!$engine->hasService('locale')) {
-            $service = new static($defaultLocale);
+            $service = new static();
             $engine->addService('locale', $service);
             self::registerBlocks($engine);
         }

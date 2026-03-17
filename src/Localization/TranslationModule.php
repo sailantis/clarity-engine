@@ -65,6 +65,7 @@ class TranslationModule implements ModuleInterface
     private array $domainStack = [];
     private string $currentDomain;
     private TranslationLoaderInterface $loader;
+    private ?LocaleService $localeService = null;
 
     /**
      * Loaded catalogs: [domain][locale] → [key → message].
@@ -75,7 +76,7 @@ class TranslationModule implements ModuleInterface
 
     public function __construct(array $config = [])
     {
-        $this->locale = $config['locale'] ?? '';
+        $this->locale = $config['locale'] ?? LocaleService::detectLocale();
         $this->fallbackLocale = $config['fallback_locale'] ?? 'en_US';
         $this->translationsPath = $config['translations_path'] ?? null;
         $this->defaultDomain = $config['default_domain'] ?? 'messages';
@@ -108,22 +109,15 @@ class TranslationModule implements ModuleInterface
     public function register(ClarityEngine $engine): void
     {
         // Bootstrap the locale service (uses existing one if LocaleService was already registered)
-        /*$locale = */
-        LocaleService::bootstrap($engine, $this->locale);
+        $this->localeService = LocaleService::bootstrap($engine);
         $engine->addService('t', $this);
 
         // ── t filter ────────────────────────────────────────────────────────
         // Signature: t($key, $vars=null, $domain=null)
         // Named arg: {{ "key" |> t(domain:"books") }}     → vars defaults to null
         //            {{ "key" |> t({name: v}, domain:"common") }}
-        /*
-        $engine->addFilter(
-            't',
-            fn(string $key, ?array $vars = null, ?string $domain = null): string => $this->get($locale->current(), $key, $vars, $domain)
-        );
-        */
         $engine->addInlineFilter('t', [
-            'php' => "\$__sv['t']->get(\$__sv['locale']->current(), {1}, {2}, {3})",
+            'php' => "\$__sv['t']->get({1}, {2}, {3})",
             'params' => ['vars', 'domain'],
             'defaults' => ['vars' => 'null', 'domain' => 'null'],
         ]);
@@ -160,17 +154,17 @@ class TranslationModule implements ModuleInterface
     /**
      * Look up a translation key with optional placeholder substitution.
      *
-     * @param string              $locale Active locale (e.g. 'de_DE').
      * @param string              $key    Translation key.
+     * @param ?string             $locale Active locale (e.g. 'de_DE').
      * @param ?array<string,mixed> $vars   Placeholder values for `{name}` substitution.
      * @param string|null         $domain Override the default domain.
      */
     public function get(
-        string $locale,
         string $key,
         ?array $vars = null,
         ?string $domain = null
     ): string {
+        $locale = $this->localeService?->current() ??  $this->locale;
 
         $domain ??= $this->currentDomain;
 

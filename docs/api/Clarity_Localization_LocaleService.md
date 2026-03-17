@@ -34,24 +34,18 @@ Template usage
 
 ## 🚀 Public methods
 
-### __construct() · [source](../../src/Localization/LocaleService.php#L52)
+### detectLocale() · [source](../../src/Localization/LocaleService.php#L47)
 
-`public function __construct(string $defaultLocale = ''): mixed`
-
-**🧭 Parameters**
-
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `$defaultLocale` | string | `''` | Locale returned when the stack is empty.<br>Defaults to PHP's Locale::getDefault(), or<br>'en_US' if that is unset. |
+`public static function detectLocale(): string`
 
 **➡️ Return value**
 
-- Type: mixed
+- Type: string
 
 
 ---
 
-### push() · [source](../../src/Localization/LocaleService.php#L94)
+### push() · [source](../../src/Localization/LocaleService.php#L81)
 
 `public function push(string|null $locale): void`
 
@@ -73,7 +67,7 @@ that may be null do not corrupt the stack.
 
 ---
 
-### pop() · [source](../../src/Localization/LocaleService.php#L107)
+### pop() · [source](../../src/Localization/LocaleService.php#L94)
 
 `public function pop(): void`
 
@@ -88,40 +82,21 @@ Calling this when the stack is empty is a no-op.
 
 ---
 
-### current() · [source](../../src/Localization/LocaleService.php#L119)
+### current() · [source](../../src/Localization/LocaleService.php#L106)
 
-`public function current(): string`
+`public function current(): string|null`
 
 Return the currently active locale (top of the stack), or the default
 locale when the stack is empty.
 
 **➡️ Return value**
 
-- Type: string
+- Type: string|null
 
 
 ---
 
-### setDefault() · [source](../../src/Localization/LocaleService.php#L127)
-
-`public function setDefault(string $locale): void`
-
-Change the default locale used when the stack is empty.
-
-**🧭 Parameters**
-
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `$locale` | string | - |  |
-
-**➡️ Return value**
-
-- Type: void
-
-
----
-
-### registerBlocks() · [source](../../src/Localization/LocaleService.php#L138)
+### registerBlocks() · [source](../../src/Localization/LocaleService.php#L117)
 
 `public static function registerBlocks(Clarity\ClarityEngine $engine): void`
 
@@ -143,9 +118,9 @@ and `IntlFormatModule` when they need to self-bootstrap the service.
 
 ---
 
-### bootstrap() · [source](../../src/Localization/LocaleService.php#L172)
+### bootstrap() · [source](../../src/Localization/LocaleService.php#L151)
 
-`public static function bootstrap(Clarity\ClarityEngine $engine, string $defaultLocale): static`
+`public static function bootstrap(Clarity\ClarityEngine $engine): static`
 
 Ensure the locale service and blocks are available on the engine.
 
@@ -157,7 +132,6 @@ self-bootstrap when `LocaleService` was not explicitly registered.
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$engine` | [ClarityEngine](Clarity_ClarityEngine.md) | - |  |
-| `$defaultLocale` | string | - |  |
 
 **➡️ Return value**
 

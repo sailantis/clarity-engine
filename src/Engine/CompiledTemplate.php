@@ -22,11 +22,11 @@ class CompiledTemplate
      * @param string[]           $sourceFiles  Unique logical template names (parallel to $sourceMap file indices).
      */
     public function __construct(
-        public readonly string $className,
-        public readonly string $code,
-        public readonly array $sourceMap,
-        public readonly array $dependencies,
-        public readonly array $sourceFiles = [],
+    public readonly string $className,
+    public readonly string $code,
+    public readonly array $sourceMap,
+    public readonly array $dependencies,
+    public readonly array $sourceFiles = [],
     ) {
     }
 }

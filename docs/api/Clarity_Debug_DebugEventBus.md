@@ -2,9 +2,13 @@
 
 **Full name:** [Clarity\Debug\DebugEventBus](../../src/Debug/DebugEventBus.php)
 
+DebugEventBus is a simple event bus for emitting and subscribing to debug events.
+
+It allows listeners to receive events with a type, payload, and timestamp.
+
 ## 🚀 Public methods
 
-### subscribe() · [source](../../src/Debug/DebugEventBus.php#L15)
+### subscribe() · [source](../../src/Debug/DebugEventBus.php#L19)
 
 `public function subscribe(Clarity\Debug\DebugListener|callable $listener): void`
 
@@ -21,7 +25,7 @@
 
 ---
 
-### emit() · [source](../../src/Debug/DebugEventBus.php#L20)
+### emit() · [source](../../src/Debug/DebugEventBus.php#L24)
 
 `public function emit(string $type, array $payload = []): void`
 
@@ -39,7 +43,7 @@
 
 ---
 
-### getEvents() · [source](../../src/Debug/DebugEventBus.php#L34)
+### getEvents() · [source](../../src/Debug/DebugEventBus.php#L38)
 
 `public function getEvents(): array`
 

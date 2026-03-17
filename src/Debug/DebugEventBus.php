@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace Clarity\Debug;
 
+/**
+ * DebugEventBus is a simple event bus for emitting and subscribing to debug events.
+ * It allows listeners to receive events with a type, payload, and timestamp.
+ */
 final class DebugEventBus
 {
     /** @var list<DebugListener|callable> */

@@ -40,8 +40,8 @@ class LocalizationTest extends BaseTestCase
 
     public function testClarityLocalePushPop(): void
     {
-        $locale = new \Clarity\Localization\LocaleService('en_US');
-        $this->assertSame('en_US', $locale->current());
+        $locale = new \Clarity\Localization\LocaleService();
+        $this->assertSame(null, $locale->current());
 
         $locale->push('de_DE');
         $this->assertSame('de_DE', $locale->current());
@@ -53,22 +53,22 @@ class LocalizationTest extends BaseTestCase
         $this->assertSame('de_DE', $locale->current());
 
         $locale->pop();
-        $this->assertSame('en_US', $locale->current());
+        $this->assertSame(null, $locale->current());
     }
 
     public function testClarityLocaleIgnoresNullAndEmptyPush(): void
     {
-        $locale = new \Clarity\Localization\LocaleService('en_US');
+        $locale = new \Clarity\Localization\LocaleService();
         $locale->push(null);
         $locale->push('');
-        $this->assertSame('en_US', $locale->current());
+        $this->assertSame(null, $locale->current());
     }
 
     public function testClarityLocalePopOnEmptyStackIsNoOp(): void
     {
-        $locale = new \Clarity\Localization\LocaleService('en_US');
+        $locale = new \Clarity\Localization\LocaleService();
         $locale->pop(); // should not throw
-        $this->assertSame('en_US', $locale->current());
+        $this->assertSame(null, $locale->current());
     }
 
     // =========================================================================
@@ -86,7 +86,7 @@ class LocalizationTest extends BaseTestCase
             'fallback_locale' => 'en_US',
             'translations_path' => $dir,
         ]);
-        $result = $loader->get('en_US', 'greeting', ['name' => 'Alice']);
+        $result = $loader->get('greeting', ['name' => 'Alice']);
         $this->assertSame('Hello, Alice!', $result);
 
         @unlink($dir . '/messages.en_US.php');
@@ -104,7 +104,7 @@ class LocalizationTest extends BaseTestCase
             'fallback_locale' => 'en_US',
             'translations_path' => $dir,
         ]);
-        $result = $loader->get('de_DE', 'save');
+        $result = $loader->get('save');
         $this->assertSame('Save', $result);
 
         @unlink($dir . '/messages.en_US.php');
@@ -118,7 +118,7 @@ class LocalizationTest extends BaseTestCase
             'fallback_locale' => 'en_US',
             'translations_path' => null,
         ]);
-        $result = $loader->get('de_DE', 'some.missing.key');
+        $result = $loader->get('some.missing.key');
         $this->assertSame('some.missing.key', $result);
     }
 

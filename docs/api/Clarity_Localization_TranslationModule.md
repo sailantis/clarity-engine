@@ -52,7 +52,7 @@ Template usage
 
 ## 🚀 Public methods
 
-### __construct() · [source](../../src/Localization/TranslationModule.php#L76)
+### __construct() · [source](../../src/Localization/TranslationModule.php#L77)
 
 `public function __construct(array $config = []): mixed`
 
@@ -69,7 +69,7 @@ Template usage
 
 ---
 
-### register() · [source](../../src/Localization/TranslationModule.php#L108)
+### register() · [source](../../src/Localization/TranslationModule.php#L109)
 
 `public function register(Clarity\ClarityEngine $engine): void`
 
@@ -86,9 +86,9 @@ Template usage
 
 ---
 
-### get() · [source](../../src/Localization/TranslationModule.php#L168)
+### get() · [source](../../src/Localization/TranslationModule.php#L162)
 
-`public function get(string $locale, string $key, array|null $vars = null, string|null $domain = null): string`
+`public function get(string $key, array|null $vars = null, string|null $domain = null): string`
 
 Look up a translation key with optional placeholder substitution.
 
@@ -96,7 +96,6 @@ Look up a translation key with optional placeholder substitution.
 
 | Name | Type | Default | Description |
 |---|---|---|---|
-| `$locale` | string | - | Active locale (e.g. 'de_DE'). |
 | `$key` | string | - | Translation key. |
 | `$vars` | array\|null | `null` | Placeholder values for `{name}` substitution. |
 | `$domain` | string\|null | `null` | Override the default domain. |
@@ -108,7 +107,7 @@ Look up a translation key with optional placeholder substitution.
 
 ---
 
-### pushDomain() · [source](../../src/Localization/TranslationModule.php#L242)
+### pushDomain() · [source](../../src/Localization/TranslationModule.php#L236)
 
 `public function pushDomain(string|null $domain): void`
 
@@ -144,7 +143,7 @@ In this example, the first `t` filter looks up `welcome_subject` in the
 
 ---
 
-### popDomain() · [source](../../src/Localization/TranslationModule.php#L251)
+### popDomain() · [source](../../src/Localization/TranslationModule.php#L245)
 
 `public function popDomain(): void`
 
