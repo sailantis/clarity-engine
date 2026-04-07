@@ -159,9 +159,12 @@ Layouts can extend other layouts, creating a hierarchy.
 **File: `views/layouts/admin.clarity.html`**
 
 ```twig
-{% extends "layouts/base" %} {% block head %}
+{% extends "layouts/base" %}
+{% block head %}
 <link rel="stylesheet" href="/css/admin.css" />
-{% block extraStyles %}{% endblock %} {% endblock %} {% block body %}
+{% block extraStyles %}{% endblock %}
+{% endblock %}
+{% block body %}
 <div class="admin-layout">
   <aside class="admin-sidebar">
     {% block sidebar %}
@@ -178,7 +181,8 @@ Layouts can extend other layouts, creating a hierarchy.
 
 {% block scripts %}
 <script src="/js/admin.js"></script>
-{% endblock %} {% endblock %}
+{% endblock %}
+{% endblock %}
 ```
 
 ### Page Template (extends Section Layout)
@@ -186,8 +190,9 @@ Layouts can extend other layouts, creating a hierarchy.
 **File: `views/admin/users.clarity.html`**
 
 ```twig
-{% extends "layouts/admin" %} {% block title %}User Management - Admin{%
-endblock %} {% block content %}
+{% extends "layouts/admin" %}
+{% block title %}User Management - Admin{%endblock %}
+{% block content %}
 <h1>Users</h1>
 <table>
   {% for user in users %}
@@ -197,7 +202,8 @@ endblock %} {% block content %}
   </tr>
   {% endfor %}
 </table>
-{% endblock %} {% block scripts %}
+{% endblock %}
+{% block scripts %}
 <script src="/js/admin.js"></script>
 <script src="/js/user-management.js"></script>
 {% endblock %}

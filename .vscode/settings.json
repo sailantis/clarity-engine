@@ -7,6 +7,6 @@
     }
   ],
   "php.validate.enable": false,
-  "phpThunder.activeInterpreter": "PHP 8.3",
-  "phpThunder.phpVersion": "8.1"
+  "phpThunder.phpVersion": "8.1",
+  "phpThunder.activeInterpreter": "PHP 8.3"
 }

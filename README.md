@@ -284,9 +284,7 @@ Clarity is designed for speed. Templates compile to native PHP classes and lever
 
 ![Benchmark Results](docs/images/benchmark-results.svg)
 
-_30 runs × 10,000 iterations, PHP 8.3.6 with OPcache enabled on a high performance server at Hetzner (Link to the Benchmark follows)_
-
-_The reason Clarity is slightly faster than the Native engine is that Native uses the handy esc_html() function for escaping._
+_30 runs × 10,000 iterations, PHP 8.3.6 with OPcache enabled on a high performance server (Benchmark link follows)_
 
 📖 **[Performance optimization guide →](docs/05-best-practices.md#performance)**
 

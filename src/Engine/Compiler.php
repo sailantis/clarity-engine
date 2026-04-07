@@ -815,10 +815,15 @@ class Compiler
         $lastPos = -1;
         $newCtx = null;
 
+        // Only consider fully-formed opening tags (including the closing '>')
+        // as boundaries. This avoids switching the escape context to 'js' or
+        // 'css' while still inside a start-tag's attributes (which remain
+        // HTML context). Partial start-tags (no closing '>') may contain
+        // attribute interpolations and must be treated as HTML.
         $boundaries = [
-            '/<script[\s>\/]/i' => 'js',
+            '/<script\b[^>]*>/i' => 'js',
             '/<\/script>/i' => 'html',
-            '/<style[\s>\/]/i' => 'css',
+            '/<style\b[^>]*>/i' => 'css',
             '/<\/style>/i' => 'html',
         ];
 

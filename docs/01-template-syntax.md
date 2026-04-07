@@ -297,8 +297,12 @@ See [Advanced Topics](04-advanced-topics.md#named-namespaces) for namespace conf
 ### Comparison Operators
 
 ```twig
-{% if age >= 18 %} {% if status == 'active' %} {% if count != 0 %} {% if price <
-100 %} {% if score > 50 %} {% if rating <= 5 %}
+{% if age >= 18 %}
+{% if status == 'active' %}
+{% if count != 0 %}
+{% if price < 100 %}
+{% if score > 50 %}
+{% if rating <= 5 %}
 ```
 
 | Operator | Description              |
@@ -313,8 +317,9 @@ See [Advanced Topics](04-advanced-topics.md#named-namespaces) for namespace conf
 ### Logical Operators
 
 ```twig
-{% if user.isActive and user.role == 'admin' %} {% if status == 'pending' or
-status == 'review' %} {% if not user.isBlocked %}
+{% if user.isActive and user.role == 'admin' %}
+{% if status == 'pending' or status == 'review' %}
+{% if not user.isBlocked %}
 ```
 
 | Operator | Description |
@@ -326,9 +331,11 @@ status == 'review' %} {% if not user.isBlocked %}
 ### Arithmetic Operators
 
 ```twig
-{% set total = price + tax %} {% set discount = price * 0.1 %} {% set remaining
-= total - paid %} {% set perItem = total / count %} {% set remainder = total %
-10 %}
+{% set total = price + tax %}
+{% set discount = price * 0.1 %}
+{% set remaining = total - paid %}
+{% set perItem = total / count %}
+{% set remainder = total % 10 %}
 ```
 
 | Operator | Description    |
@@ -344,8 +351,8 @@ status == 'review' %} {% if not user.isBlocked %}
 Use the `~` operator:
 
 ```twig
-{% set fullName = firstName ~ ' ' ~ lastName %} {% set greeting = 'Hello, ' ~
-user.name ~ '!' %}
+{% set fullName = firstName ~ ' ' ~ lastName %}
+{% set greeting = 'Hello, ' ~ user.name ~ '!' %}
 
 <p>{{ 'Total: ' ~ total ~ ' items' }}</p>
 ```
@@ -353,8 +360,9 @@ user.name ~ '!' %}
 ### Ternary Operator
 
 ```twig
-{{ user.isActive ? 'Active' : 'Inactive' }} {{ stock > 0 ? 'In Stock' : 'Out of
-Stock' }} {{ age >= 18 ? 'Adult' : 'Minor' }}
+{{ user.isActive ? 'Active' : 'Inactive' }}
+{{ stock > 0 ? 'In Stock' : 'Out of Stock' }}
+{{ age >= 18 ? 'Adult' : 'Minor' }}
 ```
 
 Syntax: `condition ? valueIfTrue : valueIfFalse`
@@ -362,7 +370,8 @@ Syntax: `condition ? valueIfTrue : valueIfFalse`
 ### Null Coalescing
 
 ```twig
-{{ user.nickname ?? user.name }} {{ customTitle ?? defaultTitle }}
+{{ user.nickname ?? user.name }}
+{{ customTitle ?? defaultTitle }}
 ```
 
 Returns the right value if the left is null or undefined.
@@ -372,8 +381,13 @@ Returns the right value if the left is null or undefined.
 ### Literal Values
 
 ```twig
-{{ 42 }} {{ 3.14 }} {{ true }} {{ false }} {{ null }} {{ "string literal" }} {{
-'single quotes' }}
+{{ 42 }}
+{{ 3.14 }}
+{{ true }}
+{{ false }}
+{{ null }}
+{{ "string literal" }}
+{{ 'single quotes' }}
 ```
 
 ### Collection Literals
@@ -381,22 +395,22 @@ Returns the right value if the left is null or undefined.
 **Arrays:**
 
 ```twig
-{% set numbers = [1, 2, 3, 4, 5] %} {% set mixed = [true, "text", 42, user.name]
-%}
+{% set numbers = [1, 2, 3, 4, 5] %}
+{% set mixed = [true, "text", 42, user.name] %}
 ```
 
 **Objects:**
 
 ```twig
-{% set person = { name: "John", age: 30, active: true } %} {% set data = { id:
-item.id, title: item.title } %}
+{% set person = { name: "John", age: 30, active: true } %}
+{% set data = { id: item.id, title: item.title } %}
 ```
 
 **Spread operator** in collections:
 
 ```twig
-{% set extended = [1, 2, ...moreNumbers, 99] %} {% set merged = { foo: "bar",
-...otherData } %}
+{% set extended = [1, 2, ...moreNumbers, 99] %}
+{% set merged = { foo: "bar", ...otherData } %}
 ```
 
 ### Built-in Functions
@@ -414,8 +428,8 @@ Returns all current template variables:
 Dynamically render another template at runtime:
 
 ```twig
-{{ include("partials/card", { title: "Hello", ...context() }) }} {{
-include(templateName, variables) }}
+{{ include("partials/card", { title: "Hello", ...context() }) }}
+{{ include(templateName, variables) }}
 ```
 
 Unlike the `{% include %}` directive, this function:
@@ -428,8 +442,9 @@ Unlike the `{% include %}` directive, this function:
 Example:
 
 ```twig
-{% for componentType in components %} {{ include("components/" ~ componentType,
-{ data: item }) }} {% endfor %}
+{% for componentType in components %}
+{{ include("components/" ~ componentType, { data: item }) }}
+{% endfor %}
 ```
 
 See [Filters and Functions](02-filters-and-functions.md) for custom functions.
@@ -504,9 +519,11 @@ Available contexts:
 ### Complex Variable Assignment
 
 ```twig
-{% set userData = { fullName: user.firstName ~ ' ' ~ user.lastName, age:
-user.birthYear ? (2026 - user.birthYear) : null, isAdult: user.birthYear and
-(2026 - user.birthYear) >= 18 } %}
+{% set userData = {
+  fullName: user.firstName ~ ' ' ~ user.lastName,
+  age: user.birthYear ? (2026 - user.birthYear) : null,
+  isAdult: user.birthYear and (2026 - user.birthYear) >= 18
+} %}
 
 <p>Name: {{ userData.fullName }}</p>
 {% if userData.isAdult %}
