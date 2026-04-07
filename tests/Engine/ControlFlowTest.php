@@ -68,6 +68,23 @@ class ControlFlowTest extends BaseTestCase
         $this->assertSame('<main>part:42</main>', self::render('include_test', ['val' => 42]));
     }
 
+    public function testStaticIncludeCanRegisterMacrosForLaterUse(): void
+    {
+        self::tpl(
+            'macro_library',
+            '{% macro @badge(text) %}<span class="badge">{{ text }}</span>{% endmacro %}'
+        );
+        self::tpl(
+            'include_macro_library',
+            '{% include "macro_library" %}{% @badge(label) %}'
+        );
+
+        $this->assertSame(
+            '<span class="badge">Ready</span>',
+            self::render('include_macro_library', ['label' => 'Ready'])
+        );
+    }
+
     public function testExtendsLayout(): void
     {
         self::tpl('layout', 'header-{% block content %}{% endblock %}-footer');

@@ -4,7 +4,7 @@
 
 Value object produced by the Clarity Compiler for a single template.
 
-## 🔐 Public Properties
+## 🌍 Public Properties
 
 - `public readonly` string `$className` · [source](../../src/Engine/CompiledTemplate.php)
 - `public readonly` string `$code` · [source](../../src/Engine/CompiledTemplate.php)

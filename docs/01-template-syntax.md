@@ -124,29 +124,36 @@ This compiles directly to PHP's `foreach ($items as $idx => $item)`.
 
 #### Range Loops
 
-**Exclusive range** (doesn't include end):
-
-```twig
-{% for i in 1..10 %} {{ i }} {# Outputs: 1 2 3 4 5 6 7 8 9 #} {% endfor %}
-```
-
 **Inclusive range** (includes end):
 
 ```twig
-{% for i in 1...10 %} {{ i }} {# Outputs: 1 2 3 4 5 6 7 8 9 10 #} {% endfor %}
+{% for i in 1..10 %}
+  {{ i }} {# Outputs: 1 2 3 4 5 6 7 8 9 10 #}
+{% endfor %}
+```
+
+**Exclusive range** (doesn't include end):
+
+```twig
+{% for i in 1...10 %}
+  {{ i }} {# Outputs: 1 2 3 4 5 6 7 8 9 #}
+{% endfor %}
 ```
 
 **Range with step:**
 
 ```twig
-{% for i in 0...100 step 10 %} {{ i }} {# Outputs: 0 10 20 30 40 50 60 70 80 90
-100 #} {% endfor %}
+{% for i in 0..100 step 10 %}
+  {{ i }} {# Outputs: 0 10 20 30 40 50 60 70 80 90 100 #}
+{% endfor %}
 ```
 
 **Dynamic ranges:**
 
 ```twig
-{% for i in start...end step increment %} {{ i }} {% endfor %}
+{% for i in start..end step increment %}
+  {{ i }}
+{% endfor %}
 ```
 
 ### Macros
@@ -180,7 +187,7 @@ Use `{% @macroName(arg1, arg2) %}` to invoke a macro:
 - Macros are expanded **inline at compile time** — zero runtime overhead
 - Parameters can reference any expression available at the call site
 - Macros cannot call themselves recursively (cycle detection throws a compile error)
-- Macros are scoped to the current template (they are not available in included or extended templates)
+- Macros are scoped to the current compile pass: macros defined in the template or in static includes become available after they are encountered, but independently rendered templates do not share macros
 
 #### Multi-Parameter Example
 
@@ -283,6 +290,8 @@ Include another template, sharing the current variable scope:
 ```
 
 Included templates are inlined at compile time.
+
+> **Tip:** Static includes can act as macro libraries. If an included template defines macros, include it before calling those macros in the parent template.
 
 #### Include with Namespaces
 

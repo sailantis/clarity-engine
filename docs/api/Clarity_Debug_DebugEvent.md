@@ -6,7 +6,7 @@ DebugEvent represents a single debug event emitted on the DebugEventBus.
 
 It contains a type, an optional payload, and a timestamp of when it was emitted.
 
-## 🔐 Public Properties
+## 🌍 Public Properties
 
 - `public readonly` string `$type` · [source](../../src/Debug/DebugEvent.php)
 - `public readonly` array `$payload` · [source](../../src/Debug/DebugEvent.php)

@@ -12,7 +12,7 @@ Carries two pieces of information:
   the engine determines that compilation is necessary.  On warm cache paths
   (cache is still fresh) getCode() is never called, avoiding unnecessary I/O.
 
-## 🔐 Public Properties
+## 🌍 Public Properties
 
 - `public readonly` string|int `$revision` · [source](../../src/Template/TemplateSource.php)
 

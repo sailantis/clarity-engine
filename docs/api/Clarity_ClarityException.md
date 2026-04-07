@@ -8,7 +8,7 @@ Carries the original source template file and the line number within
 that template, allowing error messages to point at the `.clarity.html`
 source rather than the compiled PHP cache file.
 
-## 🔐 Public Properties
+## 🌍 Public Properties
 
 - `public readonly` string `$templateFile` · [source](../../src/ClarityException.php)
 - `public readonly` int `$templateLine` · [source](../../src/ClarityException.php)

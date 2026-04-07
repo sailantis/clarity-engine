@@ -78,7 +78,8 @@ class Compiler
     private array $localVars = [];
 
     /**
-    * Macros defined in the current template (after pre-scan).
+    * Macros defined during the current compile pass (after pre-scan).
+    * Static includes can add more macros before the rest of the template is compiled.
     * @var array<string, array{params: list<string>, body: string}>
     */
     private array $macros = [];
@@ -910,6 +911,7 @@ class Compiler
 
         $includeSource = $this->readWithDep($includeName);
         $includeSource = $this->resolveExtends($includeSource, $includeName);
+        $this->extractMacros($includeSource);
 
         // Inline directly into the caller's accumulator so PHP line counts remain
         // contiguous and each line is attributed to the correct source file.

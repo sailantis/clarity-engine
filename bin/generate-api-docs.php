@@ -159,7 +159,7 @@ function generateClassDoc(ReflectionClass $reflector, $docFactory, array $classR
         fn(ReflectionProperty $prop) => $prop->isPublic()
     );
     if (!empty($props)) {
-        $md .= "## 🔐 Public Properties\n\n";
+        $md .= "## 🌍 Public Properties\n\n";
         foreach ($props as $prop) {
             $vis = getVisibility($prop);
             $static = $prop->isStatic() ? ' static' : '';

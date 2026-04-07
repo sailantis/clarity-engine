@@ -14,7 +14,7 @@ $engine->enableDebug(new DumpOptions(
 ));
 ```
 
-## 🔐 Public Properties
+## 🌍 Public Properties
 
 - `public readonly` int `$maxDepth` · [source](../../src/Debug/DumpOptions.php)
 - `public readonly` int `$maxItems` · [source](../../src/Debug/DumpOptions.php)
