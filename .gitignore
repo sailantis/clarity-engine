@@ -1,4 +1,5 @@
 .idea/
+.phpthunder/
 temp/
 /vendor/
 /conversation.txt
