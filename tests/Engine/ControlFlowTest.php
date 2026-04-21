@@ -154,6 +154,51 @@ class ControlFlowTest extends BaseTestCase
         $this->assertSame('AXC', self::render('axc_child'));
     }
 
+    public function testChildBlockCanAppendParentContent(): void
+    {
+        self::tpl('layout_parent_append', '[{% block title %}Base{% endblock %}]');
+        self::tpl(
+            'page_parent_append',
+            '{% extends "layout_parent_append" %}{% block title %}{% @parent %} / Child{% endblock %}'
+        );
+
+        $this->assertSame('[Base / Child]', self::render('page_parent_append'));
+    }
+
+    public function testChildBlockCanWrapParentContentMultipleTimes(): void
+    {
+        self::tpl('layout_parent_wrap', '[{% block body %}core{% endblock %}]');
+        self::tpl(
+            'page_parent_wrap',
+            '{% extends "layout_parent_wrap" %}{% block body %}<before>{% @parent %}|{% @parent %}</before>{% endblock %}'
+        );
+
+        $this->assertSame('[<before>core|core</before>]', self::render('page_parent_wrap'));
+    }
+
+    public function testParentPlaceholderUsesImmediateParentBlockContent(): void
+    {
+        self::tpl('base_parent_chain', '{% block body %}{% endblock %}');
+        self::tpl(
+            'section_parent_chain',
+            '{% extends "base_parent_chain" %}{% block body %}[{% block page %}Section{% endblock %}]{% endblock %}'
+        );
+        self::tpl(
+            'page_parent_chain',
+            '{% extends "section_parent_chain" %}{% block page %}Page[{% @parent %}]{% endblock %}'
+        );
+
+        $this->assertSame('[Page[Section]]', self::render('page_parent_chain'));
+    }
+
+    public function testParentPlaceholderOutsideOverrideThrows(): void
+    {
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/only valid inside an overriding child block/i');
+        self::tpl('invalid_parent_placeholder', '{% block title %}{% @parent %}{% endblock %}');
+        self::render('invalid_parent_placeholder');
+    }
+
     public function testInvalidForLoopThrows(): void
     {
         $this->expectException(ClarityException::class);

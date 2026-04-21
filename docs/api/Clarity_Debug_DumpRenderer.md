@@ -4,7 +4,7 @@
 
 ## 🚀 Public methods
 
-### render() · [source](../../src/Debug/DumpRenderer.php#L16)
+### render() · [source](../../src/Debug/DumpRenderer.php#L18)
 
 `public function render(mixed $value, Clarity\Debug\DumpOptions $opts): string`
 

@@ -12,6 +12,8 @@ interface DumpRenderer
      * May have side effects (e.g. writing to STDERR for the CLI renderer).
      * Returns a string to be concatenated into the template output; returns ''
      * when the output was sent directly to STDERR.
+     * @param mixed $value
+     * @param DumpOptions $opts
      */
     public function render(mixed $value, DumpOptions $opts): string;
 }

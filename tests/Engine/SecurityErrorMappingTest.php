@@ -27,6 +27,63 @@ class SecurityErrorMappingTest extends BaseTestCase
         }
     }
 
+    public function testNestedUndefinedArrayKeyUsesExactTemplateLine(): void
+    {
+        self::tpl('warn_nested_line', implode("\n", [
+            'static line',
+            '{% if context.authenticated %}',
+            'visible',
+            '{% endif %}',
+        ]));
+
+        try {
+            self::render('warn_nested_line', ['context' => []]);
+            $this->fail('Expected ClarityException was not thrown');
+        } catch (ClarityException $e) {
+            $this->assertStringContainsString('authenticated', $e->getMessage());
+            $this->assertSame(2, $e->templateLine);
+        }
+    }
+
+    public function testNestedExtendsUndefinedArrayKeyUsesChildTemplateLine(): void
+    {
+        self::tpl('layouts/base', implode("\n", [
+            '<html>',
+            '<body>',
+            '{% block content %}{% endblock %}',
+            '</body>',
+            '</html>',
+        ]));
+
+        self::tpl('layouts/agent', implode("\n", [
+            '{% extends "layouts/base" %}',
+            '{% block content %}',
+            '<section>',
+            '{% block page %}{% endblock %}',
+            '</section>',
+            '{% endblock %}',
+        ]));
+
+        self::tpl('pages/ticket', implode("\n", [
+            '{% extends "layouts/agent" %}',
+            '{% block page %}',
+            'safe line',
+            '{% if context.authenticated1 %}',
+            'visible',
+            '{% endif %}',
+            '{% endblock %}',
+        ]));
+
+        try {
+            self::render('pages/ticket', ['context' => []]);
+            $this->fail('Expected ClarityException was not thrown');
+        } catch (ClarityException $e) {
+            $this->assertStringContainsString('authenticated1', $e->getMessage());
+            $this->assertSame('pages/ticket', $e->templateFile);
+            $this->assertSame(4, $e->templateLine);
+        }
+    }
+
     // =========================================================================
     // Compile-time function-call prevention
     // =========================================================================

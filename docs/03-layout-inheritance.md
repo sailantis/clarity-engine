@@ -112,6 +112,33 @@ Blocks with content in the parent serve as defaults:
 
 If the child doesn't override this block, the default is used.
 
+### Parent Block Fallback
+
+Child blocks can include the parent block's content with `{% @parent %}`:
+
+```twig
+{% block scripts %}
+{% @parent %}
+<script src="/js/user-management.js"></script>
+{% endblock %}
+```
+
+This is resolved during compilation, so the final template still has zero runtime block dispatch.
+
+You can also wrap the parent content:
+
+```twig
+{% block title %}
+Admin | {% @parent %}
+{% endblock %}
+```
+
+Rules:
+
+- `{% @parent %}` only works inside an overriding child block
+- It can appear more than once in the same block
+- In multi-level inheritance, it expands to the immediate parent block content
+
 ### Empty Blocks
 
 Empty blocks serve as placeholders:

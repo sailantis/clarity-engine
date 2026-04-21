@@ -134,7 +134,7 @@ The revision ({@see \TemplateSource::$revision}) must be available immediately w
 
 ---
 
-### resolveName() · [source](../../src/Template/FileLoader.php#L135)
+### resolveName() · [source](../../src/Template/FileLoader.php#L136)
 
 `public function resolveName(string $name): string`
 
@@ -155,7 +155,7 @@ Public so it can be used for diagnostic/debugging purposes.
 
 ---
 
-### getSubLoaders() · [source](../../src/Template/FileLoader.php#L171)
+### getSubLoaders() · [source](../../src/Template/FileLoader.php#L172)
 
 `public function getSubLoaders(): array`
 

@@ -35,6 +35,10 @@ use Clarity\Template\TemplateLoader;
  */
 class Compiler
 {
+    private const SOURCE_MARKER_RE = '/^@source\s+([A-Za-z0-9+\/=]+)\s+(\d+)$/';
+
+    private const PARENT_PLACEHOLDER_RE = '/\{%-?\s*@parent\s*-?%\}/s';
+
     private Tokenizer $tokenizer;
 
     /** @var array<string, int|string>  templateName → revision collected during this compilation */
@@ -102,6 +106,12 @@ class Compiler
 
     /** @var string[] */
     private array $compileStack = [];
+
+    private ?string $mappedSourcePath = null;
+
+    private int $mappedSourceLineBase = 1;
+
+    private int $mappedMergedLineBase = 1;
 
     private ?Registry $registry = null;
 
@@ -174,6 +184,9 @@ class Compiler
         $this->tokenizer->setEscapeContext('html');
         $this->extendsStack = [];
         $this->compileStack = [];
+        $this->mappedSourcePath = null;
+        $this->mappedSourceLineBase = 1;
+        $this->mappedMergedLineBase = 1;
 
         try {
             $source = $this->readWithDep($templateName);
@@ -234,7 +247,7 @@ class Compiler
         try {
             // Match {% extends "path" %} or {% extends 'path' %}
             if (!\preg_match('/\{%-?\s*extends\s+["\']([^"\']+)["\']\s*-?%\}/s', $source, $m, PREG_OFFSET_CAPTURE)) {
-                return $source;
+                return $this->annotateSourceRegion($source, $currentName, 1);
             }
 
             $layoutRef = $m[1][0];
@@ -248,15 +261,22 @@ class Compiler
             // Recursively resolve the layout's own extends
             $layoutSource = $this->resolveExtends($layoutSource, $layoutName);
 
-            [$layoutPreamble, $layoutBody] = $this->splitLeadingSetPreamble($layoutSource);
-            [$childPreamble, $childBody] = $this->splitLeadingSetPreamble($childSource, false);
+            [$layoutPreamble, $layoutBody, $layoutBodyOffset] = $this->splitLeadingSetPreamble($layoutSource);
+            [$childPreamble, $childBody, $childBodyOffset] = $this->splitLeadingSetPreamble($childSource, false);
 
             // Extract child blocks: {% block name %}...{% endblock %}
-            $childBlocks = $this->extractBlocks($childBody);
+            $childBlocks = $this->extractBlocks(
+                $childBody,
+                $currentName,
+                $this->sourceLineAtOffset($childSource, $childBodyOffset)
+            );
 
             // Merge: replace layout's blocks with child definitions while keeping
             // leading set directives available to layout blocks.
-            $merged = $layoutPreamble . $childPreamble . $this->mergeBlocks($layoutBody, $childBlocks);
+            $merged = $layoutPreamble
+                . $this->annotateSourceRegion($childPreamble, $currentName, 1)
+                . $this->buildResumeMarker($layoutSource, $layoutName, $layoutBodyOffset)
+                . $this->mergeBlocks($layoutBody, $childBlocks, $layoutSource, $layoutName, $layoutBodyOffset);
 
             return $merged;
         } finally {
@@ -307,15 +327,15 @@ class Compiler
             break;
         }
 
-        return [$preamble, \substr($source, $offset)];
+        return [$preamble, \substr($source, $offset), $offset];
     }
 
     /**
     * Extract all {% block name %}...{% endblock %} definitions from source.
     *
-    * @return array<string, string>  block-name → inner content
+    * @return array<string, array{content: string, file: string, line: int}> block-name → source metadata
     */
-    private function extractBlocks(string $source): array
+    private function extractBlocks(string $source, string $sourceName, int $baseLine = 1): array
     {
         $blocks = [];
 
@@ -346,7 +366,11 @@ class Compiler
             }
 
             if ($content !== null) {
-                $blocks[$blockName] = $content;
+                $blocks[$blockName] = [
+                    'content' => $content,
+                    'file' => $sourceName,
+                    'line' => $baseLine + \substr_count(\substr($source, 0, $innerStart), "\n"),
+                ];
             }
         }
 
@@ -362,15 +386,20 @@ class Compiler
     * correctly.  The previous lazy-regex approach stopped at the first
     * {% endblock %} regardless of nesting depth.
     *
-    * @param string              $layoutSource
-    * @param array<string,string> $childBlocks
+    * @param array<string, array{content: string, file: string, line: int}> $childBlocks
     */
-    private function mergeBlocks(string $layoutSource, array $childBlocks): string
+    private function mergeBlocks(
+        string $layoutBody,
+        array $childBlocks,
+        string $layoutSource,
+        string $layoutName,
+        int $layoutBodyOffset
+    ): string
     {
         $result = '';
         $offset = 0;
 
-        while (preg_match('/\{%-?\s*block\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*-?%\}/s', $layoutSource, $m, PREG_OFFSET_CAPTURE, $offset)) {
+        while (preg_match('/\{%-?\s*block\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*-?%\}/s', $layoutBody, $m, PREG_OFFSET_CAPTURE, $offset)) {
             $blockName = $m[1][0];
             $tagStart = $m[0][1];
             $innerStart = $tagStart + strlen($m[0][0]);
@@ -381,7 +410,7 @@ class Compiler
             $innerEnd = null;
             $fullEnd = null;
 
-            while ($depth > 0 && preg_match('/\{%-?\s*(block\s+[a-zA-Z_][a-zA-Z0-9_]*|endblock)\s*-?%\}/s', $layoutSource, $nm, PREG_OFFSET_CAPTURE, $pos)) {
+            while ($depth > 0 && preg_match('/\{%-?\s*(block\s+[a-zA-Z_][a-zA-Z0-9_]*|endblock)\s*-?%\}/s', $layoutBody, $nm, PREG_OFFSET_CAPTURE, $pos)) {
                 $tag = trim($nm[1][0]);
                 if (str_starts_with($tag, 'block')) {
                     $depth++;
@@ -397,23 +426,99 @@ class Compiler
 
             if ($innerEnd === null) {
                 // Unclosed block tag – append the rest verbatim and bail
-                $result .= substr($layoutSource, $offset);
+                $result .= substr($layoutBody, $offset);
                 return $result;
             }
 
             // Everything before this block tag is passed through verbatim
-            $result .= substr($layoutSource, $offset, $tagStart - $offset);
+            $result .= substr($layoutBody, $offset, $tagStart - $offset);
+
+            $parentContent = substr($layoutBody, $innerStart, $innerEnd - $innerStart);
 
             // Use child's override if present, otherwise keep the default content
-            $result .= $childBlocks[$blockName]
-                ?? substr($layoutSource, $innerStart, $innerEnd - $innerStart);
+            if (isset($childBlocks[$blockName])) {
+                $child = $childBlocks[$blockName];
+                $result .= $this->expandParentPlaceholders($child, $parentContent);
+                if ($fullEnd < strlen($layoutBody)) {
+                    $result .= $this->buildResumeMarker(
+                        $layoutSource,
+                        $layoutName,
+                        $layoutBodyOffset + $fullEnd
+                    );
+                }
+            } else {
+                $result .= $parentContent;
+            }
 
             $offset = $fullEnd;
         }
 
         // Append any trailing content after the last block
-        $result .= substr($layoutSource, $offset);
+        $result .= substr($layoutBody, $offset);
         return $result;
+    }
+
+    /**
+    * Resolve `{% @parent %}` placeholders inside a child block override.
+    *
+    * Child and parent fragments are emitted with their own source markers so
+    * mapped compile errors keep pointing at the correct template and line.
+    *
+    * @param array{content: string, file: string, line: int} $childBlock
+    */
+    private function expandParentPlaceholders(array $childBlock, string $parentContent): string
+    {
+        $childContent = $childBlock['content'];
+
+        if (!\preg_match(self::PARENT_PLACEHOLDER_RE, $childContent)) {
+            return $this->annotateSourceRegion($childContent, $childBlock['file'], $childBlock['line']);
+        }
+
+        $result = '';
+        $offset = 0;
+
+        while (\preg_match(self::PARENT_PLACEHOLDER_RE, $childContent, $match, PREG_OFFSET_CAPTURE, $offset)) {
+            $matchStart = $match[0][1];
+            $matchEnd = $matchStart + \strlen($match[0][0]);
+
+            $result .= $this->annotateSourceSlice(
+                $childContent,
+                $childBlock['file'],
+                $childBlock['line'],
+                $offset,
+                $matchStart
+            );
+            $result .= $parentContent;
+            $offset = $matchEnd;
+        }
+
+        $result .= $this->annotateSourceSlice(
+            $childContent,
+            $childBlock['file'],
+            $childBlock['line'],
+            $offset,
+            \strlen($childContent)
+        );
+
+        return $result;
+    }
+
+    private function annotateSourceSlice(
+        string $source,
+        string $sourceName,
+        int $baseLine,
+        int $startOffset,
+        int $endOffset
+    ): string {
+        if ($endOffset <= $startOffset) {
+            return '';
+        }
+
+        return $this->annotateSourceRegion(
+            \substr($source, $startOffset, $endOffset - $startOffset),
+            $sourceName,
+            $baseLine + \substr_count(\substr($source, 0, $startOffset), "\n")
+        );
     }
 
     // -------------------------------------------------------------------------
@@ -461,6 +566,7 @@ class Compiler
         try {
             foreach ($segments as $seg) {
                 $tplLine = $seg[Tokenizer::KEY_LINE];
+                [$mappedSourcePath, $mappedTplLine] = $this->resolveSegmentSource($sourcePath, $tplLine);
 
                 switch ($seg[Tokenizer::KEY_TYPE]) {
 
@@ -473,13 +579,13 @@ class Compiler
                         $this->addPhpLines(
                             $lines,
                             $this->textToPhp($seg[Tokenizer::KEY_CONTENT]),
-                            $tplLine,
-                            $sourcePath
+                            $mappedTplLine,
+                            $mappedSourcePath
                         );
                         break;
 
                     case Tokenizer::COMMENT:
-                        $this->processComment($seg[Tokenizer::KEY_CONTENT]);
+                        $this->processComment($seg[Tokenizer::KEY_CONTENT], $tplLine);
                         break;
 
                     case Tokenizer::OUTPUT:
@@ -489,24 +595,24 @@ class Compiler
                         $this->addPhpLines(
                             $lines,
                             "echo {$phpExpr};",
-                            $tplLine,
-                            $sourcePath
+                            $mappedTplLine,
+                            $mappedSourcePath
                         );
                         break;
 
                     case Tokenizer::BLOCK:
                         $compiled = $this->compileBlock(
                             $seg[Tokenizer::KEY_CONTENT],
-                            $sourcePath,
-                            $tplLine,
+                            $mappedSourcePath,
+                            $mappedTplLine,
                             $lines
                         );
                         if ($compiled !== '') {
                             $this->addPhpLines(
                                 $lines,
                                 $compiled,
-                                $tplLine,
-                                $sourcePath
+                                $mappedTplLine,
+                                $mappedSourcePath
                             );
                         }
                         break;
@@ -517,9 +623,19 @@ class Compiler
         }
     }
 
-    private function processComment(string $content): void
+    private function processComment(string $content, int $tplLine): void
     {
         $inner = trim($content);
+        if (preg_match(self::SOURCE_MARKER_RE, $inner, $m)) {
+            $decoded = base64_decode($m[1], true);
+            if ($decoded !== false && $decoded !== '') {
+                $this->mappedSourcePath = $decoded;
+                $this->mappedSourceLineBase = (int) $m[2];
+                $this->mappedMergedLineBase = $tplLine;
+            }
+            return;
+        }
+
         if (str_starts_with($inner, '@context ')) {
             // Handle {# @context <name> #} hints.
             static $validContexts = [
@@ -550,6 +666,14 @@ class Compiler
         array &$lines
     ): string
     {
+        if (\preg_match('/^@parent\s*$/i', $content)) {
+            throw new ClarityException(
+                "'{% @parent %}' is only valid inside an overriding child block.",
+                $sourcePath,
+                $tplLine
+            );
+        }
+
         // Macro call: {% @name(arg1, arg2) %}
         if ($content !== '' && $content[0] === '@') {
             if (!\preg_match('/^@([a-zA-Z_][a-zA-Z0-9_]*)\s*\((.*)\)\s*$/s', $content, $mc)) {
@@ -980,6 +1104,75 @@ class Compiler
             }
             $lines[] = $codeLine;
         }
+    }
+
+    private function annotateSourceRegion(string $source, string $sourceName, int $startLine): string
+    {
+        if ($source === '') {
+            return '';
+        }
+
+        return $this->buildSourceMarker($sourceName, $startLine) . $source;
+    }
+
+    private function buildResumeMarker(string $source, string $fallbackSourceName, int $offset): string
+    {
+        [$sourceName, $sourceLine] = $this->resolveSourceOriginAtOffset($source, $fallbackSourceName, $offset);
+        return $this->buildSourceMarker($sourceName, $sourceLine);
+    }
+
+    private function buildSourceMarker(string $sourceName, int $startLine): string
+    {
+        return '{# @source ' . base64_encode($sourceName) . ' ' . $startLine . ' #}';
+    }
+
+    private function resolveSourceOriginAtOffset(string $source, string $fallbackSourceName, int $offset): array
+    {
+        $offset = max(0, min($offset, strlen($source)));
+        $mergedLine = $this->sourceLineAtOffset($source, $offset);
+
+        $activeSourceName = $fallbackSourceName;
+        $activeSourceLine = 1;
+        $activeMergedLine = 1;
+
+        if (preg_match_all('/\{#\s*@source\s+([A-Za-z0-9+\/=]+)\s+(\d+)\s*#\}/', $source, $matches, PREG_OFFSET_CAPTURE)) {
+            $matchCount = count($matches[0]);
+            for ($index = 0; $index < $matchCount; $index++) {
+                $matchOffset = $matches[0][$index][1];
+                if ($matchOffset > $offset) {
+                    break;
+                }
+
+                $decoded = base64_decode($matches[1][$index][0], true);
+                if ($decoded === false || $decoded === '') {
+                    continue;
+                }
+
+                $activeSourceName = $decoded;
+                $activeSourceLine = (int) $matches[2][$index][0];
+                $activeMergedLine = $this->sourceLineAtOffset($source, $matchOffset);
+            }
+        }
+
+        return [$activeSourceName, $activeSourceLine + max(0, $mergedLine - $activeMergedLine)];
+    }
+
+    private function resolveSegmentSource(string $defaultSourcePath, int $tplLine): array
+    {
+        if ($this->mappedSourcePath === null) {
+            return [$defaultSourcePath, $tplLine];
+        }
+
+        return [
+            $this->mappedSourcePath,
+            $this->mappedSourceLineBase + max(0, $tplLine - $this->mappedMergedLineBase),
+        ];
+    }
+
+    private function sourceLineAtOffset(string $source, int $offset): int
+    {
+        $offset = max(0, min($offset, strlen($source)));
+        return 1 + substr_count(substr($source, 0, $offset), "\n");
     }
 
     /**

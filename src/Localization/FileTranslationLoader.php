@@ -123,7 +123,10 @@ class FileTranslationLoader implements TranslationLoaderInterface
     // Cache helpers
     // =========================================================================
 
-    /** @param array<string, string> $data */
+    /**
+     * @param string $cacheFile
+     * @param array<string, string> $data
+     */
     private function writePhpCache(string $cacheFile, array $data): void
     {
         $dir = \dirname($cacheFile);
@@ -154,6 +157,7 @@ class FileTranslationLoader implements TranslationLoaderInterface
     * `['page' => ['title' => 'Foo']]` → `['page.title' => 'Foo']`
     *
     * @param  array<mixed, mixed> $array
+    * @param string $prefix
     * @return array<string, string>
     */
     private function flattenArray(array $array, string $prefix = ''): array

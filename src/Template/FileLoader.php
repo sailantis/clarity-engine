@@ -131,6 +131,7 @@ final class FileLoader implements TemplateLoader
      * Resolve a logical template name to an absolute filesystem path.
      *
      * Public so it can be used for diagnostic/debugging purposes.
+     * 
      */
     public function resolveName(string $name): string
     {

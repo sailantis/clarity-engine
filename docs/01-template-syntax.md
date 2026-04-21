@@ -189,6 +189,8 @@ Use `{% @macroName(arg1, arg2) %}` to invoke a macro:
 - Macros cannot call themselves recursively (cycle detection throws a compile error)
 - Macros are scoped to the current compile pass: macros defined in the template or in static includes become available after they are encountered, but independently rendered templates do not share macros
 
+> **Note:** Clarity also uses the `@...` notation for some compile-time snippets that are internal macros. The main example is `{% @parent %}` inside overriding child blocks.
+
 #### Multi-Parameter Example
 
 ```twig
@@ -272,6 +274,27 @@ content %}
 ```
 
 Blocks not overridden in the child will use the parent's default content.
+
+#### Parent Block Fallback
+
+Inside an overriding child block, use `{% @parent %}` to inline the parent block's content at that exact position during compilation:
+
+```twig
+{% extends "layouts/main" %}
+
+{% block title %}
+Admin | {% @parent %}
+{% endblock %}
+```
+
+If the parent block contains `My Website`, the compiled result is `Admin | My Website`.
+
+Rules:
+
+- `{% @parent %}` is only valid inside a child block that overrides a parent block
+- It is resolved at compile time, so it adds no runtime inheritance lookup
+- You can use it more than once in the same block to repeat the parent content
+- It refers to the **immediate** parent block in multi-level inheritance chains
 
 ### Includes
 
@@ -597,25 +620,26 @@ Clarity is sandboxed for security. The following are **not permitted**:
 
 ### Directive Summary
 
-| Directive                                    | Purpose                    |
-| -------------------------------------------- | -------------------------- |
-| `{% if condition %}`                         | Conditional rendering      |
-| `{% elseif condition %}`                     | Alternative condition      |
-| `{% else %}`                                 | Fallback case              |
-| `{% endif %}`                                | End conditional            |
-| `{% for item in array %}`                    | Loop over array            |
-| `{% for value, key in array %}`              | Loop with key variable     |
-| `{% for i in start...end %}`                 | Range loop (inclusive)     |
-| `{% for i in start..end %}`                  | Range loop (exclusive end) |
-| `{% endfor %}`                               | End loop                   |
-| `{% set variable = value %}`                 | Variable assignment        |
-| `{% extends "template" %}`                   | Inherit from layout        |
-| `{% block name %}...{% endblock %}`          | Define/override block      |
-| `{% include "template" %}`                   | Include another template   |
-| `{% macro @name(params) %}...{% endmacro %}` | Define a reusable macro    |
-| `{% @name(args) %}`                          | Call a macro               |
-| `{# comment #}`                              | Template comment           |
-| `{# @context js\|css\|html #}`               | Switch escaping context    |
+| Directive                                    | Purpose                     |
+| -------------------------------------------- | --------------------------- |
+| `{% if condition %}`                         | Conditional rendering       |
+| `{% elseif condition %}`                     | Alternative condition       |
+| `{% else %}`                                 | Fallback case               |
+| `{% endif %}`                                | End conditional             |
+| `{% for item in array %}`                    | Loop over array             |
+| `{% for value, key in array %}`              | Loop with key variable      |
+| `{% for i in start...end %}`                 | Range loop (inclusive)      |
+| `{% for i in start..end %}`                  | Range loop (exclusive end)  |
+| `{% endfor %}`                               | End loop                    |
+| `{% set variable = value %}`                 | Variable assignment         |
+| `{% extends "template" %}`                   | Inherit from layout         |
+| `{% block name %}...{% endblock %}`          | Define/override block       |
+| `{% include "template" %}`                   | Include another template    |
+| `{% macro @name(params) %}...{% endmacro %}` | Define a reusable macro     |
+| `{% @name(args) %}`                          | Call a macro                |
+| `{% @parent %}`                              | Inline parent block content |
+| `{# comment #}`                              | Template comment            |
+| `{# @context js\|css\|html #}`               | Switch escaping context     |
 
 ### Operator Summary
 

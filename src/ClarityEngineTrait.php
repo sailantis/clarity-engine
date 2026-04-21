@@ -778,11 +778,11 @@ trait ClarityEngineTrait
      * template file and line, using only the source map from a CompiledTemplate
      * (no class loading or reflection required).
      *
-     * Cache::writeAndLoad() prepends "<?php\n" before the compiled code, so
-     * the body does not start at line 1.  The preamble emitted by buildClass()
-     * is variable-length (deps/sourceMap exports span multiple lines), so the
-     * offset is determined dynamically by locating the "ob_start()" sentinel
-     * that marks the start of the render() body.
+    * Cache::writeAndLoad() prepends "<?php\n" before the compiled code, so
+    * the body does not start at line 1. The preamble emitted by buildClass()
+    * is variable-length (deps/sourceMap exports span multiple lines), so the
+    * offset is determined dynamically by locating the first line inside the
+    * render() try-block where compiled template statements begin.
      *
      * @param int      $fileLine     1-based line number reported by the ParseError.
      * @param string   $compiledCode The compiled PHP code from CompiledTemplate (no leading <?php).
@@ -797,26 +797,24 @@ trait ClarityEngineTrait
             return [null, 0];
         }
 
-        // Locate the line that contains "ob_start()" inside the full file
-        // (compiled code prefixed by the "<?php\n" that Cache adds).
-        $fileLines = explode("\n", "<?php\n" . $compiledCode);
-        $bodyStartFileLine = 0;
-        foreach ($fileLines as $i => $line) {
-            if (str_contains($line, 'ob_start()')) {
-                $bodyStartFileLine = $i + 1; // 0-indexed → 1-indexed
-                break;
-            }
-        }
-
-        if ($bodyStartFileLine === 0) {
+        $bodyLine = $this->resolveCompiledBodyLine(
+            $fileLine,
+            explode("\n", "<?php\n" . $compiledCode)
+        );
+        if ($bodyLine <= 0) {
             return [null, 0];
         }
 
-        // Convert the absolute file line to a body-relative line, which is
-        // what the source map's phpLineStart values are indexed against.
-        $bodyLine = $fileLine - $bodyStartFileLine + 1;
+        return $this->matchSourceMapLine($sourceMap, $files, $bodyLine);
+    }
 
-        // Find the last source-map range whose phpLineStart ≤ $bodyLine.
+    /**
+     * @param array<int, array{0:int, 1:int, 2:int}> $sourceMap
+     * @param string[]                                $files
+     * @return array{0: string|null, 1: int}
+     */
+    private function matchSourceMapLine(array $sourceMap, array $files, int $bodyLine): array
+    {
         $matched = null;
         foreach ($sourceMap as $range) {
             if ($range[0] <= $bodyLine) {
@@ -831,6 +829,51 @@ trait ClarityEngineTrait
         }
         $tplFile = $files[$matched[1]] ?? null;
         return [$tplFile, $matched[2]];
+    }
+
+    /**
+     * Convert an absolute cache-file line into a render-body-relative line.
+     *
+     * @param string[] $fileLines
+     */
+    private function resolveCompiledBodyLine(int $fileLine, array $fileLines): int
+    {
+        $bodyStartFileLine = $this->findRenderBodyStartLine($fileLines);
+        if ($bodyStartFileLine === 0 || $fileLine < $bodyStartFileLine) {
+            return 0;
+        }
+
+        return $fileLine - $bodyStartFileLine + 1;
+    }
+
+    /**
+     * Locate the first compiled template statement inside render().
+     *
+     * @param string[] $fileLines
+     */
+    private function findRenderBodyStartLine(array $fileLines): int
+    {
+        $lineCount = count($fileLines);
+        $renderStart = -1;
+
+        for ($index = 0; $index < $lineCount; $index++) {
+            if (str_contains($fileLines[$index], 'public function render(array $vars): string')) {
+                $renderStart = $index;
+                break;
+            }
+        }
+
+        if ($renderStart < 0) {
+            return 0;
+        }
+
+        for ($index = $renderStart; $index < $lineCount; $index++) {
+            if (str_contains($fileLines[$index], 'try {')) {
+                return $index + 2;
+            }
+        }
+
+        return 0;
     }
 
     /**
@@ -970,21 +1013,18 @@ trait ClarityEngineTrait
             return [null, 0];
         }
 
-        // Ranges are sorted by phpLineStart ascending; find the last one ≤ phpLine.
-        $matched = null;
-        foreach ($map as $range) {
-            if ($range[0] <= $phpLine) {
-                $matched = $range;
-            } else {
-                break;
-            }
-        }
-
-        if ($matched === null) {
+        $cacheFile = $this->cache->cacheFilePath($templateName);
+        $fileLines = @file($cacheFile, \FILE_IGNORE_NEW_LINES);
+        if (!\is_array($fileLines)) {
             return [null, 0];
         }
-        $tplFile = $files[$matched[1]] ?? null;
-        return [$tplFile, $matched[2]];
+
+        $bodyLine = $this->resolveCompiledBodyLine($phpLine, $fileLines);
+        if ($bodyLine <= 0) {
+            return [null, 0];
+        }
+
+        return $this->matchSourceMapLine($map, $files, $bodyLine);
     }
 
     // -------------------------------------------------------------------------
