@@ -4,31 +4,34 @@ Filters transform values in templates, while functions perform operations and re
 
 ## Filter Pipeline
 
-Filters transform a value before output using the `|>` operator:
+Filters transform a value before output. Both `|` and `|>` work as the filter pipe — they are completely interchangeable:
 
 ```twig
-{{ userName |> upper }}
-{{ price |> number(2) }}
+{{ userName | upper }}        {# Twig / Svelte style #}
+{{ userName |> upper }}       {# Clarity fat-pipe style #}
+{{ price | number(2) }}
 {{ createdAt |> date('d.m.Y H:i') }}
 ```
+
+> **`|` vs `||` vs `bor`**
+> - `|` — always a filter pipe (even a single `|`)
+> - `||` — logical OR (two pipes are never a filter pipe)
+> - `bor` — bitwise OR keyword (use this when you need the bitwise `|` operator)
 
 ### Chaining Filters
 
 Chain multiple filters together—each filter receives the output of the previous one:
 
 ```twig
-{{ description |> trim |> upper }}
-{{ tags |> map(t => t.name) |> join(', ') }}
-{{ price |> number(0) |> replace('0', 'FREE') }}
+{{ description | trim | upper }}
+{{ tags | map(t => t.name) | join(', ') }}
+{{ price | number(0) | replace('0', 'FREE') }}
 ```
 
 ### Filter Syntax
 
 ```twig
-{{ value |> filterName }} {# No arguments #}
-{{ value |> filterName(arg1) }} {# One argument #}
-{{ value |> filterName(arg1, arg2) }} {# Multiple arguments #}
-```
+{{ value | filterName }}              {# No arguments #}\n{{ value | filterName(arg1) }}        {# One argument #}\n{{ value | filterName(arg1, arg2) }}  {# Multiple arguments #}\n```
 
 ## Built-in Filters
 

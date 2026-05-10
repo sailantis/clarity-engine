@@ -23,11 +23,13 @@ use Clarity\ClarityException;
  * Conversions performed
  * • var-chains (foo.bar[x].baz) → $vars['foo']['bar'][$vars['x']]['baz']
  * • logical operators:  and → &&,  or → ||,  not → !
+ * • bitwise operators:  bor → |,  band → &,  bxor → ^,  bnot → ~
  * • concat operator:    ~   → .
  * • all other tokens pass through unchanged (PHP validates them)
  *
- * Pipeline (|>)
- * • Each step after |> is a filter: name  or  name(arg1, arg2)
+ * Pipeline (| or |>)
+ * • Both | and |> act as the filter pipe operator (| is normalized to |> before processing)
+ * • Each step after the pipe is a filter: name  or  name(arg1, arg2)
  * • Arguments are themselves processed as expressions
  * • Result: nested $this->__fl['name']($this->__fl['name']($expr, arg), …)
  *
@@ -237,7 +239,7 @@ class Tokenizer
     public function processExpression(string $expression): string
     {
         $this->autoEscape = true;
-        [$expr, $filters] = $this->splitPipeline($expression);
+        [$expr, $filters] = $this->splitPipeline($this->normalizePipeOperator($expression));
 
         $phpExpr = $this->convertVarsAndOps($expr);
 
@@ -266,7 +268,7 @@ class Tokenizer
     */
     public function processCondition(string $expression): string
     {
-        [$expr, $filters] = $this->splitPipeline($expression);
+        [$expr, $filters] = $this->splitPipeline($this->normalizePipeOperator($expression));
         $phpExpr = $this->convertVarsAndOps($expr);
 
         foreach ($filters as $filterSegment) {
@@ -291,6 +293,104 @@ class Tokenizer
     // -------------------------------------------------------------------------
     // Internal helpers
     // -------------------------------------------------------------------------
+
+    /**
+    /**
+    * Normalize bare | to |> so that both act as the filter pipe operator.
+    *
+    * Rules (applied only at the top nesting level, outside quoted strings):
+    *   ||  → passed through unchanged  (PHP logical OR)
+    *   |>  → passed through unchanged  (already the canonical pipe)
+    *   |   → rewritten to |>           (Twig/Svelte-compatible shorthand)
+    *
+    * This runs before splitPipeline() so that the rest of the pipeline logic
+    * only ever sees |> as the delimiter.
+    */
+    private function normalizePipeOperator(string $expr): string
+    {
+        $len = \strlen($expr);
+        if ($len === 0) {
+            return $expr;
+        }
+
+        $out = '';
+        $i = 0;
+        $inSingle = false;
+        $inDouble = false;
+        $depth = 0;
+
+        while ($i < $len) {
+            $ch = $expr[$i];
+
+            // Escape sequences inside strings
+            if (($inSingle || $inDouble) && $ch === '\\' && ($i + 1) < $len) {
+                $out .= $ch . $expr[$i + 1];
+                $i += 2;
+                continue;
+            }
+
+            if ($ch === "'" && !$inDouble) {
+                $inSingle = !$inSingle;
+                $out .= $ch;
+                $i++;
+                continue;
+            }
+            if ($ch === '"' && !$inSingle) {
+                $inDouble = !$inDouble;
+                $out .= $ch;
+                $i++;
+                continue;
+            }
+
+            if ($inSingle || $inDouble) {
+                $out .= $ch;
+                $i++;
+                continue;
+            }
+
+            // Track bracket depth
+            if ($ch === '(' || $ch === '[' || $ch === '{') {
+                $depth++;
+                $out .= $ch;
+                $i++;
+                continue;
+            }
+            if ($ch === ')' || $ch === ']' || $ch === '}') {
+                if ($depth > 0) {
+                    $depth--;
+                }
+                $out .= $ch;
+                $i++;
+                continue;
+            }
+
+            // Pipe handling — only at top level
+            if ($depth === 0 && $ch === '|') {
+                $next = $expr[$i + 1] ?? '';
+                if ($next === '|') {
+                    // || → logical OR, pass through
+                    $out .= '||';
+                    $i += 2;
+                    continue;
+                }
+                if ($next === '>') {
+                    // |> → already canonical, pass through
+                    $out .= '|>';
+                    $i += 2;
+                    continue;
+                }
+                // bare | → normalize to |>
+                $out .= '|>';
+                $i++;
+                continue;
+            }
+
+            $out .= $ch;
+            $i++;
+        }
+
+        return $out;
+    }
 
     /**
     * Split an expression string on the |> pipeline operator.
@@ -393,6 +493,10 @@ class Tokenizer
             'and' => '&&',
             'or' => '||',
             'not' => '!',
+            'bor'  => '|',
+            'band' => '&',
+            'bxor' => '^',
+            'bnot' => '~',
             'true' => 'true',
             'false' => 'false',
             'null' => 'null',

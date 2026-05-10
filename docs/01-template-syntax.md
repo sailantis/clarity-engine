@@ -360,6 +360,26 @@ See [Advanced Topics](04-advanced-topics.md#named-namespaces) for namespace conf
 | `or`     | Logical OR  |
 | `not`    | Logical NOT |
 
+> **Note:** The symbols `&&`, `||`, and `!` are also accepted (they pass straight through to PHP).
+
+### Bitwise Operators
+
+Use the keyword forms to avoid conflict with the `|` filter-pipe operator:
+
+```twig
+{{ flags bor mask }}    {# bitwise OR  — flags | mask  #}
+{{ flags band mask }}   {# bitwise AND — flags & mask  #}
+{{ flags bxor mask }}   {# bitwise XOR — flags ^ mask  #}
+{{ bnot flags }}        {# bitwise NOT — ~flags        #}
+```
+
+| Operator | PHP equivalent | Description  |
+| -------- | -------------- | ------------ |
+| `bor`    | `\|`           | Bitwise OR   |
+| `band`   | `&`            | Bitwise AND  |
+| `bxor`   | `^`            | Bitwise XOR  |
+| `bnot`   | `~`            | Bitwise NOT  |
+
 ### Arithmetic Operators
 
 ```twig
@@ -388,6 +408,19 @@ Use the `~` operator:
 
 <p>{{ 'Total: ' ~ total ~ ' items' }}</p>
 ```
+
+### Filter Pipe Operator
+
+Both `|` and `|>` pipe a value through a filter. They are fully interchangeable:
+
+```twig
+{{ name | upper }}         {# Twig / Svelte style #}
+{{ name |> upper }}        {# Clarity fat-pipe style #}
+```
+
+Whenever you need bitwise OR, use the `bor` keyword instead of `|` (see [Bitwise Operators](#bitwise-operators) above).
+
+`||` (double pipe) is always logical OR and is never treated as a filter pipe.
 
 ### Ternary Operator
 

@@ -251,6 +251,30 @@ class ControlFlowTest extends BaseTestCase
         $this->assertSame('off', self::render('not', ['flag' => false]));
     }
 
+    public function testBitwiseOr(): void
+    {
+        self::tpl('bor', '{{ a bor b }}');
+        $this->assertSame('7', self::render('bor', ['a' => 5, 'b' => 3]));
+    }
+
+    public function testBitwiseAnd(): void
+    {
+        self::tpl('band', '{{ a band b }}');
+        $this->assertSame('1', self::render('band', ['a' => 5, 'b' => 3]));
+    }
+
+    public function testBitwiseXor(): void
+    {
+        self::tpl('bxor', '{{ a bxor b }}');
+        $this->assertSame('6', self::render('bxor', ['a' => 5, 'b' => 3]));
+    }
+
+    public function testBitwiseNot(): void
+    {
+        self::tpl('bnot', '{{ bnot a }}');
+        $this->assertSame('-6', self::render('bnot', ['a' => 5]));
+    }
+
     // =========================================================================
     // For loops (extended)
     // =========================================================================

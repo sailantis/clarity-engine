@@ -109,7 +109,8 @@ Integration and advanced topics:
 
 ```twig
 {{ expression }}              {# Output with auto-escaping #}
-{{ expression |> raw }}       {# Output raw HTML (no escaping) #}
+{{ expression | raw }}        {# Output raw HTML (no escaping) #}
+{{ expression |> raw }}       {# Same — both | and |> are filter pipes #}
 {{ user.name }}               {# Dot notation #}
 {{ items[0] }}                {# Bracket notation #}
 {{ firstName ~ ' ' ~ lastName }} {# String concatenation #}
@@ -132,7 +133,7 @@ Integration and advanced topics:
 {% for i in 1...10 %}{{ i }}{% endfor %}       {# Range: 1 to 9 (exclusive) #}
 {% for i in 0..100 step 10 %}{{ i }}{% endfor %} {# With step #}
 
-{% set total = items |> length %}
+{% set total = items | length %}
 ```
 
 ### Macros
@@ -149,15 +150,16 @@ Integration and advanced topics:
 ### Filters
 
 ```twig
-{{ text |> upper }}
-{{ price |> number(2) }}
-{{ timestamp |> date('Y-m-d H:i') }}
-{{ "Hello, %s!" |> sprintf(user.name) }}
-{{ tags |> join(', ') }}
-{{ users |> map(u => u.name) |> join(', ') }} {# Lambda expression #}
-{{ items |> filter(i => i.active) |> length }}
-{{ title |> slug }}                           {# URL-friendly slug #}
-{{ html |> striptags }}                       {# Strip HTML tags #}
+{{ text | upper }}
+{{ text |> upper }}                          {# both | and |> are equivalent #}
+{{ price | number(2) }}
+{{ timestamp | date('Y-m-d H:i') }}
+{{ "Hello, %s!" | sprintf(user.name) }}
+{{ tags | join(', ') }}
+{{ users | map(u => u.name) | join(', ') }} {# Lambda expression #}
+{{ items | filter(i => i.active) | length }}
+{{ title | slug }}                           {# URL-friendly slug #}
+{{ html | striptags }}                       {# Strip HTML tags #}
 ```
 
 Common filters: `upper`, `lower`, `trim`, `length`, `number`, `date`, `sprintf`, `json`, `join`, `split`, `slug`, `map`, `filter`, `reduce`, `default`, `empty`, `striptags`, `escape`, `raw`

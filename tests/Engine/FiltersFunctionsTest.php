@@ -558,4 +558,65 @@ class FiltersFunctionsTest extends BaseTestCase
         self::tpl('builtin_context_args', '{{ context(name) |> json |> raw }}');
         self::render('builtin_context_args', ['name' => 'Bob']);
     }
+
+    // =========================================================================
+    // Bare | as filter pipe (Twig/Svelte compat syntax)
+    // =========================================================================
+
+    public function testBarePipeActsAsFilterPipe(): void
+    {
+        self::tpl('bare_pipe_basic', '{{ name | upper }}');
+        $this->assertSame('ALICE', self::render('bare_pipe_basic', ['name' => 'alice']));
+    }
+
+    public function testBarePipeChained(): void
+    {
+        self::tpl('bare_pipe_chain', '{{ name | upper | trim }}');
+        $this->assertSame('  BOB  ' === '  BOB  ' ? 'BOB' : 'BOB', self::render('bare_pipe_chain', ['name' => '  bob  ']));
+    }
+
+    public function testBarePipeAndFatPipeCoexist(): void
+    {
+        // Both syntaxes work; mixing them in the same expression is fine.
+        self::tpl('bare_pipe_mix', '{{ name | upper |> trim }}');
+        $this->assertSame('ALICE', self::render('bare_pipe_mix', ['name' => ' alice ']));
+    }
+
+    public function testBarePipeDoesNotAffectLogicalOr(): void
+    {
+        self::tpl('bare_pipe_logical_or', '{% if a or b %}yes{% else %}no{% endif %}');
+        $this->assertSame('yes', self::render('bare_pipe_logical_or', ['a' => false, 'b' => true]));
+    }
+
+    public function testDoublePipeLogicalOrUnchanged(): void
+    {
+        // || must never be treated as two filter pipes
+        self::tpl('double_pipe_or', '{% if a || b %}yes{% else %}no{% endif %}');
+        $this->assertSame('yes', self::render('double_pipe_or', ['a' => false, 'b' => true]));
+        $this->assertSame('no', self::render('double_pipe_or', ['a' => false, 'b' => false]));
+    }
+
+    public function testBitwiseOrKeywordUnchangedWithBarePipe(): void
+    {
+        // bor still produces bitwise OR even when | acts as filter pipe
+        self::tpl('bor_with_bare_pipe', '{{ a bor b }}');
+        $this->assertSame('7', self::render('bor_with_bare_pipe', ['a' => 5, 'b' => 3]));
+    }
+
+    public function testBarePipeInCondition(): void
+    {
+        // The filter result must be grouped: (items | length) > 0
+        // because "length > 0" alone is not a valid filter name.
+        self::tpl('bare_pipe_condition', '{% if (items | length) > 0 %}yes{% else %}no{% endif %}');
+        $this->assertSame('yes', self::render('bare_pipe_condition', ['items' => ['a', 'b']]));
+        $this->assertSame('no', self::render('bare_pipe_condition', ['items' => []]));
+    }
+
+    public function testBarePipeInsideParenthesesIsNotSplit(): void
+    {
+        // A | inside a function argument (depth > 0) must not be treated as a pipe
+        TestEnvironment::engine()->addFunction('choose', fn($a, $b) => $a ?: $b);
+        self::tpl('bare_pipe_depth', '{{ choose(x, y) | upper }}');
+        $this->assertSame('HELLO', self::render('bare_pipe_depth', ['x' => 'hello', 'y' => 'world']));
+    }
 }
