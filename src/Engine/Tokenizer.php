@@ -70,7 +70,6 @@ class Tokenizer
     private const IDENT_RE = '/^[A-Za-z_][A-Za-z0-9_]*$/';
     private const CHAIN_RE = '/^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$/';
 
-    private const RE_FILTER = '/^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\(\s*(.*)\s*\))?\s*$/s';
 
     /**
     * Filters whose first argument must be a lambda expression or a filter
@@ -1460,12 +1459,13 @@ class Tokenizer
     */
     public function buildFilterCall(string $filterSegment, string $phpValue): string
     {
-        if (\preg_match(self::RE_FILTER, $filterSegment, $m)) {
-            $name = $m[1];
-            $args = $m[2] ?? '';
-        } else {
+        $parsed = $this->tryParseFilterWithTrailing($filterSegment);
+        if ($parsed === null) {
             throw new ClarityException("Invalid filter segment: '{$filterSegment}'");
         }
+        $name    = $parsed['name'];
+        $args    = $parsed['args'];
+        $trailing = $parsed['trailing'];
 
         if ($name === 'raw') {
             $this->autoEscape = false;
@@ -1482,7 +1482,7 @@ class Tokenizer
 
         $inlineCall = $this->buildInlineFilterCall($name, $phpValue, $argList);
         if ($inlineCall !== null) {
-            return $inlineCall;
+            return $trailing !== '' ? $inlineCall . $this->convertVarsAndOps($trailing) : $inlineCall;
         }
 
         $safeName = "'" . \addslashes($name) . "'";
@@ -1511,7 +1511,55 @@ class Tokenizer
         }
 
         $call .= ')';
+        if ($trailing !== '') {
+            $call .= $this->convertVarsAndOps($trailing);
+        }
         return $call;
+    }
+
+    /**
+    * When a filter segment contains a trailing comparison operator
+    * (e.g. `length > 1`, `count == 0`, `upper != 'FOO'`) this method
+    * extracts the filter name, optional balanced argument list, and the
+    * trailing operator+operand as a raw Clarity expression.
+    *
+    * Returns null when the segment cannot be parsed this way.
+    *
+    * @return array{name:string,args:string,trailing:string}|null
+    */
+    private function tryParseFilterWithTrailing(string $filterSegment): ?array
+    {
+        $segment = \ltrim($filterSegment);
+
+        // Must start with a valid identifier
+        if (!\preg_match('/^([a-zA-Z_][a-zA-Z0-9_]*)/', $segment, $m)) {
+            return null;
+        }
+        $name = $m[1];
+        $rest = \ltrim(\substr($segment, \strlen($name)));
+
+        // Optional balanced argument list in parentheses
+        $args = '';
+        if (($rest[0] ?? '') === '(') {
+            [$args, $endPos] = $this->extractBalancedSegment($rest, 0);
+            $rest = \ltrim(\substr($rest, $endPos));
+        }
+
+        // Plain filter — no trailing comparison operator
+        if (\trim($rest) === '') {
+            return ['name' => $name, 'args' => $args, 'trailing' => ''];
+        }
+
+        // Rest must be a comparison operator followed by a non-empty operand
+        if (!\preg_match('/^(===|!==|==|!=|>=|<=|<>|>|<)(.+)$/s', $rest, $cm)) {
+            return null;
+        }
+
+        return [
+            'name'     => $name,
+            'args'     => $args,
+            'trailing' => ' ' . $cm[1] . ' ' . \ltrim($cm[2]),
+        ];
     }
 
     /**

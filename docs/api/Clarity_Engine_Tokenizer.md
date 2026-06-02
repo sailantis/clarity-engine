@@ -21,11 +21,13 @@ do not perform a full grammar check here.
 Conversions performed
 • var-chains (foo.bar[x].baz) → $vars['foo']['bar'][$vars['x']]['baz']
 • logical operators:  and → &&,  or → ||,  not → !
+• bitwise operators:  bor → |,  band → &,  bxor → ^,  bnot → ~
 • concat operator:    ~   → .
 • all other tokens pass through unchanged (PHP validates them)
 
-Pipeline (|>)
-• Each step after |> is a filter: name  or  name(arg1, arg2)
+Pipeline (| or |>)
+• Both | and |> act as the filter pipe operator (| is normalized to |> before processing)
+• Each step after the pipe is a filter: name  or  name(arg1, arg2)
 • Arguments are themselves processed as expressions
 • Result: nested $this->__fl['name']($this->__fl['name']($expr, arg), …)
 
@@ -46,7 +48,7 @@ Named arguments
 
 ## 🚀 Public methods
 
-### setPrunedFunctions() · [source](../../src/Engine/Tokenizer.php#L97)
+### setPrunedFunctions() · [source](../../src/Engine/Tokenizer.php#L98)
 
 `public function setPrunedFunctions(array $names): void`
 
@@ -63,7 +65,7 @@ Named arguments
 
 ---
 
-### setContextInjectedFunctions() · [source](../../src/Engine/Tokenizer.php#L103)
+### setContextInjectedFunctions() · [source](../../src/Engine/Tokenizer.php#L104)
 
 `public function setContextInjectedFunctions(array $names): void`
 
@@ -80,7 +82,7 @@ Named arguments
 
 ---
 
-### setRegistry() · [source](../../src/Engine/Tokenizer.php#L108)
+### setRegistry() · [source](../../src/Engine/Tokenizer.php#L109)
 
 `public function setRegistry(Clarity\Engine\Registry $registry): void`
 
@@ -97,7 +99,7 @@ Named arguments
 
 ---
 
-### setLocalVars() · [source](../../src/Engine/Tokenizer.php#L122)
+### setLocalVars() · [source](../../src/Engine/Tokenizer.php#L123)
 
 `public function setLocalVars(array $localVars): void`
 
@@ -120,7 +122,7 @@ variable resolution inside the loop uses direct PHP local variables
 
 ---
 
-### tokenize() · [source](../../src/Engine/Tokenizer.php#L142)
+### tokenize() · [source](../../src/Engine/Tokenizer.php#L143)
 
 `public function tokenize(string $source): array`
 
@@ -141,7 +143,7 @@ Each element is:  ['type' => TEXT|OUTPUT|BLOCK, 'content' => string, 'line' => i
 
 ---
 
-### setEscapeContext() · [source](../../src/Engine/Tokenizer.php#L232)
+### setEscapeContext() · [source](../../src/Engine/Tokenizer.php#L233)
 
 `public function setEscapeContext(string $context): void`
 
@@ -162,7 +164,7 @@ Called by the Compiler as it tracks the current position in the template.
 
 ---
 
-### processExpression() · [source](../../src/Engine/Tokenizer.php#L237)
+### processExpression() · [source](../../src/Engine/Tokenizer.php#L238)
 
 `public function processExpression(string $expression): string`
 
@@ -179,7 +181,7 @@ Called by the Compiler as it tracks the current position in the template.
 
 ---
 
-### processCondition() · [source](../../src/Engine/Tokenizer.php#L267)
+### processCondition() · [source](../../src/Engine/Tokenizer.php#L268)
 
 `public function processCondition(string $expression): string`
 
@@ -200,7 +202,7 @@ structure conditions (if, for, set) where auto-escape is meaningless.
 
 ---
 
-### processLvalue() · [source](../../src/Engine/Tokenizer.php#L286)
+### processLvalue() · [source](../../src/Engine/Tokenizer.php#L287)
 
 `public function processLvalue(string $var): string`
 
@@ -222,7 +224,7 @@ Used for the left-hand side of {% set var = ... %}.
 
 ---
 
-### convertVarsAndOps() · [source](../../src/Engine/Tokenizer.php#L390)
+### convertVarsAndOps() · [source](../../src/Engine/Tokenizer.php#L489)
 
 `public function convertVarsAndOps(string $expr): string`
 
@@ -248,7 +250,7 @@ identifiers/var-chains, operators, punctuation) and process each atom.
 
 ---
 
-### varChainToPhp() · [source](../../src/Engine/Tokenizer.php#L1170)
+### varChainToPhp() · [source](../../src/Engine/Tokenizer.php#L1273)
 
 `public function varChainToPhp(string $chain): string`
 
@@ -274,7 +276,7 @@ a.b[c.d].e    → $vars['a']['b'][$vars['c']['d']]['e']
 
 ---
 
-### buildFilterCall() · [source](../../src/Engine/Tokenizer.php#L1357)
+### buildFilterCall() · [source](../../src/Engine/Tokenizer.php#L1460)
 
 `public function buildFilterCall(string $filterSegment, string $phpValue): string`
 
