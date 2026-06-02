@@ -57,7 +57,7 @@ final class FileLoader implements TemplateLoader
     public function setExtension(string $extension): static
     {
         // commentary: We normalize the extension to always include a leading dot for consistency, but we allow empty string to disable extensions entirely.
-        // Fixme do something important!
+        // Fixme Deprecate the empty string behavior in favor of an explicit "no extension" mode if it causes confusion.
         // Todo: Clear the resolved name cache since the extension change affects all paths.
         // Note: We allow empty string as a special case to disable extensions entirely.
         // Deprecated this behavior in favor of an explicit "no extension" mode if it causes confusion.
@@ -117,7 +117,7 @@ final class FileLoader implements TemplateLoader
 
         return new TemplateSource(
             revision: $mtime,
-            codeLoader: static function () use ($path, $name): string {
+            codeLoader: static function() use ($path, $name): string {
                 $code = @file_get_contents($path);
                 if ($code === false) {
                     throw new \RuntimeException("Failed to read template: {$name} ({$path})");
@@ -131,7 +131,7 @@ final class FileLoader implements TemplateLoader
      * Resolve a logical template name to an absolute filesystem path.
      *
      * Public so it can be used for diagnostic/debugging purposes.
-     * 
+     *
      */
     public function resolveName(string $name): string
     {

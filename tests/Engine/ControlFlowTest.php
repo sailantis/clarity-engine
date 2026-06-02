@@ -29,6 +29,21 @@ class ControlFlowTest extends BaseTestCase
         $this->assertSame('no', self::render('if_grouped_pipeline', ['devices' => []]));
     }
 
+    public function testIfUngroupedPipelineComparison(): void
+    {
+        self::tpl('if_ungrouped_gt', '{% if items |> length > 1 %}many{% else %}few{% endif %}');
+        $this->assertSame('many', self::render('if_ungrouped_gt', ['items' => [1, 2]]));
+        $this->assertSame('few', self::render('if_ungrouped_gt', ['items' => [1]]));
+
+        self::tpl('if_ungrouped_eq', '{% if items |> length == 1 %}one{% else %}other{% endif %}');
+        $this->assertSame('one', self::render('if_ungrouped_eq', ['items' => ['x']]));
+        $this->assertSame('other', self::render('if_ungrouped_eq', ['items' => ['x', 'y']]));
+
+        self::tpl('if_ungrouped_eq0', '{% if items |> length == 0 %}empty{% else %}full{% endif %}');
+        $this->assertSame('empty', self::render('if_ungrouped_eq0', ['items' => []]));
+        $this->assertSame('full', self::render('if_ungrouped_eq0', ['items' => [1]]));
+    }
+
     public function testForLoopSimple(): void
     {
         self::tpl('for_simple', '{% for i in items %}{{ i }}-{% endfor %}');
