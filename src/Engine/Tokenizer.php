@@ -1202,7 +1202,8 @@ class Tokenizer
             }
 
             if ($inner !== '' && \preg_match(self::CHAIN_RE, $inner)) {
-                $php .= '[' . $this->varChainToPhp($inner) . ']';
+                // Use convertVarsAndOps so nested local vars (loop variables) resolve correctly
+                $php .= '[' . $this->convertVarsAndOps($inner) . ']';
                 continue;
             }
 

@@ -928,6 +928,20 @@ trait ClarityEngineTrait
                 );
             }
 
+            switch ($errno) {
+                case E_WARNING:
+                    $errno = E_USER_WARNING;
+                    break;
+                case E_NOTICE:
+                    $errno = E_USER_NOTICE;
+                    break;
+                case E_DEPRECATED:
+                    $errno = E_USER_DEPRECATED;
+                    break;
+                default:
+                    $errno = E_USER_ERROR;
+            }
+
             // Other errors (e.g. division by zero, type errors) are retriggered with the original message but mapped to the template line.
             //throw new ClarityException($errstr, $tplFile ?? $templateName, $tplLine);
             $newMessage = "$errstr in $tplFile:$tplLine";

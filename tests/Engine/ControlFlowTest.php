@@ -56,6 +56,35 @@ class ControlFlowTest extends BaseTestCase
         $this->assertSame('0:10,1:20,', self::render('for_index', ['items' => [10, 20]]));
     }
 
+    public function testForLoopVariableAsArrayIndex(): void
+    {
+        // Loop variable used as an array index must resolve to the local PHP variable,
+        // not to $vars['name']. This was a bug where platformLabels[platform] inside
+        // a for-loop compiled to $vars['platformLabels'][$vars['platform']] instead of
+        // $vars['platformLabels'][$platform].
+        self::tpl(
+            'for_array_index',
+            '{% for key in keys %}{{ labels[key] }}-{% endfor %}'
+        );
+        $this->assertSame('Alpha-Beta-', self::render('for_array_index', [
+            'keys' => ['a', 'b'],
+            'labels' => ['a' => 'Alpha', 'b' => 'Beta'],
+        ]));
+    }
+
+    public function testForLoopVariableAsArrayIndexWithNullCoalesce(): void
+    {
+        // Loop variable in array access with null coalescing
+        self::tpl(
+            'for_array_index_coalesce',
+            '{% for key in keys %}{{ labels[key] ?? "N/A" }},{% endfor %}'
+        );
+        $this->assertSame('Alpha,N/A,', self::render('for_array_index_coalesce', [
+            'keys' => ['a', 'missing'],
+            'labels' => ['a' => 'Alpha'],
+        ]));
+    }
+
     public function testForLoopElse(): void
     {
         // For-else is implemented via an if-check surrounding the loop
