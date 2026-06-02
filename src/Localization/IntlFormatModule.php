@@ -479,7 +479,7 @@ class IntlFormatModule implements ModuleInterface
             // Matches blocks like {count, plural, =0{...} one{...} other{...}}
             $result = \preg_replace_callback(
                 '/\{(\w+)\s*,\s*plural\s*,\s*((?:[^{}]|\{[^{}]*\})*)\}/s',
-                function (array $m) use ($vars): string {
+                function (array $m) use ($vars, &$cache): string {
                     $countVar = $m[1];
                     $rulesBlock = $m[2];
 
@@ -603,7 +603,7 @@ class IntlFormatModule implements ModuleInterface
         if (\is_int($v)) {
             return $v;
         }
-        return (int) \strtotime((string) $v);
+        return (int)\strtotime((string)$v);
     }
 
 }
