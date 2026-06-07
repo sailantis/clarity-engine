@@ -180,51 +180,51 @@ class Registry
             'defaults' => ['length' => 'null'],
         ],
         'escape' => [
-            'php' => '\htmlspecialchars((string) {1}, \ENT_QUOTES | \ENT_SUBSTITUTE, "UTF-8")',
+            'php' => '\htmlspecialchars((string){1}, \ENT_QUOTES | \ENT_SUBSTITUTE, "UTF-8")',
         ],
         'esc' => [
-            'php' => '\htmlspecialchars((string) {1}, \ENT_QUOTES | \ENT_SUBSTITUTE, "UTF-8")',
+            'php' => '\htmlspecialchars((string){1}, \ENT_QUOTES | \ENT_SUBSTITUTE, "UTF-8")',
         ],
         'trim' => [
-            'php' => '\trim((string) {1})',
+            'php' => '\trim((string){1})',
         ],
         'upper' => [
-            'php' => '\mb_strtoupper((string) {1})',
+            'php' => '\mb_strtoupper((string){1})',
         ],
         'lower' => [
-            'php' => '\mb_strtolower((string) {1})',
+            'php' => '\mb_strtolower((string){1})',
         ],
         'capitalize' => [
-            'php' => '($__tmp = (string) {1}) === "" ? "" : \mb_strtoupper(\mb_substr($__tmp, 0, 1)) . \mb_strtolower(\mb_substr($__tmp, 1))',
+            'php' => '($__tmp = (string){1}) === "" ? "" : \mb_strtoupper(\mb_substr($__tmp, 0, 1)) . \mb_strtolower(\mb_substr($__tmp, 1))',
         ],
         'title' => [
-            'php' => '\mb_convert_case((string) {1}, \MB_CASE_TITLE)',
+            'php' => '\mb_convert_case((string){1}, \MB_CASE_TITLE)',
         ],
         'replace' => [
-            'php' => '\str_replace({2}, {3}, (string) {1})',
+            'php' => '\str_replace({2}, {3}, (string){1})',
             'params' => ['search', 'replace'],
             'defaults' => ['replace' => "''"],
         ],
         'nl2br' => [
-            'php' => '\nl2br((string) {1})',
+            'php' => '\nl2br((string){1})',
         ],
         'split' => [
-            'php' => '\explode({2}, (string) {1}, {3})',
+            'php' => '\explode({2}, (string){1}, {3})',
             'params' => ['delimiter', 'limit'],
             'defaults' => ['limit' => '\\PHP_INT_MAX'],
         ],
         'join' => [
-            'php' => '\implode({2}, (array) {1})',
+            'php' => '\implode({2}, (array){1})',
             'params' => ['glue'],
             'defaults' => ['glue' => "''"],
         ],
         'truncate' => [
-            'php' => '(\mb_strlen($__tmp = ((string) {1})) <= {2} ? $__tmp : \mb_substr($__tmp, 0, {2}) . {3})',
+            'php' => '(\mb_strlen($__tmp = ((string){1})) <= {2} ? $__tmp : \mb_substr($__tmp, 0, {2}) . {3})',
             'params' => ['length', 'ellipsis'],
             'defaults' => ['ellipsis' => "'\\u{2026}'"],
         ],
         'number' => [
-            'php' => '\number_format((float) {1}, {2})',
+            'php' => '\number_format((float){1}, {2})',
             'params' => ['decimals'],
             'defaults' => ['decimals' => '2'],
         ],
@@ -237,15 +237,15 @@ class Registry
             'php' => '\abs({1} + 0)',
         ],
         'round' => [
-            'php' => '\round((float) {1}, {2})',
+            'php' => '\round((float){1}, {2})',
             'params' => ['precision'],
             'defaults' => ['precision' => '0'],
         ],
         'ceil' => [
-            'php' => '\ceil((float) {1})',
+            'php' => '\ceil((float){1})',
         ],
         'floor' => [
-            'php' => '\floor((float) {1})',
+            'php' => '\floor((float){1})',
         ],
         'date' => [
             'php' => '\date({2}, \is_int($__tmp = {1}) ? $__tmp : (int) \strtotime((string) $__tmp))',
@@ -257,10 +257,10 @@ class Registry
             'params' => ['modifier'],
         ],
         'first' => [
-            'php' => '(\is_array($__tmp = {1}) ? (\array_slice(\array_values($__tmp), 0, 1)[0] ?? null) : (($__tmp = (string) {1}) === "" ? "" : \mb_substr($__tmp, 0, 1)))',
+            'php' => '(\is_array($__tmp = {1}) ? (\array_slice(\array_values($__tmp), 0, 1)[0] ?? null) : (($__tmp = (string){1}) === "" ? "" : \mb_substr($__tmp, 0, 1)))',
         ],
         'last' => [
-            'php' => '(\is_array($__tmp = {1}) ? (\array_slice(\array_values($__tmp), -1, 1)[0] ?? null) : (($__tmp = (string) {1}) === "" ? "" : \mb_substr($__tmp, -1)))',
+            'php' => '(\is_array($__tmp = {1}) ? (\array_slice(\array_values($__tmp), -1, 1)[0] ?? null) : (($__tmp = (string){1}) === "" ? "" : \mb_substr($__tmp, -1)))',
         ],
         'keys' => [
             'php' => '(\is_array($__tmp = {1}) ? \array_keys($__tmp) : [])',
@@ -269,7 +269,7 @@ class Registry
             'php' => '(\is_array($__tmp = {1}) ? \array_values($__tmp) : [])',
         ],
         'merge' => [
-            'php' => '[...(array) {1}, ...(array) {2}]',
+            'php' => '[...(array){1}, ...(array){2}]',
             'params' => ['other'],
             'defaults' => ['other' => '[]'],
         ],
@@ -277,15 +277,15 @@ class Registry
             'php' => '(\is_array($__tmp = {1}) ? \array_reverse($__tmp) : \implode("", \array_reverse(\preg_split("//u", (string) $__tmp, -1, \PREG_SPLIT_NO_EMPTY) ?: [])))',
         ],
         'data_uri' => [
-            'php' => '"data:" . {2} . ";base64," . \base64_encode((string) {1})',
+            'php' => '"data:" . {2} . ";base64," . \base64_encode((string){1})',
             'params' => ['mime'],
             'defaults' => ['mime' => "'application/octet-stream'"],
         ],
         'url_encode' => [
-            'php' => '\rawurlencode((string) {1})',
+            'php' => '\rawurlencode((string){1})',
         ],
         'striptags' => [
-            'php' => '\strip_tags((string) {1}, {2})',
+            'php' => '\strip_tags((string){1}, {2})',
             'params' => ['allowedTags'],
             'defaults' => ['allowedTags' => "''"],
         ],
@@ -294,7 +294,7 @@ class Registry
             'php' => '\json_encode({1}, 0x200340)',
         ],
         'unicode' => [
-            'php' => 'new \Clarity\Engine\UnicodeString((string) {1}, {2}, {3})',
+            'php' => 'new \Clarity\Engine\UnicodeString((string){1}, {2}, {3})',
             'params' => ['start', 'length'],
             'defaults' => ['start' => '0', 'length' => 'null'],
         ],
