@@ -435,10 +435,13 @@ class Compiler
 
             $parentContent = substr($layoutBody, $innerStart, $innerEnd - $innerStart);
 
-            // Use child's override if present, otherwise keep the default content
+            // Use child's override if present, otherwise keep the default content.
+            // The override is re-wrapped in {% block %}...{% endblock %} so that
+            // deeper children in a multi-level extends chain can still override it.
             if (isset($childBlocks[$blockName])) {
                 $child = $childBlocks[$blockName];
-                $result .= $this->expandParentPlaceholders($child, $parentContent);
+                $expanded = $this->expandParentPlaceholders($child, $parentContent);
+                $result .= '{% block ' . $blockName . ' %}' . $expanded . '{% endblock %}';
                 if ($fullEnd < strlen($layoutBody)) {
                     $result .= $this->buildResumeMarker(
                         $layoutSource,
@@ -447,7 +450,15 @@ class Compiler
                     );
                 }
             } else {
-                $result .= $parentContent;
+                // Not overridden: keep parent content, but recurse into it so
+                // that nested blocks can still be overridden by the child.
+                $result .= $this->mergeBlocks(
+                    $parentContent,
+                    $childBlocks,
+                    $layoutSource,
+                    $layoutName,
+                    $layoutBodyOffset + $innerStart
+                );
             }
 
             $offset = $fullEnd;

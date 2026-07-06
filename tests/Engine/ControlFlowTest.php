@@ -243,6 +243,60 @@ class ControlFlowTest extends BaseTestCase
         self::render('invalid_parent_placeholder');
     }
 
+    public function testThreeLevelExtendsChildOverridesBlockDefinedInMid(): void
+    {
+        self::tpl('three_root', '<main>{% block content %}{% endblock %}</main>');
+        self::tpl(
+            'three_mid',
+            '{% extends "three_root" %}{% block content %}MID-DEFAULT{% endblock %}'
+        );
+        self::tpl(
+            'three_leaf',
+            '{% extends "three_mid" %}{% block content %}LEAF-CONTENT{% endblock %}'
+        );
+
+        $this->assertSame('<main>LEAF-CONTENT</main>', self::render('three_leaf'));
+    }
+
+    public function testThreeLevelExtendsChildOverridesNestedBlock(): void
+    {
+        self::tpl('nested_root', '<main>{% block content %}{% endblock %}</main>');
+        self::tpl(
+            'nested_mid',
+            '{% extends "nested_root" %}' .
+            '{% block content %}<section>{% block body %}default-body{% endblock %}</section>{% endblock %}'
+        );
+        self::tpl(
+            'nested_leaf',
+            '{% extends "nested_mid" %}{% block body %}LEAF-BODY{% endblock %}'
+        );
+
+        $this->assertSame(
+            '<main><section>LEAF-BODY</section></main>',
+            self::render('nested_leaf')
+        );
+    }
+
+    public function testThreeLevelExtendsLeafOverridesEmptyMidBlock(): void
+    {
+        self::tpl('empty_mid_root', '<main>{% block content %}{% endblock %}</main>');
+        self::tpl(
+            'empty_mid_mid',
+            '{% extends "empty_mid_root" %}{% set pageClass = "legal" %}' .
+            '{% block content %}{% endblock %}'
+        );
+        self::tpl(
+            'empty_mid_leaf',
+            '{% extends "empty_mid_mid" %}{% set sectionTitle = "Contact" %}' .
+            '{% block content %}<h2>Contact us</h2>{% endblock %}'
+        );
+
+        $this->assertSame(
+            '<main><h2>Contact us</h2></main>',
+            self::render('empty_mid_leaf')
+        );
+    }
+
     public function testInvalidForLoopThrows(): void
     {
         $this->expectException(ClarityException::class);
