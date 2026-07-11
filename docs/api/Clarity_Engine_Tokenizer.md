@@ -250,7 +250,7 @@ identifiers/var-chains, operators, punctuation) and process each atom.
 
 ---
 
-### varChainToPhp() · [source](../../src/Engine/Tokenizer.php#L1273)
+### varChainToPhp() · [source](../../src/Engine/Tokenizer.php#L1274)
 
 `public function varChainToPhp(string $chain): string`
 
@@ -276,7 +276,7 @@ a.b[c.d].e    → $vars['a']['b'][$vars['c']['d']]['e']
 
 ---
 
-### buildFilterCall() · [source](../../src/Engine/Tokenizer.php#L1460)
+### buildFilterCall() · [source](../../src/Engine/Tokenizer.php#L1461)
 
 `public function buildFilterCall(string $filterSegment, string $phpValue): string`
 

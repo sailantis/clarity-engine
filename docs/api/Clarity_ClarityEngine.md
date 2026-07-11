@@ -860,7 +860,7 @@ The layout receives the rendered view in the `content` variable.
 
 ---
 
-### castToArray() · [source](../../src/ClarityEngine.php#L1045)
+### castToArray() · [source](../../src/ClarityEngine.php#L1059)
 
 `public static function castToArray(mixed $value): mixed`
 
