@@ -432,13 +432,13 @@ Get all registered functions as a name → callable map.
 
 ---
 
-### addBlock() · [source](../../src/Engine/Registry.php#L713)
+### addDirective() · [source](../../src/Engine/Registry.php#L713)
 
-`public function addBlock(string $keyword, callable $handler): static`
+`public function addDirective(string $keyword, callable $handler): static`
 
-Registry of custom block / directive handlers for the Clarity compiler.
+Registry of custom directive handlers for the Clarity compiler.
 
-Modules register pairs of block keywords (e.g. `with_locale` / `endwith_locale`) whose compilation is delegated to user-supplied callables instead of being handled by the built-in match table in [`Compiler::compileBlock()`](Clarity_Engine_Compiler.md#compileblock).
+Modules register directive keywords (e.g. `with_locale`) whose compilation is delegated to user-supplied callables instead of being handled by the built-in match table in [`Compiler::compileDirective()`](Clarity_Engine_Compiler.md#compiledirective).
 
 Handler signature
 -----------------
@@ -453,11 +453,11 @@ function(
 
 Example registration (inside a Module::register() call):
 ```php
-$engine->addBlock('with_locale', function(string $rest, string $path, int $line, callable $expr): string {
+$engine->addDirective('with_locale', function(string $rest, string $path, int $line, callable $expr): string {
     $param = $expr(trim($rest));
     return "\$this->__fl['__locale']->push({$param});";
 });
-$engine->addBlock('endwith_locale', fn(...) => "\$this->__fl['__locale']->pop();");
+$engine->addDirective('endwith_locale', fn(...) => "\$this->__fl['__locale']->pop();");
 ```
 
 **🧭 Parameters**
@@ -474,9 +474,9 @@ $engine->addBlock('endwith_locale', fn(...) => "\$this->__fl['__locale']->pop();
 
 ---
 
-### hasBlock() · [source](../../src/Engine/Registry.php#L722)
+### hasDirective() · [source](../../src/Engine/Registry.php#L722)
 
-`public function hasBlock(string $keyword): bool`
+`public function hasDirective(string $keyword): bool`
 
 Check whether a handler is registered for the given keyword.
 
@@ -493,9 +493,9 @@ Check whether a handler is registered for the given keyword.
 
 ---
 
-### compileBlock() · [source](../../src/Engine/Registry.php#L738)
+### compileDirective() · [source](../../src/Engine/Registry.php#L738)
 
-`public function compileBlock(string $keyword, string $rest, string $sourcePath, int $tplLine, callable $processExpr): string`
+`public function compileDirective(string $keyword, string $rest, string $sourcePath, int $tplLine, callable $processExpr): string`
 
 Invoke the registered handler for $keyword and return compiled PHP.
 

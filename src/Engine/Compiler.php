@@ -714,8 +714,8 @@ class Compiler
             // extends/block/endblock/include are handled before this stage; if seen here → ignore
             'extends', 'block', 'endblock' => '',
             'include' => $this->compileInclude($rest, $sourcePath, $tplLine, $lines),
-            default => $this->registry->hasBlock($keyword)
-            ? $this->registry->compileBlock(
+            default => $this->registry->hasDirective($keyword)
+            ? $this->registry->compileDirective(
                 $keyword,
                 $rest,
                 $sourcePath,

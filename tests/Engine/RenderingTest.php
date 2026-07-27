@@ -148,8 +148,8 @@ class RenderingTest extends BaseTestCase
     public function testObjectLiteralSupportsSpread(): void
     {
         self::tpl('object_spread', '{{ { foo: "bar", ...payload, answer: 42 } |> json |> raw }}');
-        $result = self::render('object_spread', ['payload' => ['name' => 'Merlin']]);
-        $this->assertSame('{"foo":"bar","name":"Merlin","answer":42}', $result);
+        $result = self::render('object_spread', ['payload' => ['name' => 'Azera']]);
+        $this->assertSame('{"foo":"bar","name":"Azera","answer":42}', $result);
     }
 
     public function testSpreadOutsideCollectionThrows(): void

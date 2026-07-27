@@ -1,4 +1,4 @@
-# Merlin MVC API
+# Clarity Engine API
 
 ## Classes & Interfaces overview
 

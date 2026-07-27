@@ -50,14 +50,14 @@ class MyModule implements ModuleInterface
         // Shared service (accessible from inline filters via $__sv['key'])
         $engine->addService('myapi', new MyApiClient($this->apiKey));
 
-        // Custom block directive
-        $engine->addBlock(
+        // Custom directive
+        $engine->addDirective(
             'debug_if',
             function (string $rest, string $path, int $line, callable $expr): string {
                 return 'if (' . $expr($rest) . ' && $__debug) {';
             }
-        );
-        $engine->addBlock('enddebug_if', fn() => '}');
+        });
+        $engine->addDirective('enddebug_if', fn() => '}');
     }
 }
 ```
@@ -69,7 +69,7 @@ class MyModule implements ModuleInterface
 | `addFilter(name, callable)`         | Named filter callable invoked at render time               |
 | `addInlineFilter(name, definition)` | Filter expression compiled directly into the template PHP  |
 | `addFunction(name, callable)`       | Function callable available in template expressions        |
-| `addBlock(keyword, handler)`        | Custom `{% keyword %}` directive processed at compile time |
+| `addDirective(keyword, handler)`    | Custom `{% keyword %}` directive processed at compile time |
 | `addService(key, object)`           | Shared mutable object accessible inside inline filter PHP  |
 
 ---

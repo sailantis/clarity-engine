@@ -154,9 +154,13 @@ Child templates can optionally fill them.
 You can have as many blocks as needed:
 
 ```twig
-{% block meta %}{% endblock %} {% block title %}{% endblock %} {% block styles
-%}{% endblock %} {% block content %}{% endblock %} {% block sidebar %}{%
-endblock %} {% block footer %}{% endblock %} {% block scripts %}{% endblock %}
+{% block meta %}{% endblock %}
+{% block title %}{% endblock %}
+{% block styles %}{% endblock %}
+{% block content %}{% endblock %}
+{% block sidebar %}{% endblock %}
+{% block footer %}{% endblock %}
+{% block scripts %}{% endblock %}
 ```
 
 ## Multi-Level Inheritance
@@ -188,27 +192,27 @@ Layouts can extend other layouts, creating a hierarchy.
 ```twig
 {% extends "layouts/base" %}
 {% block head %}
-<link rel="stylesheet" href="/css/admin.css" />
-{% block extraStyles %}{% endblock %}
+  <link rel="stylesheet" href="/css/admin.css" />
+  {% block extraStyles %}{% endblock %}
 {% endblock %}
 {% block body %}
-<div class="admin-layout">
-  <aside class="admin-sidebar">
-    {% block sidebar %}
-    <nav>
-      <a href="/admin">Dashboard</a>
-      <a href="/admin/users">Users</a>
-      <a href="/admin/settings">Settings</a>
-    </nav>
-    {% endblock %}
-  </aside>
+  <div class="admin-layout">
+    <aside class="admin-sidebar">
+      {% block sidebar %}
+      <nav>
+        <a href="/admin">Dashboard</a>
+        <a href="/admin/users">Users</a>
+        <a href="/admin/settings">Settings</a>
+      </nav>
+      {% endblock %}
+    </aside>
 
-  <main class="admin-content">{% block content %}{% endblock %}</main>
-</div>
+    <main class="admin-content">{% block content %}{% endblock %}</main>
+  </div>
 
-{% block scripts %}
-<script src="/js/admin.js"></script>
-{% endblock %}
+  {% block scripts %}
+    <script src="/js/admin.js"></script>
+  {% endblock %}
 {% endblock %}
 ```
 
@@ -220,19 +224,19 @@ Layouts can extend other layouts, creating a hierarchy.
 {% extends "layouts/admin" %}
 {% block title %}User Management - Admin{%endblock %}
 {% block content %}
-<h1>Users</h1>
-<table>
-  {% for user in users %}
-  <tr>
-    <td>{{ user.name }}</td>
-    <td>{{ user.email }}</td>
-  </tr>
-  {% endfor %}
-</table>
+  <h1>Users</h1>
+  <table>
+    {% for user in users %}
+    <tr>
+      <td>{{ user.name }}</td>
+      <td>{{ user.email }}</td>
+    </tr>
+    {% endfor %}
+  </table>
 {% endblock %}
 {% block scripts %}
-<script src="/js/admin.js"></script>
-<script src="/js/user-management.js"></script>
+  <script src="/js/admin.js"></script>
+  <script src="/js/user-management.js"></script>
 {% endblock %}
 ```
 
@@ -255,7 +259,7 @@ Layouts can extend other layouts, creating a hierarchy.
 
 ```twig
 {% block pageStyles %}
-<link rel="stylesheet" href="/css/product-gallery.css" />
+  <link rel="stylesheet" href="/css/product-gallery.css" />
 {% endblock %}
 ```
 
@@ -416,10 +420,10 @@ In a child template, only content **inside blocks** is rendered:
 ```twig
 {% extends "layouts/main" %}
 
-<p>This will be IGNORED</p>
-{# Not inside a block #} {% block content %}
-<p>This will be rendered</p>
-{# Inside a block #} {% endblock %}
+<p>This will be IGNORED</p> {# Not inside a block #}
+{% block content %}
+  <p>This will be rendered</p> {# Inside a block #}
+{% endblock %}
 ```
 
 ### Leading Set Directives Are Preserved
@@ -446,8 +450,10 @@ child directives still do not become part of the layout output.
 Block names must match exactly (case-sensitive):
 
 ```twig
-{# Parent #} {% block Content %}...{% endblock %} {# Child #} {% block content
-%}...{% endblock %} {# Won't override (different case) #}
+{# Parent #}
+{% block Content %}...{% endblock %}
+{# Child #}
+{% block content %}...{% endblock %} {# Won't override (different case) #}
 ```
 
 ### Single Extends Only
@@ -457,8 +463,8 @@ A template can extend only **one** parent:
 ❌ **Not allowed:**
 
 ```twig
-{% extends "layouts/base" %} {% extends "layouts/admin" %} {# ERROR: multiple
-extends #}
+{% extends "layouts/base" %}
+{% extends "layouts/admin" %} {# ERROR: multiple extends #}
 ```
 
 ✅ **Instead:** Create a chain (admin extends base, page extends admin)
@@ -505,12 +511,15 @@ Use for **reusable components** that appear multiple times:
 **Child template:**
 
 ```twig
-{% extends "layouts/main" %} {% block content %} {% include "partials/user-card"
-%}
+{% extends "layouts/main" %}
+{% block content %}
+  {% include "partials/user-card" %}
 
-<h2>Recent Posts</h2>
-{% for post in posts %} {% include "partials/post-preview" %} {% endfor %} {%
-endblock %}
+  <h2>Recent Posts</h2>
+  {% for post in posts %}
+    {% include "partials/post-preview" %}
+  {% endfor %}
+{% endblock %}
 ```
 
 ## Real-World Example
@@ -540,69 +549,80 @@ endblock %}
 **Shop Layout: `layouts/shop.clarity.html`**
 
 ```twig
-{% extends "layouts/base" %} {% block styles %}
-<link rel="stylesheet" href="/css/shop.css" />
-{% endblock %} {% block body %} {% include "partials/shop-header" %}
+{% extends "layouts/base" %}
+{% block styles %}
+  <link rel="stylesheet" href="/css/shop.css" />
+{% endblock %}
+{% block body %}
+  {% include "partials/shop-header" %}
 
-<div class="shop-container">
-  <aside class="filters">
-    {% block filters %} {% include "partials/product-filters" %} {% endblock %}
-  </aside>
+  <div class="shop-container">
+    <aside class="filters">
+      {% block filters %} {% include "partials/product-filters" %} {% endblock %}
+    </aside>
 
-  <main class="products">{% block products %}{% endblock %}</main>
-</div>
+    <main class="products">{% block products %}{% endblock %}</main>
+  </div>
 
-{% include "partials/footer" %} {% endblock %}
+  {% include "partials/footer" %}
+{% endblock %}
 ```
 
 **Product Listing Page: `products/index.clarity.html`**
 
 ```twig
-{% extends "layouts/shop" %} {% block title %}All Products{% endblock %} {%
-block bodyClass %}products-page{% endblock %} {% block products %}
-<h1>All Products</h1>
+{% extends "layouts/shop" %}
+{% block title %}All Products{% endblock %}
+{% block bodyClass %}products-page{% endblock %}
+{% block products %}
+  <h1>All Products</h1>
 
-<div class="product-grid">
-  {% for product in products %}
-  <div class="product-card">
-    <img src="{{ product.image }}" alt="{{ product.name }}" />
-    <h3>{{ product.name }}</h3>
-    <p class="price">{{ product.price |> number(2) }}</p>
-    <a href="/products/{{ product.id }}" class="btn">View Details</a>
+  <div class="product-grid">
+    {% for product in products %}
+    <div class="product-card">
+      <img src="{{ product.image }}" alt="{{ product.name }}" />
+      <h3>{{ product.name }}</h3>
+      <p class="price">{{ product.price |> number(2) }}</p>
+      <a href="/products/{{ product.id }}" class="btn">View Details</a>
+    </div>
+    {% endfor %}
   </div>
-  {% endfor %}
-</div>
-{% endblock %} {% block scripts %}
-<script src="/js/product-filters.js"></script>
+{% endblock %}
+{% block scripts %}
+  <script src="/js/product-filters.js"></script>
 {% endblock %}
 ```
 
 **Product Detail Page: `products/show.clarity.html`**
 
 ```twig
-{% extends "layouts/base" %} {% block title %}{{ product.name }}{% endblock %}
-{% block bodyClass %}product-detail{% endblock %} {% block styles %}
-<link rel="stylesheet" href="/css/product-detail.css" />
-{% endblock %} {% block body %} {% include "partials/shop-header" %}
+{% extends "layouts/base" %}
+{% block title %}{{ product.name }}{% endblock %}
+{% block bodyClass %}product-detail{% endblock %}
+{% block styles %}
+  <link rel="stylesheet" href="/css/product-detail.css" />
+{% endblock %}
+{% block body %}
+  {% include "partials/shop-header" %}
 
-<div class="product-detail">
-  <div class="product-images">
-    {% for image in product.images %}
-    <img src="{{ image }}" alt="{{ product.name }}" />
-    {% endfor %}
+  <div class="product-detail">
+    <div class="product-images">
+      {% for image in product.images %}
+      <img src="{{ image }}" alt="{{ product.name }}" />
+      {% endfor %}
+    </div>
+
+    <div class="product-info">
+      <h1>{{ product.name }}</h1>
+      <p class="price">{{ product.price |> currency }}</p>
+      <p>{{ product.description }}</p>
+
+      <button class="btn-add-cart">Add to Cart</button>
+    </div>
   </div>
 
-  <div class="product-info">
-    <h1>{{ product.name }}</h1>
-    <p class="price">{{ product.price |> currency }}</p>
-    <p>{{ product.description }}</p>
-
-    <button class="btn-add-cart">Add to Cart</button>
-  </div>
-</div>
-
-{% include "partials/footer" %} {% endblock %} {% block scripts %}
-<script src="/js/product-gallery.js"></script>
+  {% include "partials/footer" %} {% endblock %} {% block scripts %}
+  <script src="/js/product-gallery.js"></script>
 {% endblock %}
 ```
 
@@ -613,10 +633,17 @@ block bodyClass %}products-page{% endblock %} {% block products %}
 Organize blocks logically:
 
 ```twig
-{% block head %} {% block meta %}{% endblock %} {% block title %}{% endblock %}
-{% block styles %}{% endblock %} {% endblock %} {% block body %} {% block header
-%}{% endblock %} {% block content %}{% endblock %} {% block footer %}{% endblock
-%} {% block scripts %}{% endblock %} {% endblock %}
+{% block head %}
+  {% block meta %}{% endblock %}
+  {% block title %}{% endblock %}
+  {% block styles %}{% endblock %}
+{% endblock %}
+{% block body %}
+  {% block header %}{% endblock %}
+  {% block content %}{% endblock %}
+  {% block footer %}{% endblock %}
+  {% block scripts %}{% endblock %}
+{% endblock %}
 ```
 
 ### 2. Use Descriptive Block Names
@@ -631,8 +658,9 @@ Make blocks work out-of-the-box:
 
 ```twig
 {% block header %}
-<h1>{{ siteName }}</h1>
-{% include "partials/nav" %} {% endblock %}
+  <h1>{{ siteName }}</h1>
+  {% include "partials/nav" %}
+{% endblock %}
 ```
 
 ### 4. Keep Layouts Focused
@@ -640,10 +668,13 @@ Make blocks work out-of-the-box:
 Don't overcomplicate layouts with business logic:
 
 ```twig
-{# ❌ Bad: Logic in layout #} {% if user.isPremium and user.notifications > 0 %}
-... {% endif %} {# ✅ Good: Logic in PHP, simple variables in layout #} {% if
-showNotificationBadge %}
-<span class="badge">{{ notificationCount }}</span>
+{# ❌ Bad: Logic in layout #}
+{% if user.isPremium and user.notifications > 0 %}
+  ...
+{% endif %}
+{# ✅ Good: Logic in PHP, simple variables in layout #}
+{% if showNotificationBadge %}
+  <span class="badge">{{ notificationCount }}</span>
 {% endif %}
 ```
 

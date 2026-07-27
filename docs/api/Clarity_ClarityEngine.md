@@ -430,10 +430,10 @@ Get the currently registered view namespaces.
 `public function use(Clarity\ModuleInterface $module): static`
 
 Register a module, granting it access to this engine instance so it can
-self-register filters, functions, services, and block directives.
+self-register filters, functions, services, and directives.
 
 Modules are the recommended way to bundle related features (e.g. a full
-localization set with filters, a locale stack, and `with_locale` blocks).
+localization set with filters, a locale stack, and `with_locale` directives).
 
 ```php
 $engine->use(new \Clarity\LocalizationModule([
@@ -490,11 +490,11 @@ additional parameters are declared in `params`.
 
 ---
 
-### addBlock() · [source](../../src/ClarityEngine.php#L335)
+### addDirective() · [source](../../src/ClarityEngine.php#L335)
 
-`public function addBlock(string $keyword, callable $handler): static`
+`public function addDirective(string $keyword, callable $handler): static`
 
-Register a handler for a custom block directive (e.g. `with_locale`).
+Register a handler for a custom directive (e.g. `with_locale`).
 
 The handler is a callable that receives the raw text after the keyword,
 source path and line for error messages, and a `$processExpr` callable
@@ -502,10 +502,10 @@ that converts a Clarity expression string to a PHP expression string.
 It must return a PHP statement string.
 
 ```php
-$engine->addBlock('with_locale', function(string $rest, string $path, int $line, callable $expr): string {
+$engine->addDirective('with_locale', function(string $rest, string $path, int $line, callable $expr): string {
     return "\$__sv['locale']->push({$expr(trim($rest))});"
 });
-$engine->addBlock('endwith_locale', fn(...) => "\$__sv['locale']->pop();");
+$engine->addDirective('endwith_locale', fn(...) => "\$__sv['locale']->pop();");
 ```
 
 **🧭 Parameters**

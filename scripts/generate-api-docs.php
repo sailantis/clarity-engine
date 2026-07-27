@@ -82,7 +82,7 @@ if (!is_dir($docsDir)) {
 foreach (glob($docsDir . '/*.md') as $oldDocFile) {
     @unlink($oldDocFile);
 }
-$indexContent = "# Merlin MVC API\n\n## Classes & Interfaces overview\n\n";
+$indexContent = "# Clarity Engine API\n\n## Classes & Interfaces overview\n\n";
 $sep = '';
 foreach ($namespacedClasses as $namespace => $classes) {
     $indexContent .= $sep;
@@ -631,7 +631,7 @@ function renderExampleTags(array $exampleTags): string
 function makeDocFileName(string $fqcn): string
 {
     $parts = explode('\\', ltrim($fqcn, '\\'));
-    if (count($parts) > 1 && $parts[0] === 'Merlin') {
+    if (count($parts) > 1 && $parts[0] === 'Azera') {
         array_shift($parts);
     }
     $parts = array_map(
@@ -643,7 +643,7 @@ function makeDocFileName(string $fqcn): string
 
 /**
  * Convert a type string (may contain | or & separators) into markdown with
- * inline links for known Merlin classes. Unrecognised types pass through
+ * inline links for known Azera classes. Unrecognised types pass through
  * decorateType() which adds emojis for primitives and backtick-wraps the rest.
  */
 /**

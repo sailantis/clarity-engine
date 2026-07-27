@@ -84,7 +84,7 @@ use Clarity\ClarityException;
  * $registry->addFilter('currency', function($amount, string $symbol = '€') {
  *     return $symbol . ' ' . number_format($amount, 2);
  * });
- * 
+ *
  * // Smart excerpt with word boundary
  * $registry->addFilter('excerpt', function($text, int $maxLength = 150) {
  *     if (mb_strlen($text) <= $maxLength) return $text;
@@ -108,46 +108,46 @@ class Registry
     private array $functions = [];
 
     /** @var array<string, callable> keyword → handler */
-    private array $blockHandlers = [];
+    private array $directiveHandlers = [];
 
     /** @var array<string, callable> */
     private array $filters = [
         // inlined filters
-        'default' => true,
-        'empty' => true,
-        'length' => true,
-        'slice' => true,
-        'escape' => true,
-        'esc' => true,
-        'trim' => true,
-        'upper' => true,
-        'lower' => true,
-        'capitalize' => true,
-        'title' => true,
-        'replace' => true,
-        'nl2br' => true,
-        'split' => true,
-        'join' => true,
-        'truncate' => true,
-        'number' => true,
-        'format' => true,
-        'abs' => true,
-        'round' => true,
-        'ceil' => true,
-        'floor' => true,
-        'date' => true,
+        'default'     => true,
+        'empty'       => true,
+        'length'      => true,
+        'slice'       => true,
+        'escape'      => true,
+        'esc'         => true,
+        'trim'        => true,
+        'upper'       => true,
+        'lower'       => true,
+        'capitalize'  => true,
+        'title'       => true,
+        'replace'     => true,
+        'nl2br'       => true,
+        'split'       => true,
+        'join'        => true,
+        'truncate'    => true,
+        'number'      => true,
+        'format'      => true,
+        'abs'         => true,
+        'round'       => true,
+        'ceil'        => true,
+        'floor'       => true,
+        'date'        => true,
         'date_modify' => true,
-        'first' => true,
-        'last' => true,
-        'keys' => true,
-        'values' => true,
-        'merge' => true,
-        'reverse' => true,
-        'data_uri' => true,
-        'url_encode' => true,
-        'striptags' => true,
-        'json' => true,
-        'unicode' => true,
+        'first'       => true,
+        'last'        => true,
+        'keys'        => true,
+        'values'      => true,
+        'merge'       => true,
+        'reverse'     => true,
+        'data_uri'    => true,
+        'url_encode'  => true,
+        'striptags'   => true,
+        'json'        => true,
+        'unicode'     => true,
     ];
 
     /**
@@ -162,21 +162,21 @@ class Registry
      */
     private array $inlineFilters = [
         'default' => [
-            'php' => '({1} ?? {2})',
-            'params' => ['fallback'],
+            'php'      => '({1} ?? {2})',
+            'params'   => ['fallback'],
             'defaults' => ['fallback' => 'null'],
         ],
         'empty' => [
-            'php' => '({1} ?: {2})',
-            'params' => ['fallback'],
+            'php'      => '({1} ?: {2})',
+            'params'   => ['fallback'],
             'defaults' => ['fallback' => '""'],
         ],
         'length' => [
             'php' => '(\is_array($__tmp = {1}) || $__tmp instanceof \Countable ? \count($__tmp) : \mb_strlen((string) $__tmp))',
         ],
         'slice' => [
-            'php' => '(\is_array($__tmp = {1}) ? \array_slice($__tmp, {2}, {3}) : \mb_substr((string) $__tmp, {2}, {3}))',
-            'params' => ['start', 'length'],
+            'php'      => '(\is_array($__tmp = {1}) ? \array_slice($__tmp, {2}, {3}) : \mb_substr((string) $__tmp, {2}, {3}))',
+            'params'   => ['start', 'length'],
             'defaults' => ['length' => 'null'],
         ],
         'escape' => [
@@ -201,44 +201,44 @@ class Registry
             'php' => '\mb_convert_case((string){1}, \MB_CASE_TITLE)',
         ],
         'replace' => [
-            'php' => '\str_replace({2}, {3}, (string){1})',
-            'params' => ['search', 'replace'],
+            'php'      => '\str_replace({2}, {3}, (string){1})',
+            'params'   => ['search', 'replace'],
             'defaults' => ['replace' => "''"],
         ],
         'nl2br' => [
             'php' => '\nl2br((string){1})',
         ],
         'split' => [
-            'php' => '\explode({2}, (string){1}, {3})',
-            'params' => ['delimiter', 'limit'],
+            'php'      => '\explode({2}, (string){1}, {3})',
+            'params'   => ['delimiter', 'limit'],
             'defaults' => ['limit' => '\\PHP_INT_MAX'],
         ],
         'join' => [
-            'php' => '\implode({2}, (array){1})',
-            'params' => ['glue'],
+            'php'      => '\implode({2}, (array){1})',
+            'params'   => ['glue'],
             'defaults' => ['glue' => "''"],
         ],
         'truncate' => [
-            'php' => '(\mb_strlen($__tmp = ((string){1})) <= {2} ? $__tmp : \mb_substr($__tmp, 0, {2}) . {3})',
-            'params' => ['length', 'ellipsis'],
+            'php'      => '(\mb_strlen($__tmp = ((string){1})) <= {2} ? $__tmp : \mb_substr($__tmp, 0, {2}) . {3})',
+            'params'   => ['length', 'ellipsis'],
             'defaults' => ['ellipsis' => "'\\u{2026}'"],
         ],
         'number' => [
-            'php' => '\number_format((float){1}, {2})',
-            'params' => ['decimals'],
+            'php'      => '\number_format((float){1}, {2})',
+            'params'   => ['decimals'],
             'defaults' => ['decimals' => '2'],
         ],
         'sprintf' => [
-            'php' => '\sprintf',
-            'params' => ['args'],
+            'php'      => '\sprintf',
+            'params'   => ['args'],
             'variadic' => true,
         ],
         'abs' => [
             'php' => '\abs({1} + 0)',
         ],
         'round' => [
-            'php' => '\round((float){1}, {2})',
-            'params' => ['precision'],
+            'php'      => '\round((float){1}, {2})',
+            'params'   => ['precision'],
             'defaults' => ['precision' => '0'],
         ],
         'ceil' => [
@@ -248,12 +248,12 @@ class Registry
             'php' => '\floor((float){1})',
         ],
         'date' => [
-            'php' => '\date({2}, \is_int($__tmp = {1}) ? $__tmp : (int) \strtotime((string) $__tmp))',
-            'params' => ['format'],
+            'php'      => '\date({2}, \is_int($__tmp = {1}) ? $__tmp : (int) \strtotime((string) $__tmp))',
+            'params'   => ['format'],
             'defaults' => ['format' => "'Y-m-d'"],
         ],
         'date_modify' => [
-            'php' => '(int) ((new \DateTimeImmutable("@" . (\is_int($__tmp = {1}) ? $__tmp : (int) \strtotime((string) $__tmp))))->modify({2})->getTimestamp())',
+            'php'    => '(int) ((new \DateTimeImmutable("@" . (\is_int($__tmp = {1}) ? $__tmp : (int) \strtotime((string) $__tmp))))->modify({2})->getTimestamp())',
             'params' => ['modifier'],
         ],
         'first' => [
@@ -269,24 +269,24 @@ class Registry
             'php' => '(\is_array($__tmp = {1}) ? \array_values($__tmp) : [])',
         ],
         'merge' => [
-            'php' => '[...(array){1}, ...(array){2}]',
-            'params' => ['other'],
+            'php'      => '[...(array){1}, ...(array){2}]',
+            'params'   => ['other'],
             'defaults' => ['other' => '[]'],
         ],
         'reverse' => [
             'php' => '(\is_array($__tmp = {1}) ? \array_reverse($__tmp) : \implode("", \array_reverse(\preg_split("//u", (string) $__tmp, -1, \PREG_SPLIT_NO_EMPTY) ?: [])))',
         ],
         'data_uri' => [
-            'php' => '"data:" . {2} . ";base64," . \base64_encode((string){1})',
-            'params' => ['mime'],
+            'php'      => '"data:" . {2} . ";base64," . \base64_encode((string){1})',
+            'params'   => ['mime'],
             'defaults' => ['mime' => "'application/octet-stream'"],
         ],
         'url_encode' => [
             'php' => '\rawurlencode((string){1})',
         ],
         'striptags' => [
-            'php' => '\strip_tags((string){1}, {2})',
-            'params' => ['allowedTags'],
+            'php'      => '\strip_tags((string){1}, {2})',
+            'params'   => ['allowedTags'],
             'defaults' => ['allowedTags' => "''"],
         ],
         'json' => [
@@ -294,8 +294,8 @@ class Registry
             'php' => '\json_encode({1}, 0x200340)',
         ],
         'unicode' => [
-            'php' => 'new \Clarity\Engine\UnicodeString((string){1}, {2}, {3})',
-            'params' => ['start', 'length'],
+            'php'      => 'new \Clarity\Engine\UnicodeString((string){1}, {2}, {3})',
+            'params'   => ['start', 'length'],
             'defaults' => ['start' => '0', 'length' => 'null'],
         ],
     ];
@@ -385,7 +385,7 @@ class Registry
     public function addInlineFilter(string $name, array $definition): void
     {
         $this->inlineFilters[$name] = $definition;
-        $this->filters[$name] = true;
+        $this->filters[$name]       = true;
     }
 
     /**
@@ -572,11 +572,12 @@ class Registry
             exit(1);
         };
 
-        $this->functions['keys'] = static fn(mixed $v): array =>
-            \is_array($v) ? \array_keys($v) : [];
+        $this->functions['keys'] = static fn(mixed $v): array => \is_array($v) ? \array_keys($v) : [];
 
-        $this->functions['values'] = static fn(mixed $v): array =>
-            \is_array($v) ? \array_values($v) : [];
+        $this->functions['values'] = static fn(mixed $v): array => \is_array($v) ? \array_values($v) : [];
+
+        $this->functions['len'] = static fn(mixed $v): int =>
+            \is_array($v) || $v instanceof \Countable ? \count($v) : \mb_strlen((string) $v);
     }
 
     private function registerBuiltinFilters(): void
@@ -602,11 +603,11 @@ class Registry
 
             // Style map
             static $match = [
-            'none' => \IntlDateFormatter::NONE,
-            'short' => \IntlDateFormatter::SHORT,
-            'medium' => \IntlDateFormatter::MEDIUM,
-            'long' => \IntlDateFormatter::LONG,
-            'full' => \IntlDateFormatter::FULL,
+                'none'   => \IntlDateFormatter::NONE,
+                'short'  => \IntlDateFormatter::SHORT,
+                'medium' => \IntlDateFormatter::MEDIUM,
+                'long'   => \IntlDateFormatter::LONG,
+                'full'   => \IntlDateFormatter::FULL,
             ];
 
             // Create formatter
@@ -640,10 +641,10 @@ class Registry
         };
 
         $this->filters['batch'] = static function (mixed $v, int $size, mixed $fill = null): array {
-            $size = \max(1, $size);
+            $size   = \max(1, $size);
             $chunks = \array_chunk((array) $v, $size);
             if ($fill !== null && !empty($chunks)) {
-                $last = &$chunks[\count($chunks) - 1];
+                $last =& $chunks[\count($chunks) - 1];
                 while (\count($last) < $size) {
                     $last[] = $fill;
                 }
@@ -657,8 +658,7 @@ class Registry
         // Passing raw callable variables from template scope is rejected at
         // compile time — only these two safe forms are accepted.
 
-        $this->filters['map'] = static fn(mixed $v, callable $fn): array =>
-            \array_map($fn, (array) $v);
+        $this->filters['map'] = static fn(mixed $v, callable $fn): array => \array_map($fn, (array) $v);
 
         $this->filters['filter'] = static fn(mixed $v, ?callable $fn = null): array =>
             \array_values(\array_filter((array) $v, $fn));
@@ -683,9 +683,9 @@ class Registry
     }
 
     /**
-     * Registry of custom block / directive handlers for the Clarity compiler.
+     * Registry of custom directive handlers for the Clarity compiler.
      *
-     * Modules register pairs of block keywords (e.g. `with_locale` / `endwith_locale`) whose compilation is delegated to user-supplied callables instead of being handled by the built-in match table in {@see Compiler::compileBlock()}.
+     * Modules register directive keywords (e.g. `with_locale`) whose compilation is delegated to user-supplied callables instead of being handled by the built-in match table in {@see Compiler::compileDirective()}.
      *
      * Handler signature
      * -----------------
@@ -700,28 +700,28 @@ class Registry
      *
      * Example registration (inside a Module::register() call):
      * ```php
-     * $engine->addBlock('with_locale', function(string $rest, string $path, int $line, callable $expr): string {
+     * $engine->addDirective('with_locale', function(string $rest, string $path, int $line, callable $expr): string {
      *     $param = $expr(trim($rest));
      *     return "\$this->__fl['__locale']->push({$param});";
      * });
-     * $engine->addBlock('endwith_locale', fn(...) => "\$this->__fl['__locale']->pop();");
+     * $engine->addDirective('endwith_locale', fn(...) => "\$this->__fl['__locale']->pop();");
      * ```
      *
      * @param string   $keyword  Directive keyword (lowercase, e.g. 'with_locale').
      * @param callable $handler  See class docblock for expected signature.
      */
-    public function addBlock(string $keyword, callable $handler): static
+    public function addDirective(string $keyword, callable $handler): static
     {
-        $this->blockHandlers[$keyword] = $handler;
+        $this->directiveHandlers[$keyword] = $handler;
         return $this;
     }
 
     /**
      * Check whether a handler is registered for the given keyword.
      */
-    public function hasBlock(string $keyword): bool
+    public function hasDirective(string $keyword): bool
     {
-        return isset($this->blockHandlers[$keyword]);
+        return isset($this->directiveHandlers[$keyword]);
     }
 
     /**
@@ -735,14 +735,15 @@ class Registry
      * @return string Compiled PHP statement(s).
      * @throws ClarityException If the handler itself throws one.
      */
-    public function compileBlock(
+    public function compileDirective(
         string $keyword,
         string $rest,
         string $sourcePath,
         int $tplLine,
         callable $processExpr,
-    ): string {
-        return ($this->blockHandlers[$keyword])(
+    ): string
+    {
+        return ($this->directiveHandlers[$keyword])(
             $rest,
             $sourcePath,
             $tplLine,

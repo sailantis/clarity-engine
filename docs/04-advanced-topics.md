@@ -983,19 +983,19 @@ Compiles to: `\str_pad((string) $vars['invoiceNumber'], 8, '0', \STR_PAD_LEFT)` 
 | `{2}`       | First additional parameter        |
 | `{3}`       | Second additional parameter, etc. |
 
-## Custom Block Directives
+## Custom Directives
 
-Block directives extend the template compiler with custom `{% keyword %}` tags. They are compiled at build time and emit raw PHP code.
+Directives extend the template compiler with custom `{% keyword %}` tags. They are compiled at build time and emit raw PHP code.
 
-### Registering Block Pairs
+### Registering Directives
 
 ```php
-$engine->addBlock('cache', function(string $rest, string $path, int $line, callable $expr): string {
+$engine->addDirective('cache', function(string $rest, string $path, int $line, callable $expr): string {
     $key = $expr(trim($rest));
     return "if (!\$__cache->has({$key})): ob_start();";
 });
 
-$engine->addBlock('endcache', function(string $rest, string $path, int $line, callable $expr): string {
+$engine->addDirective('endcache', function(string $rest, string $path, int $line, callable $expr): string {
     return "\$__cache->set(\$__cacheKey, ob_get_clean()); endif;";
 });
 ```

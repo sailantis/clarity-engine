@@ -115,7 +115,7 @@ class LocaleService
      */
     public static function registerBlocks(ClarityEngine $engine): void
     {
-        $engine->addBlock(
+        $engine->addDirective(
             'with_locale',
             static function (string $rest, string $sourcePath, int $tplLine, callable $processExpr): string {
                 $rest = \trim($rest);
@@ -131,7 +131,7 @@ class LocaleService
             }
         );
 
-        $engine->addBlock(
+        $engine->addDirective(
             'endwith_locale',
             static function (string $rest, string $sourcePath, int $tplLine, callable $processExpr): string {
                 return "\$__sv['locale']->pop();";

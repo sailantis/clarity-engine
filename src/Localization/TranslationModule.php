@@ -122,7 +122,7 @@ class TranslationModule implements ModuleInterface
             'defaults' => ['vars' => 'null', 'domain' => 'null'],
         ]);
 
-        $engine->addBlock(
+        $engine->addDirective(
             'with_t_domain',
             static function (string $rest, string $sourcePath, int $tplLine, callable $processExpr): string {
                 $rest = trim($rest);
@@ -138,7 +138,7 @@ class TranslationModule implements ModuleInterface
             }
         );
 
-        $engine->addBlock(
+        $engine->addDirective(
             'endwith_t_domain',
             static function (string $rest, string $sourcePath, int $tplLine, callable $processExpr): string {
                 return "\$__sv['t']->popDomain();";

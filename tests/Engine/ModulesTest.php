@@ -91,15 +91,15 @@ class ModulesTest extends BaseTestCase
     }
 
     // =========================================================================
-    // Custom block directives
+    // Custom directives
     // =========================================================================
 
-    public function testAddBlockRegistersCustomDirective(): void
+    public function testAddDirectiveRegistersCustomDirective(): void
     {
         $engine = new ClarityEngine();
         $engine->setViewPath(TestEnvironment::viewDir())->setCachePath(TestEnvironment::cacheDir());
-        $engine->addBlock('noop', fn(string $r, string $p, int $l, callable $e): string => '/* noop */');
-        $engine->addBlock('endnoop', fn(string $r, string $p, int $l, callable $e): string => '/* endnoop */');
+        $engine->addDirective('noop', fn(string $r, string $p, int $l, callable $e): string => '/* noop */');
+        $engine->addDirective('endnoop', fn(string $r, string $p, int $l, callable $e): string => '/* endnoop */');
 
         self::tpl('block_noop', '{% noop %}inner{% endnoop %}');
         $result = $engine->renderPartial('block_noop');
@@ -117,16 +117,16 @@ class ModulesTest extends BaseTestCase
         $engine->renderPartial('bad_directive');
     }
 
-    public function testBlockHandlerCanProcessExpression(): void
+    public function testDirectiveHandlerCanProcessExpression(): void
     {
         $engine = new ClarityEngine();
         $engine->setViewPath(TestEnvironment::viewDir())->setCachePath(TestEnvironment::cacheDir());
 
-        $engine->addBlock('tag', function (string $rest, string $path, int $line, callable $expr): string {
+        $engine->addDirective('tag', function (string $rest, string $path, int $line, callable $expr): string {
             $phpTag = $expr($rest);
             return "ob_start(); \$__tag = {$phpTag};";
         });
-        $engine->addBlock(
+        $engine->addDirective(
             'endtag',
             fn(string $r, string $p, int $l, callable $e): string =>
             'echo "<" . htmlspecialchars((string)$__tag) . ">" . ob_get_clean() . "</" . htmlspecialchars((string)$__tag) . ">";'

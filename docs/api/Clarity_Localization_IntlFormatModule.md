@@ -100,7 +100,7 @@ Config options: {
 
 `public function register(Clarity\ClarityEngine $engine): void`
 
-Register all filters, functions, services, and block directives that
+Register all filters, functions, services, and directives that
 this module provides into the given engine instance.
 
 This method is called once by [`ClarityEngine::use()`](Clarity_ClarityEngine.md#use) at engine

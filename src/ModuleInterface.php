@@ -5,7 +5,7 @@ namespace Clarity;
 /**
  * Contract for Clarity engine modules.
  *
- * A module bundles a cohesive set of filters, functions, and block directives
+ * A module bundles a cohesive set of filters, functions, and directives
  * and registers them all in one call via {@see ClarityEngine::use()}.
  *
  * Example
@@ -24,7 +24,7 @@ namespace Clarity;
  *     public function register(ClarityEngine $engine): void
  *     {
  *         $engine->addFilter('my_filter', fn($v) => strtoupper($v));
- *         $engine->addBlock('my_block', fn($rest, $path, $line, $expr) => '// …');
+ *         $engine->addDirective('my_directive', fn($rest, $path, $line, $expr) => '// …');
  *     }
  * }
  * ```
@@ -32,7 +32,7 @@ namespace Clarity;
 interface ModuleInterface
 {
     /**
-     * Register all filters, functions, services, and block directives that
+     * Register all filters, functions, services, and directives that
      * this module provides into the given engine instance.
      *
      * This method is called once by {@see ClarityEngine::use()} at engine
