@@ -59,39 +59,38 @@ class Tokenizer
     private array $varChainCache = [];
 
     /**
-    * Compile-time local variable context: templateVarName → PHP variable string.
-    * Set by the Compiler when entering/leaving loop scopes so that expressions
-    * inside loops resolve loop variables to direct PHP local variables instead
-    * of $vars['name'] lookups.
-    *
-    * @var array<string, string>
-    */
+     * Compile-time local variable context: templateVarName → PHP variable string.
+     * Set by the Compiler when entering/leaving loop scopes so that expressions
+     * inside loops resolve loop variables to direct PHP local variables instead
+     * of $vars['name'] lookups.
+     *
+     * @var array<string, string>
+     */
     private array $localVars = [];
     private const IDENT_RE = '/^[A-Za-z_][A-Za-z0-9_]*$/';
     private const CHAIN_RE = '/^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$/';
 
-
     /**
-    * Filters whose first argument must be a lambda expression or a filter
-    * reference (quoted string). Plain variable references are rejected to
-    * prevent callable injection from template variables.
-    */
+     * Filters whose first argument must be a lambda expression or a filter
+     * reference (quoted string). Plain variable references are rejected to
+     * prevent callable injection from template variables.
+     */
     private const CALLABLE_ARG_FILTERS = ['map' => true, 'filter' => true, 'reduce' => true];
 
     /**
-    * Function names that are compiled to the literal '' (eliminated at compile
-    * time).  Used to prune dump() in production mode with zero runtime cost.
-    *
-    * @var array<string, true>
-    */
+     * Function names that are compiled to the literal '' (eliminated at compile
+     * time).  Used to prune dump() in production mode with zero runtime cost.
+     *
+     * @var array<string, true>
+     */
     private array $prunedFunctions = [];
 
     /**
-    * Function names that receive the current escape context ('html'|'js'|'css')
-    * as an extra first string argument in the emitted PHP call.
-    *
-    * @var array<string, true>
-    */
+     * Function names that receive the current escape context ('html'|'js'|'css')
+     * as an extra first string argument in the emitted PHP call.
+     *
+     * @var array<string, true>
+     */
     private array $contextInjectedFunctions = [];
 
     /** @param array<string, true> $names */
@@ -112,14 +111,14 @@ class Tokenizer
     }
 
     /**
-    * Update the compile-time local variable context.
-    *
-    * Called by the Compiler when entering or exiting a loop scope so that
-    * variable resolution inside the loop uses direct PHP local variables
-    * ($__lv_item_0) rather than $vars['item'] array lookups.
-    *
-    * @param array<string, string> $localVars  templateVarName → PHP variable string
-    */
+     * Update the compile-time local variable context.
+     *
+     * Called by the Compiler when entering or exiting a loop scope so that
+     * variable resolution inside the loop uses direct PHP local variables
+     * ($__lv_item_0) rather than $vars['item'] array lookups.
+     *
+     * @param array<string, string> $localVars  templateVarName → PHP variable string
+     */
     public function setLocalVars(array $localVars): void
     {
         $this->localVars = $localVars;
@@ -133,43 +132,43 @@ class Tokenizer
     // -------------------------------------------------------------------------
 
     /**
-    * Split a raw template source into an ordered array of segments.
-    *
-    * Each element is:  ['type' => TEXT|OUTPUT|BLOCK, 'content' => string, 'line' => int]
-    *
-    * @param string $source Raw template source.
-    * @return array<int, array{int, string, int}>
-    */
+     * Split a raw template source into an ordered array of segments.
+     *
+     * Each element is:  ['type' => TEXT|OUTPUT|BLOCK, 'content' => string, 'line' => int]
+     *
+     * @param string $source Raw template source.
+     * @return array<int, array{int, string, int}>
+     */
     public function tokenize(string $source): array
     {
         $segments = [];
-        $pattern = '/\{\{.*?\}\}++|\{%.*?%\}++|\{#.*?#\}++/s';
+        $pattern  = '/\{\{.*?\}\}++|\{%.*?%\}++|\{#.*?#\}++/s';
         if (!\preg_match_all($pattern, $source, $matches, PREG_OFFSET_CAPTURE)) {
             return [
                 [
-                    self::KEY_TYPE => self::TEXT,
+                    self::KEY_TYPE    => self::TEXT,
                     self::KEY_CONTENT => \trim($source),
-                    self::KEY_LINE => 1
+                    self::KEY_LINE    => 1
                 ]
             ];
         }
 
         $line = 1;
-        $pos = 0;
+        $pos  = 0;
         foreach ($matches[0] as [$match, $offset]) {
             if ($offset > $pos) {
                 $text = \substr($source, $pos, $offset - $pos);
                 if (\trim($text) !== '') {
                     $segments[] = [
-                        self::KEY_TYPE => self::TEXT,
+                        self::KEY_TYPE    => self::TEXT,
                         self::KEY_CONTENT => $text,
-                        self::KEY_LINE => $line
+                        self::KEY_LINE    => $line
                     ];
                 }
                 $line += \substr_count($text, "\n");
             }
 
-            $len = \strlen($match);
+            $len   = \strlen($match);
             $inner = \trim(\substr($match, 2, $len - 4));
             switch ($match[1]) {
                 case '{':
@@ -185,9 +184,9 @@ class Tokenizer
                     throw new ClarityException("Unexpected tag type in match: {$match[0]}");
             }
             $segments[] = [
-                self::KEY_TYPE => $type,
+                self::KEY_TYPE    => $type,
                 self::KEY_CONTENT => $inner,
-                self::KEY_LINE => $line
+                self::KEY_LINE    => $line
             ];
 
             $line += \substr_count($match, "\n");
@@ -198,9 +197,9 @@ class Tokenizer
             $rest = \substr($source, $pos);
             if (\trim($rest) !== '') {
                 $segments[] = [
-                    self::KEY_TYPE => self::TEXT,
+                    self::KEY_TYPE    => self::TEXT,
                     self::KEY_CONTENT => $rest,
-                    self::KEY_LINE => $line
+                    self::KEY_LINE    => $line
                 ];
             }
         }
@@ -213,23 +212,23 @@ class Tokenizer
     // -------------------------------------------------------------------------
 
     /**
-    * Convert a Clarity expression string to a PHP expression string.
-    *
-    * The pipeline (|>) is processed first; the leftmost segment is the
-    * expression and each subsequent segment is a filter call.
-    *
-    * @param string $expression Raw expression from inside {{ ... }} or the
-    *                           right-hand side of {% set var = ... %}.
-    * @param bool   $autoEscape When true and there is no |> raw at the end,
-    *                           wraps the whole result in htmlspecialchars().
-    * @return string PHP expression (no leading <?= or trailing ?>).
-    */
+     * Convert a Clarity expression string to a PHP expression string.
+     *
+     * The pipeline (|>) is processed first; the leftmost segment is the
+     * expression and each subsequent segment is a filter call.
+     *
+     * @param string $expression Raw expression from inside {{ ... }} or the
+     *                           right-hand side of {% set var = ... %}.
+     * @param bool   $autoEscape When true and there is no |> raw at the end,
+     *                           wraps the whole result in htmlspecialchars().
+     * @return string PHP expression (no leading <?= or trailing ?>).
+     */
     /**
-    * Set the output-escaping context for the next processExpression() call.
-    * Called by the Compiler as it tracks the current position in the template.
-    *
-    * @param string $context  'html' | 'js' | 'css'
-    */
+     * Set the output-escaping context for the next processExpression() call.
+     * Called by the Compiler as it tracks the current position in the template.
+     *
+     * @param string $context  'html' | 'js' | 'css'
+     */
     public function setEscapeContext(string $context): void
     {
         $this->escapeContext = $context;
@@ -249,8 +248,8 @@ class Tokenizer
 
         if ($this->autoEscape) {
             $phpExpr = match ($this->escapeContext) {
-                'js' => '\\json_encode(' . $phpExpr . ', 271)', // HEX_TAG|HEX_AMP|HEX_APOS|HEX_QUOT|UNESCAPED_UNICODE
-                'css' => '(string)(' . $phpExpr . ')',          // raw — CSS values are not HTML-escaped
+                'js'    => '\\json_encode(' . $phpExpr . ', 271)', // HEX_TAG|HEX_AMP|HEX_APOS|HEX_QUOT|UNESCAPED_UNICODE
+                'css'   => '(string)(' . $phpExpr . ')',           // raw — CSS values are not HTML-escaped
                 default => "\\htmlspecialchars((string)({$phpExpr}), 11, 'UTF-8')",
             };
         }
@@ -259,12 +258,12 @@ class Tokenizer
     }
 
     /**
-    * Convert a Clarity expression without pipeline — used for control
-    * structure conditions (if, for, set) where auto-escape is meaningless.
-    *
-    * @param string $expression Raw Clarity expression.
-    * @return string PHP expression.
-    */
+     * Convert a Clarity expression without pipeline — used for control
+     * structure conditions (if, for, set) where auto-escape is meaningless.
+     *
+     * @param string $expression Raw Clarity expression.
+     * @return string PHP expression.
+     */
     public function processCondition(string $expression): string
     {
         [$expr, $filters] = $this->splitPipeline($this->normalizePipeOperator($expression));
@@ -278,12 +277,12 @@ class Tokenizer
     }
 
     /**
-    * Convert a Clarity variable chain to its PHP $vars[...] equivalent.
-    * Used for the left-hand side of {% set var = ... %}.
-    *
-    * @param string $var Clarity variable name (e.g. 'user.name', 'items[0]').
-    * @return string PHP lvalue (e.g. '$vars[\'user\'][\'name\']').
-    */
+     * Convert a Clarity variable chain to its PHP $vars[...] equivalent.
+     * Used for the left-hand side of {% set var = ... %}.
+     *
+     * @param string $var Clarity variable name (e.g. 'user.name', 'items[0]').
+     * @return string PHP lvalue (e.g. '$vars[\'user\'][\'name\']').
+     */
     public function processLvalue(string $var): string
     {
         return $this->varChainToPhp(\trim($var));
@@ -312,11 +311,11 @@ class Tokenizer
             return $expr;
         }
 
-        $out = '';
-        $i = 0;
+        $out      = '';
+        $i        = 0;
         $inSingle = false;
         $inDouble = false;
-        $depth = 0;
+        $depth    = 0;
 
         while ($i < $len) {
             $ch = $expr[$i];
@@ -392,14 +391,14 @@ class Tokenizer
     }
 
     /**
-    * Split an expression string on the |> pipeline operator.
-    *
-    * Returns [expressionString, [filterSegment, ...]].
-    * The expression string may still contain quoted strings, so we cannot
-    * simply explode — we split only on |> that are not inside quotes.
-    *
-    * @return array{0: string, 1: string[]}
-    */
+     * Split an expression string on the |> pipeline operator.
+     *
+     * Returns [expressionString, [filterSegment, ...]].
+     * The expression string may still contain quoted strings, so we cannot
+     * simply explode — we split only on |> that are not inside quotes.
+     *
+     * @return array{0: string, 1: string[]}
+     */
     private function splitPipeline(string $expression): array
     {
         $parts = $this->splitRespectingStrings($expression, '|>');
@@ -414,26 +413,26 @@ class Tokenizer
     }
 
     /**
-    * Split $subject on $delimiter while respecting single- and double-quoted
-    * string literals and balanced parentheses / square / curly brackets (i.e.
-    * do not split on delimiters that are inside quotes or nested structures).
-    *
-    * This ensures that lambdas with inner pipelines work correctly, for example:
-    *   items |> map(item => item |> upper) |> join(",")
-    * The |> inside map(...) is at depth > 0 and is not treated as a split point.
-    *
-    * @return string[]
-    */
+     * Split $subject on $delimiter while respecting single- and double-quoted
+     * string literals and balanced parentheses / square / curly brackets (i.e.
+     * do not split on delimiters that are inside quotes or nested structures).
+     *
+     * This ensures that lambdas with inner pipelines work correctly, for example:
+     *   items |> map(item => item |> upper) |> join(",")
+     * The |> inside map(...) is at depth > 0 and is not treated as a split point.
+     *
+     * @return string[]
+     */
     private function splitRespectingStrings(string $subject, string $delimiter): array
     {
-        $parts = [];
-        $current = '';
-        $len = \strlen($subject);
-        $dlen = \strlen($delimiter);
-        $i = 0;
+        $parts    = [];
+        $current  = '';
+        $len      = \strlen($subject);
+        $dlen     = \strlen($delimiter);
+        $i        = 0;
         $inSingle = false;
         $inDouble = false;
-        $depth = 0; // parenthesis / square / curly-brace nesting depth
+        $depth    = 0; // parenthesis / square / curly-brace nesting depth
 
         while ($i < $len) {
             $ch = $subject[$i];
@@ -477,33 +476,33 @@ class Tokenizer
     }
 
     /**
-    * Convert a Clarity expression (no pipeline) to PHP by:
-    * 1. Replacing var-chains with $vars[...] accesses
-    * 2. Replacing logical/string operators with PHP equivalents
-    * 3. Rejecting function-call syntax: any identifier followed by '(' throws
-    *    a ClarityException at compile time — use the |> filter pipeline instead.
-    *
-    * Strategy: tokenize the expression into atoms (quoted strings, numbers,
-    * identifiers/var-chains, operators, punctuation) and process each atom.
-    */
+     * Convert a Clarity expression (no pipeline) to PHP by:
+     * 1. Replacing var-chains with $vars[...] accesses
+     * 2. Replacing logical/string operators with PHP equivalents
+     * 3. Rejecting function-call syntax: any identifier followed by '(' throws
+     *    a ClarityException at compile time — use the |> filter pipeline instead.
+     *
+     * Strategy: tokenize the expression into atoms (quoted strings, numbers,
+     * identifiers/var-chains, operators, punctuation) and process each atom.
+     */
     public function convertVarsAndOps(string $expr): string
     {
         static $keywordMap = [
-            'and' => '&&',
-            'or' => '||',
-            'not' => '!',
-            'bor'  => '|',
-            'band' => '&',
-            'bxor' => '^',
-            'bnot' => '~',
-            'true' => 'true',
+            'and'   => '&&',
+            'or'    => '||',
+            'not'   => '!',
+            'bor'   => '|',
+            'band'  => '&',
+            'bxor'  => '^',
+            'bnot'  => '~',
+            'true'  => 'true',
             'false' => 'false',
-            'null' => 'null',
+            'null'  => 'null',
         ];
 
-        $len = \strlen($expr);
-        $i = 0;
-        $out = '';
+        $len      = \strlen($expr);
+        $i        = 0;
+        $out      = '';
         $inSingle = false;
         $inDouble = false;
 
@@ -598,13 +597,13 @@ class Tokenizer
                 if ($nextAfterIdent !== '.' && $nextAfterIdent !== '[') {
                     // Plain identifier — may be a keyword or a cacheable single-segment chain
                     $token = \substr($expr, $start, $idEnd - $start);
-                    $i = $idEnd;
+                    $i     = $idEnd;
 
                     $prevChar = ($start - 1 >= 0) ? $expr[$start - 1] : null;
                     $nextChar = $nextAfterIdent !== '' ? $nextAfterIdent : null;
                     $prevIsId = $prevChar !== null && (\ctype_alnum($prevChar) || $prevChar === '_');
                     $nextIsId = $nextChar !== null && (\ctype_alnum($nextChar) || $nextChar === '_');
-                    $lower = \strtolower($token);
+                    $lower    = \strtolower($token);
 
                     if (!$prevIsId && !$nextIsId && isset($keywordMap[$lower])) {
                         $out .= $keywordMap[$lower];
@@ -637,7 +636,7 @@ class Tokenizer
                         $out .= $this->varChainCache[$token];
                     } else {
                         $parsed = $this->parseVarChainAt($expr, $start);
-                        $php = $parsed !== null
+                        $php    = $parsed !== null
                             ? $this->varChainToPhpWithSegments($token, $parsed['segments'])
                             : $token;
                         $out .= $php;
@@ -653,9 +652,9 @@ class Tokenizer
                     continue;
                 }
 
-                $i = $parsed['end'];
+                $i        = $parsed['end'];
                 $segments = $parsed['segments'];
-                $token = \substr($expr, $start, $i - $start);
+                $token    = \substr($expr, $start, $i - $start);
 
                 // Dot/bracket chains cannot be function calls — always forbidden.
                 $j = $i;
@@ -684,10 +683,10 @@ class Tokenizer
     }
 
     /**
-    * Parse a Clarity array/object literal and any trailing property/index access.
-    *
-    * @return array{0:string,1:int}
-    */
+     * Parse a Clarity array/object literal and any trailing property/index access.
+     *
+     * @return array{0:string,1:int}
+     */
     private function parseCollectionLiteralAt(string $expr, int $start): array
     {
         [$inner, $end] = $this->extractBalancedSegment($expr, $start);
@@ -755,7 +754,7 @@ class Tokenizer
                 throw new ClarityException("Object literal entries must use 'key: value' syntax: '{$entry}'");
             }
 
-            $rawKey = \trim(\substr($entry, 0, $colonPos));
+            $rawKey   = \trim(\substr($entry, 0, $colonPos));
             $rawValue = \trim(\substr($entry, $colonPos + 1));
 
             if ($rawValue === '') {
@@ -775,7 +774,7 @@ class Tokenizer
         }
 
         $first = $rawKey[0];
-        $last = $rawKey[\strlen($rawKey) - 1];
+        $last  = $rawKey[\strlen($rawKey) - 1];
         if (($first === '"' && $last === '"') || ($first === "'" && $last === "'")) {
             return $rawKey;
         }
@@ -790,14 +789,14 @@ class Tokenizer
     }
 
     /**
-    * Consume chained property/index access after a compiled expression.
-    *
-    * @return array{0:string,1:int}
-    */
+     * Consume chained property/index access after a compiled expression.
+     *
+     * @return array{0:string,1:int}
+     */
     private function compilePostfixAccessChain(string $expr, int $start, string $php): array
     {
         $len = \strlen($expr);
-        $i = $start;
+        $i   = $start;
 
         while ($i < $len) {
             while ($i < $len && \ctype_space($expr[$i])) {
@@ -820,8 +819,8 @@ class Tokenizer
                 }
 
                 $name = \substr($expr, $nameStart, $nameEnd - $nameStart);
-                $php = '(' . $php . ')[\'' . $name . '\']';
-                $i = $nameEnd;
+                $php  = '(' . $php . ')[\'' . $name . '\']';
+                $i    = $nameEnd;
                 continue;
             }
 
@@ -833,8 +832,8 @@ class Tokenizer
                 }
 
                 $indexPhp = \ctype_digit($inner) ? $inner : $this->processCondition($inner);
-                $php = '(' . $php . ')[' . $indexPhp . ']';
-                $i = $end;
+                $php      = '(' . $php . ')[' . $indexPhp . ']';
+                $i        = $end;
                 continue;
             }
 
@@ -845,21 +844,21 @@ class Tokenizer
     }
 
     /**
-    * Extract the contents of a balanced (), [] or {} segment starting at $start.
-    *
-    * @return array{0:string,1:int}
-    */
+     * Extract the contents of a balanced (), [] or {} segment starting at $start.
+     *
+     * @return array{0:string,1:int}
+     */
     private function extractBalancedSegment(string $subject, int $start): array
     {
-        $open = $subject[$start] ?? null;
+        $open  = $subject[$start] ?? null;
         $pairs = ['(' => ')', '[' => ']', '{' => '}'];
         if ($open === null || !isset($pairs[$open])) {
             throw new ClarityException('Expected a balanced segment opener.');
         }
 
-        $stack = [$pairs[$open]];
-        $len = \strlen($subject);
-        $i = $start + 1;
+        $stack    = [$pairs[$open]];
+        $len      = \strlen($subject);
+        $i        = $start + 1;
         $inSingle = false;
         $inDouble = false;
 
@@ -908,13 +907,13 @@ class Tokenizer
         throw new ClarityException("Unterminated '{$open}' segment in expression.");
     }
 
-    private function findTopLevelChar(string $subject, string $needle): int|false
+    private function findTopLevelChar(string $subject, string $needle): int|bool
     {
-        $len = \strlen($subject);
+        $len      = \strlen($subject);
         $inSingle = false;
         $inDouble = false;
-        $stack = [];
-        $pairs = ['(' => ')', '[' => ']', '{' => '}'];
+        $stack    = [];
+        $pairs    = ['(' => ')', '[' => ']', '{' => '}'];
 
         for ($i = 0; $i < $len; $i++) {
             $ch = $subject[$i];
@@ -957,27 +956,27 @@ class Tokenizer
     }
 
     /**
-    * Parse a registered-function call starting at the opening '(' in $expr
-    * and return the compiled PHP expression plus the new position after ')'.
-    *
-    * Each argument is compiled as a full Clarity expression (pipelines and
-    * nested function calls work inside arguments). Named arguments use the
-    * Clarity `name=expression` syntax and are emitted as PHP named arguments
-    * (`name: phpExpr`).
-    *
-    * Generated code: $this->__fn['name']($phpArg1, name2: $phpArg2, ...)
-    *
-    * @param string $name      The function name (already validated as registered).
-    * @param string $expr      The full expression string being compiled.
-    * @param int    $openParen Position of the '(' character in $expr.
-    * @param int    $len       Length of $expr.
-    * @return array{0: string, 1: int}  [phpCallExpression, indexAfterClosingParen]
-    */
+     * Parse a registered-function call starting at the opening '(' in $expr
+     * and return the compiled PHP expression plus the new position after ')'.
+     *
+     * Each argument is compiled as a full Clarity expression (pipelines and
+     * nested function calls work inside arguments). Named arguments use the
+     * Clarity `name=expression` syntax and are emitted as PHP named arguments
+     * (`name: phpExpr`).
+     *
+     * Generated code: $this->__fn['name']($phpArg1, name2: $phpArg2, ...)
+     *
+     * @param string $name      The function name (already validated as registered).
+     * @param string $expr      The full expression string being compiled.
+     * @param int    $openParen Position of the '(' character in $expr.
+     * @param int    $len       Length of $expr.
+     * @return array{0: string, 1: int}  [phpCallExpression, indexAfterClosingParen]
+     */
     private function buildFunctionCallInExpr(string $name, string $expr, int $openParen, int $len): array
     {
-        $i = $openParen + 1; // skip '('
+        $i        = $openParen + 1; // skip '('
         $argStart = $i;
-        $depth = 1;
+        $depth    = 1;
         $inSingle = false;
         $inDouble = false;
 
@@ -1007,7 +1006,6 @@ class Tokenizer
         $argsRaw = \substr($expr, $argStart, $i - $argStart);
         $i++; // consume closing ')'
 
-        // Pruned function: compile to '' at template compile time (e.g. dump in production).
         if (isset($this->prunedFunctions[$name])) {
             return ["''", $i];
         }
@@ -1031,8 +1029,8 @@ class Tokenizer
         // their output is never passed through htmlspecialchars/json_encode.
         if (isset($this->contextInjectedFunctions[$name])) {
             $this->autoEscape = false;
-            $contextLit = "'" . $this->escapeContext . "'";
-            $call = "\$__fn[{$safeName}]({$contextLit}";
+            $contextLit       = "'" . $this->escapeContext . "'";
+            $call             = "\$__fn[{$safeName}]({$contextLit}";
             if (\trim($argsRaw) !== '') {
                 $argList = $this->splitRespectingStrings($argsRaw, ',');
                 $call .= ', ' . \implode(', ', $this->compileArgList($argList));
@@ -1054,12 +1052,12 @@ class Tokenizer
     }
 
     /**
-    * Parse a var-chain from $subject starting at $start.
-    *
-    * Returns null if no valid identifier starts at $start.
-    *
-    * @return array{end:int, segments:array<int,array{type:string,value:string}>}|null
-    */
+     * Parse a var-chain from $subject starting at $start.
+     *
+     * Returns null if no valid identifier starts at $start.
+     *
+     * @return array{end:int, segments:array<int,array{type:string,value:string}>}|null
+     */
     private function parseVarChainAt(string $subject, int $start): ?array
     {
         $len = \strlen($subject);
@@ -1105,7 +1103,7 @@ class Tokenizer
             if ($ch === '[') {
                 $i++; // skip '['
                 $innerStart = $i;
-                $depth = 1;
+                $depth      = 1;
 
                 while ($i < $len) {
                     $cc = $subject[$i];
@@ -1136,7 +1134,7 @@ class Tokenizer
                     if ($cc === ']') {
                         $depth--;
                         if ($depth === 0) {
-                            $inner = \substr($subject, $innerStart, $i - $innerStart);
+                            $inner      = \substr($subject, $innerStart, $i - $innerStart);
                             $segments[] = ['type' => 'index', 'value' => $inner];
                             $i++; // consume closing ']'
                             break;
@@ -1151,7 +1149,7 @@ class Tokenizer
                 if ($depth > 0) {
                     // Unterminated index expression: consume to end as one index segment.
                     $segments[] = ['type' => 'index', 'value' => substr($subject, $innerStart)];
-                    $i = $len;
+                    $i          = $len;
                 }
 
                 continue;
@@ -1164,10 +1162,10 @@ class Tokenizer
     }
 
     /**
-    * Convert parsed var-chain segments to PHP.
-    *
-    * @param array<int,array{type:string,value:string}> $segments
-    */
+     * Convert parsed var-chain segments to PHP.
+     *
+     * @param array<int,array{type:string,value:string}> $segments
+     */
     private function buildVarChainPhp(array $segments): string
     {
         if (empty($segments)) {
@@ -1180,10 +1178,10 @@ class Tokenizer
         }
 
         $php = '$vars[\'' . $first . '\']';
-        $n = \count($segments);
+        $n   = \count($segments);
 
         for ($k = 1; $k < $n; $k++) {
-            $seg = $segments[$k];
+            $seg   = $segments[$k];
             $value = $seg['value'];
 
             if ($seg['type'] === 'key') {
@@ -1214,35 +1212,35 @@ class Tokenizer
     }
 
     /**
-    * Convert a parsed var-chain and memoize by raw chain string.
-    *
-    * @param array<int,array{type:string,value:string}> $segments
-    */
+     * Convert a parsed var-chain and memoize by raw chain string.
+     *
+     * @param array<int,array{type:string,value:string}> $segments
+     */
     private function varChainToPhpWithSegments(string $chain, array $segments): string
     {
         if (isset($this->varChainCache[$chain])) {
             return $this->varChainCache[$chain];
         }
 
-        $php = $this->buildVarChainPhp($segments);
+        $php                         = $this->buildVarChainPhp($segments);
         $this->varChainCache[$chain] = $php;
         return $php;
     }
 
     /**
-    * Like buildVarChainPhp() but uses the local-var PHP variable for the root segment.
-    * Called when the chain root is a locally-bound loop variable (e.g. $item.foo).
-    *
-    * @param array<int,array{type:string,value:string}> $segments
-    */
+     * Like buildVarChainPhp() but uses the local-var PHP variable for the root segment.
+     * Called when the chain root is a locally-bound loop variable (e.g. $item.foo).
+     *
+     * @param array<int,array{type:string,value:string}> $segments
+     */
     private function buildVarChainPhpWithLocalRoot(array $segments): string
     {
         $first = $segments[0]['value'];
-        $php = $this->localVars[$first]; // e.g. '$item'
-        $n = \count($segments);
+        $php   = $this->localVars[$first]; // e.g. '$item'
+        $n     = \count($segments);
 
         for ($k = 1; $k < $n; $k++) {
-            $seg = $segments[$k];
+            $seg   = $segments[$k];
             $value = $seg['value'];
 
             if ($seg['type'] === 'key') {
@@ -1262,15 +1260,15 @@ class Tokenizer
     }
 
     /**
-    * Convert a Clarity var-chain string to a PHP $vars[...] expression.
-    *
-    * Supports:
-    *   foo           → $vars['foo']
-    *   foo.bar       → $vars['foo']['bar']
-    *   items[0]      → $vars['items'][0]
-    *   items[index]  → $vars['items'][$vars['index']]
-    *   a.b[c.d].e    → $vars['a']['b'][$vars['c']['d']]['e']
-    */
+     * Convert a Clarity var-chain string to a PHP $vars[...] expression.
+     *
+     * Supports:
+     *   foo           → $vars['foo']
+     *   foo.bar       → $vars['foo']['bar']
+     *   items[0]      → $vars['items'][0]
+     *   items[index]  → $vars['items'][$vars['index']]
+     *   a.b[c.d].e    → $vars['a']['b'][$vars['c']['d']]['e']
+     */
     public function varChainToPhp(string $chain): string
     {
         if ($chain === '') {
@@ -1297,10 +1295,10 @@ class Tokenizer
     }
 
     /**
-    * If $arg is a named argument of the form  identifier:expression  (where
-    * : is not part of ::), return ['name'=>…, 'expr'=>…].
-    * Returns null for ordinary positional arguments.
-    */
+     * If $arg is a named argument of the form  identifier:expression  (where
+     * : is not part of ::), return ['name'=>…, 'expr'=>…].
+     * Returns null for ordinary positional arguments.
+     */
     private function parseNamedArg(string $arg): ?array
     {
         // identifier followed by = that is not == ; also must not be !=, <=, >=
@@ -1311,25 +1309,25 @@ class Tokenizer
     }
 
     /**
-    * Compile a list of raw argument strings (already split on `,`) to PHP expressions.
-    *
-    * Named arguments (`identifier=expression`) are emitted as PHP named arguments
-    * (`identifier: phpExpr`), letting PHP validate parameter names and arity at
-    * runtime. This means function and filter signatures can change without requiring
-    * template recompilation.
-    *
-    * Positional arguments are compiled as full Clarity expressions (pipelines and
-    * nested function calls are supported).
-    *
-    * A positional argument after a named argument is rejected at compile time to
-    * prevent generating syntactically invalid PHP.
-    *
-    * @param  string[] $argList Raw argument strings (already split on ',').
-    * @return string[] Compiled PHP argument strings, ready to join with ', '.
-    */
+     * Compile a list of raw argument strings (already split on `,`) to PHP expressions.
+     *
+     * Named arguments (`identifier=expression`) are emitted as PHP named arguments
+     * (`identifier: phpExpr`), letting PHP validate parameter names and arity at
+     * runtime. This means function and filter signatures can change without requiring
+     * template recompilation.
+     *
+     * Positional arguments are compiled as full Clarity expressions (pipelines and
+     * nested function calls are supported).
+     *
+     * A positional argument after a named argument is rejected at compile time to
+     * prevent generating syntactically invalid PHP.
+     *
+     * @param  string[] $argList Raw argument strings (already split on ',').
+     * @return string[] Compiled PHP argument strings, ready to join with ', '.
+     */
     private function compileArgList(array $argList): array
     {
-        $result = [];
+        $result    = [];
         $seenNamed = false;
         foreach ($argList as $arg) {
             $arg = \trim($arg);
@@ -1339,7 +1337,7 @@ class Tokenizer
             $named = $this->parseNamedArg($arg);
             if ($named !== null) {
                 $seenNamed = true;
-                $result[] = $named['name'] . ': ' . $this->processCondition($named['expr']);
+                $result[]  = $named['name'] . ': ' . $this->processCondition($named['expr']);
             } else {
                 if ($seenNamed) {
                     throw new ClarityException(
@@ -1353,14 +1351,14 @@ class Tokenizer
     }
 
     /**
-    * @param string[] $argList
-    * @return array{0: string[], 1: array<string, string>}
-    */
+     * @param string[] $argList
+     * @return array{0: string[], 1: array<string, string>}
+     */
     private function compileFilterArguments(array $argList): array
     {
         $positional = [];
-        $named = [];
-        $seenNamed = false;
+        $named      = [];
+        $seenNamed  = false;
 
         foreach ($argList as $arg) {
             $arg = \trim($arg);
@@ -1370,7 +1368,7 @@ class Tokenizer
 
             $parsedNamed = $this->parseNamedArg($arg);
             if ($parsedNamed !== null) {
-                $seenNamed = true;
+                $seenNamed                   = true;
                 $named[$parsedNamed['name']] = $this->processCondition($parsedNamed['expr']);
                 continue;
             }
@@ -1388,12 +1386,12 @@ class Tokenizer
     }
 
     /**
-    * map/filter/reduce accept a callable as their first argument. For reduce,
-    * that callable may declare two comma-separated parameters on the left side
-    * of the lambda arrow, so we merge split segments back into one callable arg.
-    *
-    * @return string[]
-    */
+     * map/filter/reduce accept a callable as their first argument. For reduce,
+     * that callable may declare two comma-separated parameters on the left side
+     * of the lambda arrow, so we merge split segments back into one callable arg.
+     *
+     * @return string[]
+     */
     private function splitCallableFilterArgs(string $args): array
     {
         // Split top-level commas (your existing helper)
@@ -1410,7 +1408,7 @@ class Tokenizer
 
         // Case 2: find the first argument that contains =>
         $lambdaEnd = null;
-        $count = \count($parts);
+        $count     = \count($parts);
 
         for ($i = 1; $i < $count; $i++) {
             if ($this->findLambdaArrow($parts[$i]) !== false) {
@@ -1444,28 +1442,28 @@ class Tokenizer
     }
 
     /**
-    * Build a PHP filter call:  $this->__fl['name']($value, arg1, name2: arg2)
-    *
-    * For map / filter / reduce the first argument must be either:
-    *   - a lambda expression:  param => expression
-    *   - a filter reference:   'filterName' or "filterName"
-    * Bare variable names are rejected at compile time.
-    *
-    * Named arguments (`identifier=expression`) are emitted directly as PHP named
-    * arguments (`identifier: phpExpr`). PHP validates names and arity at runtime.
-    *
-    * @param string $filterSegment Clarity filter segment e.g. 'number(2)' or 'upper'
-    * @param string $phpValue      Already-converted PHP expression for the input value.
-    * @return string PHP call expression.
-    */
+     * Build a PHP filter call:  $this->__fl['name']($value, arg1, name2: arg2)
+     *
+     * For map / filter / reduce the first argument must be either:
+     *   - a lambda expression:  param => expression
+     *   - a filter reference:   'filterName' or "filterName"
+     * Bare variable names are rejected at compile time.
+     *
+     * Named arguments (`identifier=expression`) are emitted directly as PHP named
+     * arguments (`identifier: phpExpr`). PHP validates names and arity at runtime.
+     *
+     * @param string $filterSegment Clarity filter segment e.g. 'number(2)' or 'upper'
+     * @param string $phpValue      Already-converted PHP expression for the input value.
+     * @return string PHP call expression.
+     */
     public function buildFilterCall(string $filterSegment, string $phpValue): string
     {
         $parsed = $this->tryParseFilterWithTrailing($filterSegment);
         if ($parsed === null) {
             throw new ClarityException("Invalid filter segment: '{$filterSegment}'");
         }
-        $name    = $parsed['name'];
-        $args    = $parsed['args'];
+        $name     = $parsed['name'];
+        $args     = $parsed['args'];
         $trailing = $parsed['trailing'];
 
         if ($name === 'raw') {
@@ -1487,7 +1485,7 @@ class Tokenizer
         }
 
         $safeName = "'" . \addslashes($name) . "'";
-        $call = "\$__fl[{$safeName}]({$phpValue}";
+        $call     = "\$__fl[{$safeName}]({$phpValue}";
 
         if ($argList !== []) {
             $isCallableFilter = isset(self::CALLABLE_ARG_FILTERS[$name]);
@@ -1519,15 +1517,15 @@ class Tokenizer
     }
 
     /**
-    * When a filter segment contains a trailing comparison operator
-    * (e.g. `length > 1`, `count == 0`, `upper != 'FOO'`) this method
-    * extracts the filter name, optional balanced argument list, and the
-    * trailing operator+operand as a raw Clarity expression.
-    *
-    * Returns null when the segment cannot be parsed this way.
-    *
-    * @return array{name:string,args:string,trailing:string}|null
-    */
+     * When a filter segment contains a trailing comparison operator
+     * (e.g. `length > 1`, `count == 0`, `upper != 'FOO'`) this method
+     * extracts the filter name, optional balanced argument list, and the
+     * trailing operator+operand as a raw Clarity expression.
+     *
+     * Returns null when the segment cannot be parsed this way.
+     *
+     * @return array{name:string,args:string,trailing:string}|null
+     */
     private function tryParseFilterWithTrailing(string $filterSegment): ?array
     {
         $segment = \ltrim($filterSegment);
@@ -1564,8 +1562,8 @@ class Tokenizer
     }
 
     /**
-    * @param string[] $argList
-    */
+     * @param string[] $argList
+     */
     private function buildInlineFilterCall(string $name, string $phpValue, array $argList): ?string
     {
         $definition = $this->registry->getInlineFilter($name);
@@ -1584,16 +1582,16 @@ class Tokenizer
     }
 
     /**
-    * @param array{php?: string, params?: string[], defaults?: array<string, string>, variadic?: bool} $definition
-    * @param string[] $positionalArgs
-    * @param array<string, string> $namedArgs
-    * @return array<int, string>
-    */
+     * @param array{php?: string, params?: string[], defaults?: array<string, string>, variadic?: bool} $definition
+     * @param string[] $positionalArgs
+     * @param array<string, string> $namedArgs
+     * @return array<int, string>
+     */
     private function resolveInlineFilterSlots(string $filterName, array $definition, string $phpValue, array $positionalArgs, array $namedArgs): array
     {
-        $params = $definition['params'] ?? [];
+        $params   = $definition['params'] ?? [];
         $defaults = $definition['defaults'] ?? [];
-        $slots = [1 => $phpValue];
+        $slots    = [1 => $phpValue];
         $assigned = [];
 
         foreach ($positionalArgs as $index => $phpArg) {
@@ -1603,8 +1601,8 @@ class Tokenizer
                 );
             }
 
-            $paramName = $params[$index];
-            $slots[$index + 2] = $phpArg;
+            $paramName            = $params[$index];
+            $slots[$index + 2]    = $phpArg;
             $assigned[$paramName] = true;
         }
 
@@ -1622,7 +1620,7 @@ class Tokenizer
             }
 
             $slots[$paramIndex + 2] = $phpArg;
-            $assigned[$paramName] = true;
+            $assigned[$paramName]   = true;
         }
 
         foreach ($params as $index => $paramName) {
@@ -1643,9 +1641,9 @@ class Tokenizer
     }
 
     /**
-    * @param string[] $positionalArgs
-    * @param array<string, string> $namedArgs
-    */
+     * @param string[] $positionalArgs
+     * @param array<string, string> $namedArgs
+     */
     private function buildInlineVariadicFilterCall(string $filterName, string $name, string $phpValue, array $positionalArgs, array $namedArgs): ?string
     {
         if ($namedArgs !== []) {
@@ -1664,8 +1662,8 @@ class Tokenizer
     }
 
     /**
-    * @param array<int, string> $slots
-    */
+     * @param array<int, string> $slots
+     */
     private function substituteInlineFilterTemplate(string $template, array $slots): string
     {
         return (string) \preg_replace_callback(
@@ -1683,23 +1681,23 @@ class Tokenizer
     }
 
     /**
-    * Compile the callable argument accepted by map / filter / reduce.
-    *
-    * Accepted forms:
-    *   param => expression                  single-parameter lambda
-    *   acc, item => expression             explicit two-parameter reduce lambda
-    *   'filterName' / "filterName"         reference to a registered filter
-    *                                        or to an inline built-in filter for map()
-    *
-    * Anything else (bare variable names, function calls, …) is rejected.
-    */
+     * Compile the callable argument accepted by map / filter / reduce.
+     *
+     * Accepted forms:
+     *   param => expression                  single-parameter lambda
+     *   acc, item => expression             explicit two-parameter reduce lambda
+     *   'filterName' / "filterName"         reference to a registered filter
+     *                                        or to an inline built-in filter for map()
+     *
+     * Anything else (bare variable names, function calls, …) is rejected.
+     */
     private function compileCallableArg(string $arg, string $filterName): string
     {
         // ── Filter reference: 'name' or "name" ───────────────────────────────
         $trimmed = \trim($arg);
         if (\strlen($trimmed) >= 2) {
             $first = $trimmed[0];
-            $last = $trimmed[-1];
+            $last  = $trimmed[-1];
             if (($first === '"' && $last === '"') || ($first === "'" && $last === "'")) {
                 $refName = \substr($trimmed, 1, -1);
                 if (!\preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $refName)) {
@@ -1745,12 +1743,12 @@ class Tokenizer
     }
 
     /**
-    * Find the position of the first '=>' operator that is not inside a quoted
-    * string. Returns false if none is found.
-    */
-    private function findLambdaArrow(string $s): int|false
+     * Find the position of the first '=>' operator that is not inside a quoted
+     * string. Returns false if none is found.
+     */
+    private function findLambdaArrow(string $s): int|bool
     {
-        $len = \strlen($s);
+        $len      = \strlen($s);
         $inSingle = false;
         $inDouble = false;
 
@@ -1780,30 +1778,30 @@ class Tokenizer
     }
 
     /**
-    * Compile a Clarity lambda expression to a PHP static closure.
-    *
-    * Syntax:
-    *   param => body_expression
-    *   acc, item => body_expression    (reduce only)
-    *
-    * - Each lambda parameter becomes a PHP closure parameter with the same name.
-    * - 'map' and 'filter' require exactly one parameter.
-    * - 'reduce' requires exactly two parameters so you can write:
-    *       carry, item => carry + item
-    * - The body is compiled as a full Clarity expression (including filter
-    *   pipelines) with the parameter name(s) treated as local variables,
-    *   while all other identifiers are resolved from the captured $vars.
-    * - Both $vars and $this->__fl (the filter registry) are captured by value so
-    *   the closure can access outer template variables and other filters.
-    *
-    * @param string $arg      The full lambda string (e.g. 'item => item.name').
-    * @param int    $arrow    Position of '=>' in $arg.
-    * @param string $filterName The callable filter currently being compiled.
-    */
+     * Compile a Clarity lambda expression to a PHP static closure.
+     *
+     * Syntax:
+     *   param => body_expression
+     *   acc, item => body_expression    (reduce only)
+     *
+     * - Each lambda parameter becomes a PHP closure parameter with the same name.
+     * - 'map' and 'filter' require exactly one parameter.
+     * - 'reduce' requires exactly two parameters so you can write:
+     *       carry, item => carry + item
+     * - The body is compiled as a full Clarity expression (including filter
+     *   pipelines) with the parameter name(s) treated as local variables,
+     *   while all other identifiers are resolved from the captured $vars.
+     * - Both $vars and $this->__fl (the filter registry) are captured by value so
+     *   the closure can access outer template variables and other filters.
+     *
+     * @param string $arg      The full lambda string (e.g. 'item => item.name').
+     * @param int    $arrow    Position of '=>' in $arg.
+     * @param string $filterName The callable filter currently being compiled.
+     */
     private function compileLambda(string $arg, int $arrow, string $filterName): string
     {
         $paramList = \trim(\substr($arg, 0, $arrow));
-        $body = \trim(\substr($arg, $arrow + 2));
+        $body      = \trim(\substr($arg, $arrow + 2));
 
         $first = \strstr($paramList, ',', true);
         if ($first === false) {
@@ -1823,7 +1821,7 @@ class Tokenizer
         // up the parameter references afterwards with a targeted substitution.
         $phpBody = $this->processCondition($body);
 
-        $phpBody = \str_replace("\$vars['{$first}']", '$' . $first, $phpBody);
+        $phpBody   = \str_replace("\$vars['{$first}']", '$' . $first, $phpBody);
         $signature = "mixed \${$first}";
 
         if ($filterName === 'reduce') {

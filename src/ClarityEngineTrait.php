@@ -79,13 +79,13 @@ trait ClarityEngineTrait
     {
         $opts = $opts ?? new DumpOptions();
 
-        $this->debugMode = true;
-        $this->debugBus = new DebugEventBus();
+        $this->debugMode  = true;
+        $this->debugBus   = new DebugEventBus();
         $this->debugPanel = null;
 
         $htmlRenderer = new HtmlDumpRenderer();
-        $cliRenderer = new CliDumpRenderer();
-        $jsRenderer = new JsDumpRenderer();
+        $cliRenderer  = new CliDumpRenderer();
+        $jsRenderer   = new JsDumpRenderer();
 
         // Install context-aware dump handler
         $this->registry->setDumpHandler(
@@ -134,8 +134,8 @@ trait ClarityEngineTrait
      */
     public function disableDebug(): static
     {
-        $this->debugMode = false;
-        $this->debugBus = null;
+        $this->debugMode  = false;
+        $this->debugBus   = null;
         $this->debugPanel = null;
         return $this;
     }
@@ -391,7 +391,7 @@ trait ClarityEngineTrait
      *     return $symbol . ' ' . number_format($amount, 2);
      * });
      * ```
-     * 
+     *
      * Template usage:
      * ```twig
      * {{ price |> currency }}       {# Output: € 99.99 #}
@@ -401,12 +401,12 @@ trait ClarityEngineTrait
      * **Example: Excerpt filter**
      * ```php
      * $engine->addFilter('excerpt', function($text, int $length = 100) {
-     *     return mb_strlen($text) > $length 
-     *         ? mb_substr($text, 0, $length) . '…' 
+     *     return mb_strlen($text) > $length
+     *         ? mb_substr($text, 0, $length) . '…'
      *         : $text;
      * });
      * ```
-     * 
+     *
      * Template usage:
      * ```twig
      * {{ article.body |> excerpt(150) }}
@@ -537,7 +537,7 @@ trait ClarityEngineTrait
      * wrapped in the layout. The layout receives the rendered content in the `content`
      * variable.
      *
-     * Templates are automatically compiled to cached PHP classes. The cache is 
+     * Templates are automatically compiled to cached PHP classes. The cache is
      * automatically invalidated when source files change.
      *
      * **Basic rendering:**
@@ -601,7 +601,7 @@ trait ClarityEngineTrait
         $this->renderDepth++;
         try {
             $merged = [...$this->vars, ...$vars];
-            $cast = self::castToArray($merged);
+            $cast   = self::castToArray($merged);
             $output = $this->renderFile($view, $cast);
         } finally {
             $this->renderDepth--;
@@ -625,8 +625,6 @@ trait ClarityEngineTrait
         $vars['content'] = $content;
         return $this->renderPartial($layout, $vars);
     }
-
-
 
     // -------------------------------------------------------------------------
     // Internal rendering
@@ -682,7 +680,7 @@ trait ClarityEngineTrait
                 restore_exception_handler();
                 if ($this->debugMode) {
                     $this->debugBus?->emit('template.render', [
-                        'template' => $templateName,
+                        'template'    => $templateName,
                         'duration_ms' => \round((\microtime(true) - $renderStart) * 1000, 3),
                     ]);
                 }
@@ -706,7 +704,7 @@ trait ClarityEngineTrait
         if ($this->debugMode) {
             $this->debugBus?->emit('template.resolve', [
                 'template' => $templateName,
-                'loader' => \get_class($loader),
+                'loader'   => \get_class($loader),
             ]);
         }
 
@@ -742,10 +740,10 @@ trait ClarityEngineTrait
             ->setRegistry($this->registry)
             ->setDebugMode($this->debugMode);
         $compileStart = $this->debugMode ? \microtime(true) : 0.0;
-        $compiled = $this->compiler->compile($templateName, $loader);
+        $compiled     = $this->compiler->compile($templateName, $loader);
         if ($this->debugMode) {
             $this->debugBus?->emit('template.compile', [
-                'template' => $templateName,
+                'template'    => $templateName,
                 'duration_ms' => \round((\microtime(true) - $compileStart) * 1000, 3),
             ]);
         }
@@ -774,22 +772,22 @@ trait ClarityEngineTrait
     }
 
     /**
-     * Map a file line number from a compiled cache file back to the original
-     * template file and line, using only the source map from a CompiledTemplate
-     * (no class loading or reflection required).
-     *
-    * Cache::writeAndLoad() prepends "<?php\n" before the compiled code, so
-    * the body does not start at line 1. The preamble emitted by buildClass()
-    * is variable-length (deps/sourceMap exports span multiple lines), so the
-    * offset is determined dynamically by locating the first line inside the
-    * render() try-block where compiled template statements begin.
-     *
-     * @param int      $fileLine     1-based line number reported by the ParseError.
-     * @param string   $compiledCode The compiled PHP code from CompiledTemplate (no leading <?php).
-     * @param array    $sourceMap    Source map from the CompiledTemplate.
-     * @param string[] $files        Logical template names (indexed by the integers in $sourceMap).
-     * @param string   $templateName Fallback logical template name.
-     * @return array{0: string|null, 1: int}  [templateName|null, templateLine]
+      * Map a file line number from a compiled cache file back to the original
+      * template file and line, using only the source map from a CompiledTemplate
+      * (no class loading or reflection required).
+      *
+     * Cache::writeAndLoad() prepends "<?php\n" before the compiled code, so
+     * the body does not start at line 1. The preamble emitted by buildClass()
+     * is variable-length (deps/sourceMap exports span multiple lines), so the
+     * offset is determined dynamically by locating the first line inside the
+     * render() try-block where compiled template statements begin.
+      *
+      * @param int      $fileLine     1-based line number reported by the ParseError.
+      * @param string   $compiledCode The compiled PHP code from CompiledTemplate (no leading <?php).
+      * @param array    $sourceMap    Source map from the CompiledTemplate.
+      * @param string[] $files        Logical template names (indexed by the integers in $sourceMap).
+      * @param string   $templateName Fallback logical template name.
+      * @return array{0: string|null, 1: int}  [templateName|null, templateLine]
      */
     private function mapCompiledErrorLine(int $fileLine, string $compiledCode, array $sourceMap, array $files, string $templateName): array
     {
@@ -853,7 +851,7 @@ trait ClarityEngineTrait
      */
     private function findRenderBodyStartLine(array $fileLines): int
     {
-        $lineCount = count($fileLines);
+        $lineCount   = count($fileLines);
         $renderStart = -1;
 
         for ($index = 0; $index < $lineCount; $index++) {
@@ -894,8 +892,9 @@ trait ClarityEngineTrait
                 return false;
             }
 
-            if (!(error_reporting() & $errno))
+            if (!(error_reporting() & $errno)) {
                 return false;
+            }
 
             // Determine template position
             [$tplFile, $tplLine] = $this->resolveTemplateLine($templateName, $errline);
@@ -1017,7 +1016,7 @@ trait ClarityEngineTrait
         }
 
         try {
-            $map = $className::$sourceMap;
+            $map   = $className::$sourceMap;
             $files = $className::$sourceFiles;
         } catch (\Error) {
             return [null, 0];
@@ -1052,9 +1051,10 @@ trait ClarityEngineTrait
      * Precedence:
      * 1. JsonSerializable → jsonSerialize() then recurse
      * 2. Objects with toArray() → toArray() then recurse
-     * 3. Other objects → get_object_vars() then recurse
-     * 4. Arrays → recurse element by element
-     * 5. Scalars / null → pass through
+     * 3. Traversable (Iterator / IteratorAggregate) → iterator_to_array() then recurse
+     * 4. Other objects → get_object_vars() then recurse
+     * 5. Arrays → recurse element by element
+     * 6. Scalars / null → pass through
      */
     public static function castToArray(mixed $value): mixed
     {
@@ -1074,6 +1074,13 @@ trait ClarityEngineTrait
         if (\is_object($value)) {
             if (\method_exists($value, 'toArray')) {
                 return self::castToArray($value->toArray());
+            }
+            if ($value instanceof \Traversable) {
+                $result = [];
+                foreach ($value as $k => $v) {
+                    $result[$k] = self::castToArray($v);
+                }
+                return $result;
             }
             return self::castToArray(get_object_vars($value));
         }
