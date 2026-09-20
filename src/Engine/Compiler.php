@@ -37,6 +37,22 @@ class Compiler
 {
     private const SOURCE_MARKER_RE = '/^@source\s+([A-Za-z0-9+\/=]+)\s+(\d+)$/';
 
+    /**
+     * Placeholder property emitted by buildClass().  compile() rewrites it with
+     * the resolved first line of the compiled render body, expressed in
+     * cache-file coordinates (i.e. accounting for the "<?php" line that
+     * Cache::writeAndLoad() prepends).  Baking the offset into the class means
+     * runtime error mapping needs neither reflection nor file I/O.
+     */
+    private const BODY_LINE_PROPERTY = 'public static int $renderBodyLine = 0;';
+
+    /**
+     * Unique placeholder emitted by buildClass() on the line directly above the
+     * first compiled template statement inside render().  It is stripped by
+     * compile() once the body offset is known.  The line itself emits no output.
+     */
+    private const BODY_LINE_TOKEN = '@@CLARITY_BODY_LINE@@';
+
     private const PARENT_PLACEHOLDER_RE = '/\{%-?\s*@parent\s*-?%\}/s';
 
     private Tokenizer $tokenizer;
@@ -63,9 +79,9 @@ class Compiler
     private ?TemplateLoader $loader = null;
 
     /**
-    * @var list<array{type:string, restore:array<string,string|null>}>
-    * Stack tracking loop types and compiler-scope variable bindings to restore on endfor.
-    */
+     * @var list<array{type:string, restore:array<string,string|null>}>
+     * Stack tracking loop types and compiler-scope variable bindings to restore on endfor.
+     */
     private array $forStack = [];
 
     /** Counter for generating unique temp-variable names in compiled range loops */
@@ -75,30 +91,30 @@ class Compiler
     private bool $debugMode = false;
 
     /**
-    * @var array<string, string>  templateVarName → PHP variable string for locally-bound loop vars.
-    * Checked first during expression resolution; falls back to $vars[name] when absent.
-    * Simple mapping: 'item' → '$item', 'key' → '$key', etc.
-    */
+     * @var array<string, string>  templateVarName → PHP variable string for locally-bound loop vars.
+     * Checked first during expression resolution; falls back to $vars[name] when absent.
+     * Simple mapping: 'item' → '$item', 'key' → '$key', etc.
+     */
     private array $localVars = [];
 
     /**
-    * Macros defined during the current compile pass (after pre-scan).
-    * Static includes can add more macros before the rest of the template is compiled.
-    * @var array<string, array{params: list<string>, body: string}>
-    */
+     * Macros defined during the current compile pass (after pre-scan).
+     * Static includes can add more macros before the rest of the template is compiled.
+     * @var array<string, array{params: list<string>, body: string}>
+     */
     private array $macros = [];
 
     /**
-    * Stack of macro names currently being expanded (for cycle detection).
-    * @var list<string>
-    */
+     * Stack of macro names currently being expanded (for cycle detection).
+     * @var list<string>
+     */
     private array $macroExpansionStack = [];
 
     /**
-    * Current output-escaping context tracked during compilation.
-    * Updated automatically by scanning TEXT tokens for <script>/<style> boundaries
-    * and by explicit {# @context js #} / {# @context html #} / {# @context css #} hints.
-    */
+     * Current output-escaping context tracked during compilation.
+     * Updated automatically by scanning TEXT tokens for <script>/<style> boundaries
+     * and by explicit {# @context js #} / {# @context html #} / {# @context css #} hints.
+     */
     private string $context = 'html';
 
     /** @var string[] */
@@ -159,32 +175,32 @@ class Compiler
     // -------------------------------------------------------------------------
 
     /**
-    * Compile a template and return a CompiledTemplate value object.
-    *
-    * @param string         $templateName Logical template name (e.g. 'home', 'admin::dashboard').
-    * @param TemplateLoader $loader       Loader used to fetch source for this template and its
-    *                                    dependencies (extends parents, includes).
-    * @throws ClarityException On compilation errors.
-    */
+     * Compile a template and return a CompiledTemplate value object.
+     *
+     * @param string         $templateName Logical template name (e.g. 'home', 'admin::dashboard').
+     * @param TemplateLoader $loader       Loader used to fetch source for this template and its
+     *                                    dependencies (extends parents, includes).
+     * @throws ClarityException On compilation errors.
+     */
     public function compile(string $templateName, TemplateLoader $loader): CompiledTemplate
     {
-        $this->loader = $loader;
-        $this->dependencies = [];
-        $this->sourceMap = [];
-        $this->sourceFiles = [];
+        $this->loader          = $loader;
+        $this->dependencies    = [];
+        $this->sourceMap       = [];
+        $this->sourceFiles     = [];
         $this->sourceFileIndex = [];
-        $this->phpLine = 0;
-        $this->forStack = [];
-        $this->rangeCounter = 0;
-        $this->localVars = [];
+        $this->phpLine         = 0;
+        $this->forStack        = [];
+        $this->rangeCounter    = 0;
+        $this->localVars       = [];
         $this->tokenizer->setLocalVars([]);
-        $this->macros = [];
+        $this->macros              = [];
         $this->macroExpansionStack = [];
-        $this->context = 'html';
+        $this->context             = 'html';
         $this->tokenizer->setEscapeContext('html');
-        $this->extendsStack = [];
-        $this->compileStack = [];
-        $this->mappedSourcePath = null;
+        $this->extendsStack         = [];
+        $this->compileStack         = [];
+        $this->mappedSourcePath     = null;
         $this->mappedSourceLineBase = 1;
         $this->mappedMergedLineBase = 1;
 
@@ -211,12 +227,36 @@ class Compiler
         // Build the complete class code (no leading <?php – Cache adds it)
         $code = $this->buildClass($className, $body);
 
+        // Resolve the line at which the compiled render body starts and bake it
+        // into the class.  Knowing this offset up-front lets the engine map a
+        // runtime error line to a template line with zero file I/O: it only has
+        // to read `$className::$renderBodyLine` (a plain static read).
+        //
+        // The offsets are expressed in *cache-file* coordinates: Cache::writeAndLoad()
+        // prepends "<?php\n" to $code, shifting every line by one, and the marker
+        // sits directly above the first compiled statement.
+        $bodyMarkerLine = $this->findBodyMarkerLine($code);
+        $renderBodyLine = $bodyMarkerLine === 0 ? 0 : $bodyMarkerLine + 2;
+
+        $code = \str_replace(
+            [
+                self::BODY_LINE_TOKEN,
+                self::BODY_LINE_PROPERTY,
+            ],
+            [
+                '',
+                'public static int $renderBodyLine = ' . $renderBodyLine . ';',
+            ],
+            $code
+        );
+
         return new CompiledTemplate(
             className: $className,
             code: $code,
             sourceMap: $this->sourceMap,
             dependencies: $this->dependencies,
             sourceFiles: $this->sourceFiles,
+            renderBodyLine: $renderBodyLine,
         );
     }
 
@@ -225,13 +265,13 @@ class Compiler
     // -------------------------------------------------------------------------
 
     /**
-    * If the source contains {% extends "…" %}, load the parent, merge blocks,
-    * and return the merged source.  Recursive: parent may itself extend.
-    *
-    * @param string $source       Full source of the child template.
-    * @param string $currentName  Logical name of the child template (for error reporting).
-    * @return string Merged source ready for compilation.
-    */
+     * If the source contains {% extends "…" %}, load the parent, merge blocks,
+     * and return the merged source.  Recursive: parent may itself extend.
+     *
+     * @param string $source       Full source of the child template.
+     * @param string $currentName  Logical name of the child template (for error reporting).
+     * @return string Merged source ready for compilation.
+     */
     private function resolveExtends(string $source, string $currentName): string
     {
         if (\in_array($currentName, $this->extendsStack, true)) {
@@ -250,11 +290,11 @@ class Compiler
                 return $this->annotateSourceRegion($source, $currentName, 1);
             }
 
-            $layoutRef = $m[1][0];
-            $layoutName = $this->resolveLogicalName($layoutRef, $currentName);
+            $layoutRef    = $m[1][0];
+            $layoutName   = $this->resolveLogicalName($layoutRef, $currentName);
             $extendsStart = $m[0][1];
-            $extendsEnd = $extendsStart + \strlen($m[0][0]);
-            $childSource = \substr($source, 0, $extendsStart) . \substr($source, $extendsEnd);
+            $extendsEnd   = $extendsStart + \strlen($m[0][0]);
+            $childSource  = \substr($source, 0, $extendsStart) . \substr($source, $extendsEnd);
 
             $layoutSource = $this->readWithDep($layoutName);
 
@@ -285,21 +325,21 @@ class Compiler
     }
 
     /**
-    * Split a template into a leading set preamble and the remaining body.
-    *
-    * Only leading {% set ... %} directives are preserved across inheritance.
-    * Rendered content outside blocks remains unsupported and is left in the
-    * body, where it continues to be ignored for child templates.
-    *
-    * @param bool $preservePadding When true, keep leading whitespace/comments as-is.
-    *                              Child templates pass false so ignored content stays ignored.
-    * @return array{0: string, 1: string}
-    */
+     * Split a template into a leading set preamble and the remaining body.
+     *
+     * Only leading {% set ... %} directives are preserved across inheritance.
+     * Rendered content outside blocks remains unsupported and is left in the
+     * body, where it continues to be ignored for child templates.
+     *
+     * @param bool $preservePadding When true, keep leading whitespace/comments as-is.
+     *                              Child templates pass false so ignored content stays ignored.
+     * @return array{0: string, 1: string}
+     */
     private function splitLeadingSetPreamble(string $source, bool $preservePadding = true): array
     {
         $preamble = '';
-        $offset = 0;
-        $length = \strlen($source);
+        $offset   = 0;
+        $length   = \strlen($source);
 
         while ($offset < $length) {
             if (\preg_match('/\G\s+/As', $source, $m, 0, $offset)) {
@@ -331,10 +371,10 @@ class Compiler
     }
 
     /**
-    * Extract all {% block name %}...{% endblock %} definitions from source.
-    *
-    * @return array<string, array{content: string, file: string, line: int}> block-name → source metadata
-    */
+     * Extract all {% block name %}...{% endblock %} definitions from source.
+     *
+     * @return array<string, array{content: string, file: string, line: int}> block-name → source metadata
+     */
     private function extractBlocks(string $source, string $sourceName, int $baseLine = 1): array
     {
         $blocks = [];
@@ -342,13 +382,13 @@ class Compiler
         // Use a simple iterative approach to handle nested blocks
         $offset = 0;
         while (\preg_match('/\{%-?\s*block\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*-?%\}/s', $source, $m, PREG_OFFSET_CAPTURE, $offset)) {
-            $blockName = $m[1][0];
+            $blockName  = $m[1][0];
             $blockStart = $m[0][1]; // position of {% block ... %}
             $innerStart = $blockStart + \strlen($m[0][0]);
 
             // Find the matching {% endblock %}, accounting for nesting
-            $depth = 1;
-            $pos = $innerStart;
+            $depth   = 1;
+            $pos     = $innerStart;
             $content = null;
 
             while ($depth > 0 && \preg_match('/\{%-?\s*(block\s+[a-zA-Z_][a-zA-Z0-9_]*|endblock)\s*-?%\}/s', $source, $nm, PREG_OFFSET_CAPTURE, $pos)) {
@@ -360,7 +400,7 @@ class Compiler
                 }
                 if ($depth === 0) {
                     $content = \substr($source, $innerStart, $nm[0][1] - $innerStart);
-                    $offset = $nm[0][1] + \strlen($nm[0][0]);
+                    $offset  = $nm[0][1] + \strlen($nm[0][0]);
                 }
                 $pos = $nm[0][1] + \strlen($nm[0][0]);
             }
@@ -368,8 +408,8 @@ class Compiler
             if ($content !== null) {
                 $blocks[$blockName] = [
                     'content' => $content,
-                    'file' => $sourceName,
-                    'line' => $baseLine + \substr_count(\substr($source, 0, $innerStart), "\n"),
+                    'file'    => $sourceName,
+                    'line'    => $baseLine + \substr_count(\substr($source, 0, $innerStart), "\n"),
                 ];
             }
         }
@@ -378,37 +418,36 @@ class Compiler
     }
 
     /**
-    * Replace each {% block name %}...{% endblock %} in $layoutSource with
-    * the child's definition for that block (if one exists).
-    *
-    * Uses the same iterative nesting-aware approach as extractBlocks() so
-    * that layout blocks which themselves contain inner blocks are matched
-    * correctly.  The previous lazy-regex approach stopped at the first
-    * {% endblock %} regardless of nesting depth.
-    *
-    * @param array<string, array{content: string, file: string, line: int}> $childBlocks
-    */
+     * Replace each {% block name %}...{% endblock %} in $layoutSource with
+     * the child's definition for that block (if one exists).
+     *
+     * Uses the same iterative nesting-aware approach as extractBlocks() so
+     * that layout blocks which themselves contain inner blocks are matched
+     * correctly.  The previous lazy-regex approach stopped at the first
+     * {% endblock %} regardless of nesting depth.
+     *
+     * @param array<string, array{content: string, file: string, line: int}> $childBlocks
+     */
     private function mergeBlocks(
         string $layoutBody,
         array $childBlocks,
         string $layoutSource,
         string $layoutName,
         int $layoutBodyOffset
-    ): string
-    {
+    ): string {
         $result = '';
         $offset = 0;
 
         while (preg_match('/\{%-?\s*block\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*-?%\}/s', $layoutBody, $m, PREG_OFFSET_CAPTURE, $offset)) {
-            $blockName = $m[1][0];
-            $tagStart = $m[0][1];
+            $blockName  = $m[1][0];
+            $tagStart   = $m[0][1];
             $innerStart = $tagStart + strlen($m[0][0]);
 
             // Walk forward tracking nesting to find the matching {% endblock %}
-            $depth = 1;
-            $pos = $innerStart;
+            $depth    = 1;
+            $pos      = $innerStart;
             $innerEnd = null;
-            $fullEnd = null;
+            $fullEnd  = null;
 
             while ($depth > 0 && preg_match('/\{%-?\s*(block\s+[a-zA-Z_][a-zA-Z0-9_]*|endblock)\s*-?%\}/s', $layoutBody, $nm, PREG_OFFSET_CAPTURE, $pos)) {
                 $tag = trim($nm[1][0]);
@@ -419,7 +458,7 @@ class Compiler
                 }
                 if ($depth === 0) {
                     $innerEnd = $nm[0][1];
-                    $fullEnd = $nm[0][1] + strlen($nm[0][0]);
+                    $fullEnd  = $nm[0][1] + strlen($nm[0][0]);
                 }
                 $pos = $nm[0][1] + strlen($nm[0][0]);
             }
@@ -439,7 +478,7 @@ class Compiler
             // The override is re-wrapped in {% block %}...{% endblock %} so that
             // deeper children in a multi-level extends chain can still override it.
             if (isset($childBlocks[$blockName])) {
-                $child = $childBlocks[$blockName];
+                $child    = $childBlocks[$blockName];
                 $expanded = $this->expandParentPlaceholders($child, $parentContent);
                 $result .= '{% block ' . $blockName . ' %}' . $expanded . '{% endblock %}';
                 if ($fullEnd < strlen($layoutBody)) {
@@ -470,13 +509,13 @@ class Compiler
     }
 
     /**
-    * Resolve `{% @parent %}` placeholders inside a child block override.
-    *
-    * Child and parent fragments are emitted with their own source markers so
-    * mapped compile errors keep pointing at the correct template and line.
-    *
-    * @param array{content: string, file: string, line: int} $childBlock
-    */
+     * Resolve `{% @parent %}` placeholders inside a child block override.
+     *
+     * Child and parent fragments are emitted with their own source markers so
+     * mapped compile errors keep pointing at the correct template and line.
+     *
+     * @param array{content: string, file: string, line: int} $childBlock
+     */
     private function expandParentPlaceholders(array $childBlock, string $parentContent): string
     {
         $childContent = $childBlock['content'];
@@ -490,7 +529,7 @@ class Compiler
 
         while (\preg_match(self::PARENT_PLACEHOLDER_RE, $childContent, $match, PREG_OFFSET_CAPTURE, $offset)) {
             $matchStart = $match[0][1];
-            $matchEnd = $matchStart + \strlen($match[0][0]);
+            $matchEnd   = $matchStart + \strlen($match[0][0]);
 
             $result .= $this->annotateSourceSlice(
                 $childContent,
@@ -537,12 +576,12 @@ class Compiler
     // -------------------------------------------------------------------------
 
     /**
-    * Compile a (already-merged) template source to PHP render-body code.
-    *
-    * @param string $source     Merged template source.
-    * @param string $sourcePath Absolute path (for error reporting and source-map file tagging).
-    * @return string PHP statements that form the body of render().
-    */
+     * Compile a (already-merged) template source to PHP render-body code.
+     *
+     * @param string $source     Merged template source.
+     * @param string $sourcePath Absolute path (for error reporting and source-map file tagging).
+     * @return string PHP statements that form the body of render().
+     */
     private function compileSource(string $source, string $sourcePath): string
     {
         $lines = [];
@@ -551,16 +590,16 @@ class Compiler
     }
 
     /**
-    * Compile a template source into the provided $lines accumulator, updating
-    * the shared $phpLine counter and $sourceMap in-place.
-    *
-    * Includes are inlined directly here (rather than returning a string) to
-    * avoid double-counting PHP lines in the source map.
-    *
-    * @param string $source     Template source (already merged with extends/blocks).
-    * @param string $sourcePath Absolute path of the template being compiled.
-    * @param array  $lines      Accumulator for generated PHP code lines (mutated).
-    */
+     * Compile a template source into the provided $lines accumulator, updating
+     * the shared $phpLine counter and $sourceMap in-place.
+     *
+     * Includes are inlined directly here (rather than returning a string) to
+     * avoid double-counting PHP lines in the source map.
+     *
+     * @param string $source     Template source (already merged with extends/blocks).
+     * @param string $sourcePath Absolute path of the template being compiled.
+     * @param array  $lines      Accumulator for generated PHP code lines (mutated).
+     */
     private function compileSourceInto(string $source, string $sourcePath, array &$lines): void
     {
         if (\in_array($sourcePath, $this->compileStack, true)) {
@@ -580,7 +619,6 @@ class Compiler
                 [$mappedSourcePath, $mappedTplLine] = $this->resolveSegmentSource($sourcePath, $tplLine);
 
                 switch ($seg[Tokenizer::KEY_TYPE]) {
-
                     case Tokenizer::TEXT:
                         if ($seg[Tokenizer::KEY_CONTENT] === '') {
                             break;
@@ -640,7 +678,7 @@ class Compiler
         if (preg_match(self::SOURCE_MARKER_RE, $inner, $m)) {
             $decoded = base64_decode($m[1], true);
             if ($decoded !== false && $decoded !== '') {
-                $this->mappedSourcePath = $decoded;
+                $this->mappedSourcePath     = $decoded;
                 $this->mappedSourceLineBase = (int) $m[2];
                 $this->mappedMergedLineBase = $tplLine;
             }
@@ -651,8 +689,8 @@ class Compiler
             // Handle {# @context <name> #} hints.
             static $validContexts = [
                 'html' => true,
-                'js' => true,
-                'css' => true
+                'js'   => true,
+                'css'  => true
             ];
             $ctx = strtolower(trim(substr($inner, 9)));
             if (isset($validContexts[$ctx])) {
@@ -663,20 +701,19 @@ class Compiler
     }
 
     /**
-    * Compile a single {% … %} directive to PHP.
-    *
-    * @param string $content    Inner text of the {% … %} tag (trimmed).
-    * @param string $sourcePath Source file path for error messages.
-    * @param int    $tplLine    Template line number for error messages.
-    * @param array  $lines      Accumulator for generated PHP code lines (mutated).
-    */
+     * Compile a single {% … %} directive to PHP.
+     *
+     * @param string $content    Inner text of the {% … %} tag (trimmed).
+     * @param string $sourcePath Source file path for error messages.
+     * @param int    $tplLine    Template line number for error messages.
+     * @param array  $lines      Accumulator for generated PHP code lines (mutated).
+     */
     private function compileBlock(
         string $content,
         string $sourcePath,
         int $tplLine,
         array &$lines
-    ): string
-    {
+    ): string {
         if (\preg_match('/^@parent\s*$/i', $content)) {
             throw new ClarityException(
                 "'{% @parent %}' is only valid inside an overriding child block.",
@@ -701,20 +738,20 @@ class Compiler
             2
         );
         $keyword = \strtolower($parts[0]);
-        $rest = $parts[1] ?? '';
+        $rest    = $parts[1] ?? '';
 
         return match ($keyword) {
-            'if' => 'if (' . $this->tokenizer->processCondition($rest) . '):',
+            'if'     => 'if (' . $this->tokenizer->processCondition($rest) . '):',
             'elseif' => 'elseif (' . $this->tokenizer->processCondition($rest) . '):',
-            'else' => 'else:',
-            'endif' => 'endif;',
+            'else'   => 'else:',
+            'endif'  => 'endif;',
             'endfor' => $this->compileEndFor($sourcePath, $tplLine),
-            'for' => $this->compileFor($rest, $sourcePath, $tplLine),
-            'set' => $this->compileSet($rest, $sourcePath, $tplLine),
+            'for'    => $this->compileFor($rest, $sourcePath, $tplLine),
+            'set'    => $this->compileSet($rest, $sourcePath, $tplLine),
             // extends/block/endblock/include are handled before this stage; if seen here → ignore
             'extends', 'block', 'endblock' => '',
-            'include' => $this->compileInclude($rest, $sourcePath, $tplLine, $lines),
-            default => $this->registry->hasDirective($keyword)
+            'include'                      => $this->compileInclude($rest, $sourcePath, $tplLine, $lines),
+            default                        => $this->registry->hasDirective($keyword)
             ? $this->registry->compileDirective(
                 $keyword,
                 $rest,
@@ -735,14 +772,14 @@ class Compiler
     // -------------------------------------------------------------------------
 
     /**
-    * Scan $source for {% macro @name(params) %}...{% endmacro %} definitions,
-    * store them in $this->macros, and strip the definitions from the source.
-    */
+     * Scan $source for {% macro @name(params) %}...{% endmacro %} definitions,
+     * store them in $this->macros, and strip the definitions from the source.
+     */
     private function extractMacros(string &$source): void
     {
         $pattern = '/\{%-?\s*macro\s+@([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*-?%\}(.*?)\{%-?\s*endmacro\s*-?%\}/s';
-        $source = (string) \preg_replace_callback($pattern, function (array $m): string {
-            $name = $m[1];
+        $source  = (string) \preg_replace_callback($pattern, function (array $m): string {
+            $name   = $m[1];
             $params = $m[2] !== '' ? \array_map('trim', \explode(',', $m[2])) : [];
             $this->macros[$name] = ['params' => $params, 'body' => $m[3]];
             return '';
@@ -750,17 +787,16 @@ class Compiler
     }
 
     /**
-    * Inline a macro call into the current output.
-    * Params become PHP locals ($__m_paramName) scoped to the macro body.
-    */
+     * Inline a macro call into the current output.
+     * Params become PHP locals ($__m_paramName) scoped to the macro body.
+     */
     private function compileMacroCall(
         string $name,
         string $argsRaw,
         string $sourcePath,
         int $tplLine,
         array &$lines
-    ): void
-    {
+    ): void {
         if (!isset($this->macros[$name])) {
             throw new ClarityException("Call to undefined macro '@{$name}'", $sourcePath, $tplLine);
         }
@@ -775,9 +811,9 @@ class Compiler
             );
         }
 
-        $macro = $this->macros[$name];
+        $macro  = $this->macros[$name];
         $params = $macro['params'];
-        $args = $argsRaw !== '' ? $this->splitArgList($argsRaw) : [];
+        $args   = $argsRaw !== '' ? $this->splitArgList($argsRaw) : [];
 
         if (\count($args) !== \count($params)) {
             throw new ClarityException(
@@ -790,7 +826,7 @@ class Compiler
         // Assign each argument to a unique PHP local; save compile-scope for restore.
         $restore = [];
         foreach ($params as $idx => $param) {
-            $phpVar = '$__m_' . $param;
+            $phpVar  = '$__m_' . $param;
             $phpExpr = $this->tokenizer->processCondition(\trim($args[$idx]));
             $this->addPhpLines($lines, $phpVar . ' = ' . $phpExpr . ';', $tplLine, $sourcePath);
             $restore[$param] = $this->localVars[$param] ?? null;
@@ -818,16 +854,16 @@ class Compiler
     }
 
     /**
-    * Split a comma-separated argument list, respecting nested parentheses and quoted strings.
-    *
-    * @return list<string>
-    */
+     * Split a comma-separated argument list, respecting nested parentheses and quoted strings.
+     *
+     * @return list<string>
+     */
     private function splitArgList(string $input): array
     {
-        $parts = [];
-        $depth = 0;
-        $start = 0;
-        $len = \strlen($input);
+        $parts    = [];
+        $depth    = 0;
+        $start    = 0;
+        $len      = \strlen($input);
         $inSingle = false;
         $inDouble = false;
 
@@ -863,15 +899,15 @@ class Compiler
     private const RE_FOR_IN = '/^([a-zA-Z_][a-zA-Z0-9_.]*)(?:\s*,\s*([a-zA-Z_][a-zA-Z0-9_]*))?\s+in\s+(.+?)(?:(\.\.\.?)(.+?)(?:\s+step\s+(.+))?)?$/s';
 
     /**
-    * Compile {% for item in list %} → PHP foreach.
-    * Compile {% for item, idx in list %} → PHP foreach.
-    * Compile {% for i in start..end %} / {% for i in start...end [step N] %} → native PHP for.
-    *
-    * Range syntax:
-    *   ..   exclusive upper bound  (start ≤ i < end)
-    *   ...  inclusive upper bound  (start ≤ i ≤ end)
-    * An optional `step N` suffix controls the increment (default: 1).
-    */
+     * Compile {% for item in list %} → PHP foreach.
+     * Compile {% for item, idx in list %} → PHP foreach.
+     * Compile {% for i in start..end %} / {% for i in start...end [step N] %} → native PHP for.
+     *
+     * Range syntax:
+     *   ..   exclusive upper bound  (start ≤ i < end)
+     *   ...  inclusive upper bound  (start ≤ i ≤ end)
+     * An optional `step N` suffix controls the increment (default: 1).
+     */
     private function compileFor(string $rest, string $sourcePath, int $tplLine): string
     {
         $rest = trim($rest);
@@ -883,21 +919,21 @@ class Compiler
         // Range syntax: varName in startExpr(..|...)endExpr [step stepExpr]
         if (isset($m[4]) && $m[4] !== '') {
             // Evaluate bounds in the current (outer) scope before registering the loop var
-            $start = $this->tokenizer->processCondition(trim($m[3]));
+            $start     = $this->tokenizer->processCondition(trim($m[3]));
             $inclusive = ($m[4] === '..');
-            $end = $this->tokenizer->processCondition(trim($m[5]));
-            $step = isset($m[6]) && $m[6] !== '' ? $this->tokenizer->processCondition(trim($m[6])) : '1';
-            $cmp = $inclusive ? '<=' : '<';
+            $end       = $this->tokenizer->processCondition(trim($m[5]));
+            $step      = isset($m[6]) && $m[6] !== '' ? $this->tokenizer->processCondition(trim($m[6])) : '1';
+            $cmp       = $inclusive ? '<=' : '<';
 
-            $n = $this->rangeCounter++;
+            $n  = $this->rangeCounter++;
             $rb = "\$__rb{$n}";
             $re = "\$__re{$n}";
             $rs = "\$__rs{$n}";
 
             // Allocate a local PHP variable for the iteration variable (same name as template var)
             $itemTplName = trim($m[1]);
-            $itemPhpVar = '$' . $itemTplName;
-            $restore = [$itemTplName => $this->localVars[$itemTplName] ?? null];
+            $itemPhpVar  = '$' . $itemTplName;
+            $restore     = [$itemTplName => $this->localVars[$itemTplName] ?? null];
             $this->localVars[$itemTplName] = $itemPhpVar;
             $this->tokenizer->setLocalVars($this->localVars);
 
@@ -916,14 +952,14 @@ class Compiler
         $listExpr = $this->tokenizer->processCondition(trim($m[3]));
 
         $itemTplName = trim($m[1]);
-        $itemPhpVar = '$' . $itemTplName;
-        $restore = [$itemTplName => $this->localVars[$itemTplName] ?? null];
+        $itemPhpVar  = '$' . $itemTplName;
+        $restore     = [$itemTplName => $this->localVars[$itemTplName] ?? null];
         $this->localVars[$itemTplName] = $itemPhpVar;
 
         // Optional key variable
         if (isset($m[2]) && $m[2] !== '') {
             $keyTplName = trim($m[2]);
-            $keyPhpVar = '$' . $keyTplName;
+            $keyPhpVar  = '$' . $keyTplName;
             $restore[$keyTplName] = $this->localVars[$keyTplName] ?? null;
             $this->localVars[$keyTplName] = $keyPhpVar;
             $this->tokenizer->setLocalVars($this->localVars);
@@ -937,19 +973,19 @@ class Compiler
     }
 
     /**
-    * Compile {% endfor %} → the correct PHP closing keyword based on the
-    * matching opening loop (native `for` vs `foreach`).
-    */
+     * Compile {% endfor %} → the correct PHP closing keyword based on the
+     * matching opening loop (native `for` vs `foreach`).
+     */
     /**
-    * Scan a TEXT segment for <script>/<style> open/close tags and update $this->context
-    * to reflect the escaping context that applies AFTER this text block.
-    * Uses the last boundary found so that a segment containing both open and close
-    * (e.g. an inline <script>…</script>) correctly ends back in 'html'.
-    */
+     * Scan a TEXT segment for <script>/<style> open/close tags and update $this->context
+     * to reflect the escaping context that applies AFTER this text block.
+     * Uses the last boundary found so that a segment containing both open and close
+     * (e.g. an inline <script>…</script>) correctly ends back in 'html'.
+     */
     private function updateContextFromText(string $text): void
     {
         $lastPos = -1;
-        $newCtx = null;
+        $newCtx  = null;
 
         // Only consider fully-formed opening tags (including the closing '>')
         // as boundaries. This avoids switching the escape context to 'js' or
@@ -958,9 +994,9 @@ class Compiler
         // attribute interpolations and must be treated as HTML.
         $boundaries = [
             '/<script\b[^>]*>/i' => 'js',
-            '/<\/script>/i' => 'html',
-            '/<style\b[^>]*>/i' => 'css',
-            '/<\/style>/i' => 'html',
+            '/<\/script>/i'      => 'html',
+            '/<style\b[^>]*>/i'  => 'css',
+            '/<\/style>/i'       => 'html',
         ];
 
         foreach ($boundaries as $pattern => $ctx) {
@@ -968,7 +1004,7 @@ class Compiler
                 $last = \end($m[0]);
                 if ($last[1] > $lastPos) {
                     $lastPos = $last[1];
-                    $newCtx = $ctx;
+                    $newCtx  = $ctx;
                 }
             }
         }
@@ -1000,8 +1036,8 @@ class Compiler
     private const RE_SET = '/^(.+?)\s*=\s*(.+)$/s';
 
     /**
-    * Compile {% set var = expr %} → PHP assignment.
-    */
+     * Compile {% set var = expr %} → PHP assignment.
+     */
     private function compileSet(string $rest, string $sourcePath, int $tplLine): string
     {
         // Expect:  lvalue  =  expression
@@ -1018,15 +1054,15 @@ class Compiler
     private const RE_INCLUDE = '/^["\']([^"\']+)["\']\s*$/';
 
     /**
-    * Compile {% include "name" %} by recursively compiling the included template
-    * and writing its output directly into $outLines, preserving source-map
-    * accuracy (no double-counting of PHP lines).
-    *
-    * @param string $rest        Everything after the 'include' keyword.
-    * @param string $currentName Logical name of the including template.
-    * @param int    $tplLine     Template line of the include directive.
-    * @param array  $outLines    Accumulator to write the compiled lines into (mutated).
-    */
+     * Compile {% include "name" %} by recursively compiling the included template
+     * and writing its output directly into $outLines, preserving source-map
+     * accuracy (no double-counting of PHP lines).
+     *
+     * @param string $rest        Everything after the 'include' keyword.
+     * @param string $currentName Logical name of the including template.
+     * @param int    $tplLine     Template line of the include directive.
+     * @param array  $outLines    Accumulator to write the compiled lines into (mutated).
+     */
     private function compileInclude(string $rest, string $currentName, int $tplLine, array &$outLines): string
     {
         if (!\preg_match(self::RE_INCLUDE, trim($rest), $m)) {
@@ -1059,50 +1095,50 @@ class Compiler
     // -------------------------------------------------------------------------
 
     /**
-    * Convert a raw TEXT segment to a PHP echo statement that preserves
-    * the content verbatim.
-    *
-    * Produces a **single-line** PHP double-quoted string literal by escaping
-    * all control characters (including newlines), backslashes, double-quotes,
-    * and dollar signs via addcslashes().  This avoids three problems the
-    * previous nowdoc approach had:
-    *
-    *  1. PHP 7.3+ indented nowdoc: the 8-space class-body indentation added
-    *     by buildClass() was silently stripped from the start of every content
-    *     line, mangling template text that relied on leading spaces.
-    *  2. Marker escape: a time-derived uniqid() marker could theoretically
-    *     collide with content the template author controls.
-    *  3. Per-segment uniqid() syscall overhead.
-    *
-    * addcslashes() escapes:
-    *   \x00–\x1F  control chars (incl. \n → \n, \r → \r, \t → \t, others → octal)
-    *   \x7F       DEL
-    *   \          → \\
-    *   "          → \"
-    *   $          → \$  (prevents PHP variable interpolation)
-    */
+     * Convert a raw TEXT segment to a PHP echo statement that preserves
+     * the content verbatim.
+     *
+     * Produces a **single-line** PHP double-quoted string literal by escaping
+     * all control characters (including newlines), backslashes, double-quotes,
+     * and dollar signs via addcslashes().  This avoids three problems the
+     * previous nowdoc approach had:
+     *
+     *  1. PHP 7.3+ indented nowdoc: the 8-space class-body indentation added
+     *     by buildClass() was silently stripped from the start of every content
+     *     line, mangling template text that relied on leading spaces.
+     *  2. Marker escape: a time-derived uniqid() marker could theoretically
+     *     collide with content the template author controls.
+     *  3. Per-segment uniqid() syscall overhead.
+     *
+     * addcslashes() escapes:
+     *   \x00–\x1F  control chars (incl. \n → \n, \r → \r, \t → \t, others → octal)
+     *   \x7F       DEL
+     *   \          → \\
+     *   "          → \"
+     *   $          → \$  (prevents PHP variable interpolation)
+     */
     private function textToPhp(string $text): string
     {
         return 'echo "' . addcslashes($text, "\0..\37\177\\\"$") . '";';
     }
 
     /**
-    * Append PHP code line(s) to the output and update the source map.
-    *
-    * The source map stores compact ranges: a new entry is only appended when
-    * the (file, templateLine) pair changes from the previous entry, so a range
-    * implicitly covers all PHP lines up to the start of the next entry.
-    *
-    * @param array  $lines   The accumulated render-body lines (mutated).
-    * @param string $php     The PHP code to append (may contain newlines).
-    * @param int    $tplLine The corresponding template source line.
-    * @param string $file    Absolute path of the source template file.
-    */
+     * Append PHP code line(s) to the output and update the source map.
+     *
+     * The source map stores compact ranges: a new entry is only appended when
+     * the (file, templateLine) pair changes from the previous entry, so a range
+     * implicitly covers all PHP lines up to the start of the next entry.
+     *
+     * @param array  $lines   The accumulated render-body lines (mutated).
+     * @param string $php     The PHP code to append (may contain newlines).
+     * @param int    $tplLine The corresponding template source line.
+     * @param string $file    Absolute path of the source template file.
+     */
     private function addPhpLines(array &$lines, string $php, int $tplLine, string $file): void
     {
         if (!isset($this->sourceFileIndex[$file])) {
             $this->sourceFileIndex[$file] = \count($this->sourceFiles);
-            $this->sourceFiles[] = $file;
+            $this->sourceFiles[]          = $file;
         }
         $fileIdx = $this->sourceFileIndex[$file];
 
@@ -1139,7 +1175,7 @@ class Compiler
 
     private function resolveSourceOriginAtOffset(string $source, string $fallbackSourceName, int $offset): array
     {
-        $offset = max(0, min($offset, strlen($source)));
+        $offset     = max(0, min($offset, strlen($source)));
         $mergedLine = $this->sourceLineAtOffset($source, $offset);
 
         $activeSourceName = $fallbackSourceName;
@@ -1187,16 +1223,16 @@ class Compiler
     }
 
     /**
-    * Resolve a logical template reference to a normalized logical name.
-    *
-    * This is where namespace logic and extension stripping would go if we
-    * supported those features.  For now, we just trim whitespace and validate
-    * that the name contains only safe characters.
-    *
-    * @param string $ref         The raw template reference (e.g. from an extends/include tag).
-    * @param string $currentName The logical name of the template containing this reference (for error messages).
-    * @return string Normalized logical name to use for loader lookup.
-    */
+     * Resolve a logical template reference to a normalized logical name.
+     *
+     * This is where namespace logic and extension stripping would go if we
+     * supported those features.  For now, we just trim whitespace and validate
+     * that the name contains only safe characters.
+     *
+     * @param string $ref         The raw template reference (e.g. from an extends/include tag).
+     * @param string $currentName The logical name of the template containing this reference (for error messages).
+     * @return string Normalized logical name to use for loader lookup.
+     */
     private function resolveLogicalName(string $ref, string $currentName): string
     {
         $ref = trim($ref);
@@ -1208,8 +1244,8 @@ class Compiler
         // Strip extension if the engine has an explicit extension configured
         if (
             $this->extension !== null
-            && $this->extension !== ''
-            && str_ends_with($ref, $this->extension)
+                && $this->extension !== ''
+                && str_ends_with($ref, $this->extension)
         ) {
             $ref = substr($ref, 0, -strlen($this->extension));
         }
@@ -1226,10 +1262,10 @@ class Compiler
     }
 
     /**
-    * Load a template's source via the active loader and record revision as a dependency.
-    *
-    * @param string $name Logical template name.
-    */
+     * Load a template's source via the active loader and record revision as a dependency.
+     *
+     * @param string $name Logical template name.
+     */
     private function readWithDep(string $name): string
     {
         $src = $this->loader->load($name);
@@ -1241,12 +1277,32 @@ class Compiler
     }
 
     /**
-    * Wrap the compiled render body in a class with docblock.
-    *
-    * @param string $className Generated class name.
-    * @param string $body      PHP render body statements.
-    * @return string Complete PHP class code (without leading <?php).
-    */
+     * Locate the line holding the body-base marker in the generated class code.
+     *
+     * The result is in *code* coordinates (no leading "<?php").  compile() adds
+     * +1 for the line below the marker and +1 more for the "<?php" that
+     * Cache::writeAndLoad() prepends, which is how $renderBodyLine is derived.
+     *
+     * @param string $code Generated class code (without leading "<?php").
+     * @return int 1-based line of the marker, or 0 when not found.
+     */
+    private function findBodyMarkerLine(string $code): int
+    {
+        $offset = \strpos($code, self::BODY_LINE_TOKEN);
+        if ($offset === false || $offset === 0) {
+            return 0;
+        }
+
+        return \substr_count($code, "\n", 0, $offset) + 1;
+    }
+
+    /**
+     * Wrap the compiled render body in a class with docblock.
+     *
+     * @param string $className Generated class name.
+     * @param string $body      PHP render body statements.
+     * @return string Complete PHP class code (without leading <?php).
+     */
     private function buildClass(string $className, string $body): string
     {
         // Indent the body
@@ -1255,17 +1311,17 @@ class Compiler
             array_map(fn(string $l) => $l !== '' ? '        ' . $l : '', explode("\n", $body))
         );
 
-        $depsExport = var_export($this->dependencies, true);
+        $depsExport  = var_export($this->dependencies, true);
         $filesExport = var_export($this->sourceFiles, true);
-        $mapExport = var_export($this->sourceMap, true);
-        $debugFlag = $this->debugMode ? 'true' : 'false';
+        $mapExport   = var_export($this->sourceMap, true);
+        $debugFlag   = $this->debugMode ? 'true' : 'false';
 
         // Detect which registries are actually referenced in the compiled body.
         // The constructor always accepts all three (so the caller stays simple),
         // but render() only unpacks the ones that are actually used.
-        $usesFilters = \str_contains($body, '$__fl');
+        $usesFilters   = \str_contains($body, '$__fl');
         $usesFunctions = \str_contains($body, '$__fn');
-        $usesServices = \str_contains($body, '$__sv');
+        $usesServices  = \str_contains($body, '$__sv');
 
         $unpacks = '';
         if ($usesFilters) {
@@ -1293,6 +1349,9 @@ class Compiler
             /** @var bool  whether this template was compiled with debug mode enabled */
             public static bool \$debugCompiled = {$debugFlag};
 
+            /** @var int  cache-file line at which the compiled render body starts; 0 when unknown */
+            public static int \$renderBodyLine = 0;
+
             /** @param array<string,callable> \$__fl Filter registry */
             /** @param array<string,callable> \$__fn Function registry */
             /** @param array<string,callable> \$__sv Service registry */
@@ -1302,6 +1361,7 @@ class Compiler
             {
         {$unpacks}                ob_start();
                 try {
+        /* @@CLARITY_BODY_LINE@@ */
         {$indented}
                     return (string) ob_get_clean();
                 } catch (\Throwable \$__e) {

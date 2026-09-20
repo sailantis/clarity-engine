@@ -607,8 +607,8 @@ try {
 } catch (ClarityException $e) {
     echo "<pre>";
     echo "Error: " . $e->getMessage() . "\n";
-    echo "File: " . $e->getFile() . "\n";
-    echo "Line: " . $e->getLine() . "\n";
+    echo "Template: " . $e->templateFile . "\n";
+    echo "Line: " . $e->templateLine . "\n";
     echo "\nStack Trace:\n" . $e->getTraceAsString();
     echo "</pre>";
 }

@@ -2,7 +2,7 @@
 
 This directory contains detailed guides for using Clarity, a fast, secure template engine for PHP.
 
-## 📖 Documentation Overview
+## Documentation Overview
 
 ### For Beginners
 
@@ -27,13 +27,13 @@ Deep dives into specialized features:
 7. **[Best Practices](05-best-practices.md)** — Organization, naming, security, testing, and debugging
 8. **[Troubleshooting](06-troubleshooting.md)** — Common errors and how to fix them
 
-## 🔗 Additional Resources
+## Additional Resources
 
 - **[Main README](../README.md)** — Quick reference and overview
 - **[API Documentation](../api/README.md)** — Auto-generated API reference
 - **[Examples](examples/README.md)** — Runnable template examples
 
-## 💡 Suggested Reading Order
+## Suggested Reading Order
 
 **For Template Authors:**
 
@@ -47,6 +47,6 @@ Deep dives into specialized features:
 2. Advanced Topics (caching, namespaces, error handling)
 3. API Documentation for method references
 
-## 🤝 Contributing
+## Contributing
 
 Found an error or have suggestions? Please open an issue or pull request on the main repository.

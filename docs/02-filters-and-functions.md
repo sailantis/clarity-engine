@@ -14,6 +14,7 @@ Filters transform a value before output. Both `|` and `|>` work as the filter pi
 ```
 
 > **`|` vs `||` vs `bor`**
+>
 > - `|` — always a filter pipe (even a single `|`)
 > - `||` — logical OR (two pipes are never a filter pipe)
 > - `bor` — bitwise OR keyword (use this when you need the bitwise `|` operator)
@@ -31,7 +32,10 @@ Chain multiple filters together—each filter receives the output of the previou
 ### Filter Syntax
 
 ```twig
-{{ value | filterName }}              {# No arguments #}\n{{ value | filterName(arg1) }}        {# One argument #}\n{{ value | filterName(arg1, arg2) }}  {# Multiple arguments #}\n```
+{{ value | filterName }}              {# No arguments #}
+{{ value | filterName(arg1) }}        {# One argument #}
+{{ value | filterName(arg1, arg2) }}  {# Multiple arguments #}
+```
 
 ## Built-in Filters
 
@@ -346,7 +350,8 @@ Count array elements or string length:
 
 ```twig
 {{ items.length }} {# Property access also works #}
-{{ items |> length }} {# Filter form #} {{ "hello" |> length }} {# Output: 5 #}
+{{ items |> length }} {# Filter form #}
+{{ "hello" |> length }} {# Output: 5 #}
 ```
 
 #### slice(start, length?)
@@ -581,6 +586,14 @@ Get array values (re-indexed):
 {{ values(data) |> join(', ') }}
 ```
 
+### len(var)
+
+Get the length of an array or string similar to `length` filter:
+
+```twig
+{{ len(data) }}
+```
+
 ## Custom Filters
 
 Register custom filters in your PHP code:
@@ -614,26 +627,6 @@ Use in template:
 
 ```twig
 {{ article.body |> excerpt(50) }} {{ article.body |> excerpt(150, '…') }}
-```
-
-### Chainable Filter
-
-Filters can be chained, so design them to work with various inputs:
-
-```php
-$engine->addFilter('highlight', function($text, string $query) {
-    return str_replace(
-        $query,
-        '<mark>' . $query . '</mark>',
-        $text
-    );
-});
-```
-
-Use in template:
-
-```twig
-{{ description |> highlight(searchTerm) |> raw }}
 ```
 
 ### Filter Accessing Template Context
@@ -692,60 +685,6 @@ Use in template:
 <li>Item {{ i }}</li>
 {% endfor %}
 ```
-
-## Best Practices
-
-### When to Use Filters vs. Functions
-
-- **Filters:** Transform a value (pipe input → output)
-- **Functions:** Generate or compute a value (return result)
-
-```twig
-<!-- Filter: Transform existing value -->
-{{ userName |> upper }}
-
-<!-- Function: Generate new value -->
-{{ asset('logo.png') }}
-```
-
-### Keep Logic Simple
-
-Templates should focus on presentation. Complex business logic belongs in PHP:
-
-❌ **Bad:**
-
-```twig
-{{ items |> filter(i => i.price > 100 and i.category == 'electronics' and i.stock > 0) |> map(i => i.name ~ ' - $' ~ i.price) }}
-```
-
-✅ **Good:**
-
-```php
-// In PHP
-$expensiveElectronics = array_filter($items, fn($i) =>
-    $i->price > 100 && $i->category === 'electronics' && $i->stock > 0
-);
-$engine->render('products', ['products' => $expensiveElectronics]);
-```
-
-```twig
-<!-- In template -->
-{% for product in products %}
-<li>{{ product.name }} - {{ product.price |> currency }}</li>
-{% endfor %}
-```
-
-### Security with Custom Filters
-
-- Always validate and sanitize inputs
-- Be careful returning raw HTML (users might inject untrusted data)
-- Prefer auto-escaping; only use `|> raw` when absolutely necessary
-
-### Naming Conventions
-
-- Use lowercase_with_underscores: `format_date`, `url_encode`
-- Make names descriptive: `excerpt` not `exc`, `currency` not `cur`
-- Avoid conflicts with built-in filters
 
 ## Named Arguments
 

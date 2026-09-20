@@ -23,7 +23,7 @@ use Clarity\ClarityException;
  * Conversions performed
  * • var-chains (foo.bar[x].baz) → $vars['foo']['bar'][$vars['x']]['baz']
  * • logical operators:  and → &&,  or → ||,  not → !
- * • bitwise operators:  bor → |,  band → &,  bxor → ^,  bnot → ~
+ * • bitwise operators:  bor → |,  band → &,  bxor → ^,  bnot → ~,  blsh → <<,  brsh → >>
  * • concat operator:    ~   → .
  * • all other tokens pass through unchanged (PHP validates them)
  *
@@ -495,6 +495,8 @@ class Tokenizer
             'band'  => '&',
             'bxor'  => '^',
             'bnot'  => '~',
+            'blsh'  => '<<',
+            'brsh'  => '>>',
             'true'  => 'true',
             'false' => 'false',
             'null'  => 'null',
@@ -561,8 +563,8 @@ class Tokenizer
 
             if (
                 $ch === '.'
-                && ($expr[$i + 1] ?? '') === '.'
-                && ($expr[$i + 2] ?? '') === '.'
+                    && ($expr[$i + 1] ?? '') === '.'
+                    && ($expr[$i + 2] ?? '') === '.'
             ) {
                 throw new ClarityException('Spread operator is only allowed inside array and object literals.');
             }
@@ -1029,8 +1031,8 @@ class Tokenizer
         // their output is never passed through htmlspecialchars/json_encode.
         if (isset($this->contextInjectedFunctions[$name])) {
             $this->autoEscape = false;
-            $contextLit       = "'" . $this->escapeContext . "'";
-            $call             = "\$__fn[{$safeName}]({$contextLit}";
+            $contextLit = "'" . $this->escapeContext . "'";
+            $call       = "\$__fn[{$safeName}]({$contextLit}";
             if (\trim($argsRaw) !== '') {
                 $argList = $this->splitRespectingStrings($argsRaw, ',');
                 $call .= ', ' . \implode(', ', $this->compileArgList($argList));
@@ -1134,7 +1136,7 @@ class Tokenizer
                     if ($cc === ']') {
                         $depth--;
                         if ($depth === 0) {
-                            $inner      = \substr($subject, $innerStart, $i - $innerStart);
+                            $inner = \substr($subject, $innerStart, $i - $innerStart);
                             $segments[] = ['type' => 'index', 'value' => $inner];
                             $i++; // consume closing ']'
                             break;
@@ -1149,7 +1151,7 @@ class Tokenizer
                 if ($depth > 0) {
                     // Unterminated index expression: consume to end as one index segment.
                     $segments[] = ['type' => 'index', 'value' => substr($subject, $innerStart)];
-                    $i          = $len;
+                    $i = $len;
                 }
 
                 continue;
@@ -1222,7 +1224,7 @@ class Tokenizer
             return $this->varChainCache[$chain];
         }
 
-        $php                         = $this->buildVarChainPhp($segments);
+        $php = $this->buildVarChainPhp($segments);
         $this->varChainCache[$chain] = $php;
         return $php;
     }
@@ -1337,7 +1339,7 @@ class Tokenizer
             $named = $this->parseNamedArg($arg);
             if ($named !== null) {
                 $seenNamed = true;
-                $result[]  = $named['name'] . ': ' . $this->processCondition($named['expr']);
+                $result[] = $named['name'] . ': ' . $this->processCondition($named['expr']);
             } else {
                 if ($seenNamed) {
                     throw new ClarityException(
@@ -1368,7 +1370,7 @@ class Tokenizer
 
             $parsedNamed = $this->parseNamedArg($arg);
             if ($parsedNamed !== null) {
-                $seenNamed                   = true;
+                $seenNamed = true;
                 $named[$parsedNamed['name']] = $this->processCondition($parsedNamed['expr']);
                 continue;
             }
@@ -1601,8 +1603,8 @@ class Tokenizer
                 );
             }
 
-            $paramName            = $params[$index];
-            $slots[$index + 2]    = $phpArg;
+            $paramName = $params[$index];
+            $slots[$index + 2] = $phpArg;
             $assigned[$paramName] = true;
         }
 
@@ -1620,7 +1622,7 @@ class Tokenizer
             }
 
             $slots[$paramIndex + 2] = $phpArg;
-            $assigned[$paramName]   = true;
+            $assigned[$paramName] = true;
         }
 
         foreach ($params as $index => $paramName) {
@@ -1722,7 +1724,7 @@ class Tokenizer
 
         throw new ClarityException(
             "The '{$filterName}' filter requires a lambda (e.g. 'item => item.name') "
-            . "or a filter reference (e.g. '\"upper\"'), got: '{$arg}'"
+                . "or a filter reference (e.g. '\"upper\"'), got: '{$arg}'"
         );
     }
 
@@ -1828,7 +1830,7 @@ class Tokenizer
             if (!isset($second)) {
                 throw new ClarityException(
                     "The 'reduce' filter lambda must declare two parameters separated by a comma "
-                    . "(e.g. 'acc, item => acc + item'), got: '{$paramList}'"
+                        . "(e.g. 'acc, item => acc + item'), got: '{$paramList}'"
                 );
             }
             $phpBody = \str_replace("\$vars['{$second}']", '$' . $second, $phpBody);

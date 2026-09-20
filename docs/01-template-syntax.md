@@ -373,12 +373,12 @@ Use the keyword forms to avoid conflict with the `|` filter-pipe operator:
 {{ bnot flags }}        {# bitwise NOT — ~flags        #}
 ```
 
-| Operator | PHP equivalent | Description  |
-| -------- | -------------- | ------------ |
-| `bor`    | `\|`           | Bitwise OR   |
-| `band`   | `&`            | Bitwise AND  |
-| `bxor`   | `^`            | Bitwise XOR  |
-| `bnot`   | `~`            | Bitwise NOT  |
+| Operator | PHP equivalent | Description |
+| -------- | -------------- | ----------- |
+| `bor`    | `\|`           | Bitwise OR  |
+| `band`   | `&`            | Bitwise AND |
+| `bxor`   | `^`            | Bitwise XOR |
+| `bnot`   | `~`            | Bitwise NOT |
 
 ### Arithmetic Operators
 
@@ -607,37 +607,37 @@ title: widget.title, data: widget.data, config: widget.config }) }} {% endfor %}
 
 Clarity is sandboxed for security. The following are **not permitted**:
 
-❌ Direct PHP variables:
+Direct PHP variables:
 
 ```twig
 {{ $variable }} {# ERROR #}
 ```
 
-❌ Arbitrary PHP function calls:
+Arbitrary PHP function calls:
 
 ```twig
 {{ strtoupper(name) }} {# ERROR #}
 ```
 
-❌ Method calls on objects:
+Method calls on objects:
 
 ```twig
 {{ user.getName() }} {# ERROR #}
 ```
 
-✅ Instead, use filters:
+Instead, use filters:
 
 ```twig
 {{ name |> upper }} {# CORRECT #}
 ```
 
-❌ PHP statements or semicolons:
+PHP statements or semicolons:
 
 ```twig
 {{ $x = 5; }} {# ERROR #}
 ```
 
-✅ Instead, use `{% set %}`:
+Instead, use `{% set %}`:
 
 ```twig
 {% set x = 5 %} {# CORRECT #}
@@ -676,12 +676,13 @@ Clarity is sandboxed for security. The following are **not permitted**:
 
 ### Operator Summary
 
-| Category      | Operators                   |
-| ------------- | --------------------------- |
-| Comparison    | `==` `!=` `<` `>` `<=` `>=` |
-| Logical       | `and` `or` `not`            |
-| Arithmetic    | `+` `-` `*` `/` `%`         |
-| String        | `~` (concatenation)         |
-| Ternary       | `condition ? true : false`  |
-| Null coalesce | `??`                        |
-| Spread        | `...` (in arrays/objects)   |
+| Category      | Operators                                                      |
+| ------------- | -------------------------------------------------------------- |
+| Comparison    | `==` `!=` `<` `>` `<=` `>=`                                    |
+| Logical       | `and` `or` `not`                                               |
+| Arithmetic    | `+` `-` `*` `/` `%`                                            |
+| Bitwise       | `band` `bor` `bxor` `bnot` `blsh` `brsh` `&` `^` `~` `<<` `>>` |
+| String        | `~` (concatenation)                                            |
+| Ternary       | `condition ? true : false`                                     |
+| Null coalesce | `??`                                                           |
+| Spread        | `...` (in arrays/objects)                                      |

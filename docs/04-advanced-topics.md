@@ -411,19 +411,62 @@ try {
     $output = $engine->render('page', $data);
 } catch (ClarityException $e) {
     echo "Template error: " . $e->getMessage();
-    echo "\nFile: " . $e->getFile();
-    echo "\nLine: " . $e->getLine();
+    echo "\nTemplate: " . $e->templateFile;
+    echo "\nLine: " . $e->templateLine;
 }
 ```
+
+> **Use `$e->templateFile` / `$e->templateLine`, not `$e->getFile()` / `$e->getLine()`.**
+> `getFile()` and `getLine()` report where the exception was _thrown_ — i.e. inside
+> the engine or, for a syntax error, the generated cache file. `templateFile` and
+> `templateLine` point at the originating `.clarity.html` source. When the location
+> could not be resolved, `templateFile` falls back to the logical template name.
+
+The original throwable is always available as `$e->getPrevious()`.
+
+### What gets mapped
+
+| Failure                                                                | Result                                                                                                                           |
+| ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Undefined variable / array key / null offset                           | `ClarityException` — the render is aborted                                                                                       |
+| Syntax error in a template expression                                  | `ClarityException` wrapping the `ParseError`, pointing at the template line                                                      |
+| Exception thrown by a filter, function, or inline-filter PHP           | `ClarityException` wrapping the original, pointing at the template line that invoked it                                          |
+| `TypeError` / `Error` (e.g. a typed filter argument rejects the value) | `ClarityException` wrapping the original, pointing at the template line                                                          |
+| Other PHP diagnostics (e.g. `foreach()` over `null`)                   | Handed to your own error handler, annotated `… in <template>:<line>`; **rendering continues** and the partial output is returned |
+| Exception raised entirely outside the render path                      | Passed through unchanged, keeping its original type                                                                              |
+
+### Interoperating with your own error handler
+
+Clarity installs an error handler for the duration of a render and **chains** to whatever
+handler was already installed, so your logging / error-reporting listener keeps working:
+
+```php
+set_error_handler(function (int $no, string $msg, string $file, int $line): bool {
+    $log->warning($msg, ['file' => $file, 'line' => $line]);
+    return true;
+});
+
+// Diagnostics raised inside a template arrive here annotated with the template
+// location, e.g. "foreach() argument must be of type array|object, null given
+// in pages/list on line 4".
+$engine->render('pages/list', $data);
+```
+
+Two consequences worth knowing:
+
+- **Clarity does not impose a severity policy.** Non-variable diagnostics are handed to you
+  with their level translated to the matching `E_USER_*` constant (`E_WARNING` →
+  `E_USER_WARNING`, `E_NOTICE` → `E_USER_NOTICE`). If your handler promotes warnings to
+  exceptions, template warnings will abort the render — your choice, not Clarity's.
+- **Diagnostics raised outside the template** are passed straight through to your handler
+  unannotated.
 
 ### Error Messages
 
 Clarity maps errors back to the **original template file and line**:
 
 ```
-Syntax error in template: unexpected token '}' at line 42
-File: views/products/show.clarity.html
-Line: 42
+Syntax error in template: unexpected token '}' in views/products/show.clarity.html on line 42
 ```
 
 Even though the error occurs in compiled PHP, Clarity traces it back to the source `.clarity.html` file.
@@ -490,8 +533,8 @@ if ($_ENV['APP_ENV'] === 'development') {
         echo "<pre>";
         echo "Template Error:\n";
         echo $e->getMessage() . "\n";
-        echo "\nFile: " . $e->getFile();
-        echo "\nLine: " . $e->getLine();
+        echo "\nFile: " . $e->templateFile;
+        echo "\nLine: " . $e->templateLine;
         echo "\n\nStack Trace:\n" . $e->getTraceAsString();
         echo "</pre>";
         exit;
@@ -508,7 +551,7 @@ try {
     echo $engine->render('page', $data);
 } catch (ClarityException $e) {
     error_log("Template error: " . $e->getMessage());
-    error_log("File: " . $e->getFile() . ":" . $e->getLine());
+    error_log("File: " . $e->templateFile . ":" . $e->templateLine);
 
     http_response_code(500);
     echo "Sorry, something went wrong. Please try again later.";

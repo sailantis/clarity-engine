@@ -6,7 +6,7 @@
 
 ---
 
-## ✨ Features
+## Features
 
 - **Compiled & Cached** – Templates compile to PHP classes and leverage OPcache for blazing-fast rendering
 - **Secure Sandbox** – No arbitrary PHP execution; templates are strictly sandboxed with controlled access
@@ -21,7 +21,7 @@
 
 ---
 
-## 📦 Installation
+## Installation
 
 ```bash
 composer require sailantis/clarity-engine
@@ -31,7 +31,7 @@ composer require sailantis/clarity-engine
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Basic Setup
 
@@ -78,7 +78,7 @@ That's it! Clarity automatically compiles and caches your template.
 
 ---
 
-## 📚 Documentation
+## Documentation
 
 ### For Template Authors
 
@@ -164,7 +164,7 @@ Integration and advanced topics:
 
 Common filters: `upper`, `lower`, `trim`, `length`, `number`, `date`, `sprintf`, `json`, `join`, `split`, `slug`, `map`, `filter`, `reduce`, `default`, `empty`, `striptags`, `escape`, `raw`
 
-📖 **[See all filters and detailed syntax →](docs/02-filters-and-functions.md)**
+**[See all filters and detailed syntax →](docs/02-filters-and-functions.md)**
 
 ### Template Inheritance
 
@@ -195,11 +195,11 @@ Common filters: `upper`, `lower`, `trim`, `length`, `number`, `date`, `sprintf`,
 {{ include("widgets/card", { title: "Hi" }) }} {# Dynamic include with context #}
 ```
 
-📖 **[Full syntax reference →](docs/01-template-syntax.md)**
+**[Full syntax reference →](docs/01-template-syntax.md)**
 
 ---
 
-## ⚙️ Configuration
+## Configuration
 
 Configure the engine with these methods:
 
@@ -247,25 +247,25 @@ $engine->use(new \Clarity\Localization\TranslationModule([
 ]));
 ```
 
-📖 **[Configuration guide →](docs/00-getting-started.md#configuration)**
+**[Configuration guide →](docs/00-getting-started.md#configuration)**
 
 ---
 
-## 🔒 Security
+## Security
 
 Clarity provides a secure sandbox environment:
 
-- ✅ **No arbitrary PHP execution** – Templates cannot call PHP functions or access global state
-- ✅ **Auto-escaping by default** – All output is HTML-escaped to prevent XSS attacks
-- ✅ **Compile-time validation** – Syntax errors caught during compilation, not at runtime
-- ✅ **Object safety** – Objects are converted to arrays, preventing method calls from templates
-- ✅ **Controlled lambdas** – Lambda expressions can only use registered filters
+- **No arbitrary PHP execution** – Templates cannot call PHP functions or access global state
+- **Auto-escaping by default** – All output is HTML-escaped to prevent XSS attacks
+- **Compile-time validation** – Syntax errors caught during compilation, not at runtime
+- **Object safety** – Objects are converted to arrays, preventing method calls from templates
+- **Controlled lambdas** – Lambda expressions can only use registered filters
 
-📖 **[Security best practices →](docs/05-best-practices.md#security)**
+**[Security best practices →](docs/05-best-practices.md#security)**
 
 ---
 
-## ⚡ Performance
+## Performance
 
 Clarity is designed for speed. Templates compile to native PHP classes and leverage OPcache for optimal performance:
 
@@ -288,11 +288,11 @@ Clarity is designed for speed. Templates compile to native PHP classes and lever
 
 _30 runs × 10,000 iterations, PHP 8.3.6 with OPcache enabled on a high performance server (Benchmark link follows)_
 
-📖 **[Performance optimization guide →](docs/05-best-practices.md#performance)**
+**[Performance optimization guide →](docs/05-best-practices.md#performance)**
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
@@ -311,13 +311,13 @@ php vendor/bin/phpunit
 
 ---
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-## 🔗 Links
+## Links
 
 - **[Documentation](docs/README.md)** – Complete guide index
 - **[Examples](docs/examples/)** – Runnable example templates

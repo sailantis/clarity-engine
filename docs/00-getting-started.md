@@ -4,13 +4,13 @@ Clarity is a fast, secure PHP template engine that compiles `.clarity.html` temp
 
 ## Key Features
 
-- **🔒 Sandboxed** — Templates cannot execute arbitrary PHP code
-- **⚡ Fast** — Compiles to PHP classes with zero runtime overhead after warmup
-- **🛡️ Auto-escaping** — HTML output is automatically escaped by default
-- **🎨 Expressive Syntax** — Clean, readable template language
-- **📦 Template Inheritance** — Reusable layouts with extends and blocks
-- **🔧 Extensible** — Add custom filters and functions
-- **🌐 Unicode-aware** — Built-in support for multibyte strings
+- **Sandboxed** — Templates cannot execute arbitrary PHP code
+- **Fast** — Compiles to PHP classes with zero runtime overhead after warmup
+- **Auto-escaping** — HTML output is automatically escaped by default
+- **Expressive Syntax** — Clean, readable template language
+- **Template Inheritance** — Reusable layouts with extends and blocks
+- **Extensible** — Add custom filters and functions
+- **Unicode-aware** — Built-in support for multibyte strings
 
 ## Installation
 
@@ -181,7 +181,7 @@ $engine->use(new TranslationModule([
 ]));
 ```
 
-📖 **[Module reference →](04-advanced-topics.md#modules)**
+**[Module reference →](04-advanced-topics.md#modules)**
 
 ### Debug Mode
 
