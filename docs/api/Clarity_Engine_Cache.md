@@ -4,12 +4,12 @@
 
 Read/write cache for Clarity compiled template classes.
 
-Each compiled template is stored as a single `.php` file.  The cache
+Each compiled template is stored as a single `.php` file. The cache
 filename is derived deterministically from `md5($templateName)` so lookups
 never require reading the directory.
 
 Cache filename : md5($templateName).php
-Class name     : __Clarity_<md5($templateName)>_<uniqid>   (versioned per compile)
+Class name     : __Clarity_<md5($templateName)>\_<uniqid> (versioned per compile)
 
 Versioned class names allow multiple compiled versions of the same template
 to coexist in memory across recompilations — eliminating redeclaration
@@ -18,33 +18,37 @@ collisions in long-running processes (Swoole, RoadRunner, regular FPM alike).
 Each compiled file ends with `return '$className';` so that `require`-ing
 it returns the exact class name without any file re-reading or regex.
 
-In-process class name registry
---------------------------------
+## In-process class name registry
+
 `Cache::$classNames` maps templateName → loaded class name for the current
-process.  This lets warm-path calls to `isFresh()` and `load()` operate
+process. This lets warm-path calls to `isFresh()` and `load()` operate
 purely from memory (OPcache + static array) with zero file I/O.
 
-Compiled class static properties
----------------------------------
-$dependencies – array<string,int|string>  logicalName => revision
-$sourceMap    – list<[phpLineStart, fileIndex, templateLine]>  ranges
+## Compiled class static properties
+
+$dependencies   – array<string,int|string>  logicalName => revision
+$sourceMap – list<[phpLineStart, fileIndex, templateLine]> ranges
+$renderBodyLine – int first line of the compiled render body, in cache-file
+coordinates; lets error mapping run without re-reading the file
+
+A class lacking `$renderBodyLine` was compiled by an older Clarity version and is
+treated as stale, so it is recompiled once on the next request.
 
 ## 🚀 Public methods
 
-### __construct() · [source](../../src/Engine/Cache.php#L44)
+### \_\_construct() · [source](../../src/Engine/Cache.php#L44)
 
 `public function __construct(string $path = ''): mixed`
 
 **🧭 Parameters**
 
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `$path` | string | `''` |  |
+| Name    | Type   | Default | Description |
+| ------- | ------ | ------- | ----------- |
+| `$path` | string | `''`    |             |
 
 **➡️ Return value**
 
 - Type: mixed
-
 
 ---
 
@@ -56,14 +60,13 @@ Change the cache directory at runtime.
 
 **🧭 Parameters**
 
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `$path` | string | - |  |
+| Name    | Type   | Default | Description |
+| ------- | ------ | ------- | ----------- |
+| `$path` | string | -       |             |
 
 **➡️ Return value**
 
 - Type: static
-
 
 ---
 
@@ -75,7 +78,6 @@ Change the cache directory at runtime.
 
 - Type: string
 
-
 ---
 
 ### isFresh() · [source](../../src/Engine/Cache.php#L86)
@@ -85,8 +87,8 @@ Change the cache directory at runtime.
 Check whether a valid (non-stale) cached file exists for the given
 logical template name.
 
-Freshness rules
----------------
+## Freshness rules
+
 1. A compiled class for this template name is known (either loaded in
    this process already, or loadable from the cache file).
 2. Every entry in the class's $dependencies still has the same revision
@@ -97,15 +99,14 @@ On warm paths the class is already in memory; `readDeps()` reflects
 
 **🧭 Parameters**
 
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `$templateName` | string | - | Logical template name (e.g. 'home', 'layouts/base'). |
-| `$revisionFor` | callable | - | fn(string $name): int|string — returns the current<br>revision for a dependency name. The engine passes a<br>closure that calls the active TemplateLoader. |
+| Name            | Type     | Default | Description                                          |
+| --------------- | -------- | ------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `$templateName` | string   | -       | Logical template name (e.g. 'home', 'layouts/base'). |
+| `$revisionFor`  | callable | -       | fn(string $name): int                                | string — returns the current<br>revision for a dependency name. The engine passes a<br>closure that calls the active TemplateLoader. |
 
 **➡️ Return value**
 
 - Type: bool
-
 
 ---
 
@@ -116,20 +117,19 @@ On warm paths the class is already in memory; `readDeps()` reflects
 Return the class name for a loaded (or loadable) compiled template.
 
 If the class was already loaded in this process, returns from the in-
-process registry with no I/O.  Otherwise requires the cache file (which
+process registry with no I/O. Otherwise requires the cache file (which
 is OPcache-eligible) and registers the returned class name.
 
 **🧭 Parameters**
 
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `$templateName` | string | - | Logical template name. |
+| Name            | Type   | Default | Description            |
+| --------------- | ------ | ------- | ---------------------- |
+| `$templateName` | string | -       | Logical template name. |
 
 **➡️ Return value**
 
 - Type: string|null
 - Description: Null if no cache file exists.
-
 
 ---
 
@@ -146,16 +146,15 @@ loaded in this process.
 
 **🧭 Parameters**
 
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `$templateName` | string | - | Logical template name. |
-| `$compiled` | [CompiledTemplate](Clarity_Engine_CompiledTemplate.md) | - | Result from the compiler. |
+| Name            | Type                                                   | Default | Description               |
+| --------------- | ------------------------------------------------------ | ------- | ------------------------- |
+| `$templateName` | string                                                 | -       | Logical template name.    |
+| `$compiled`     | [CompiledTemplate](Clarity_Engine_CompiledTemplate.md) | -       | Result from the compiler. |
 
 **➡️ Return value**
 
 - Type: string
 - Description: The class name that is now live in memory.
-
 
 ---
 
@@ -168,14 +167,13 @@ remove it from the in-process registry.
 
 **🧭 Parameters**
 
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `$templateName` | string | - |  |
+| Name            | Type   | Default | Description |
+| --------------- | ------ | ------- | ----------- |
+| `$templateName` | string | -       |             |
 
 **➡️ Return value**
 
 - Type: void
-
 
 ---
 
@@ -190,7 +188,6 @@ registry so stale class names do not prevent recompilation.
 
 - Type: void
 
-
 ---
 
 ### classNameFor() · [source](../../src/Engine/Cache.php#L239)
@@ -200,19 +197,18 @@ registry so stale class names do not prevent recompilation.
 Return the base class-name prefix for a template name.
 
 Note: the actual in-memory class name includes a unique compile-time
-suffix to prevent redeclaration collisions.  Use `getLoadedClassName()`
+suffix to prevent redeclaration collisions. Use `getLoadedClassName()`
 to obtain the real class name after a template has been loaded.
 
 **🧭 Parameters**
 
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `$templateName` | string | - |  |
+| Name            | Type   | Default | Description |
+| --------------- | ------ | ------- | ----------- |
+| `$templateName` | string | -       |             |
 
 **➡️ Return value**
 
 - Type: string
-
 
 ---
 
@@ -225,14 +221,13 @@ given template name, or null if the template has not been loaded yet.
 
 **🧭 Parameters**
 
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `$templateName` | string | - |  |
+| Name            | Type   | Default | Description |
+| --------------- | ------ | ------- | ----------- |
+| `$templateName` | string | -       |             |
 
 **➡️ Return value**
 
 - Type: string|null
-
 
 ---
 
@@ -243,23 +238,21 @@ given template name, or null if the template has not been loaded yet.
 Compute the cache file path for a given logical template name.
 
 Files are stored under a 2-character hex subdirectory derived from the
-first two characters of the template name's MD5 hash.  This limits the
+first two characters of the template name's MD5 hash. This limits the
 number of files per directory to at most 256 buckets × N templates,
 keeping directory listings manageable even for large applications.
 
-Example:  md5('home') = 'b026...'  →  {cachePath}/b0/b026....php
+Example: md5('home') = 'b026...' → {cachePath}/b0/b026....php
 
 **🧭 Parameters**
 
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `$templateName` | string | - |  |
+| Name            | Type   | Default | Description |
+| --------------- | ------ | ------- | ----------- |
+| `$templateName` | string | -       |             |
 
 **➡️ Return value**
 
 - Type: string
-
-
 
 ---
 

@@ -11,6 +11,9 @@ namespace Clarity\Engine;
  * @property-read array    $dependencies Associative array of [logicalName => revision (int|string)]
  *                                       for every template (entry + extends + includes) read
  *                                       during compilation. Used for cache invalidation.
+ * @property-read int      $renderBodyLine Line at which the compiled render body starts
+ *                                       (1-based, relative to the class code without the
+ *                                       leading "<?php"); 0 when it could not be determined.
  */
 class CompiledTemplate
 {
@@ -20,13 +23,14 @@ class CompiledTemplate
      * @param array              $sourceMap    [phpLine, fileIndex, templateLine] mapping.
      * @param array<string,int|string> $dependencies [logicalName => revision] for cache invalidation.
      * @param string[]           $sourceFiles  Unique logical template names (parallel to $sourceMap file indices).
+     * @param int                $renderBodyLine First line of the compiled render body.
      */
     public function __construct(
-    public readonly string $className,
-    public readonly string $code,
-    public readonly array $sourceMap,
-    public readonly array $dependencies,
-    public readonly array $sourceFiles = [],
-    ) {
-    }
+        public readonly string $className,
+        public readonly string $code,
+        public readonly array $sourceMap,
+        public readonly array $dependencies,
+        public readonly array $sourceFiles = [],
+        public readonly int $renderBodyLine = 0,
+    ) {}
 }

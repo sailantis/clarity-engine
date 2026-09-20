@@ -661,23 +661,37 @@ trait ClarityEngineTrait
                 $this->registry->allServices()
             );
 
-            // Install error handler to map PHP errors → template lines
-            set_error_handler(
-                $this->buildErrorHandler($templateName),
+            // Install error handler to map PHP errors → template lines.
+            //
+            // set_error_handler() hands back the previously installed handler so
+            // this one can *chain* to it.  That matters: returning false from an
+            // error handler makes PHP's BUILT-IN handler report the diagnostic —
+            // it does NOT invoke the previously registered custom handler.  Without
+            // chaining, a template diagnostic would silently bypass the
+            // application's logging / error reporting and go to stderr instead.
+            //
+            // $previousHandler is passed BY REFERENCE into buildErrorHandler():
+            // its value only exists once set_error_handler() returns, so the
+            // closure must observe the variable rather than a snapshot of it.
+            $previousHandler = null;
+            $previousHandler = set_error_handler(
+                $this->buildErrorHandler($templateName, $previousHandler),
                 E_ALL & ~E_DEPRECATED & ~E_USER_DEPRECATED
-            );
-
-            // Install exception handler to catch uncaught exceptions (e.g. type errors) and map them to template lines as well.
-            set_exception_handler(
-                $this->buildExceptionHandler($templateName)
             );
 
             $renderStart = $this->debugMode ? \microtime(true) : 0.0;
             try {
                 $output = $template->render($vars);
+            } catch (\Throwable $e) {
+                // Exceptions raised while the template runs (e.g. from PHP
+                // generated for inline filters, from a registered filter, or a
+                // TypeError on a filter argument) are mapped here rather than by
+                // a global exception handler: a global handler only fires for
+                // exceptions that are *truly* uncaught, which never happens when
+                // the caller wraps render() in try/catch.
+                throw $this->mapRenderThrowable($e, $className, $templateName);
             } finally {
                 restore_error_handler();
-                restore_exception_handler();
                 if ($this->debugMode) {
                     $this->debugBus?->emit('template.render', [
                         'template'    => $templateName,
@@ -757,10 +771,9 @@ trait ClarityEngineTrait
             $this->cache->invalidate($templateName);
             [$tplFile, $tplLine] = $this->mapCompiledErrorLine(
                 $e->getLine(),
-                $compiled->code,
+                $compiled->renderBodyLine,
                 $compiled->sourceMap,
-                $compiled->sourceFiles,
-                $templateName
+                $compiled->sourceFiles
             );
             throw new ClarityException(
                 'Syntax error in template: ' . $e->getMessage(),
@@ -772,38 +785,127 @@ trait ClarityEngineTrait
     }
 
     /**
-      * Map a file line number from a compiled cache file back to the original
-      * template file and line, using only the source map from a CompiledTemplate
-      * (no class loading or reflection required).
-      *
+     * Map a file line number from a compiled cache file back to the original
+     * template file and line, using only data available at compile time
+     * (no class loading, reflection, or file I/O).
+     *
      * Cache::writeAndLoad() prepends "<?php\n" before the compiled code, so
-     * the body does not start at line 1. The preamble emitted by buildClass()
-     * is variable-length (deps/sourceMap exports span multiple lines), so the
-     * offset is determined dynamically by locating the first line inside the
-     * render() try-block where compiled template statements begin.
-      *
-      * @param int      $fileLine     1-based line number reported by the ParseError.
-      * @param string   $compiledCode The compiled PHP code from CompiledTemplate (no leading <?php).
-      * @param array    $sourceMap    Source map from the CompiledTemplate.
-      * @param string[] $files        Logical template names (indexed by the integers in $sourceMap).
-      * @param string   $templateName Fallback logical template name.
-      * @return array{0: string|null, 1: int}  [templateName|null, templateLine]
+     * the body does not start at line 1.  The compiler bakes the resolved body
+     * offset into {@see CompiledTemplate::$renderBodyLine}, from which the
+     * engine can derive the body start line of the written cache file without
+     * re-parsing it.
+     *
+     * @param int      $fileLine      1-based line number reported by the ParseError.
+     * @param int      $renderBodyLine First line of the compiled body, as baked into the class.
+     * @param array    $sourceMap     Source map from the CompiledTemplate.
+     * @param string[] $files         Logical template names (indexed by the integers in $sourceMap).
+     * @return array{0: string|null, 1: int}  [templateName|null, templateLine]
      */
-    private function mapCompiledErrorLine(int $fileLine, string $compiledCode, array $sourceMap, array $files, string $templateName): array
+    private function mapCompiledErrorLine(int $fileLine, int $renderBodyLine, array $sourceMap, array $files): array
     {
-        if ($sourceMap === []) {
+        if ($sourceMap === [] || $renderBodyLine <= 0) {
             return [null, 0];
         }
 
-        $bodyLine = $this->resolveCompiledBodyLine(
-            $fileLine,
-            explode("\n", "<?php\n" . $compiledCode)
+        return $this->matchSourceMapLine($sourceMap, $files, $fileLine - $renderBodyLine + 1);
+    }
+
+    /**
+     * Translate a throwable raised during template execution into a
+     * {@see ClarityException} that points at the originating template.
+     *
+     * The throwable's own location is used when it lies inside this template's
+     * compiled cache file.  Otherwise the stack trace is searched for the
+     * innermost frame belonging to that file, which covers user code called
+     * *from* the template (filters, functions, services).  Throwables that
+     * never touch the template — e.g. an exception raised by an application
+     * callback outside the render path — are returned unchanged so genuine
+     * application bugs keep their original type.
+     *
+     * @param \Throwable  $e            Throwable raised by the render call.
+     * @param class-string $className   Compiled template class that was being rendered.
+     * @param string      $templateName Logical template name (for cache-path resolution).
+     */
+    private function mapRenderThrowable(\Throwable $e, string $className, string $templateName): \Throwable
+    {
+        // Already describes a template location → nothing to add.
+        if ($e instanceof ClarityException) {
+            return $e;
+        }
+
+        $line = $this->resolveThrowableTemplateLine($e, $className, $templateName);
+        if ($line <= 0) {
+            return $e;
+        }
+
+        [$tplFile, $tplLine] = $this->matchSourceMapLine(
+            self::staticPropertyOrDefault($className, 'sourceMap', []),
+            self::staticPropertyOrDefault($className, 'sourceFiles', []),
+            $line
         );
-        if ($bodyLine <= 0) {
-            return [null, 0];
+        if ($tplFile === null) {
+            return $e;
         }
 
-        return $this->matchSourceMapLine($sourceMap, $files, $bodyLine);
+        return new ClarityException(
+            $e->getMessage(),
+            $tplFile,
+            $tplLine,
+            previous: $e
+        );
+    }
+
+    /**
+     * Read a static property from a compiled template class, tolerating classes
+     * compiled by an older compiler that lack it.
+     *
+     * @param class-string $className
+     * @param mixed        $default
+     * @return mixed
+     */
+    private static function staticPropertyOrDefault(string $className, string $property, mixed $default): mixed
+    {
+        try {
+            return $className::${$property};
+        } catch (\Error) {
+            return $default;
+        }
+    }
+
+    /**
+     * Find the compiled-body-relative line at which a throwable originated.
+     *
+     * @param \Throwable   $e
+     * @param class-string $className
+     * @param string       $templateName
+     * @return int Body-relative line, or 0 when the throwable did not originate
+     *             in this template.
+     */
+    private function resolveThrowableTemplateLine(\Throwable $e, string $className, string $templateName): int
+    {
+        $renderBodyLine = self::staticPropertyOrDefault($className, 'renderBodyLine', 0);
+        if (!\is_int($renderBodyLine) || $renderBodyLine <= 0) {
+            return 0;
+        }
+
+        $cachePath  = $this->cache->cacheFilePath($templateName);
+        $cacheReal  = \realpath($cachePath);
+        $cacheForms = $cacheReal === false ? [$cachePath] : [$cachePath, $cacheReal];
+
+        $file = $e->getFile();
+        if (in_array($file, $cacheForms, true)) {
+            return $e->getLine() - $renderBodyLine + 1;
+        }
+
+        // Fallback: user code (filters, functions) called by the template
+        // throws from its own file, but the frame below it is the template.
+        foreach ($e->getTrace() as $frame) {
+            if (isset($frame['file'], $frame['line']) && in_array($frame['file'], $cacheForms, true)) {
+                return $frame['line'] - $renderBodyLine + 1;
+            }
+        }
+
+        return 0;
     }
 
     /**
@@ -813,91 +915,61 @@ trait ClarityEngineTrait
      */
     private function matchSourceMapLine(array $sourceMap, array $files, int $bodyLine): array
     {
-        $matched = null;
-        foreach ($sourceMap as $range) {
+        // Ranges are appended in ascending order of their start line, so the
+        // matching range is the last one whose start is <= $bodyLine.  Scanning
+        // backwards finds it in O(1) for the common case (errors near the end of
+        // a template) instead of walking the whole map from the beginning.
+        for ($index = \count($sourceMap) - 1; $index >= 0; $index--) {
+            $range = $sourceMap[$index];
             if ($range[0] <= $bodyLine) {
-                $matched = $range;
-            } else {
-                break;
+                return [$files[$range[1]] ?? null, $range[2]];
             }
         }
 
-        if ($matched === null) {
-            return [null, 0];
-        }
-        $tplFile = $files[$matched[1]] ?? null;
-        return [$tplFile, $matched[2]];
-    }
-
-    /**
-     * Convert an absolute cache-file line into a render-body-relative line.
-     *
-     * @param string[] $fileLines
-     */
-    private function resolveCompiledBodyLine(int $fileLine, array $fileLines): int
-    {
-        $bodyStartFileLine = $this->findRenderBodyStartLine($fileLines);
-        if ($bodyStartFileLine === 0 || $fileLine < $bodyStartFileLine) {
-            return 0;
-        }
-
-        return $fileLine - $bodyStartFileLine + 1;
-    }
-
-    /**
-     * Locate the first compiled template statement inside render().
-     *
-     * @param string[] $fileLines
-     */
-    private function findRenderBodyStartLine(array $fileLines): int
-    {
-        $lineCount   = count($fileLines);
-        $renderStart = -1;
-
-        for ($index = 0; $index < $lineCount; $index++) {
-            if (str_contains($fileLines[$index], 'public function render(array $vars): string')) {
-                $renderStart = $index;
-                break;
-            }
-        }
-
-        if ($renderStart < 0) {
-            return 0;
-        }
-
-        for ($index = $renderStart; $index < $lineCount; $index++) {
-            if (str_contains($fileLines[$index], 'try {')) {
-                return $index + 2;
-            }
-        }
-
-        return 0;
+        return [null, 0];
     }
 
     /**
      * Build an error-handler closure that maps a PHP error in the compiled
      * cache file back to the original template name and line.
      *
-     * @param string $templateName The logical entry template name.
+     * Diagnostics that do NOT originate in the template are handed to the
+     * previously installed handler via {@see self::dispatchToPreviousHandler()},
+     * so the application keeps receiving them.
+     *
+     * @param string         $templateName    The logical entry template name.
+     * @param callable|null  $previousHandler Handler that was installed before this
+     *                                        one, captured from set_error_handler().
      * @return callable
      */
-    private function buildErrorHandler(string $templateName): callable
+    private function buildErrorHandler(string $templateName, ?callable &$previousHandler = null): callable
     {
         $cacheFile = $this->cache->cacheFilePath($templateName);
 
-        return function (int $errno, string $errstr, string $errfile, int $errline) use ($templateName, $cacheFile): bool {
+        return function (int $errno, string $errstr, string $errfile, int $errline) use ($templateName, $cacheFile, &$previousHandler): bool {
 
-            // Error comes from a different file → pass through to the next handler
-            if (realpath($errfile) !== realpath($cacheFile)) {
-                return false;
+            // Diagnostics raised outside the compiled template belong to the
+            // application, not to the template → hand them to the handler that
+            // was installed before this one, so application error handling is
+            // preserved rather than bypassed.
+            //
+            // PHP reports the exact `require` path in $errfile, so a plain string
+            // comparison against the path handed to require is sufficient.  The
+            // realpath() fallback only covers exotic path shapes (symlinks, mixed
+            // casing) and is deliberately attempted *after* the cheap compare.
+            if ($errfile !== $cacheFile && realpath($errfile) !== realpath($cacheFile)) {
+                return self::dispatchToPreviousHandler($previousHandler, $errno, $errstr, $errfile, $errline);
             }
 
             if (!(error_reporting() & $errno)) {
-                return false;
+                return self::dispatchToPreviousHandler($previousHandler, $errno, $errstr, $errfile, $errline);
             }
 
-            // Determine template position
+            // Determine template position.  Resolution can fail (e.g. the class
+            // was loaded by an older compiler), in which case fall back to the
+            // logical template name so the message is still actionable.
             [$tplFile, $tplLine] = $this->resolveTemplateLine($templateName, $errline);
+            $tplFile = $tplFile ?? $templateName;
 
             // 1) Undefined array key "foo"
             if (preg_match('/Undefined array key "([^"]+)"/', $errstr, $m)) {
@@ -918,7 +990,8 @@ trait ClarityEngineTrait
                 );
             }
 
-            if (preg_match('/Undefined variable: (\S+)/', $errstr, $m)) {
+            // 3) Undefined variable $foo  (PHP 8 wording; PHP 7 used "Undefined variable: foo")
+            if (preg_match('/Undefined variable:?\s+\$?(\w+)/', $errstr, $m)) {
                 $varName = $m[1];
                 throw new ClarityException(
                     "Variable \"$varName\" is not defined in this context",
@@ -927,72 +1000,62 @@ trait ClarityEngineTrait
                 );
             }
 
-            switch ($errno) {
-                case E_WARNING:
-                    $errno = E_USER_WARNING;
-                    break;
-                case E_NOTICE:
-                    $errno = E_USER_NOTICE;
-                    break;
-                case E_DEPRECATED:
-                    $errno = E_USER_DEPRECATED;
-                    break;
-                default:
-                    $errno = E_USER_ERROR;
+            // Any other diagnostic (e.g. `foreach() argument must be of type
+            // array|object`) is annotated with the template location and handed
+            // to the previous handler.  Rendering continues — the application's
+            // handler decides how severe that is (log it, promote it to an
+            // exception, ignore it), so Clarity does not impose a policy.
+            //
+            // The level is converted to its E_USER_* counterpart because
+            // trigger_error() — and therefore a handler receiving a user-level
+            // diagnostic — accepts *only* user-level constants.
+            $userLevel = match ($errno) {
+                E_NOTICE => E_USER_NOTICE,
+                default  => E_USER_WARNING
+            };
+
+            $annotated = "$errstr in $tplFile:$tplLine";
+
+            // Prefer handing the annotated message to the previous handler
+            // directly: re-emitting it with trigger_error() would be dropped,
+            // because PHP does not invoke a handler for a user-level error raised
+            // *while an error handler is executing*.
+            if ($previousHandler !== null) {
+                return self::dispatchToPreviousHandler(
+                    $previousHandler,
+                    $userLevel,
+                    $annotated,
+                    $cacheFile,
+                    $errline
+                );
             }
 
-            // Other errors (e.g. division by zero, type errors) are retriggered with the original message but mapped to the template line.
-            //throw new ClarityException($errstr, $tplFile ?? $templateName, $tplLine);
-            $newMessage = "$errstr in $tplFile:$tplLine";
-            trigger_error($newMessage, $errno);
+            trigger_error($annotated, $userLevel);
             return true;
         };
     }
 
     /**
-     * Build an exception-handler closure that maps uncaught exceptions in the compiled cache file back to the original template name and line.
+     * Hand a diagnostic to the handler that was installed before Clarity's.
      *
-     * @param string $templateName The logical entry template name.
-     * @return callable
+     * A `null` previous handler means PHP's built-in handler is the next one in
+     * line, which is exactly what returning false requests — so the caller's
+     * result is returned unchanged in that case.
+     *
+     * @param callable|null $previousHandler
      */
-    private function buildExceptionHandler(string $templateName): callable
-    {
-        $cacheFile = $this->cache->cacheFilePath($templateName);
+    private static function dispatchToPreviousHandler(
+        ?callable $previousHandler,
+        int $errno,
+        string $errstr,
+        string $errfile,
+        int $errline
+    ): bool {
+        if ($previousHandler === null) {
+            return false; // → PHP's built-in error handler reports it
+        }
 
-        return function (\Throwable $e) use ($templateName, $cacheFile) {
-            $cachePath = realpath($cacheFile);
-
-            // First, check the exception's own file (fast path)
-            $exFile = $e->getFile();
-            if ($exFile !== null && realpath($exFile) === $cachePath) {
-                $exLine = $e->getLine();
-            } else {
-                // Fallback: inspect the trace for frames that originate from the cache file
-                foreach ($e->getTrace() as $frame) {
-                    if (isset($frame['file']) && realpath($frame['file']) === $cachePath) {
-                        $exLine = $frame['line'] ?? 0;
-                        break;
-                    }
-                }
-            }
-
-            if (!isset($exLine)) {
-                // No frame from the cache file found → rethrow normally
-                throw $e;
-            }
-
-            [$tplFile, $mappedLine] = $this->resolveTemplateLine(
-                $templateName,
-                $exLine
-            );
-
-            throw new ClarityException(
-                $e->getMessage(),
-                $tplFile ?? $templateName,
-                $mappedLine,
-                previous: $e
-            );
-        };
+        return (bool) $previousHandler($errno, $errstr, $errfile, $errline);
     }
 
     /**
@@ -1001,8 +1064,10 @@ trait ClarityEngineTrait
      * the compiled class — no file I/O required.
      *
      * The source map is a list of ranges: [phpLineStart, fileIndex, templateLine].
-     * The matching range is the last entry whose phpLineStart ≤ $phpLine.
-     * Template names are resolved from the parallel $sourceFiles static property.
+     * The matching range is the last entry whose phpLineStart ≤ the body-relative
+     * line.  Template names are resolved from the parallel $sourceFiles static
+     * property, and the body offset comes from $renderBodyLine — both baked into
+     * the class at compile time, so this needs neither reflection nor disk access.
      *
      * @param string $templateName Logical name of the entry template.
      * @param int    $phpLine      Line number of the error in the compiled file.
@@ -1018,21 +1083,16 @@ trait ClarityEngineTrait
         try {
             $map   = $className::$sourceMap;
             $files = $className::$sourceFiles;
+            $body  = $className::$renderBodyLine;
         } catch (\Error) {
             return [null, 0];
         }
 
-        if (!\is_array($map) || $map === []) {
+        if (!\is_array($map) || $map === [] || !\is_int($body) || $body <= 0) {
             return [null, 0];
         }
 
-        $cacheFile = $this->cache->cacheFilePath($templateName);
-        $fileLines = @file($cacheFile, \FILE_IGNORE_NEW_LINES);
-        if (!\is_array($fileLines)) {
-            return [null, 0];
-        }
-
-        $bodyLine = $this->resolveCompiledBodyLine($phpLine, $fileLines);
+        $bodyLine = $phpLine - $body + 1;
         if ($bodyLine <= 0) {
             return [null, 0];
         }

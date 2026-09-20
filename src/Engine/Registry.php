@@ -110,7 +110,7 @@ class Registry
     /** @var array<string, callable> keyword → handler */
     private array $directiveHandlers = [];
 
-    /** @var array<string, callable> */
+    /** @var array<string, callable|bool> */
     private array $filters = [
         // inlined filters
         'default'     => true,
@@ -530,9 +530,9 @@ class Registry
             return (string) \json_encode(
                 $args,
                 JSON_UNESCAPED_UNICODE
-                | JSON_UNESCAPED_SLASHES
-                | JSON_INVALID_UTF8_SUBSTITUTE
-                | JSON_PARTIAL_OUTPUT_ON_ERROR
+                    | JSON_UNESCAPED_SLASHES
+                    | JSON_INVALID_UTF8_SUBSTITUTE
+                    | JSON_PARTIAL_OUTPUT_ON_ERROR
             );
         };
 
@@ -644,7 +644,7 @@ class Registry
             $size   = \max(1, $size);
             $chunks = \array_chunk((array) $v, $size);
             if ($fill !== null && !empty($chunks)) {
-                $last =& $chunks[\count($chunks) - 1];
+                $last = &$chunks[\count($chunks) - 1];
                 while (\count($last) < $size) {
                     $last[] = $fill;
                 }
@@ -741,8 +741,7 @@ class Registry
         string $sourcePath,
         int $tplLine,
         callable $processExpr,
-    ): string
-    {
+    ): string {
         return ($this->directiveHandlers[$keyword])(
             $rest,
             $sourcePath,

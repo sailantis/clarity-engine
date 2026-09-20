@@ -159,7 +159,7 @@ class Cache
     public function writeAndLoad(string $templateName, CompiledTemplate $compiled): string
     {
         $cacheFile = $this->cacheFilePath($templateName);
-        $dir = \dirname($cacheFile);
+        $dir       = \dirname($cacheFile);
         if (!is_dir($dir)) {
             mkdir($dir, 0755, true);
         }
@@ -208,7 +208,7 @@ class Cache
             return;
         }
         $hasOpcache = \function_exists('opcache_invalidate');
-        $iter = new \RecursiveIteratorIterator(
+        $iter       = new \RecursiveIteratorIterator(
             new \RecursiveDirectoryIterator($this->path, \FilesystemIterator::SKIP_DOTS),
             \RecursiveIteratorIterator::CHILD_FIRST
         );
@@ -262,7 +262,7 @@ class Cache
      */
     public function cacheFilePath(string $templateName): string
     {
-        $hash = md5($templateName);
+        $hash   = md5($templateName);
         $bucket = \substr($hash, 0, 2);
         return $this->path . DIRECTORY_SEPARATOR . $bucket . DIRECTORY_SEPARATOR . $hash . '.php';
     }
@@ -293,10 +293,15 @@ class Cache
 
         try {
             $deps = $className::$dependencies;
-            return \is_array($deps) ? $deps : null;
         } catch (\Error) {
             return null;
         }
+
+        if (!\is_array($deps)) {
+            return null;
+        }
+
+        return $deps;
     }
 
 }

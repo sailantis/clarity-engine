@@ -400,13 +400,13 @@ Blocks can contain variables and expressions:
 
 `{% extends %}` must be the **first directive** in the template:
 
-✅ **Correct:**
+**Correct:**
 
 ```twig
 {% extends "layouts/main" %} {% block content %} ... {% endblock %}
 ```
 
-❌ **Incorrect:**
+**Incorrect:**
 
 ```twig
 <p>Some content</p>
@@ -460,14 +460,14 @@ Block names must match exactly (case-sensitive):
 
 A template can extend only **one** parent:
 
-❌ **Not allowed:**
+**Not allowed:**
 
 ```twig
 {% extends "layouts/base" %}
 {% extends "layouts/admin" %} {# ERROR: multiple extends #}
 ```
 
-✅ **Instead:** Create a chain (admin extends base, page extends admin)
+**Instead:** Create a chain (admin extends base, page extends admin)
 
 ## Inheritance vs. Includes
 
