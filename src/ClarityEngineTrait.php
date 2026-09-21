@@ -339,15 +339,15 @@ trait ClarityEngineTrait
     }
 
     /**
-     * Store a non-callable service object in the registry so that
-     * compiled template render bodies can access it via `$__sv['key']`.
+     * Store a service object in the registry so that compiled template render
+     * bodies can access it via `$__sv['key']`.
      *
      * This is primarily used by modules that need shared mutable state (e.g. a
      * locale stack) accessible both from closures that close over the object
      * *and* from inline filter PHP templates using `$__sv['key']->method()`.
      *
      * @param string $name    Key under which the service is accessible.
-     * @param mixed  $service Service value (not required to be callable).
+     * @param mixed  $service Service value, can be of any type.
      * @return $this
      */
     public function addService(string $name, mixed $service): static

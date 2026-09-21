@@ -49,9 +49,10 @@ class Compiler
     /**
      * Unique placeholder emitted by buildClass() on the line directly above the
      * first compiled template statement inside render().  It is stripped by
-     * compile() once the body offset is known.  The line itself emits no output.
+     * compile() once the body offset is known.  The line itself emits no
+     * output.
      */
-    private const BODY_LINE_TOKEN = '@@CLARITY_BODY_LINE@@';
+    private const BODY_LINE_TOKEN = '/* @@CLARITY_BODY_LINE@@ */';
 
     private const PARENT_PLACEHOLDER_RE = '/\{%-?\s*@parent\s*-?%\}/s';
 
@@ -1389,7 +1390,7 @@ class Compiler
 
             /** @param array<string,callable> \$__fl Filter registry */
             /** @param array<string,callable> \$__fn Function registry */
-            /** @param array<string,callable> \$__sv Service registry */
+            /** @param array<string,mixed> \$__sv Service registry */
             public function __construct(private array \$__fl, private array \$__fn, private array \$__sv) {}
 
             public function render(array \$vars): string
