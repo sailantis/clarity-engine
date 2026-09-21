@@ -46,7 +46,7 @@ class Cache
     {
         $this->path = $path !== ''
             ? \rtrim($path, '/\\')
-            : \sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'clarity_cache';
+            : \sys_get_temp_dir() . \DIRECTORY_SEPARATOR . 'clarity_cache';
     }
 
     /**
