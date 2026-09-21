@@ -1105,16 +1105,34 @@ trait ClarityEngineTrait
     // -------------------------------------------------------------------------
 
     /**
-     * Recursively cast values to arrays so templates never receive live
-     * objects and cannot call methods.
+     * Recursively cast values so templates never receive live objects and
+     * cannot call methods.
+     *
+     * The general rule is **object → array of its public properties** (step 5).
+     * Steps 1-4 are recognised exceptions that produce the value the object
+     * itself defines as its template-facing representation; step 5b keeps a
+     * value object from becoming an empty array.
      *
      * Precedence:
-     * 1. JsonSerializable → jsonSerialize() then recurse
-     * 2. Objects with toArray() → toArray() then recurse
-     * 3. Traversable (Iterator / IteratorAggregate) → iterator_to_array() then recurse
-     * 4. Other objects → get_object_vars() then recurse
-     * 5. Arrays → recurse element by element
-     * 6. Scalars / null → pass through
+     * 1. DateTimeInterface → ISO-8601 (ATOM) string, keeping the offset. Done
+     *    first so the value survives `|> date(...)`, which accepts int|string.
+     * 2. Public toArray() → toArray() then recurse. Ranked above
+     *    JsonSerializable because `toArray(): array` declares an array return
+     *    type, whereas `jsonSerialize(): mixed` may return a scalar.
+     * 3. JsonSerializable → jsonSerialize() then recurse. Used with
+     *    get_object_vars() (never `(array)`, which would expose private and
+     *    protected properties under mangled keys).
+     * 4. Traversable (Iterator / IteratorAggregate) → iterate then recurse.
+     * 5. Other objects → get_object_vars() then recurse. This is the general
+     *    object → array conversion.
+     * 5b. …if an object exposes no public properties but is Stringable, use
+     *    its __toString(). Checked only after 5 so the general rule stays
+     *    dominant and public state is never silently dropped.
+     * 6. Arrays → recurse element by element.
+     * 7. Scalars / null → pass through.
+     *
+     * @param mixed $value Value to cast.
+     * @return mixed Arrays, scalars or null — never a live object.
      */
     public static function castToArray(mixed $value): mixed
     {
@@ -1126,26 +1144,43 @@ trait ClarityEngineTrait
             return $result;
         }
 
+        if ($value instanceof \DateTimeInterface) {
+            return $value->format(\DateTimeInterface::ATOM);
+        }
+
+        if (!\is_object($value)) {
+            return $value;
+        }
+
+        // is_callable() (not method_exists()) so a private/protected toArray()
+        // is ignored rather than throwing "Call to private method".
+        if (\is_callable([$value, 'toArray'])) {
+            return self::castToArray($value->toArray());
+        }
+
         if ($value instanceof \JsonSerializable) {
             $data = $value->jsonSerialize();
-            return self::castToArray((array) $data);
+            // get_object_vars() guards against a self-returning
+            // jsonSerialize() recursing forever, without leaking non-public
+            // state the way `(array)` would. Non-object results pass through
+            // unwrapped, so a string stays a string.
+            return self::castToArray(\is_object($data) ? get_object_vars($data) : $data);
         }
 
-        if (\is_object($value)) {
-            if (\method_exists($value, 'toArray')) {
-                return self::castToArray($value->toArray());
+        if ($value instanceof \Traversable) {
+            $result = [];
+            foreach ($value as $k => $v) {
+                $result[$k] = self::castToArray($v);
             }
-            if ($value instanceof \Traversable) {
-                $result = [];
-                foreach ($value as $k => $v) {
-                    $result[$k] = self::castToArray($v);
-                }
-                return $result;
-            }
-            return self::castToArray(get_object_vars($value));
+            return $result;
         }
 
-        return $value;
+        $vars = get_object_vars($value);
+        if ($vars === [] && $value instanceof \Stringable) {
+            return (string) $value;
+        }
+
+        return self::castToArray($vars);
     }
 
 }

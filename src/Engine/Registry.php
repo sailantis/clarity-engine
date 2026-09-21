@@ -41,6 +41,8 @@ use Clarity\ClarityException;
  *
  * **Dates & Times**
  * - `date [$format='Y-m-d']`    : Format timestamp/DateTimeInterface/date string
+ *   (DateTimeInterface values reach this filter as ISO-8601 strings, because
+ *   castToArray() converts them on the way in)
  * - `date_modify($modifier)`    : Apply date modifier (e.g. '+1 day'), return Unix timestamp
  *
  * **Arrays & Collections**
@@ -417,7 +419,7 @@ class Registry
 
     /**
      * Store a non-callable service object under a named key so that compiled
-     * template render bodies can access it via `$this->__fl['key']->method()`.
+     * template render bodies can access it via `$__sv['key']->method()`.
      *
      * The key is conventionally prefixed with `__` to avoid collisions with
      * real filter names (e.g. `__locale`, `__translator`).
@@ -700,11 +702,11 @@ class Registry
      *
      * Example registration (inside a Module::register() call):
      * ```php
-     * $engine->addDirective('with_locale', function(string $rest, string $path, int $line, callable $expr): string {
-     *     $param = $expr(trim($rest));
-     *     return "\$this->__fl['__locale']->push({$param});";
+     * $engine->addDirective('with_locale', function(string $rest, string $path, int $line, callable $processExpr): string {
+     *     $param = $processExpr(trim($rest));
+     *     return "\$__sv['locale']->push({$param});";
      * });
-     * $engine->addDirective('endwith_locale', fn(...) => "\$this->__fl['__locale']->pop();");
+     * $engine->addDirective('endwith_locale', fn(...) => "\$__sv['locale']->pop();");
      * ```
      *
      * @param string   $keyword  Directive keyword (lowercase, e.g. 'with_locale').
