@@ -166,6 +166,20 @@ Clarity compiles `.clarity.html` templates into PHP classes and caches them on d
 1. **First Request:** Template is compiled to PHP and saved in the cache directory
 2. **Subsequent Requests:** Cached PHP file is loaded directly (zero compilation overhead)
 3. **Auto-Invalidation:** Cache is automatically regenerated when source files change
+   or when the engine's compiler version changes
+
+### Compiler Version
+
+Every compiled class records the `Compiler::COMPILER_VERSION` that produced it. A
+cached file stamped with a different version is treated as stale and recompiled,
+and files written before versioning existed (no stamp) count as stale too.
+
+This covers upgrades that change the PHP a template compiles to **without
+changing the template file** — for example the 1.0 change of the two-variable
+`for` loop from `(value, key)` to `(key, value)`. The source revision is
+identical in such a case, so a revision check alone would keep executing the old
+bindings silently. Upgrading Clarity therefore never requires flushing the cache
+by hand.
 
 ### Cache Configuration
 
@@ -201,8 +215,9 @@ Clarity automatically detects changes to:
 - The template file itself
 - Extended layouts (`{% extends %}`)
 - Included partials (`{% include %}`)
+- The engine's compiler version (`Compiler::COMPILER_VERSION`)
 
-When any file changes, the cache is regenerated automatically.
+When any of these change, the cache is regenerated automatically.
 
 #### Manual Cache Flush
 
@@ -215,8 +230,10 @@ $engine->flushCache();
 Use cases for manual flushing:
 
 - Development when auto-invalidation doesn't work (rare)
-- After deployment to ensure fresh compilation
 - Troubleshooting cache issues
+
+> **Note:** Flushing is _not_ required after upgrading Clarity — the compiler
+> version stamp handles that. See [Compiler Version](#compiler-version) above.
 
 #### Development vs. Production
 
@@ -343,8 +360,6 @@ The `raw` filter is a **compile-time marker** that disables the auto-escape wrap
 
 ### When to Use raw
 
-✅ **Safe uses:**
-
 ```twig
 {# 1. Sanitized HTML from a WYSIWYG editor #}
 {{ article.sanitizedBody |> raw }}
@@ -354,17 +369,6 @@ The `raw` filter is a **compile-time marker** that disables the auto-escape wrap
 {{ data |> json |> raw }}
 {# 4. HTML-generating filters like nl2br #}
 {{ description |> nl2br |> raw }}
-```
-
-❌ **Dangerous uses:**
-
-```twig
-{# NEVER use raw with user input #}
-{{ userInput |> raw }}
-{# ⚠️ XSS VULNERABILITY #}
-{# NEVER use raw with untrusted data #}
-{{ $_GET['name'] |> raw }}
-{# ⚠️ DANGER #}
 ```
 
 ### Safe HTML Generation
@@ -391,9 +395,8 @@ Use in template:
 When `raw` appears **anywhere** in the filter chain, auto-escaping is disabled for the entire expression:
 
 ```twig
-{{ description |> trim |> nl2br |> raw }} {# No escaping applied (because of
-raw) #} {{ description |> raw |> upper }} {# Still no escaping (raw anywhere in
-chain) #}
+{{ description |> trim |> nl2br |> raw }} {# No escaping applied (because of raw) #}
+{{ description |> raw |> upper }} {# Still no escaping (raw anywhere in chain) #}
 ```
 
 ## Error Handling
@@ -510,8 +513,10 @@ Even though the error occurs in compiled PHP, Clarity traces it back to the sour
 #### Circular Includes
 
 ```twig
-{# a.clarity.html #} {% include "b" %} {# b.clarity.html #} {% include "a" %} {#
-Circular! #}
+{# a.clarity.html #}
+{% include "b" %}
+{# b.clarity.html #}
+{% include "a" %} {# Circular! #}
 ```
 
 **Error:** `Circular include detected: a → b → a`
@@ -567,9 +572,9 @@ Clarity is fully Unicode-aware via the `mbstring` extension.
 String filters use multibyte functions:
 
 ```twig
-{{ "Ä Ö Ü ß" |> upper }} {# Output: "Ä Ö Ü SS" (Unicode-aware) #} {{ "ПРИВЕТ
-МИР" |> lower }} {# Output: "привет мир" #} {{ "你好世界" |> length }} {#
-Output: 4 (characters, not bytes) #}
+{{ "Ä Ö Ü ß" |> upper }} {# Output: "Ä Ö Ü SS" (Unicode-aware) #}
+{{ "ПРИВЕТМИР" |> lower }} {# Output: "привет мир" #}
+{{ "你好世界" |> length }} {# Output: 4 (characters, not bytes) #}
 ```
 
 ### UnicodeString Class
@@ -594,8 +599,8 @@ $ustr->reverse();      // Reverse string
 Clarity handles emoji correctly:
 
 ```twig
-{{ "Hello 👋 World 🌍" |> length }} {# Output: 13 (counts emoji as 1 character
-each) #} {{ "🚀🌟💡" |> reverse }} {# Output: "💡🌟🚀" #}
+{{ "Hello 👋 World 🌍" |> length }} {# Output: 13 (counts emoji as 1 character each) #}
+{{ "🚀🌟💡" |> reverse }} {# Output: "💡🌟🚀" #}
 ```
 
 ### Character Encoding
@@ -623,32 +628,32 @@ Clarity enforces strict security through compilation-time checks and runtime san
 
 The following are **rejected at compile time** (template won't compile):
 
-❌ **Direct PHP variables:**
+**Direct PHP variables:**
 
 ```twig
 {{ $variable }} {# ERROR #}
 ```
 
-❌ **Arbitrary function calls:**
+**Arbitrary function calls:**
 
 ```twig
-{{ strtoupper(name) }} {# ERROR #} {{ file_get_contents('/etc/passwd') }} {#
-ERROR #}
+{{ strtoupper(name) }} {# ERROR #}
+{{ file_get_contents('/etc/passwd') }} {# ERROR #}
 ```
 
-❌ **Method calls:**
+**Method calls:**
 
 ```twig
 {{ user.getName() }} {# ERROR #}
 ```
 
-❌ **PHP statements:**
+**PHP statements:**
 
 ```twig
 {{ $x = 5; }} {# ERROR #}
 ```
 
-❌ **Backticks, heredocs, PHP tags:**
+**Backticks, heredocs, PHP tags:**
 
 ```twig
 {{ `ls -la` }} {# ERROR #}
@@ -677,14 +682,32 @@ $engine->render('page', ['user' => $user]);
 **In template:**
 
 ```twig
-{{ user.name }} {# Works: public properties exposed #} {{ user.password }} {#
-NULL: private properties hidden #} {{ user.getName() }} {# COMPILE ERROR: method
-calls not allowed #}
+{{ user.name }} {# Works: public properties exposed #}
+{{ user.password }} {# NULL: private properties hidden #}
+{{ user.getName() }} {# COMPILE ERROR: method calls not allowed #}
 ```
+
+Object → array is the **general rule**: the array is the object's _public_
+properties, so visibility is enforced by PHP itself and is never widened by
+anything a class chooses to implement.
 
 **Custom serialization:**
 
-Implement `JsonSerializable` or `toArray()`:
+Implement `toArray()` — or `JsonSerializable` if the class already needs it:
+
+```php
+class User {
+    private $name;
+    private $email;
+
+    public function toArray(): array {
+        return [
+            'name' => $this->name,
+            'email' => $this->email,
+        ];
+    }
+}
+```
 
 ```php
 class User implements JsonSerializable {
@@ -700,6 +723,36 @@ class User implements JsonSerializable {
 }
 ```
 
+`toArray()` is checked first, so a class implementing both uses `toArray()`.
+Prefer `toArray()`: its `: array` return type is enforced, whereas
+`jsonSerialize(): mixed` may return a scalar, in which case the template
+receives that scalar rather than an array.
+
+**Recognition order** for a value passed to `render()` (checked in this order,
+each recursing afterwards so nested objects are converted too):
+
+| Value                                                         | Becomes                                               |
+| ------------------------------------------------------------- | ----------------------------------------------------- |
+| `DateTimeInterface`                                           | ISO-8601 string, e.g. `2026-09-21T12:00:00+02:00`     |
+| object with a public `toArray()`                              | the returned array                                    |
+| `JsonSerializable`                                            | the result of `jsonSerialize()`                       |
+| `Traversable`                                                 | array of its iterations                               |
+| any other object                                              | array of its **public** properties (the general rule) |
+| …an object with **no** public properties that is `Stringable` | its `__toString()` value                              |
+| scalar / `null`                                               | passed through                                        |
+
+Two consequences worth knowing:
+
+- **`DateTime` works directly.** It becomes an ISO-8601 string, so
+  `{{ order.createdAt |> date("Y-m-d") }}` renders correctly. Previously a
+  `DateTime` object converted to `[]` and the filter printed `1970-01-01`.
+- **`__toString()` is a last resort.** It is only consulted when an object
+  exposes no public properties, so a value object such as `Money` (all state
+  private) renders as `12.34`, while an object that _does_ have public
+  properties keeps them instead of being replaced by its string form.
+
+````
+
 ### Lambda Security
 
 Lambdas in `map`, `filter`, `reduce` only accept:
@@ -707,18 +760,19 @@ Lambdas in `map`, `filter`, `reduce` only accept:
 1. **Lambda expressions** (parsed at compile time)
 2. **Filter references** (validated at compile time)
 
-❌ **NOT allowed:**
+**NOT allowed:**
 
 ```twig
-{# Cannot pass callable via variable #} {% set callback = someCallable %} {{
-items |> map(callback) }} {# ERROR #}
-```
+{# Cannot pass callable via variable #}
+{% set callback = someCallable %}
+{{ items |> map(callback) }} {# ERROR #}
+````
 
-✅ **Allowed:**
+**Allowed:**
 
 ```twig
-{{ items |> map(i => i.name) }} {# Lambda: safe #} {{ items |> map("upper") }}
-{# Filter reference: safe #}
+{{ items |> map(i => i.name) }} {# Lambda: safe #}
+{{ items |> map("upper") }} {# Filter reference: safe #}
 ```
 
 ### Registered Filters/Functions
@@ -730,8 +784,8 @@ $engine->addFilter('customFilter', $callable);
 ```
 
 ```twig
-{{ value |> customFilter }} {# Allowed: registered #} {{ value |> notRegistered
-}} {# ERROR: not registered #}
+{{ value |> customFilter }} {# Allowed: registered #}
+{{ value |> notRegistered }} {# ERROR: not registered #}
 ```
 
 ## Performance Optimization

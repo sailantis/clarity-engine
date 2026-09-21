@@ -108,11 +108,11 @@ Integration and advanced topics:
 ### Output & Variables
 
 ```twig
-{{ expression }}              {# Output with auto-escaping #}
-{{ expression | raw }}        {# Output raw HTML (no escaping) #}
-{{ expression |> raw }}       {# Same — both | and |> are filter pipes #}
-{{ user.name }}               {# Dot notation #}
-{{ items[0] }}                {# Bracket notation #}
+{{ expression }}                 {# Output with auto-escaping #}
+{{ expression | raw }}           {# Output raw HTML (no escaping) #}
+{{ expression |> raw }}          {# Same — both | and |> are filter pipes #}
+{{ user.name }}                  {# Dot notation #}
+{{ items[0] }}                   {# Bracket notation #}
 {{ firstName ~ ' ' ~ lastName }} {# String concatenation #}
 ```
 
@@ -125,12 +125,12 @@ Integration and advanced topics:
   {{ item.name }}
 {% endfor %}
 
-{% for value, key in assocArray %}         {# Loop with key variable #}
+{% for key, value in assocArray %}               {# Loop with key variable #}
   {{ key }}: {{ value }}
 {% endfor %}
 
-{% for i in 1..10 %}{{ i }}{% endfor %}        {# Range: 1 to 10 (inclusive) #}
-{% for i in 1...10 %}{{ i }}{% endfor %}       {# Range: 1 to 9 (exclusive) #}
+{% for i in 1..10 %}{{ i }}{% endfor %}          {# Range: 1 to 10 (inclusive) #}
+{% for i in 1...10 %}{{ i }}{% endfor %}         {# Range: 1 to 9 (exclusive) #}
 {% for i in 0..100 step 10 %}{{ i }}{% endfor %} {# With step #}
 
 {% set total = items | length %}
@@ -156,7 +156,7 @@ Integration and advanced topics:
 {{ timestamp | date('Y-m-d H:i') }}
 {{ "Hello, %s!" | sprintf(user.name) }}
 {{ tags | join(', ') }}
-{{ users | map(u => u.name) | join(', ') }} {# Lambda expression #}
+{{ users | map(u => u.name) | join(', ') }}  {# Lambda expression #}
 {{ items | filter(i => i.active) | length }}
 {{ title | slug }}                           {# URL-friendly slug #}
 {{ html | striptags }}                       {# Strip HTML tags #}
@@ -191,7 +191,7 @@ Common filters: `upper`, `lower`, `trim`, `length`, `number`, `date`, `sprintf`,
 ### Includes
 
 ```twig
-{% include "partials/header" %}              {# Static include #}
+{% include "partials/header" %}                {# Static include #}
 {{ include("widgets/card", { title: "Hi" }) }} {# Dynamic include with context #}
 ```
 
@@ -258,7 +258,7 @@ Clarity provides a secure sandbox environment:
 - **No arbitrary PHP execution** – Templates cannot call PHP functions or access global state
 - **Auto-escaping by default** – All output is HTML-escaped to prevent XSS attacks
 - **Compile-time validation** – Syntax errors caught during compilation, not at runtime
-- **Object safety** – Objects are converted to arrays, preventing method calls from templates
+- **Object safety** – Objects are converted to their public properties, preventing method calls from templates (`DateTimeInterface` becomes an ISO-8601 string; `toArray()` / `JsonSerializable` can supply a custom array)
 - **Controlled lambdas** – Lambda expressions can only use registered filters
 
 **[Security best practices →](docs/05-best-practices.md#security)**

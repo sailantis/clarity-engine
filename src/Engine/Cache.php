@@ -28,6 +28,7 @@ namespace Clarity\Engine;
  * ---------------------------------
  * $dependencies – array<string,int|string>  logicalName => revision
  * $sourceMap    – list<[phpLineStart, fileIndex, templateLine]>  ranges
+ * $compilerVersion – int  Compiler::COMPILER_VERSION that produced the class
  */
 class Cache
 {
@@ -44,8 +45,8 @@ class Cache
     public function __construct(string $path = '')
     {
         $this->path = $path !== ''
-            ? rtrim($path, '/\\')
-            : sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'clarity_cache';
+            ? \rtrim($path, '/\\')
+            : \sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'clarity_cache';
     }
 
     /**
@@ -53,7 +54,7 @@ class Cache
      */
     public function setPath(string $path): static
     {
-        $this->path = rtrim($path, '/\\');
+        $this->path = \rtrim($path, '/\\');
         return $this;
     }
 
@@ -72,11 +73,15 @@ class Cache
      * ---------------
      * 1. A compiled class for this template name is known (either loaded in
      *    this process already, or loadable from the cache file).
-     * 2. Every entry in the class's $dependencies still has the same revision
+     * 2. The class was produced by the current compiler version. A change in
+     *    Compiler::COMPILER_VERSION is a change in emitted semantics (e.g. the
+     *    two-variable for loop binding (key, value) instead of (value, key)), so
+     *    the template source may be unchanged while the compiled code is wrong.
+     * 3. Every entry in the class's $dependencies still has the same revision
      *    as recorded at compile time, as determined by calling $revisionFor.
      *
-     * On warm paths the class is already in memory; `readDeps()` reflects
-     * `$dependencies` directly — zero file I/O from this method.
+     * On warm paths the class is already in memory; the static properties are
+     * read directly — zero file I/O from this method.
      *
      * @param string   $templateName  Logical template name (e.g. 'home', 'layouts/base').
      * @param callable $revisionFor   fn(string $name): int|string — returns the current
@@ -87,14 +92,25 @@ class Cache
     {
         $cacheFile = $this->cacheFilePath($templateName);
 
-        if (!is_file($cacheFile)) {
+        if (!\is_file($cacheFile)) {
             return false;
         }
 
-        $deps = $this->readDeps($templateName);
+        $className = $this->load($templateName);
 
-        if ($deps === null) {
-            // Could not parse deps → treat as stale
+        if ($className === null) {
+            // File present but unreadable / not a compiled class → treat as stale
+            return false;
+        }
+
+        // Check if the emitted bytecode comes from the current compiler.
+        if (($className::$compilerVersion ?? 0) !== Compiler::COMPILER_VERSION) {
+            return false;
+        }
+
+        $deps = $className::$dependencies ?? null;
+
+        if (!\is_array($deps)) {
             return false;
         }
 
@@ -129,14 +145,14 @@ class Cache
         }
 
         $cacheFile = $this->cacheFilePath($templateName);
-        if (!is_file($cacheFile)) {
+        if (!\is_file($cacheFile)) {
             return null;
         }
 
         // require (not require_once) so the versioned class is always declared;
         // the file returns the class name as its last statement.
         $className = require $cacheFile;
-        if (is_string($className) && $className !== '') {
+        if (\is_string($className) && $className !== '') {
             self::$classNames[$templateName] = $className;
             return $className;
         }
@@ -160,8 +176,8 @@ class Cache
     {
         $cacheFile = $this->cacheFilePath($templateName);
         $dir       = \dirname($cacheFile);
-        if (!is_dir($dir)) {
-            mkdir($dir, 0755, true);
+        if (!\is_dir($dir)) {
+            \mkdir($dir, 0755, true);
         }
 
         $code = "<?php\n" . $compiled->code . "\n";
@@ -188,12 +204,12 @@ class Cache
     public function invalidate(string $templateName): void
     {
         $file = $this->cacheFilePath($templateName);
-        if (is_file($file)) {
+        if (\is_file($file)) {
             if (\function_exists('opcache_invalidate')) {
                 @\opcache_invalidate($file, true);
             }
-            @unlink($file);
-            clearstatcache(true, $file);
+            @\unlink($file);
+            \clearstatcache(true, $file);
         }
         unset(self::$classNames[$templateName]);
     }
@@ -214,7 +230,7 @@ class Cache
         );
         foreach ($iter as $file) {
             if ($file->isDir()) {
-                rmdir($file->getPathname());
+                \rmdir($file->getPathname());
                 continue;
             }
 
@@ -222,7 +238,7 @@ class Cache
             if ($hasOpcache) {
                 @\opcache_invalidate($path, true);
             }
-            unlink($path);
+            \unlink($path);
         }
         self::$classNames = [];
     }
@@ -238,7 +254,7 @@ class Cache
      */
     public function classNameFor(string $templateName): string
     {
-        return '__Clarity_' . md5($templateName);
+        return '__Clarity_' . \md5($templateName);
     }
 
     /**
@@ -265,43 +281,6 @@ class Cache
         $hash   = md5($templateName);
         $bucket = \substr($hash, 0, 2);
         return $this->path . DIRECTORY_SEPARATOR . $bucket . DIRECTORY_SEPARATOR . $hash . '.php';
-    }
-
-    /**
-     * @return array<string,int|string>|null  [logicalName => revision] or null on failure.
-     *
-     * On warm paths (class already in memory via the static registry) this is
-     * pure OPcache access — zero file I/O.  On cold paths the cache file is
-     * required (OPcache-eligible) and the returned class name is registered.
-     */
-    private function readDeps(string $templateName): ?array
-    {
-        if (isset(self::$classNames[$templateName])) {
-            $className = self::$classNames[$templateName];
-        } else {
-            $cacheFile = $this->cacheFilePath($templateName);
-            if (!is_file($cacheFile)) {
-                return [];
-            }
-            // require (not require_once) — the file returns the class name.
-            $className = require $cacheFile;
-            if (!is_string($className) || $className === '') {
-                return null;
-            }
-            self::$classNames[$templateName] = $className;
-        }
-
-        try {
-            $deps = $className::$dependencies;
-        } catch (\Error) {
-            return null;
-        }
-
-        if (!\is_array($deps)) {
-            return null;
-        }
-
-        return $deps;
     }
 
 }

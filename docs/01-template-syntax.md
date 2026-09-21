@@ -106,16 +106,16 @@ Iterate over arrays:
 
 #### Loop with Key Variable
 
-Access both value and key in a single loop using the two-variable syntax. The **first** name is the value and the **second** is the key:
+Access both key and value in a single loop using the two-variable syntax. The **first** name is the key and the **second** is the value — the same order as Twig's `{% for key, user in users %}`:
 
 ```twig
-{# Indexed array: value, index #}
-{% for item, idx in items %}
+{# Indexed array: index, value #}
+{% for idx, item in items %}
 <li>{{ idx }}: {{ item.name }}</li>
 {% endfor %}
 
-{# Associative array: value, key #}
-{% for v, k in settings %}
+{# Associative array: key, value #}
+{% for k, v in settings %}
 <p>{{ k }}: {{ v }}</p>
 {% endfor %}
 ```
@@ -660,9 +660,9 @@ Instead, use `{% set %}`:
 | `{% else %}`                                 | Fallback case               |
 | `{% endif %}`                                | End conditional             |
 | `{% for item in array %}`                    | Loop over array             |
-| `{% for value, key in array %}`              | Loop with key variable      |
-| `{% for i in start...end %}`                 | Range loop (inclusive)      |
-| `{% for i in start..end %}`                  | Range loop (exclusive end)  |
+| `{% for key, value in array %}`              | Loop with key variable      |
+| `{% for i in start..end %}`                  | Range loop (inclusive end)  |
+| `{% for i in start...end %}`                 | Range loop (exclusive end)  |
 | `{% endfor %}`                               | End loop                    |
 | `{% set variable = value %}`                 | Variable assignment         |
 | `{% extends "template" %}`                   | Inherit from layout         |

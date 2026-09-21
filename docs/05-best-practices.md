@@ -92,65 +92,11 @@ $engine->setLoader(new DomainRouterLoader(
 - Can be used multiple times on a page
 - No page structure, just fragments
 
-## Naming Conventions
-
-### Files
-
-✅ **Good:**
-
-- Use kebab-case: `user-profile.clarity.html`, `product-card.clarity.html`
-- Descriptive names: `email-welcome.clarity.html`, not `email1.clarity.html`
-- Match purpose: `layouts/admin.clarity.html`, `partials/nav.clarity.html`
-
-❌ **Avoid:**
-
-- CamelCase file names: `UserProfile.clarity.html`
-- Underscores: `user_profile.clarity.html` (kebab-case preferred)
-- Generic names: `template1.clarity.html`, `page.clarity.html`
-
-### Blocks
-
-✅ **Good:**
-
-- Descriptive: `{% block pageTitle %}`, `{% block mainContent %}`
-- CamelCase: `{% block sidebarWidgets %}`, `{% block metaTags %}`
-- Hierarchical: `{% block head %}` → `{% block headStyles %}`, `{% block headScripts %}`
-
-❌ **Avoid:**
-
-- Generic: `{% block content1 %}`, `{% block block2 %}`
-- Too short: `{% block c %}`, `{% block s %}`
-
-### Variables
-
-✅ **Good:**
-
-- CamelCase: `{{ userName }}`, `{{ productList }}`
-- Descriptive: `{{ articlePublishedAt }}`, `{{ userProfileImage }}`
-
-❌ **Avoid:**
-
-- Abbreviated: `{{ usrNm }}`, `{{ pubAt }}`
-- Numeric suffixes: `{{ user1 }}`, `{{ user2 }}`
-
-### Filters & Functions
-
-✅ **Good:**
-
-- Lowercase with underscores: `format_date`, `currency`, `sanitize_html`
-- Verb for functions: `asset()`, `url()`, `include()`
-- Adjective/noun for filters: `upper`, `currency`, `excerpt`
-
-❌ **Avoid:**
-
-- CamelCase: `formatDate` (use `format_date`)
-- Abbreviated: `curr`, `fmt`
-
 ## Security Best Practices
 
 ### Always Rely on Auto-Escaping
 
-✅ **Correct:**
+**Correct:**
 
 ```twig
 <p>{{ user.bio }}</p>
@@ -161,28 +107,31 @@ Auto-escaping protects against XSS by default.
 
 ### Use raw Sparingly
 
-❌ **Dangerous:**
+**Dangerous:**
 
 ```twig
-{{ userInput |> raw }} {{ $_GET['name'] |> raw }}
+{{ userInput |> raw }}
 ```
 
-✅ **Safe:**
+**Safe:**
 
 ```twig
-{# Only with trusted, sanitized content #} {{ sanitizedArticleBody |> raw }} {#
-Or content you control #} {{ renderedWidget |> raw }} {{ data |> json |> raw }}
+{# Only with trusted, sanitized content #}
+{{ sanitizedArticleBody |> raw }}
+{# Or content you control #}
+{{ renderedWidget |> raw }}
+{{ data |> json |> raw }}
 ```
 
 ### Sanitize in PHP, Not Templates
 
-❌ **Bad:**
+**Bad:**
 
 ```twig
 {# Don't sanitize in templates #} {{ userBio |> strip_tags |> raw }}
 ```
 
-✅ **Good:**
+**Good:**
 
 ```php
 // Sanitize in PHP
@@ -199,14 +148,14 @@ $engine->render('profile', ['userBio' => $sanitized]);
 
 If allowing dynamic includes, validate paths:
 
-❌ **Dangerous:**
+**Dangerous:**
 
 ```php
 $template = $_GET['template'];  // User input
 $engine->render($template, $data);  // DANGER: Path traversal
 ```
 
-✅ **Safe:**
+**Safe:**
 
 ```php
 $allowedTemplates = ['home', 'about', 'contact'];
@@ -222,12 +171,12 @@ $engine->render($template, $data);
 ### Never Trust User Data
 
 ```php
-// ❌ Bad: Passing unfiltered user input
+// Bad: Passing unfiltered user input
 $engine->render('search', [
     'query' => $_GET['q'],  // Unfiltered
 ]);
 
-// ✅ Good: Validate/sanitize first
+// Good: Validate/sanitize first
 $engine->render('search', [
     'query' => htmlspecialchars($_GET['q'] ?? '', ENT_QUOTES, 'UTF-8'),
 ]);
@@ -239,15 +188,13 @@ But remember: **Clarity auto-escapes by default**, so even unsanitized input is 
 
 ### Keep Templates Simple
 
-❌ **Bad: Complex logic in templates**
+**Bad: Complex logic in templates**
 
 ```twig
-{% set filteredUsers = users |> filter(u => u.age >= 18 and u.active and u.role
-== 'member') |> map(u => { name: u.firstName ~ ' ' ~ u.lastName, email: u.email
-|> lower, joined: u.createdAt |> date('Y-m-d') }) %}
+{% set filteredUsers = users |> filter(u => u.age >= 18 and u.active and u.role == 'member') |> map(u => { name: u.firstName ~ ' ' ~ u.lastName, email: u.email |> lower, joined: u.createdAt |> date('Y-m-d') }) %}
 ```
 
-✅ **Good: Logic in PHP**
+**Good: Logic in PHP**
 
 ```php
 $filteredUsers = array_map(function($u) {
@@ -263,52 +210,27 @@ $engine->render('users', ['users' => $filteredUsers]);
 
 ```twig
 {% for user in users %}
-<li>{{ user.name }} ({{ user.email }})</li>
+    <li>{{ user.name }} ({{ user.email }})</li>
 {% endfor %}
-```
-
-### Pre-Compute Data
-
-❌ **Bad: Repeated computation**
-
-```twig
-{% for item, idx in items %}
-{{ items.length - idx }} items remaining
-{% endfor %}
-```
-
-✅ **Good: Compute once**
-
-```twig
-{% set total = items.length %}
-{% for item in items %}
-{{ total - loop.index }} items remaining
-{% endfor %}
-```
-
-Or better, in PHP:
-
-```php
-$data['itemCount'] = count($items);
 ```
 
 ### Avoid Deep Nesting
 
-❌ **Bad:**
+**Bad:**
 
 ```twig
 {% if user %}
-{% if user.isActive %}
-{% if user.hasPermission %}
-{% for item in user.items %}
-{% if item.isPublished %} {# Deeply nested #} {% endif %}
-{% endfor %}
-{% endif %}
-{% endif %}
+    {% if user.isActive %}
+        {% if user.hasPermission %}
+            {% for item in user.items %}
+                {% if item.isPublished %} {# Deeply nested #} {% endif %}
+            {% endfor %}
+        {% endif %}
+    {% endif %}
 {% endif %}
 ```
 
-✅ **Good: Flatten in PHP**
+**Good: Flatten in PHP**
 
 ```php
 $publishedItems = $user && $user->isActive && $user->hasPermission
@@ -320,7 +242,7 @@ $engine->render('items', ['items' => $publishedItems]);
 
 ```twig
 {% for item in items %}
-{# Simple, flat loop #}
+    {# Simple, flat loop #}
 {% endfor %}
 ```
 
@@ -346,53 +268,35 @@ Use consistent indentation (2 or 4 spaces):
 
 ```twig
 {% if condition %}
-<div>
-  {% for item in items %}
-  <p>{{ item.name }}</p>
-  {% endfor %}
-</div>
+    <div>
+        {% for item in items %}
+            <p>{{ item.name }}</p>
+        {% endfor %}
+    </div>
 {% endif %}
 ```
 
 ### Whitespace Around Delimiters
 
-✅ **Preferred:**
+**Preferred:**
 
 ```twig
-{{ variable }} {% for item in items %}
+{{ variable }}
+{% for item in items %}
 ```
 
-❌ **Avoid:**
+**Avoid:**
 
 ```twig
-{{variable}} {%for item in items%}
-```
-
-### Line Length
-
-Keep lines under 120 characters. Break long chains:
-
-```twig
-{# ✅ Good #} {{ productDescription |> trim |> truncate(100) |> nl2br |> raw }}
-{# ❌ Too long #} {{ productDescription |> trim |> truncate(100) |> nl2br |> raw
-}}
-```
-
-### Comments
-
-Use comments to explain complex logic:
-
-```twig
-{# Calculate discounted price: 10% off for members #} {% set finalPrice =
-user.isMember ? (price * 0.9) : price %} {# Loop through published articles only
-#} {% for article in articles |> filter(a => a.isPublished) %} ... {% endfor %}
+{{variable}}
+{%for item in items%}
 ```
 
 ## Data Handling
 
 ### Pass Only Required Data
 
-❌ **Bad: Passing entire objects**
+**Bad: Passing entire objects**
 
 ```php
 $engine->render('profile', [
@@ -401,7 +305,7 @@ $engine->render('profile', [
 ]);
 ```
 
-✅ **Good: Pass specific fields**
+**Good: Pass specific fields**
 
 ```php
 $engine->render('profile', [
@@ -416,7 +320,7 @@ $engine->render('profile', [
 Provide consistent structures:
 
 ```php
-// ✅ Good: Consistent array structure
+// Good: Consistent array structure
 $products = array_map(function($p) {
     return [
         'id' => $p->id,
@@ -443,14 +347,15 @@ Templates can rely on this structure:
 Use `default` filter:
 
 ```twig
-{{ user.nickname |> default(user.name) }} {{ customMessage |> default('No
-message provided') }}
+{{ user.nickname |> default(user.name) }}
+{{ customMessage |> default('No message provided') }}
 ```
 
-Or ternary:
+Or use the null coalescing operator:
 
 ```twig
-{{ user.avatar ? user.avatar : '/images/default-avatar.png' }}
+{{ user.avatar ?? '/images/default-avatar.png' }}
+{{ customMessage ?? 'No message provided' }}
 ```
 
 ## Testing Templates
@@ -552,9 +457,9 @@ Use the `dump()` function for debugging:
 
 ```twig
 {% if user %}
-<p>User exists: {{ user.name }}</p>
+    <p>User exists: {{ user.name }}</p>
 {% else %}
-<p>No user provided</p>
+    <p>No user provided</p>
 {% endif %}
 ```
 
@@ -563,8 +468,8 @@ Use the `dump()` function for debugging:
 Chain `dump` in filter pipeline:
 
 ```twig
-{# See intermediate result #} {{ items |> filter(i => i.active) |> dump |>
-slice(0, 5) }}
+{# See intermediate result #}
+{{ items |> filter(i => i.active) |> dump |> slice(0, 5) }}
 ```
 
 ### Enable Error Display (Development)
@@ -613,18 +518,20 @@ Pass variables to includes using `include()` function:
 
 ```twig
 <button
-  class="btn btn-{{ type |> default('primary') }}"
-  type="{{ buttonType |> default('button') }}"
->
-  {{ label }}
+    class="btn btn-{{ type |> default('primary') }}"
+    type="{{ buttonType |> default('button') }}"
+    >
+    {{ label }}
 </button>
 ```
 
 **Usage:**
 
 ```twig
-{{ include("components/button", { label: "Submit", type: "success", buttonType:
-"submit" }) }}
+{{ include("components/button", {
+    label: "Submit", type: "success",
+    buttonType: "submit"
+}) }}
 {{ include("components/button", { label: "Cancel", type: "secondary" }) }}
 ```
 
@@ -636,23 +543,24 @@ Create flexible layouts with multiple slots:
 
 ```twig
 <div class="two-column-layout">
-  <aside class="sidebar">{% block sidebar %}{% endblock %}</aside>
-
-  <main class="content">{% block content %}{% endblock %}</main>
+    <aside class="sidebar">{% block sidebar %}{% endblock %}</aside>
+    <main class="content">{% block content %}{% endblock %}</main>
 </div>
 ```
 
 **Usage:**
 
 ```twig
-{% extends "layouts/two-column" %} {% block sidebar %}
-<h3>Categories</h3>
-<ul>
-  ...
-</ul>
-{% endblock %} {% block content %}
-<h1>Article Title</h1>
-<p>Article content...</p>
+{% extends "layouts/two-column" %}
+{% block sidebar %}
+    <h3>Categories</h3>
+    <ul>
+        ...
+    </ul>
+{% endblock %}
+{% block content %}
+    <h1>Article Title</h1>
+    <p>Article content...</p>
 {% endblock %}
 ```
 
@@ -684,122 +592,6 @@ $engine->addFunction('asset', function($path) {
 <link rel="stylesheet" href="{{ asset('css/main.css') }}" />
 {# Outputs: /assets/css/main.css?v=1234567890 #}
 ```
-
-## Documentation
-
-### Comment Complex Logic
-
-```twig
-{# Calculate total price with discount: - Base price from product - 10% discount
-for members - Sales tax applied after discount #} {% set basePrice =
-product.price %} {% set discount = user.isMember ? (basePrice * 0.1) : 0 %} {%
-set subtotal = basePrice - discount %} {% set total = subtotal * 1.08 %}
-```
-
-### Document Custom Filters
-
-```php
-/**
- * Format currency with symbol and decimal places.
- *
- * Usage in templates:
- *   {{ price |> currency }}        → € 12.50
- *   {{ price |> currency('$') }}   → $ 12.50
- */
-$engine->addFilter('currency', function($value, string $symbol = '€') {
-    return $symbol . ' ' . number_format($value, 2);
-});
-```
-
-### README for Template Directory
-
-Create `views/README.md`:
-
-```markdown
-# Template Structure
-
-## Layouts
-
-- `layouts/main.clarity.html` - Default public layout
-- `layouts/admin.clarity.html` - Admin panel layout
-
-## Pages
-
-- `pages/home.clarity.html` - Homepage
-- `pages/about.clarity.html` - About page
-
-## Components
-
-- `components/button.clarity.html` - Reusable button component
-  Usage: `{{ include("components/button", { label: "Click" }) }}`
-
-## Filters
-
-- `currency` - Format numbers as currency
-- `excerpt` - Truncate text with ellipsis
-```
-
-## Common Pitfalls
-
-### Don't Mix PHP and Templates
-
-❌ **Bad:**
-
-```twig
-{% set users = <?php echo json_encode($users); ?> %}
-```
-
-✅ **Good:**
-
-Pass all data via `render()`:
-
-```php
-$engine->render('page', ['users' => $users]);
-```
-
-### Don't Overuse Filters
-
-❌ **Bad: Excessive chaining**
-
-```twig
-{{ text |> trim |> lower |> capitalize |> truncate(50) |> replace('old', 'new')
-}}
-```
-
-✅ **Good: Pre-process in PHP**
-
-```php
-$processedText = str_replace('old', 'new',
-    mb_substr(ucfirst(strtolower(trim($text))), 0, 50)
-);
-```
-
-### Don't Abuse Global State
-
-❌ **Bad:**
-
-```php
-global $currentUser;
-$engine->render('page', ['user' => $currentUser]);
-```
-
-✅ **Good:**
-
-```php
-$engine->render('page', ['user' => $request->getUser()]);
-```
-
-## Checklist
-
-**Before deploying:**
-
-- [ ] All templates use auto-escaping (no unnecessary `raw`)
-- [ ] Cache directory is persistent and writable
-- [ ] No sensitive data passed to templates
-- [ ] Complex logic moved to PHP
-- [ ] Templates tested with edge cases (null, empty arrays, etc.)
-- [ ] Error handling configured for production
-- [ ] OPcache enabled on production server
 
 ## Next Steps
 

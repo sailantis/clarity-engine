@@ -3,6 +3,7 @@ namespace Clarity\Tests\Engine;
 
 use Clarity\ClarityEngine;
 use Clarity\Engine\Cache;
+use Clarity\Engine\Compiler;
 use Clarity\Tests\BaseTestCase;
 use Clarity\Tests\TestEnvironment;
 
@@ -138,6 +139,157 @@ class CacheTest extends BaseTestCase
         $this->assertTrue($cache->isFresh('freshtest', static fn(string $n) => $engine->getLoader()->load($n)->revision));
     }
 
+    // =========================================================================
+    // Compiler-version invalidation
+    // =========================================================================
+
+    public function testCompiledFileRecordsCompilerVersion(): void
+    {
+        self::tpl('cver', 'ok');
+        self::render('cver');
+
+        $cache    = new Cache(TestEnvironment::cacheDir());
+        $compiled = file_get_contents($cache->cacheFilePath('cver'));
+
+        $this->assertIsString($compiled);
+        $this->assertStringContainsString(
+            'public static int $compilerVersion = ' . Compiler::COMPILER_VERSION . ';',
+            $compiled
+        );
+    }
+
+    public function testCompiledFileHasNoCompilerKeyInDependencies(): void
+    {
+        // $dependencies must stay a clean logicalName => revision map; the
+        // version travels in its own typed property, so no synthetic key may
+        // appear anywhere in the emitted source.
+        self::tpl('cver_deps', 'ok');
+        self::render('cver_deps');
+
+        $cache    = new Cache(TestEnvironment::cacheDir());
+        $compiled = file_get_contents($cache->cacheFilePath('cver_deps'));
+
+        $this->assertIsString($compiled);
+        $this->assertStringNotContainsString('@compiler', $compiled);
+    }
+
+    /**
+     * A semantic compiler change (e.g. the reversed for-loop binding) leaves the
+     * template source byte-identical, so the revision check alone would call the
+     * old bytecode fresh. The stamped version must force a recompile.
+     *
+     * The staleness is observed from a FRESH process: the in-process path can
+     * never reach the version guard (see {@see renderInFreshProcess()}).
+     */
+    public function testStaleCompilerVersionForcesRecompile(): void
+    {
+        self::tpl('cver_stale', 'compiled-ok');
+        self::assertSame('compiled-ok', self::render('cver_stale'));
+
+        $cache = new Cache(TestEnvironment::cacheDir());
+        $file  = $cache->cacheFilePath('cver_stale');
+
+        $src = file_get_contents($file);
+        $this->assertIsString($src);
+        $mutated = str_replace(
+            'public static int $compilerVersion = ' . Compiler::COMPILER_VERSION . ';',
+            'public static int $compilerVersion = 0;',
+            $src,
+            $count
+        );
+        $this->assertSame(1, $count, 'the version stamp must appear exactly once');
+        $this->assertStringContainsString('compilerVersion = 0;', $mutated);
+        file_put_contents($file, $mutated);
+
+        // Note: deliberately NO invalidate() — the wrong-stamped file must stay
+        // on disk so the version guard is what rejects it.
+        $this->assertSame('compiled-ok', $this->renderInFreshProcess('cver_stale'));
+
+        $this->assertStringContainsString(
+            'public static int $compilerVersion = ' . Compiler::COMPILER_VERSION . ';',
+            (string) file_get_contents($file),
+            'Expected the stale-stamped file to be recompiled'
+        );
+    }
+
+    /**
+     * Cache files written before versioning existed carry no property at all;
+     * they must be read as version 0 (stale) rather than crash or be assumed
+     * current. This is the migration path for every existing deployment.
+     */
+    public function testUnversionedCompiledFileIsTreatedAsStale(): void
+    {
+        self::tpl('cver_unversioned', 'compiled-ok');
+        self::assertSame('compiled-ok', self::render('cver_unversioned'));
+
+        $cache = new Cache(TestEnvironment::cacheDir());
+        $file  = $cache->cacheFilePath('cver_unversioned');
+
+        $src = file_get_contents($file);
+        $this->assertIsString($src);
+        $stripped = str_replace(
+            'public static int $compilerVersion = ' . Compiler::COMPILER_VERSION . ';',
+            '',
+            $src,
+            $count
+        );
+        $this->assertSame(1, $count, 'the version stamp must appear exactly once');
+        $this->assertStringNotContainsString('public static int $compilerVersion', $stripped);
+        file_put_contents($file, $stripped);
+
+        $this->assertSame('compiled-ok', $this->renderInFreshProcess('cver_unversioned'));
+
+        $this->assertStringContainsString(
+            'public static int $compilerVersion = ' . Compiler::COMPILER_VERSION . ';',
+            (string) file_get_contents($file),
+            'Expected an unversioned file to be recompiled'
+        );
+    }
+
+    /**
+     * Render a template in a completely fresh PHP process.
+     *
+     * Cache freshness cannot be observed in-process:
+     *  - `Cache::$classNames` (static) plus OPcache short-circuit the read, and
+     *  - `Cache::invalidate()` deletes the file *and* clears the registry, so any
+     *    later in-process render recompiles unconditionally and never consults
+     *    `isFresh()` at all.
+     *
+     * A child process is therefore the only faithful simulation of "the next real
+     * request against the cache file currently on disk". OPcache is disabled in
+     * the child so a cached script can never mask a mutant on disk.
+     */
+    private function renderInFreshProcess(string $templateName): string
+    {
+        $autoload = realpath(__DIR__ . '/../../vendor/autoload.php');
+        $this->assertIsString($autoload, 'vendor/autoload.php must exist');
+
+        $bootstrap = sys_get_temp_dir() . DIRECTORY_SEPARATOR . '_clarity_fresh_render.php';
+        file_put_contents($bootstrap,
+            "<?php\n"
+                . 'require_once ' . var_export($autoload, true) . ";\n"
+                . "\$engine = new \\Clarity\\ClarityEngine();\n"
+                . "\$engine->setViewPath(\$argv[1])->setCachePath(\$argv[2])->setExtension('clarity.html');\n"
+                . "echo \$engine->renderPartial(\$argv[3]);\n"
+        );
+
+        $cmd = \sprintf(
+            '%s -d opcache.enable_cli=0 -d opcache.enable=0 %s %s %s %s 2>&1',
+            \escapeshellarg(PHP_BINARY),
+            \escapeshellarg($bootstrap),
+            \escapeshellarg(TestEnvironment::viewDir()),
+            \escapeshellarg(TestEnvironment::cacheDir()),
+            \escapeshellarg($templateName)
+        );
+
+        $output = \shell_exec($cmd);
+        @unlink($bootstrap);
+
+        $this->assertIsString($output, 'the fresh process produced no output');
+
+        return $output;
+    }
+
     /**
      * Uses a private, isolated cache directory so that flushing does not
      * destroy the shared cache files that all other tests rely on across runs.
@@ -205,11 +357,14 @@ class CacheTest extends BaseTestCase
 
     public function testCompiledClassWithoutRenderBodyLineIsTreatedAsStaleByCache(): void
     {
-        // readDeps() is only consulted for a template that is not yet loaded in
-        // this process (Cache::$classNames short-circuits the warm path, and
-        // re-requiring an already-declared file would be a redeclare fatal), so
-        // the staleness guard is asserted against the cache file content plus a
-        // fresh read of a *different* template to keep the assertion meaningful.
+        // NOTE: no staleness guard currently keys off $renderBodyLine. The
+        // compiler always emits the declaration (the heredoc contains
+        // `public static int $renderBodyLine = 0;` and compile() rewrites its
+        // value), so a *missing* declaration can only come from a hand-tampered
+        // or pre-feature file. The engine tolerates that at error-mapping time
+        // (staticPropertyOrDefault() → 0 → maps nothing) instead of forcing a
+        // recompile. This test therefore only pins the shape of the emitted
+        // declaration, not a cache guard — do not write docs claiming otherwise.
         $isolatedCache = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'clarity_test_bodyline_stale';
         $this->removeDir($isolatedCache);
         @mkdir($isolatedCache, 0755, true);
@@ -222,8 +377,9 @@ class CacheTest extends BaseTestCase
         $file = glob($isolatedCache . DIRECTORY_SEPARATOR . '*/*.php')[0];
         $this->assertStringContainsString('renderBodyLine =', file_get_contents($file));
 
-        // Stripping the declaration must be detectable by reflection on the file
-        // content: the guard in readDeps() keys off exactly this.
+        // Stripping the declaration from the emitted class must be detectable at
+        // the text level. (Nothing in Cache.php keys off it — this only proves the
+        // declaration is a single, strippable occurrence; see the note above.)
         $stripped = preg_replace(
             '/^\s*public static int \$renderBodyLine = \d+;\s*$/m',
             '',

@@ -65,9 +65,9 @@ class RenderingTest extends BaseTestCase
     {
         self::tpl('nested_dynidx', '{{ items[indexes[i + 1]] }}');
         $result = self::render('nested_dynidx', [
-            'items' => ['x', 'y', 'z', 'w'],
+            'items'   => ['x', 'y', 'z', 'w'],
             'indexes' => [0, 2, 3],
-            'i' => 1,
+            'i'       => 1,
         ]);
         $this->assertSame('w', $result);
     }
@@ -113,7 +113,7 @@ class RenderingTest extends BaseTestCase
 
         $result = self::render('object_literal_filter', [
             'count' => 3,
-            'user' => ['id' => 7],
+            'user'  => ['id' => 7],
         ]);
 
         $this->assertSame('{"foo":"bar","count":3,"nested":{"id":7},"items":[1,2]}', $result);
@@ -227,7 +227,8 @@ class RenderingTest extends BaseTestCase
 
     public function testObjectWithToArray(): void
     {
-        $obj = new class {
+        $obj = new class
+        {
             public function toArray(): array
             {
                 return ['key' => 'value'];
@@ -240,7 +241,8 @@ class RenderingTest extends BaseTestCase
 
     public function testJsonSerializableObjectCasting(): void
     {
-        $obj = new class implements \JsonSerializable {
+        $obj = new class implements \JsonSerializable
+        {
             public function jsonSerialize(): mixed
             {
                 return ['x' => 42];
@@ -249,6 +251,202 @@ class RenderingTest extends BaseTestCase
         self::tpl('jsonser', '{{ data.x }}');
         $result = self::render('jsonser', ['data' => $obj]);
         $this->assertSame('42', $result);
+    }
+
+    /**
+     * A self-returning jsonSerialize() used to make castToArray() recurse until
+     * the memory limit was hit, because the object was re-tested against the
+     * same branch. The (array) cast that guarded against that also exposed
+     * non-public properties - see testJsonSerializableDoesNotLeakNonPublicState.
+     */
+    public function testSelfReturningJsonSerializableDoesNotRecurseForever(): void
+    {
+        $obj = new class implements \JsonSerializable
+        {
+            public string $name = 'ok';
+            private string $secret = 'PRIVATE_LEAK';
+
+            public function jsonSerialize(): mixed
+            {
+                return $this;
+            }
+        };
+        // Loop in (key, value) order so the private property's absence can be
+        // asserted: dot access on a missing key throws instead.
+        self::tpl('jsonser_self', '{% for key, value in data %}[{{ key }}={{ value }}]{% endfor %}');
+        $result = self::render('jsonser_self', ['data' => $obj]);
+        $this->assertSame('[name=ok]', $result);
+    }
+
+    /**
+     * JsonSerializable is a wire-format contract and exposes nothing about
+     * visibility, so it must not widen what a template can reach. `(array)`
+     * did: it flattens private/protected props into mangled keys.
+     */
+    public function testJsonSerializableDoesNotLeakNonPublicState(): void
+    {
+        $obj = new class implements \JsonSerializable
+        {
+            public string $owner = 'alice';
+            private string $apiKey = 'sk-SECRET';
+            protected string $internal = 'INTERNAL';
+
+            public function jsonSerialize(): mixed
+            {
+                return $this;
+            }
+        };
+        self::tpl('jsonser_leak', '{% for key, value in data %}[{{ key }}={{ value }}]{% endfor %}');
+        $result = self::render('jsonser_leak', ['data' => $obj]);
+        $this->assertSame('[owner=alice]', $result);
+    }
+
+    /**
+     * A plain object of the same shape must produce the same result as the
+     * JsonSerializable one, i.e. visibility rules may not depend on whether a
+     * class happens to implement the interface.
+     */
+    public function testJsonSerializableMatchesPlainObjectVisibility(): void
+    {
+        $plain = new class
+        {
+            public string $owner = 'alice';
+            private string $apiKey = 'sk-SECRET';
+            protected string $internal = 'INTERNAL';
+        };
+        self::tpl('plain_leak', '{% for key, value in data %}[{{ key }}={{ value }}]{% endfor %}');
+        $result = self::render('plain_leak', ['data' => $plain]);
+        $this->assertSame('[owner=alice]', $result);
+    }
+
+    /**
+     * toArray() declares an array return type; jsonSerialize() does not. An
+     * object offering both must therefore resolve through toArray().
+     */
+    public function testToArrayWinsOverJsonSerializable(): void
+    {
+        $obj = new class implements \JsonSerializable
+        {
+            public function jsonSerialize(): mixed
+            {
+                return ['winner' => 'jsonSerialize'];
+            }
+
+            public function toArray(): array
+            {
+                return ['winner' => 'toArray'];
+            }
+        };
+        self::tpl('both_contracts', '{{ data.winner }}');
+        $result = self::render('both_contracts', ['data' => $obj]);
+        $this->assertSame('toArray', $result);
+    }
+
+    /**
+     * A scalar returned from jsonSerialize() used to be wrapped in a
+     * one-element array by the (array) cast.
+     */
+    public function testJsonSerializableReturningScalarIsNotWrapped(): void
+    {
+        $obj = new class implements \JsonSerializable
+        {
+            public function jsonSerialize(): mixed
+            {
+                return 'plain-string';
+            }
+        };
+        self::tpl('jsonser_scalar', '{{ data }}');
+        $result = self::render('jsonser_scalar', ['data' => $obj]);
+        $this->assertSame('plain-string', $result);
+    }
+
+    /**
+     * method_exists() reports true for non-public methods, so a private
+     * toArray() used to trigger "Call to private method".
+     */
+    public function testPrivateToArrayIsIgnored(): void
+    {
+        $obj = new class
+        {
+            public string $name = 'from-props';
+
+            private function toArray(): array
+            {
+                return ['name' => 'from-private-toArray'];
+            }
+        };
+        self::tpl('private_toarray', '{{ data.name }}');
+        $result = self::render('private_toarray', ['data' => $obj]);
+        $this->assertSame('from-props', $result);
+    }
+
+    /**
+     * DateTimeInterface is neither JsonSerializable nor Traversable and exposes
+     * no public properties, so it used to cast to [] and make the date filter
+     * render 1970-01-01.
+     */
+    public function testDateTimeInterfaceBecomesIsoString(): void
+    {
+        $dt = new \DateTime('2026-09-21 12:00:00+02:00');
+        self::tpl('datetime', '{{ createdAt }}');
+        $result = self::render('datetime', ['createdAt' => $dt]);
+        $this->assertSame('2026-09-21T12:00:00+02:00', $result);
+    }
+
+    public function testDateTimeInterfaceWorksWithDateFilter(): void
+    {
+        $dt = new \DateTime('2026-09-21 12:00:00+02:00');
+        self::tpl('datetime_filter', '{{ createdAt |> date("Y-m-d") }}');
+        $result = self::render('datetime_filter', ['createdAt' => $dt]);
+        $this->assertSame('2026-09-21', $result);
+    }
+
+    public function testDateTimeImmutableBecomesIsoString(): void
+    {
+        $dt = new \DateTimeImmutable('2026-09-21 12:00:00+02:00');
+        self::tpl('datetime_immutable', '{{ createdAt }}');
+        $result = self::render('datetime_immutable', ['createdAt' => $dt]);
+        $this->assertSame('2026-09-21T12:00:00+02:00', $result);
+    }
+
+    /**
+     * A value object holding all state privately is otherwise invisible to
+     * templates; __toString() is the only meaningful representation.
+     */
+    public function testStringableValueObjectUsesToString(): void
+    {
+        $obj = new class
+        {
+            private int $cents = 1234;
+
+            public function __toString(): string
+            {
+                return \number_format($this->cents / 100, 2);
+            }
+        };
+        self::tpl('stringable', '{{ price }}');
+        $result = self::render('stringable', ['price' => $obj]);
+        $this->assertSame('12.34', $result);
+    }
+
+    /**
+     * The general object -> array rule stays dominant: an object with public
+     * properties must not have them silently replaced by __toString().
+     */
+    public function testObjectWithPublicPropertiesIgnoresToString(): void
+    {
+        $obj = new class
+        {
+            public string $name = 'from-props';
+
+            public function __toString(): string
+            {
+                return 'from-tostring';
+            }
+        };
+        self::tpl('stringable_props', '{{ data.name }}');
+        $result = self::render('stringable_props', ['data' => $obj]);
+        $this->assertSame('from-props', $result);
     }
 
     // =========================================================================
@@ -285,7 +483,7 @@ class RenderingTest extends BaseTestCase
 
         self::tpl('dynamic_include_ns', '{{ include("ui::badge", { label: "ok" }) }}');
 
-        $engine = TestEnvironment::engine();
+        $engine         = TestEnvironment::engine();
         $originalLoader = $engine->getLoader();
         $engine->setLoader(new DomainRouterLoader(
             ['ui' => new FileLoader($nsPath)],
@@ -330,7 +528,7 @@ class RenderingTest extends BaseTestCase
         @mkdir($nsDir, 0755, true);
         file_put_contents($nsDir . DIRECTORY_SEPARATOR . 'hello.clarity.html', 'ns:{{ x }}');
 
-        $engine = TestEnvironment::engine();
+        $engine         = TestEnvironment::engine();
         $originalLoader = $engine->getLoader();
         $engine->setLoader(new DomainRouterLoader(
             ['mns' => new FileLoader($nsDir)],
@@ -356,7 +554,7 @@ class RenderingTest extends BaseTestCase
         // json_encode wraps strings in quotes and escapes < (HEX_TAG) and ' (HEX_APOS)
         $this->assertStringContainsString('var x = ', $result);
         $this->assertStringNotContainsString("O'Reilly", $result); // apostrophe escaped
-        $this->assertStringNotContainsString('<b>', $result);       // < escaped
+        $this->assertStringNotContainsString('<b>', $result);      // < escaped
     }
 
     public function testHtmlContextAfterScriptClose(): void
