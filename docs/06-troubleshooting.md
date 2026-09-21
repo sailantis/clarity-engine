@@ -33,8 +33,11 @@ $engine->render('page', [
 3. **Check with conditional:**
 
 ```twig
-{% if variableName %} {{ variableName }} {% else %} No value provided {% endif
-%}
+{% if variableName %}
+    {{ variableName }}
+{% else %}
+    No value provided
+{% endif %}
 ```
 
 4. **Use null coalescing operator:**
@@ -60,7 +63,10 @@ Filter 'filterName' is not registered
 1. **Check filter name spelling:**
 
 ```twig
-{# ❌ Wrong #} {{ value |> uppercase }} {# ✅ Correct #} {{ value |> upper }}
+{# Wrong #}
+{{ value |> uppercase }}
+{# Correct #}
+{{ value |> upper }}
 ```
 
 2. **Register custom filter:**
@@ -92,24 +98,33 @@ Syntax error: unexpected token '}' at line 42
 1. **Unclosed tags:**
 
 ```twig
-{# ❌ Wrong #} {% if condition %}
-<p>Content</p>
-{# Missing {% endif %} #} {# ✅ Correct #} {% if condition %}
-<p>Content</p>
+{# Wrong #}
+{% if condition %}
+    <p>Content</p>
+{# Missing {% endif %} #}
+
+{# Correct #}
+{% if condition %}
+    <p>Content</p>
 {% endif %}
 ```
 
 2. **Mismatched delimiters:**
 
 ```twig
-{# ❌ Wrong #} {{ value |> upper } {# ✅ Correct #} {{ value |> upper }}
+{# Wrong #}
+{{ value |> upper }}
+{# Correct #}
+{{ value |> upper }}
 ```
 
 3. **Missing closing parenthesis:**
 
 ```twig
-{# ❌ Wrong #} {{ value |> truncate(100 }} {# ✅ Correct #} {{ value |>
-truncate(100) }}
+{# Wrong #}
+{{ value |> truncate(100 }}
+{# Correct #}
+{{ value |> truncate(100) }}
 ```
 
 **Debugging tip:** Check the line number in the error message and examine the template file at that line.
@@ -154,8 +169,10 @@ $engine->setExtension('.tpl.html');
 4. **Use correct namespace:**
 
 ```twig
-{# ❌ Wrong #} {% include "admin/sidebar" %} {# ✅ Correct with namespace #} {%
-include "admin::sidebar" %}
+{# Wrong #}
+{% include "admin/sidebar" %}
+{# Correct with namespace #}
+{% include "admin::sidebar" %}
 ```
 
 ---
@@ -173,15 +190,20 @@ Circular include detected: template1 → template2 → template1
 **Example:**
 
 ```twig
-{# templates/a.clarity.html #} {% include "b" %} {# templates/b.clarity.html #}
+{# templates/a.clarity.html #}
+{% include "b" %}
+{# templates/b.clarity.html #}
 {% include "a" %} {# Circular! #}
 ```
 
 **Solution:** Refactor to break the circular dependency:
 
 ```twig
-{# templates/a.clarity.html #} {% include "c" %} {# templates/b.clarity.html #}
-{% include "c" %} {# templates/c.clarity.html #}
+{# templates/a.clarity.html #}
+{% include "c" %}
+{# templates/b.clarity.html #}
+{% include "c" %}
+{# templates/c.clarity.html #}
 <div>Shared content</div>
 ```
 
@@ -280,10 +302,10 @@ if (function_exists('opcache_reset')) {
 $engine->flushCache();
 ```
 
-Restart PHP-FPM:
+Restart PHP-FPM gracefully:
 
 ```bash
-sudo systemctl restart php8.2-fpm
+sudo systemctl reload php8.3-fpm
 ```
 
 2. **Browser caching HTML:**
@@ -306,23 +328,14 @@ rm -rf cache/clarity/*
 
 ---
 
-### Output Not Escaped
+### Output Escaped
 
-**Problem:** HTML tags appearing in output when they should be escaped.
+**Problem:** HTML tags appearing in output when they should not be escaped.
 
-**Cause:** Using `raw` filter inappropriately.
-
-**Example:**
+**Solution:** Add `raw` filter when outputting trusted HTML:
 
 ```twig
-{# ❌ Wrong: Disables escaping #} {{ userInput |> raw }} {# ✅ Correct:
-Auto-escaped #} {{ userInput }}
-```
-
-**Solution:** Remove `raw` filter unless outputting trusted HTML:
-
-```twig
-{# Only use raw with sanitized content #} {{ sanitizedArticleBody |> raw }}
+{{ sanitizedArticleBody |> raw }}
 ```
 
 ---
@@ -334,12 +347,16 @@ Auto-escaped #} {{ userInput }}
 **Example:**
 
 ```twig
-{# ❌ Vulnerable #} {{ userComment |> raw }} {# If userComment = "
+{# Vulnerable #}
+{{ userComment |> raw }}
+{# Probable output if userComment contains a script tag:
 <script>
   alert("XSS");
 </script>
-" → executes! #} {# ✅ Safe #} {{ userComment }} {# Output:
-&lt;script&gt;alert('XSS')&lt;/script&gt; #}
+#}
+{# Safe #}
+{{ userComment }}
+{# Output: &lt;script&gt;alert('XSS')&lt;/script&gt; #}
 ```
 
 **Solution:** Never use `raw` with user input. Always rely on auto-escaping for untrusted data.
@@ -367,10 +384,10 @@ Or via CLI:
 php -r "require 'vendor/autoload.php'; (new \Clarity\ClarityEngine())->setCachePath(__DIR__ . '/cache/clarity')->flushCache();"
 ```
 
-2. **Restart PHP-FPM:**
+2. **Restart PHP-FPM gracefully:**
 
 ```bash
-sudo systemctl restart php8.2-fpm
+sudo systemctl reload php8.3-fpm
 ```
 
 3. **Clear OPcache:**
@@ -467,17 +484,20 @@ Fatal error: Allowed memory size exhausted
 1. **Too much data passed to template:**
 
 ```php
-// ❌ Bad: Passing huge dataset
+// Bad: Passing huge dataset
 $engine->render('page', ['items' => $millionRows]);
 
-// ✅ Good: Paginate
+// Good: Paginate
 $engine->render('page', ['items' => array_slice($millionRows, 0, 20)]);
 ```
 
 2. **Infinite loop in template:**
 
 ```twig
-{# ❌ Infinite loop #} {% for i in 1..999999999 %} {{ i }} {% endfor %}
+{# Long running loop #}
+{% for i in 1..999999999 %}
+    {{ i }}
+{% endfor %}
 ```
 
 ---
@@ -735,23 +755,6 @@ php -m | grep mbstring
 composer install
 ls -la cache/
 ```
-
----
-
-## Prevention Checklist
-
-Before reporting an issue, verify:
-
-- [ ] PHP version >= 8.1
-- [ ] Composer dependencies installed (`composer install`)
-- [ ] Autoloader included (`require 'vendor/autoload.php'`)
-- [ ] View path correctly set
-- [ ] Cache directory exists and is writable
-- [ ] Template file exists at expected path
-- [ ] Variables passed to `render()` correctly
-- [ ] No typos in filter/function names
-- [ ] No circular includes
-- [ ] Error display enabled (development)
 
 ---
 

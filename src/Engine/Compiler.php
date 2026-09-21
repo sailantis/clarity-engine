@@ -60,7 +60,7 @@ class Compiler
     /** @var array<string, int|string>  templateName → revision collected during this compilation */
     private array $dependencies = [];
 
-    /** @var array<int, int>  phpOutputLine → templateLine source map */
+    /** @var list<array{int,int,int}>  phpOutputLine → templateLine source map */
     private array $sourceMap = [];
 
     /** @var string[]  de-duplicated list of logical template names, in order of first appearance */
@@ -79,8 +79,8 @@ class Compiler
     private ?TemplateLoader $loader = null;
 
     /**
-     * @var list<array{type:string, restore:array<string,string|null>}>
      * Stack tracking loop types and compiler-scope variable bindings to restore on endfor.
+     * @var list<array{type:string, restore:array<string,string|null>}>
      */
     private array $forStack = [];
 
@@ -899,13 +899,30 @@ class Compiler
     private const RE_FOR_IN = '/^([a-zA-Z_][a-zA-Z0-9_.]*)(?:\s*,\s*([a-zA-Z_][a-zA-Z0-9_]*))?\s+in\s+(.+?)(?:(\.\.\.?)(.+?)(?:\s+step\s+(.+))?)?$/s';
 
     /**
+     * Bump this whenever a change alters the PHP that a template compiles to.
+     *
+     * Compiled classes record the value they were built with (see buildClass());
+     * Cache::isFresh() treats a mismatch as stale, so an engine upgrade can
+     * never keep executing bytecode produced by an older compiler. This matters
+     * for changes that alter *semantics* without altering the template source —
+     * e.g. reversing the key/value order of the two-variable for loop, where the
+     * template file's revision is unchanged but the bindings would silently swap.
+     *
+     * 1 → initial versioned compiler (two-variable for loop switched to (key, value))
+     */
+    public const COMPILER_VERSION = 1;
+
+    /**
      * Compile {% for item in list %} → PHP foreach.
-     * Compile {% for item, idx in list %} → PHP foreach.
+     * Compile {% for key, item in list %} → PHP foreach.
      * Compile {% for i in start..end %} / {% for i in start...end [step N] %} → native PHP for.
      *
+     * Two-variable form: the FIRST name is the KEY and the SECOND is the VALUE,
+     * matching Twig's `{% for key, user in users %}`.
+     *
      * Range syntax:
-     *   ..   exclusive upper bound  (start ≤ i < end)
-     *   ...  inclusive upper bound  (start ≤ i ≤ end)
+     *   ..   inclusive upper bound  (start ≤ i ≤ end)
+     *   ...  exclusive upper bound  (start ≤ i < end)
      * An optional `step N` suffix controls the increment (default: 1).
      */
     private function compileFor(string $rest, string $sourcePath, int $tplLine): string
@@ -951,25 +968,39 @@ class Compiler
         // Standard foreach — evaluate list in the current (outer) scope first
         $listExpr = $this->tokenizer->processCondition(trim($m[3]));
 
-        $itemTplName = trim($m[1]);
-        $itemPhpVar  = '$' . $itemTplName;
-        $restore     = [$itemTplName => $this->localVars[$itemTplName] ?? null];
-        $this->localVars[$itemTplName] = $itemPhpVar;
+        $firstName = trim($m[1]);
+        $hasSecond = isset($m[2]) && $m[2] !== '';
 
-        // Optional key variable
-        if (isset($m[2]) && $m[2] !== '') {
-            $keyTplName = trim($m[2]);
-            $keyPhpVar  = '$' . $keyTplName;
-            $restore[$keyTplName] = $this->localVars[$keyTplName] ?? null;
-            $this->localVars[$keyTplName] = $keyPhpVar;
-            $this->tokenizer->setLocalVars($this->localVars);
-            $this->forStack[] = ['type' => 'foreach', 'restore' => $restore];
-            return "foreach ({$listExpr} as {$keyPhpVar} => {$itemPhpVar}):";
+        // The two-variable form is (key, value) — Twig order — so the FIRST name
+        // binds the key and the SECOND binds the value. With a single name it is
+        // the value, matching {% for item in items %}.
+        $keyTplName  = $hasSecond ? $firstName : null;
+        $itemTplName = $hasSecond ? trim($m[2]) : $firstName;
+
+        $itemPhpVar = '$' . $itemTplName;
+        if ($keyTplName !== null) {
+            $keyPhpVar = '$' . $keyTplName;
+        }
+
+        $restore = [];
+        foreach ([$keyTplName, $itemTplName] as $tplName) {
+            if ($tplName === null || isset($restore[$tplName])) {
+                continue;
+            }
+            $restore[$tplName] = $this->localVars[$tplName] ?? null;
+            $this->localVars[$tplName] = '$' . $tplName;
         }
 
         $this->tokenizer->setLocalVars($this->localVars);
         $this->forStack[] = ['type' => 'foreach', 'restore' => $restore];
-        return "foreach ({$listExpr} as {$itemPhpVar}):";
+
+        if ($keyTplName === null) {
+            return "foreach ({$listExpr} as {$itemPhpVar}):";
+        }
+
+        // PHP's foreach binding is (key => value), so the key variable goes on
+        // the left. The template wrote (key, value), matching that order.
+        return "foreach ({$listExpr} as {$keyPhpVar} => {$itemPhpVar}):";
     }
 
     /**
@@ -1315,6 +1346,7 @@ class Compiler
         $filesExport = var_export($this->sourceFiles, true);
         $mapExport   = var_export($this->sourceMap, true);
         $debugFlag   = $this->debugMode ? 'true' : 'false';
+        $versionInt  = self::COMPILER_VERSION;
 
         // Detect which registries are actually referenced in the compiled body.
         // The constructor always accepts all three (so the caller stays simple),
@@ -1348,6 +1380,9 @@ class Compiler
 
             /** @var bool  whether this template was compiled with debug mode enabled */
             public static bool \$debugCompiled = {$debugFlag};
+
+            /** @var int  compiler version that produced this class; see Cache::isFresh() */
+            public static int \$compilerVersion = {$versionInt};
 
             /** @var int  cache-file line at which the compiled render body starts; 0 when unknown */
             public static int \$renderBodyLine = 0;

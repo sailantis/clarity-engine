@@ -30,9 +30,11 @@ $dependencies   – array<string,int|string>  logicalName => revision
 $sourceMap – list<[phpLineStart, fileIndex, templateLine]> ranges
 $renderBodyLine – int first line of the compiled render body, in cache-file
 coordinates; lets error mapping run without re-reading the file
+$compilerVersion – int Compiler::COMPILER_VERSION that produced the class
 
-A class lacking `$renderBodyLine` was compiled by an older Clarity version and is
-treated as stale, so it is recompiled once on the next request.
+`isFresh()` treats a class stamped with an older `$compilerVersion` as stale and
+recompiles it, and a class with no stamp at all counts as version 0 (also stale).
+There is no separate self-heal rule keyed off `$renderBodyLine`.
 
 ## 🚀 Public methods
 
@@ -91,11 +93,14 @@ logical template name.
 
 1. A compiled class for this template name is known (either loaded in
    this process already, or loadable from the cache file).
-2. Every entry in the class's $dependencies still has the same revision
+2. The class was produced by the current compiler version. A change in
+   Compiler::COMPILER_VERSION is a change in emitted semantics, so the
+   template source may be unchanged while the compiled code is wrong.
+3. Every entry in the class's $dependencies still has the same revision
    as recorded at compile time, as determined by calling $revisionFor.
 
-On warm paths the class is already in memory; `readDeps()` reflects
-`$dependencies` directly — zero file I/O from this method.
+On warm paths the class is already in memory; the static properties are
+read directly — zero file I/O from this method.
 
 **🧭 Parameters**
 

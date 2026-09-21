@@ -52,8 +52,24 @@ class ControlFlowTest extends BaseTestCase
 
     public function testForLoopWithIndex(): void
     {
-        self::tpl('for_index', '{% for item, idx in items %}{{ idx }}:{{ item }},{% endfor %}');
+        self::tpl('for_index', '{% for idx, item in items %}{{ idx }}:{{ item }},{% endfor %}');
         $this->assertSame('0:10,1:20,', self::render('for_index', ['items' => [10, 20]]));
+    }
+
+    /**
+     * The two-variable form is (key, value) — Twig order. Reversing it must fail
+     * loudly rather than silently swapping the bindings.
+     */
+    public function testForLoopTwoVariableOrderIsKeyThenValue(): void
+    {
+        self::tpl('for_order', '{% for k, v in map %}{{ k }}={{ v }},{% endfor %}');
+        $this->assertSame('x=1,y=2,', self::render('for_order', ['map' => ['x' => 1, 'y' => 2]]));
+    }
+
+    public function testForLoopTwoVariableOrderOnIndexedArray(): void
+    {
+        self::tpl('for_order_idx', '{% for k, v in items %}{{ k }}:{{ v }},{% endfor %}');
+        $this->assertSame('0:a,1:b,', self::render('for_order_idx', ['items' => ['a', 'b']]));
     }
 
     public function testForLoopVariableAsArrayIndex(): void
@@ -67,7 +83,7 @@ class ControlFlowTest extends BaseTestCase
             '{% for key in keys %}{{ labels[key] }}-{% endfor %}'
         );
         $this->assertSame('Alpha-Beta-', self::render('for_array_index', [
-            'keys' => ['a', 'b'],
+            'keys'   => ['a', 'b'],
             'labels' => ['a' => 'Alpha', 'b' => 'Beta'],
         ]));
     }
@@ -80,7 +96,7 @@ class ControlFlowTest extends BaseTestCase
             '{% for key in keys %}{{ labels[key] ?? "N/A" }},{% endfor %}'
         );
         $this->assertSame('Alpha,N/A,', self::render('for_array_index_coalesce', [
-            'keys' => ['a', 'missing'],
+            'keys'   => ['a', 'missing'],
             'labels' => ['a' => 'Alpha'],
         ]));
     }
@@ -145,8 +161,8 @@ class ControlFlowTest extends BaseTestCase
         self::tpl(
             'page_with_title',
             '{% extends "layout_with_title" %}' .
-            "\n{% set sectionTitle = \"The PHP IDE Extension\" %}" .
-            "\n{% block content %}body{% endblock %}"
+                "\n{% set sectionTitle = \"The PHP IDE Extension\" %}" .
+                "\n{% block content %}body{% endblock %}"
         );
 
         $this->assertSame(
@@ -164,14 +180,14 @@ class ControlFlowTest extends BaseTestCase
         self::tpl(
             'section_meta',
             '{% extends "base_meta" %}' .
-            '{% set sectionTitle = "Section" %}' .
-            '{% block body %}[{% block page %}section-body{% endblock %}]{% endblock %}'
+                '{% set sectionTitle = "Section" %}' .
+                '{% block body %}[{% block page %}section-body{% endblock %}]{% endblock %}'
         );
         self::tpl(
             'page_meta_nested',
             '{% extends "section_meta" %}' .
-            '{% set sectionTitle = "Child" %}' .
-            '{% block page %}content{% endblock %}'
+                '{% set sectionTitle = "Child" %}' .
+                '{% block page %}content{% endblock %}'
         );
 
         $this->assertSame('<title>Child</title>[content]', self::render('page_meta_nested'));
@@ -183,9 +199,9 @@ class ControlFlowTest extends BaseTestCase
         self::tpl(
             'page_ignore_text',
             '{% extends "layout_ignore_text" %}' .
-            '{% set sectionTitle = "Ignored" %}' .
-            '<p>IGNORED</p>' .
-            '{% block content %}body{% endblock %}'
+                '{% set sectionTitle = "Ignored" %}' .
+                '<p>IGNORED</p>' .
+                '{% block content %}body{% endblock %}'
         );
 
         $this->assertSame('[body]', self::render('page_ignore_text'));
@@ -264,7 +280,7 @@ class ControlFlowTest extends BaseTestCase
         self::tpl(
             'nested_mid',
             '{% extends "nested_root" %}' .
-            '{% block content %}<section>{% block body %}default-body{% endblock %}</section>{% endblock %}'
+                '{% block content %}<section>{% block body %}default-body{% endblock %}</section>{% endblock %}'
         );
         self::tpl(
             'nested_leaf',
@@ -283,12 +299,12 @@ class ControlFlowTest extends BaseTestCase
         self::tpl(
             'empty_mid_mid',
             '{% extends "empty_mid_root" %}{% set pageClass = "legal" %}' .
-            '{% block content %}{% endblock %}'
+                '{% block content %}{% endblock %}'
         );
         self::tpl(
             'empty_mid_leaf',
             '{% extends "empty_mid_mid" %}{% set sectionTitle = "Contact" %}' .
-            '{% block content %}<h2>Contact us</h2>{% endblock %}'
+                '{% block content %}<h2>Contact us</h2>{% endblock %}'
         );
 
         $this->assertSame(
@@ -399,19 +415,19 @@ class ControlFlowTest extends BaseTestCase
 
     public function testForLoopIndexWithStyle(): void
     {
-        self::tpl('for_idx_with', '{% for item, idx in list %}{{ idx }}:{{ item }},{% endfor %}');
+        self::tpl('for_idx_with', '{% for idx, item in list %}{{ idx }}:{{ item }},{% endfor %}');
         $this->assertSame('0:a,1:b,2:c,', self::render('for_idx_with', ['list' => ['a', 'b', 'c']]));
     }
 
     public function testForLoopIndexWithStyleAssocArray(): void
     {
-        self::tpl('for_idx_with_assoc', '{% for v, k in map %}{{ k }}={{ v }},{% endfor %}');
+        self::tpl('for_idx_with_assoc', '{% for k, v in map %}{{ k }}={{ v }},{% endfor %}');
         $this->assertSame('x=1,y=2,', self::render('for_idx_with_assoc', ['map' => ['x' => 1, 'y' => 2]]));
     }
 
     public function testForLoopIndexNestedNoCollision(): void
     {
-        $tpl = '{% for outer, oi in rows %}{% for inner, ii in outer %}{{ oi }}.{{ ii }}:{{ inner }},{% endfor %}{% endfor %}';
+        $tpl = '{% for oi, outer in rows %}{% for ii, inner in outer %}{{ oi }}.{{ ii }}:{{ inner }},{% endfor %}{% endfor %}';
         self::tpl('for_nested_idx', $tpl);
         $result = self::render('for_nested_idx', ['rows' => [['a', 'b'], ['c']]]);
         $this->assertSame('0.0:a,0.1:b,1.0:c,', $result);
@@ -535,7 +551,7 @@ class ControlFlowTest extends BaseTestCase
         self::tpl(
             'macro_basic',
             '{% macro @greet(name) %}Hello {{ name }}!{% endmacro %}' .
-            '{% @greet(user) %}'
+                '{% @greet(user) %}'
         );
         $this->assertSame('Hello World!', self::render('macro_basic', ['user' => 'World']));
     }
@@ -545,7 +561,7 @@ class ControlFlowTest extends BaseTestCase
         self::tpl(
             'macro_multi',
             '{% macro @field(label, value) %}<label>{{ label }}: {{ value }}</label>{% endmacro %}' .
-            '{% @field(name, email) %}'
+                '{% @field(name, email) %}'
         );
         $result = self::render('macro_multi', ['name' => 'Name', 'email' => 'test@example.com']);
         $this->assertSame('<label>Name: test@example.com</label>', $result);
@@ -556,7 +572,7 @@ class ControlFlowTest extends BaseTestCase
         self::tpl(
             'macro_repeat',
             '{% macro @item(label) %}<li>{{ label }}</li>{% endmacro %}' .
-            '{% @item(a) %}{% @item(b) %}'
+                '{% @item(a) %}{% @item(b) %}'
         );
         $result = self::render('macro_repeat', ['a' => 'First', 'b' => 'Second']);
         $this->assertSame('<li>First</li><li>Second</li>', $result);
@@ -569,7 +585,7 @@ class ControlFlowTest extends BaseTestCase
         self::tpl(
             'macro_isolate',
             '{% macro @show(x) %}[{{ x }}]{% endmacro %}' .
-            '{% @show(a) %}{{ x }}'
+                '{% @show(a) %}{{ x }}'
         );
         $result = self::render('macro_isolate', ['a' => 'macro', 'x' => 'outer']);
         $this->assertSame('[macro]outer', $result);
@@ -580,7 +596,7 @@ class ControlFlowTest extends BaseTestCase
         self::tpl(
             'macro_loop',
             '{% macro @row(item) %}<tr>{{ item }}</tr>{% endmacro %}' .
-            '{% for row in rows %}{% @row(row) %}{% endfor %}'
+                '{% for row in rows %}{% @row(row) %}{% endfor %}'
         );
         $result = self::render('macro_loop', ['rows' => ['a', 'b', 'c']]);
         $this->assertSame('<tr>a</tr><tr>b</tr><tr>c</tr>', $result);
@@ -601,7 +617,7 @@ class ControlFlowTest extends BaseTestCase
         self::tpl(
             'macro_arity',
             '{% macro @field(label, value) %}{{ label }}{{ value }}{% endmacro %}' .
-            '{% @field(only_one) %}'
+                '{% @field(only_one) %}'
         );
         self::render('macro_arity', ['only_one' => 'x']);
     }
@@ -611,8 +627,8 @@ class ControlFlowTest extends BaseTestCase
         self::tpl(
             'macro_chain',
             '{% macro @a(x) %}<div>{% @b(x) %}</div>{% endmacro %}' .
-            '{% macro @b(y) %}<span>{{ y }}</span>{% endmacro %}' .
-            '{% @a(val) %}'
+                '{% macro @b(y) %}<span>{{ y }}</span>{% endmacro %}' .
+                '{% @a(val) %}'
         );
         $this->assertSame('<div><span>hello</span></div>', self::render('macro_chain', ['val' => 'hello']));
     }
@@ -624,7 +640,7 @@ class ControlFlowTest extends BaseTestCase
         self::tpl(
             'macro_self_recurse',
             '{% macro @loop(x) %}{% @loop(x) %}{% endmacro %}' .
-            '{% @loop(val) %}'
+                '{% @loop(val) %}'
         );
         self::render('macro_self_recurse', ['val' => 1]);
     }
@@ -636,8 +652,8 @@ class ControlFlowTest extends BaseTestCase
         self::tpl(
             'macro_indirect_recurse',
             '{% macro @a(x) %}{% @b(x) %}{% endmacro %}' .
-            '{% macro @b(y) %}{% @a(y) %}{% endmacro %}' .
-            '{% @a(val) %}'
+                '{% macro @b(y) %}{% @a(y) %}{% endmacro %}' .
+                '{% @a(val) %}'
         );
         self::render('macro_indirect_recurse', ['val' => 1]);
     }

@@ -11,11 +11,13 @@ class ModulesTest extends BaseTestCase
 {
     public function testModuleCanRegisterFilterAndService(): void
     {
-        $module = new class implements ModuleInterface {
+        $module = new class implements ModuleInterface
+        {
             public function register(\Clarity\ClarityEngine $engine): void
             {
                 $engine->addFilter('double', fn($v) => $v * 2);
-                $engine->addService('svc', new class {
+                $engine->addService('svc', new class
+                {
                     public function greet(): string
                     {
                         return 'hi';
@@ -46,9 +48,9 @@ class ModulesTest extends BaseTestCase
         $engine->setViewPath(TestEnvironment::viewDir())->setCachePath(TestEnvironment::cacheDir());
 
         $registered = false;
-        $module = new class ($registered) implements ModuleInterface {
-            public function __construct(private bool &$flag)
-            {}
+        $module     = new class ($registered) implements ModuleInterface
+        {
+            public function __construct(private bool &$flag) {}
             public function register(ClarityEngine $e): void
             {
                 $this->flag = true;
@@ -63,10 +65,9 @@ class ModulesTest extends BaseTestCase
     public function testUseIsFluent(): void
     {
         $engine = new ClarityEngine();
-        $module = new class implements ModuleInterface {
-            public function register(ClarityEngine $e): void
-            {
-            }
+        $module = new class implements ModuleInterface
+        {
+            public function register(ClarityEngine $e): void {}
         };
         $result = $engine->use($module);
         $this->assertSame($engine, $result);
@@ -77,7 +78,8 @@ class ModulesTest extends BaseTestCase
         $engine = new ClarityEngine();
         $engine->setViewPath(TestEnvironment::viewDir())->setCachePath(TestEnvironment::cacheDir());
 
-        $module = new class implements ModuleInterface {
+        $module = new class implements ModuleInterface
+        {
             public function register(ClarityEngine $e): void
             {
                 $e->addFilter('shout', fn(string $v): string => strtoupper($v) . '!!!');
@@ -129,12 +131,48 @@ class ModulesTest extends BaseTestCase
         $engine->addDirective(
             'endtag',
             fn(string $r, string $p, int $l, callable $e): string =>
-            'echo "<" . htmlspecialchars((string)$__tag) . ">" . ob_get_clean() . "</" . htmlspecialchars((string)$__tag) . ">";'
+                'echo "<" . htmlspecialchars((string)$__tag) . ">" . ob_get_clean() . "</" . htmlspecialchars((string)$__tag) . ">";'
         );
 
         self::tpl('block_expr', '{% tag tagName %}hello{% endtag %}');
         $result = $engine->renderPartial('block_expr', ['tagName' => 'span']);
         $this->assertSame('<span>hello</span>', $result);
+    }
+
+    /**
+     * A directive that gates a block on the engine's debug state must read that
+     * state through the compiled body's unpacked locals. Only `$__fl`, `$__fn`
+     * and `$__sv` exist inside `render()`; a literal `$__debug` local is never
+     * defined, so such a block would silently never render (and raise an
+     * "Undefined variable" warning whenever the guard is truthy).
+     */
+    public function testCustomDirectiveCanReadDebugFlagViaService(): void
+    {
+        $engine = new ClarityEngine();
+        $engine->setViewPath(TestEnvironment::viewDir())->setCachePath(TestEnvironment::cacheDir());
+
+        $engine->addService('__debug', fn(): bool => $engine->isDebugMode());
+        $engine->addDirective(
+            'debug_if',
+            function (string $rest, string $path, int $line, callable $processExpr): string {
+                return 'if (' . $processExpr($rest) . ' && $__sv["__debug"]()) {';
+            }
+        );
+        $engine->addDirective('enddebug_if', fn() => '}');
+
+        self::tpl('mod_debug_if', '{% debug_if count > 3 %}DEBUG{% enddebug_if %}normal');
+
+        // Debug off: the guard is false, so only the trailing literal renders.
+        $engine->disableDebug();
+        $this->assertSame('normal', $engine->renderPartial('mod_debug_if', ['count' => 9]));
+
+        // Debug on: the guard is true. PHPUnit turns undefined-variable warnings
+        // into failures, so a `$__debug`-style reference would fail right here.
+        $engine->enableDebug();
+        $this->assertSame('DEBUGnormal', $engine->renderPartial('mod_debug_if', ['count' => 9]));
+
+        // Falsy expression stays falsy in debug mode.
+        $this->assertSame('normal', $engine->renderPartial('mod_debug_if', ['count' => 1]));
     }
 
     // =========================================================================
@@ -161,8 +199,8 @@ class ModulesTest extends BaseTestCase
         $engine->setViewPath(TestEnvironment::viewDir())->setCachePath(TestEnvironment::cacheDir());
 
         $engine->addInlineFilter('repeat_str', [
-            'php' => '\\str_repeat((string) {1}, {2})',
-            'params' => ['times'],
+            'php'      => '\\str_repeat((string) {1}, {2})',
+            'params'   => ['times'],
             'defaults' => ['times' => '2'],
         ]);
 
@@ -180,7 +218,8 @@ class ModulesTest extends BaseTestCase
         $engine = new ClarityEngine();
         $engine->setViewPath(TestEnvironment::viewDir())->setCachePath(TestEnvironment::cacheDir());
 
-        $counter = new class {
+        $counter = new class
+        {
             public int $n = 0;
             public function next(): int
             {
