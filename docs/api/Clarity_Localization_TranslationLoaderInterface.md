@@ -1,4 +1,4 @@
-# 🔌 Interface: TranslationLoaderInterface
+# Interface: TranslationLoaderInterface
 
 **Full name:** [Clarity\Localization\TranslationLoaderInterface](../../src/Localization/TranslationLoaderInterface.php)
 
@@ -12,22 +12,22 @@ The `FileTranslationLoader` is provided as a convenient implementation that
 supports multiple file formats (PHP, JSON, YAML) and caching via generated
 PHP files.
 
-## 🚀 Public methods
+## Public methods
 
-### load() · [source](../../src/Localization/TranslationLoaderInterface.php#L22)
+### load() · <small>[🗎](../../src/Localization/TranslationLoaderInterface.php#L22)</small>
 
 `public function load(string $domain, string $locale): array`
 
 Load flat key => message pairs for a domain+locale.
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$domain` | string | - |  |
 | `$locale` | string | - |  |
 
-**➡️ Return value**
+**Return value**
 
 - Type: array
 

@@ -1,4 +1,4 @@
-# 🧩 Class: DomainRouterLoader
+# Class: DomainRouterLoader
 
 **Full name:** [Clarity\Template\DomainRouterLoader](../../src/Template/DomainRouterLoader.php)
 
@@ -26,72 +26,72 @@ echo $engine->render('lib::widget');
 echo $engine->render('other');
 ```
 
-## 🚀 Public methods
+## Public methods
 
-### __construct() · [source](../../src/Template/DomainRouterLoader.php#L36)
+### __construct() · <small>[🗎](../../src/Template/DomainRouterLoader.php#L36)</small>
 
 `public function __construct(array $domainLoaders, Clarity\Template\TemplateLoader|null $fallback = null): mixed`
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$domainLoaders` | array | - |  |
 | `$fallback` | [TemplateLoader](Clarity_Template_TemplateLoader.md)\|null | `null` |  |
 
-**➡️ Return value**
+**Return value**
 
 - Type: mixed
 
 
 ---
 
-### addDomainLoader() · [source](../../src/Template/DomainRouterLoader.php#L48)
+### addDomainLoader() · <small>[🗎](../../src/Template/DomainRouterLoader.php#L48)</small>
 
 `public function addDomainLoader(string $domain, Clarity\Template\TemplateLoader $loader): void`
 
 Add or replace a domain loader at runtime.
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$domain` | string | - | Domain prefix to route (e.g. "app"). |
 | `$loader` | [TemplateLoader](Clarity_Template_TemplateLoader.md) | - | Loader to handle templates for this domain. |
 
-**➡️ Return value**
+**Return value**
 
 - Type: void
 
 
 ---
 
-### setFallbackLoader() · [source](../../src/Template/DomainRouterLoader.php#L58)
+### setFallbackLoader() · <small>[🗎](../../src/Template/DomainRouterLoader.php#L58)</small>
 
 `public function setFallbackLoader(Clarity\Template\TemplateLoader|null $loader): void`
 
 Set or replace the fallback loader for templates without a domain prefix.
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$loader` | [TemplateLoader](Clarity_Template_TemplateLoader.md)\|null | - | Loader to handle templates without a domain, or null to disable. |
 
-**➡️ Return value**
+**Return value**
 
 - Type: void
 
 
 ---
 
-### getDomainLoaders() · [source](../../src/Template/DomainRouterLoader.php#L68)
+### getDomainLoaders() · <small>[🗎](../../src/Template/DomainRouterLoader.php#L68)</small>
 
 `public function getDomainLoaders(): array`
 
 Get the currently configured domain loaders.
 
-**➡️ Return value**
+**Return value**
 
 - Type: array
 - Description: Associative array of domain => loader mappings.
@@ -99,13 +99,13 @@ Get the currently configured domain loaders.
 
 ---
 
-### getFallbackLoader() · [source](../../src/Template/DomainRouterLoader.php#L78)
+### getFallbackLoader() · <small>[🗎](../../src/Template/DomainRouterLoader.php#L78)</small>
 
 `public function getFallbackLoader(): Clarity\Template\TemplateLoader|null`
 
 Get the currently configured fallback loader.
 
-**➡️ Return value**
+**Return value**
 
 - Type: [TemplateLoader](Clarity_Template_TemplateLoader.md)|null
 - Description: The fallback loader, or null if none is set.
@@ -113,7 +113,7 @@ Get the currently configured fallback loader.
 
 ---
 
-### load() · [source](../../src/Template/DomainRouterLoader.php#L86)
+### load() · <small>[🗎](../../src/Template/DomainRouterLoader.php#L86)</small>
 
 `public function load(string $name): Clarity\Template\TemplateSource|null`
 
@@ -121,24 +121,24 @@ Load a template by its logical name and return source with revision metadata.
 
 The revision ({@see \TemplateSource::$revision}) must be available immediately with minimal I/O (e.g. a filemtime() call for file-based loaders); the actual template source could be fetched lazily via [`TemplateSource::getCode()`](Clarity_Template_TemplateSource.md#getcode) only when the engine determines compilation is needed.
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$name` | string | - | Logical template name, e.g. 'home', 'admin::dashboard',<br>'layouts/base'. Must not be empty. |
 
-**➡️ Return value**
+**Return value**
 
 - Type: [TemplateSource](Clarity_Template_TemplateSource.md)|null
 
-**⚠️ Throws**
+**Throws**
 
 - RuntimeException  If the template cannot be found or loaded.
 
 
 ---
 
-### getSubLoaders() · [source](../../src/Template/DomainRouterLoader.php#L107)
+### getSubLoaders() · <small>[🗎](../../src/Template/DomainRouterLoader.php#L107)</small>
 
 `public function getSubLoaders(): array`
 
@@ -146,7 +146,7 @@ Return the list of loaders wrapped by this loader, if any.
 
 Used by the engine to traverse loader hierarchies (e.g. DomainRouterLoader → FileLoader) and apply configuration changes like setExtension() to all relevant loaders.
 
-**➡️ Return value**
+**Return value**
 
 - Type: array
 - Description: List of loaders wrapped by this loader, or an empty array if this loader is not a wrapper.

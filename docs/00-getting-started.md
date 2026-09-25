@@ -109,7 +109,7 @@ $engine->addNamespace('components', __DIR__ . '/views/components');
 // Reference in templates:
 // {% include "admin::sidebar" %}
 // {% extends "emails::layouts/base" %}
-// {{ include("components::card", { title: item.title }) }}
+// {{ include("components::card", { title: item:title }) }}
 ```
 
 Namespaces can also be passed in the constructor alongside other options:
@@ -220,8 +220,8 @@ See [Advanced Topics → Template Loaders](04-advanced-topics.md#template-loader
 
 ```twig
 {{ variable }}
-{{ user.name }}
-{{ items[0].title }}
+{{ user:name }}
+{{ items[0]:title }}
 {{ price |> number(2) }}
 {{ description |> upper |> trim }}
 ```
@@ -230,7 +230,7 @@ See [Advanced Topics → Template Loaders](04-advanced-topics.md#template-loader
 
 ```twig
 <!-- Conditionals -->
-{% if user.isActive %}
+{% if user:isActive %}
 <p>Active user</p>
 {% else %}
 <p>Inactive user</p>
@@ -238,11 +238,11 @@ See [Advanced Topics → Template Loaders](04-advanced-topics.md#template-loader
 
 <!-- Loops -->
 {% for item in items %}
-<li>{{ item.name }}</li>
+<li>{{ item:name }}</li>
 {% endfor %}
 
 <!-- Variable Assignment -->
-{% set total = items.length %}
+{% set total = items:length %}
 
 <!-- Includes -->
 {% include "partials/header" %}
@@ -319,15 +319,15 @@ echo $engine->render('home', [
 ```twig
 {% extends "layouts/main" %} {% block title %}{{ title }} - My Website{%
 endblock %} {% block content %}
-<h2>Hello, {{ user.name }}!</h2>
-<p>You are logged in as: <strong>{{ user.role }}</strong></p>
+<h2>Hello, {{ user:name }}!</h2>
+<p>You are logged in as: <strong>{{ user:role }}</strong></p>
 
 <h3>Recent Articles</h3>
 <ul>
   {% for article in articles %}
   <li>
-    <strong>{{ article.title }}</strong>
-    <p>{{ article.body |> excerpt(50) }}</p>
+    <strong>{{ article:title }}</strong>
+    <p>{{ article:body |> excerpt(50) }}</p>
   </li>
   {% endfor %}
 </ul>

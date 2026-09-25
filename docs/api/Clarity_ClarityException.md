@@ -1,4 +1,4 @@
-# 🧩 Class: ClarityException
+# Class: ClarityException
 
 **Full name:** [Clarity\ClarityException](../../src/ClarityException.php)
 
@@ -8,18 +8,18 @@ Carries the original source template file and the line number within
 that template, allowing error messages to point at the `.clarity.html`
 source rather than the compiled PHP cache file.
 
-## 🌍 Public Properties
+## Public Properties
 
-- `public readonly` string `$templateFile` · [source](../../src/ClarityException.php)
-- `public readonly` int `$templateLine` · [source](../../src/ClarityException.php)
+- `public readonly` string `$templateFile` · <small>[🗎](../../src/ClarityException.php)</small>
+- `public readonly` int `$templateLine` · <small>[🗎](../../src/ClarityException.php)</small>
 
-## 🚀 Public methods
+## Public methods
 
-### __construct() · [source](../../src/ClarityException.php#L13)
+### __construct() · <small>[🗎](../../src/ClarityException.php#L13)</small>
 
 `public function __construct(string $message, string $templateFile = '', int $templateLine = 0, Throwable|null $previous = null): mixed`
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
@@ -28,7 +28,7 @@ source rather than the compiled PHP cache file.
 | `$templateLine` | int | `0` |  |
 | `$previous` | Throwable\|null | `null` |  |
 
-**➡️ Return value**
+**Return value**
 
 - Type: mixed
 

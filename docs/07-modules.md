@@ -127,7 +127,7 @@ Locale auto-detection order: PHP `intl` extension → `setlocale(LC_ALL, 0)` →
 {% endwith_locale %}
 
 {# Dynamic locale from a variable #}
-{% with_locale user.locale %}
+{% with_locale user:locale %}
     {{ date |> format_date("long") }}
 {% endwith_locale %}
 ```
@@ -215,7 +215,7 @@ return [
 {{ "logout" |> t }}
 
 {# With placeholder variables #}
-{{ "greeting" |> t({name: user.name}) }}
+{{ "greeting" |> t({name: user:name}) }}
 
 {# Nested key (flattened with dot) #}
 {{ "nav.home" |> t }}
@@ -239,7 +239,7 @@ Use `{% with_t_domain %}` to switch the active domain for a section of the templ
 ```twig
 {% with_t_domain "emails" %}
     <h1>{{ "welcome_subject" |> t }}</h1>
-    <p>{{ "welcome_body" |> t({name: user.name}) }}</p>
+    <p>{{ "welcome_body" |> t({name: user:name}) }}</p>
 
     {# Nested domain switch #}
     {% with_t_domain "common" %}
@@ -260,8 +260,8 @@ $engine
 ```
 
 ```twig
-{% with_locale user.preferredLocale %}
-    {{ "greeting" |> t({name: user.name}) }}
+{% with_locale user:preferredLocale %}
+    {{ "greeting" |> t({name: user:name}) }}
 {% endwith_locale %}
 ```
 
@@ -335,15 +335,15 @@ Input values can be a Unix timestamp (int), a `DateTimeInterface`, or a date str
 | `format_relative` | `format_relative(loc?)`                                              | Relative time, e.g. `"3 minutes ago"` |
 
 ```twig
-{{ order.created_at |> format_date }}
-{{ order.created_at |> format_date("long") }}
-{{ order.created_at |> format_date("full", "de_DE", "Europe/Berlin") }}
+{{ order:created_at |> format_date }}
+{{ order:created_at |> format_date("long") }}
+{{ order:created_at |> format_date("full", "de_DE", "Europe/Berlin") }}
 
-{{ order.created_at |> format_time("short") }}
+{{ order:created_at |> format_time("short") }}
 
-{{ order.created_at |> format_datetime("long", "short") }}
+{{ order:created_at |> format_datetime("long", "short") }}
 
-{{ comment.created_at |> format_relative }}
+{{ comment:created_at |> format_relative }}
 ```
 
 #### Locale Information Filters
@@ -418,9 +418,9 @@ $engine
 
 ```twig
 {# Combined usage #}
-{% with_locale user.locale %}
-    <h1>{{ "welcome" |> t({name: user.name}) }}</h1>
-    <p>{{ "balance_info" |> t({amount: account.balance |> format_currency("EUR")}) }}</p>
-    <p>{{ "last_login" |> t({date: user.lastLogin |> format_relative}) }}</p>
+{% with_locale user:locale %}
+    <h1>{{ "welcome" |> t({name: user:name}) }}</h1>
+    <p>{{ "balance_info" |> t({amount: account:balance |> format_currency("EUR")}) }}</p>
+    <p>{{ "last_login" |> t({date: user:lastLogin |> format_relative}) }}</p>
 {% endwith_locale %}
 ```

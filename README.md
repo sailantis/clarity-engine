@@ -68,7 +68,7 @@ echo $engine->render('welcome', [
     <title>{{ title }}</title>
   </head>
   <body>
-    <h1>Hello, {{ user.name }}!</h1>
+    <h1>Hello, {{ user:name }}!</h1>
     <p>The current time is {{ "now" |> date("H:i:s") }}</p>
   </body>
 </html>
@@ -111,8 +111,9 @@ Integration and advanced topics:
 {{ expression }}                 {# Output with auto-escaping #}
 {{ expression | raw }}           {# Output raw HTML (no escaping) #}
 {{ expression |> raw }}          {# Same — both | and |> are filter pipes #}
-{{ user.name }}                  {# Dot notation #}
-{{ items[0] }}                   {# Bracket notation #}
+{{ user:name }}                  {# Array key (static) #}
+{{ user.name }}                  {# Object property (static) #}
+{{ items[0] }}                   {# Array index #}
 {{ firstName ~ ' ' ~ lastName }} {# String concatenation #}
 ```
 
@@ -122,7 +123,7 @@ Integration and advanced topics:
 {% if condition %}...{% elseif other %}...{% else %}...{% endif %}
 
 {% for item in items %}
-  {{ item.name }}
+  {{ item:name }}
 {% endfor %}
 
 {% for key, value in assocArray %}               {# Loop with key variable #}
@@ -276,17 +277,39 @@ Clarity is designed for speed. Templates compile to native PHP classes and lever
 
 ### Benchmark Results
 
-| Engine  | Warm (ms) | Mean (ms) | P95 (ms) |
-| ------- | --------- | --------- | -------- |
-| Clarity | 0.445     | 0.218     | 0.250    |
-| Native  | 0.530     | 0.232     | 0.265    |
-| Plates  | 2.212     | 0.277     | 0.319    |
-| Blade   | 17.553    | 0.354     | 0.408    |
-| Twig    | 11.753    | 0.617     | 0.706    |
+Clarity is measured against the other mainstream PHP template engines rendering
+one identical page. The chart and table below are generated from the benchmark
+run's own JSON — the figures are not transcribed, so they cannot drift from the
+data they came from.
 
-![Benchmark Results](docs/images/benchmark-results.svg)
+<!-- view-engine:begin -->
 
-_30 runs × 10,000 iterations, PHP 8.3.6 with OPcache enabled on a high performance server (Benchmark link follows)_
+Clarity is measured against other PHP template engines rendering the same page, on the same machine and PHP build. The chart and the table below are generated from the run's own JSON.
+
+![Template engine benchmark](docs/images/benchmark-results.svg)
+
+Rows are ordered by median, fastest first. Two engines sitting next to each other at the top of the table are not thereby ranked: the harness rotates engine order between runs, and a difference well under one percent is narrower than the run-to-run drift of engines whose code did not change, so it is a tie rather than a win.
+
+| Engine   | First render (ms) | Mean (ms) | Median (ms) | Min (ms) | p95 (ms) | Trimmed mean (ms) | Peak memory (MB) |
+| -------- | ----------------: | --------: | ----------: | -------: | -------: | ----------------: | ---------------: |
+| Clarity  |             9.948 |     0.444 |       0.429 |    0.395 |    0.517 |             0.444 |              1.6 |
+| Stempler |            23.730 |     0.447 |       0.431 |    0.401 |    0.522 |             0.446 |              1.7 |
+| Native   |             0.662 |     0.466 |       0.450 |    0.422 |    0.541 |             0.466 |              1.5 |
+| Plates   |             2.500 |     0.557 |       0.535 |    0.506 |    0.657 |             0.557 |              1.5 |
+| Blade    |            34.432 |     0.765 |       0.739 |    0.692 |    0.901 |             0.765 |              2.0 |
+| Twig     |            38.315 |     1.301 |       1.259 |    1.194 |    1.527 |             1.301 |              1.8 |
+
+**Environment** — PHP 8.3.33 · Linux 6.8.0-139-generic · SAPI cli · OPcache (`opcache.enable_cli`): yes
+
+**Budget** — 10,000 renders × 30 runs, 200 items per render
+
+**Engines** — Clarity dev-main · NativeEngine (Azera) 0.1.0 · Plates 3.6.0 · Blade 12.69.2 · Twig 3.27.0 · Stempler 3.17.2
+
+_Measured 2026-09-22T17:44:57+00:00_
+
+Full report — every chart, including the first-render compile cost and per-render memory: <https://sailantis.github.io/azera-competition/benchmarks/view-engine.html>
+
+<!-- view-engine:end -->
 
 **[Performance optimization guide →](docs/05-best-practices.md#performance)**
 

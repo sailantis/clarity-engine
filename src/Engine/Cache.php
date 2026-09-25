@@ -27,7 +27,7 @@ namespace Clarity\Engine;
  * Compiled class static properties
  * ---------------------------------
  * $dependencies – array<string,int|string>  logicalName => revision
- * $sourceMap    – list<[phpLineStart, fileIndex, templateLine]>  ranges
+ * $sourceMap    – string  packed ranges; decode with {@see SourceMap::decode()}
  * $compilerVersion – int  Compiler::COMPILER_VERSION that produced the class
  */
 class Cache

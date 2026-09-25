@@ -1,4 +1,4 @@
-# 🧩 Class: FileLoader
+# Class: FileLoader
 
 **Full name:** [Clarity\Template\FileLoader](../../src/Template/FileLoader.php)
 
@@ -19,56 +19,56 @@ resolution rules as the classic ClarityEngine::resolveView() method:
 load() calls filemtime() eagerly (cheap metadata syscall) and defers
 file_get_contents() until getCode() is called — zero I/O on warm cache paths.
 
-## 📌 Public Constants
+## Public Constants
 
 - **DEFAULT_EXTENSION** = `'.clarity.html'`
 
-## 🚀 Public methods
+## Public methods
 
-### __construct() · [source](../../src/Template/FileLoader.php#L37)
+### __construct() · <small>[🗎](../../src/Template/FileLoader.php#L37)</small>
 
 `public function __construct(string $basePath, string|null $extension = null): mixed`
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$basePath` | string | - | Base directory for template resolution. |
 | `$extension` | string\|null | `null` | File extension with or without leading dot. |
 
-**➡️ Return value**
+**Return value**
 
 - Type: mixed
 
 
 ---
 
-### setExtension() · [source](../../src/Template/FileLoader.php#L57)
+### setExtension() · <small>[🗎](../../src/Template/FileLoader.php#L57)</small>
 
 `public function setExtension(string $extension): static`
 
 Set the view file extension for this instance.
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$extension` | string | - | Extension with or without a leading dot. |
 
-**➡️ Return value**
+**Return value**
 
 - Type: static
 
 
 ---
 
-### getExtension() · [source](../../src/Template/FileLoader.php#L78)
+### getExtension() · <small>[🗎](../../src/Template/FileLoader.php#L78)</small>
 
 `public function getExtension(): string`
 
 Get the effective file extension used when resolving templates.
 
-**➡️ Return value**
+**Return value**
 
 - Type: string
 - Description: Extension including leading dot or empty string.
@@ -76,32 +76,32 @@ Get the effective file extension used when resolving templates.
 
 ---
 
-### setBasePath() · [source](../../src/Template/FileLoader.php#L89)
+### setBasePath() · <small>[🗎](../../src/Template/FileLoader.php#L89)</small>
 
 `public function setBasePath(string $path): static`
 
 Set the base path for resolving relative template names.
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$path` | string | - | Base directory for templates. |
 
-**➡️ Return value**
+**Return value**
 
 - Type: static
 
 
 ---
 
-### getBasePath() · [source](../../src/Template/FileLoader.php#L101)
+### getBasePath() · <small>[🗎](../../src/Template/FileLoader.php#L101)</small>
 
 `public function getBasePath(): string`
 
 Get the currently configured base path for template resolution.
 
-**➡️ Return value**
+**Return value**
 
 - Type: string
 - Description: Base directory for templates.
@@ -109,7 +109,7 @@ Get the currently configured base path for template resolution.
 
 ---
 
-### load() · [source](../../src/Template/FileLoader.php#L109)
+### load() · <small>[🗎](../../src/Template/FileLoader.php#L109)</small>
 
 `public function load(string $name): Clarity\Template\TemplateSource|null`
 
@@ -117,24 +117,24 @@ Load a template by its logical name and return source with revision metadata.
 
 The revision ({@see \TemplateSource::$revision}) must be available immediately with minimal I/O (e.g. a filemtime() call for file-based loaders); the actual template source could be fetched lazily via [`TemplateSource::getCode()`](Clarity_Template_TemplateSource.md#getcode) only when the engine determines compilation is needed.
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$name` | string | - | Logical template name, e.g. 'home', 'admin::dashboard',<br>'layouts/base'. Must not be empty. |
 
-**➡️ Return value**
+**Return value**
 
 - Type: [TemplateSource](Clarity_Template_TemplateSource.md)|null
 
-**⚠️ Throws**
+**Throws**
 
 - RuntimeException  If the template cannot be found or loaded.
 
 
 ---
 
-### resolveName() · [source](../../src/Template/FileLoader.php#L136)
+### resolveName() · <small>[🗎](../../src/Template/FileLoader.php#L136)</small>
 
 `public function resolveName(string $name): string`
 
@@ -142,20 +142,20 @@ Resolve a logical template name to an absolute filesystem path.
 
 Public so it can be used for diagnostic/debugging purposes.
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$name` | string | - |  |
 
-**➡️ Return value**
+**Return value**
 
 - Type: string
 
 
 ---
 
-### getSubLoaders() · [source](../../src/Template/FileLoader.php#L172)
+### getSubLoaders() · <small>[🗎](../../src/Template/FileLoader.php#L172)</small>
 
 `public function getSubLoaders(): array`
 
@@ -163,7 +163,7 @@ Return the list of loaders wrapped by this loader, if any.
 
 Used by the engine to traverse loader hierarchies (e.g. DomainRouterLoader → FileLoader) and apply configuration changes like setExtension() to all relevant loaders.
 
-**➡️ Return value**
+**Return value**
 
 - Type: array
 - Description: List of loaders wrapped by this loader, or an empty array if this loader is not a wrapper.

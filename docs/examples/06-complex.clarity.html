@@ -192,15 +192,15 @@ block styles %}
 
 <div class="stats-bar">
   <div class="stat">
-    <div class="stat-number">{{ articles.length }}</div>
+    <div class="stat-number">{{ articles:length }}</div>
     <div class="stat-label">Articles</div>
   </div>
   <div class="stat">
-    <div class="stat-number">{{ authors.length }}</div>
+    <div class="stat-number">{{ authors:length }}</div>
     <div class="stat-label">Authors</div>
   </div>
   <div class="stat">
-    <div class="stat-number">{{ allTags.length }}</div>
+    <div class="stat-number">{{ allTags:length }}</div>
     <div class="stat-label">Topics</div>
   </div>
 </div>
@@ -212,43 +212,43 @@ block styles %}
   {% endfor %}
 </div>
 
-{% set publishedArticles = articles |> filter(a => a.published) %} {% if
-publishedArticles.length > 0 %}
+{% set publishedArticles = articles |> filter(a => a:published) %} {% if
+publishedArticles:length > 0 %}
 <div class="article-grid">
   {% for article in publishedArticles %}
   <article class="article-card">
-    <div class="article-header">{{ article.title |> truncate(50) }}</div>
+    <div class="article-header">{{ article:title |> truncate(50) }}</div>
 
     <div class="article-content">
       <div class="article-meta">
-        <span>📅 {{ article.publishedAt |> date('F j, Y') }}</span>
-        <span>⏱️ {{ article.readTime }} min read</span>
-        <span>👁️ {{ article.views }} views</span>
+        <span>📅 {{ article:publishedAt |> date('F j, Y') }}</span>
+        <span>⏱️ {{ article:readTime }} min read</span>
+        <span>👁️ {{ article:views }} views</span>
       </div>
 
-      <h2 class="article-title">{{ article.title }}</h2>
+      <h2 class="article-title">{{ article:title }}</h2>
 
-      <p class="article-excerpt">{{ article.excerpt |> truncate(150) }}</p>
+      <p class="article-excerpt">{{ article:excerpt |> truncate(150) }}</p>
 
       <div class="article-tags">
-        {% for tag in article.tags %}
+        {% for tag in article:tags %}
         <span class="tag">{{ tag |> upper }}</span>
         {% endfor %}
       </div>
 
-      {% set author = authors |> filter(a => a.id == article.authorId) |> first
+      {% set author = authors |> filter(a => a:id == article:authorId) |> first
       %} {% if author %}
       <div class="author">
-        <div class="author-avatar">{{ author.name |> first |> upper }}</div>
+        <div class="author-avatar">{{ author:name |> first |> upper }}</div>
         <div class="author-info">
-          <div class="author-name">{{ author.name }}</div>
-          <div class="author-bio">{{ author.bio |> truncate(60) }}</div>
+          <div class="author-name">{{ author:name }}</div>
+          <div class="author-bio">{{ author:bio |> truncate(60) }}</div>
         </div>
       </div>
       {% endif %}
 
       <div style="margin-top: 20px">
-        <a href="/blog/{{ article.slug }}" class="read-more">
+        <a href="/blog/{{ article:slug }}" class="read-more">
           Read Article →
         </a>
       </div>
@@ -267,14 +267,14 @@ publishedArticles.length > 0 %}
 >
   <h3>Article Summary</h3>
   <p>
-    Showing {{ publishedArticles.length }} published articles out of {{
-    articles.length }} total.
+    Showing {{ publishedArticles:length }} published articles out of {{
+    articles:length }} total.
   </p>
 
-  {% set totalViews = publishedArticles |> map(a => a.views) |> reduce(sum,
+  {% set totalViews = publishedArticles |> map(a => a:views) |> reduce(sum,
   value => sum + value, 0) %} {% set avgReadTime = (publishedArticles |> map(a
-  => a.readTime) |> reduce(sum, value => sum + value, 0)) /
-  publishedArticles.length %}
+  => a:readTime) |> reduce(sum, value => sum + value, 0)) /
+  publishedArticles:length %}
 
   <p>
     <strong>Total views:</strong> {{ totalViews }} |
@@ -291,9 +291,9 @@ publishedArticles.length > 0 %}
   <h3>Top Authors</h3>
   {% set topAuthors = authors |> slice(0, 3) %} {% for author in topAuthors %}
   <div style="padding: 10px 0; border-bottom: 1px solid #ddd">
-    <strong>{{ author.name }}</strong>
+    <strong>{{ author:name }}</strong>
     <div style="font-size: 13px; color: #666">
-      {{ author.articlesCount }} articles
+      {{ author:articlesCount }} articles
     </div>
   </div>
   {% endfor %}
@@ -308,8 +308,8 @@ publishedArticles.length > 0 %}
 {% endblock %} {% block scripts %}
 <script>
   console.log("Blog page loaded");
-  console.log("Total articles: {{ articles.length }}");
-  console.log("Published articles: {{ publishedArticles.length }}");
+  console.log("Total articles: {{ articles:length }}");
+  console.log("Published articles: {{ publishedArticles:length }}");
   console.log('Tags: {{ allTags |> join(", ") }}');
 </script>
 {% endblock %}

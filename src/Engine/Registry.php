@@ -2,6 +2,8 @@
 namespace Clarity\Engine;
 
 use Clarity\ClarityException;
+use Countable;
+use Stringable;
 
 /**
  * Registry of filter and function callables for the Clarity template engine.
@@ -114,42 +116,38 @@ class Registry
 
     /** @var array<string, callable|bool> */
     private array $filters = [
-        // inlined filters
-        'default'     => true,
-        'empty'       => true,
-        'length'      => true,
-        'slice'       => true,
-        'escape'      => true,
-        'esc'         => true,
-        'trim'        => true,
-        'upper'       => true,
-        'lower'       => true,
-        'capitalize'  => true,
-        'title'       => true,
-        'replace'     => true,
-        'nl2br'       => true,
-        'split'       => true,
-        'join'        => true,
-        'truncate'    => true,
-        'number'      => true,
-        'format'      => true,
+        // inline filters
         'abs'         => true,
-        'round'       => true,
+        'capitalize'  => true,
         'ceil'        => true,
-        'floor'       => true,
         'date'        => true,
         'date_modify' => true,
-        'first'       => true,
-        'last'        => true,
-        'keys'        => true,
-        'values'      => true,
-        'merge'       => true,
-        'reverse'     => true,
         'data_uri'    => true,
-        'url_encode'  => true,
-        'striptags'   => true,
+        'default'     => true,
+        'empty'       => true,
+        'esc'         => true,
+        'escape'      => true,
+        'expand'      => true,
+        'floor'       => true,
+        'format'      => true,
+        'join'        => true,
         'json'        => true,
+        'lower'       => true,
+        'merge'       => true,
+        'nl2br'       => true,
+        'number'      => true,
+        'replace'     => true,
+        'reverse'     => true,
+        'round'       => true,
+        'slice'       => true,
+        'split'       => true,
+        'striptags'   => true,
+        'title'       => true,
+        'trim'        => true,
+        'truncate'    => true,
         'unicode'     => true,
+        'url_encode'  => true,
+        'upper'       => true,
     ];
 
     /**
@@ -173,9 +171,6 @@ class Registry
             'params'   => ['fallback'],
             'defaults' => ['fallback' => '""'],
         ],
-        'length' => [
-            'php' => '(\is_array($__tmp = {1}) || $__tmp instanceof \Countable ? \count($__tmp) : \mb_strlen((string) $__tmp))',
-        ],
         'slice' => [
             'php'      => '(\is_array($__tmp = {1}) ? \array_slice($__tmp, {2}, {3}) : \mb_substr((string) $__tmp, {2}, {3}))',
             'params'   => ['start', 'length'],
@@ -183,6 +178,11 @@ class Registry
         ],
         'escape' => [
             'php' => '\htmlspecialchars((string){1}, \ENT_QUOTES | \ENT_SUBSTITUTE, "UTF-8")',
+        ],
+        'expand' => [
+            'php'      => 'isset($__va[$__tmp = (string) {1}]) ? $__va[$__tmp] : ({2} ?? throw new \Clarity\ClarityException("Undefined variable: $__tmp"))',
+            'params'   => ['fallback'],
+            'defaults' => ['fallback' => 'null'],
         ],
         'esc' => [
             'php' => '\htmlspecialchars((string){1}, \ENT_QUOTES | \ENT_SUBSTITUTE, "UTF-8")',
@@ -250,25 +250,16 @@ class Registry
             'php' => '\floor((float){1})',
         ],
         'date' => [
-            'php'      => '\date({2}, \is_int($__tmp = {1}) ? $__tmp : (int) \strtotime((string) $__tmp))',
+            // The parenthesised assignment matters: `$__tmp = {1} instanceof X`
+            // parses as `$__tmp = ({1} instanceof X)` because `instanceof` binds
+            // tighter than `=`, leaving $__tmp a bool.
+            'php'      => '\date({2}, ($__tmp = {1}) instanceof \DateTimeInterface ? $__tmp->getTimestamp() : (\is_int($__tmp) ? $__tmp : (int) \strtotime((string) $__tmp)))',
             'params'   => ['format'],
             'defaults' => ['format' => "'Y-m-d'"],
         ],
         'date_modify' => [
             'php'    => '(int) ((new \DateTimeImmutable("@" . (\is_int($__tmp = {1}) ? $__tmp : (int) \strtotime((string) $__tmp))))->modify({2})->getTimestamp())',
             'params' => ['modifier'],
-        ],
-        'first' => [
-            'php' => '(\is_array($__tmp = {1}) ? (\array_slice(\array_values($__tmp), 0, 1)[0] ?? null) : (($__tmp = (string){1}) === "" ? "" : \mb_substr($__tmp, 0, 1)))',
-        ],
-        'last' => [
-            'php' => '(\is_array($__tmp = {1}) ? (\array_slice(\array_values($__tmp), -1, 1)[0] ?? null) : (($__tmp = (string){1}) === "" ? "" : \mb_substr($__tmp, -1)))',
-        ],
-        'keys' => [
-            'php' => '(\is_array($__tmp = {1}) ? \array_keys($__tmp) : [])',
-        ],
-        'values' => [
-            'php' => '(\is_array($__tmp = {1}) ? \array_values($__tmp) : [])',
         ],
         'merge' => [
             'php'      => '[...(array){1}, ...(array){2}]',
@@ -284,10 +275,10 @@ class Registry
             'defaults' => ['mime' => "'application/octet-stream'"],
         ],
         'url_encode' => [
-            'php' => '\rawurlencode((string){1})',
+            'php' => '\rawurlencode((string) {1})',
         ],
         'striptags' => [
-            'php'      => '\strip_tags((string){1}, {2})',
+            'php'      => '\strip_tags((string) {1}, {2})',
             'params'   => ['allowedTags'],
             'defaults' => ['allowedTags' => "''"],
         ],
@@ -546,8 +537,7 @@ class Registry
                 return ($this->dumpHandler)($ctx, ...$args);
             }
             // Minimal fallback — debug mode without enableDebug() (e.g. setDebugMode(true))
-            $out = '<pre style="background:#f7f7f9;padding:8px;border:1px solid #ddd;'
-                . 'font-family:monospace;font-size:13px;overflow:auto">';
+            $out = '<pre style="background:#f7f7f9;padding:8px;border:1px solid #ddd;font-family:monospace;font-size:13px;overflow:auto">';
             foreach ($args as $i => $v) {
                 $out .= \htmlspecialchars(
                     "[{$i}] " . \print_r($v, true),
@@ -565,7 +555,7 @@ class Registry
                 // ddHandler must exit(); this is a safety net:
             }
             // Minimal fallback
-            if (\PHP_SAPI !== 'cli' && \PHP_SAPI !== 'phpdbg') {
+            if (\PHP_SAPI !== 'cli' && \PHP_SAPI !== 'phpdbg' && !\extension_loaded('xdebug')) {
                 \header('Content-Type: text/plain; charset=utf-8');
             }
             foreach ($args as $v) {
@@ -574,12 +564,17 @@ class Registry
             exit(1);
         };
 
-        $this->functions['keys'] = static fn(mixed $v): array => \is_array($v) ? \array_keys($v) : [];
-
-        $this->functions['values'] = static fn(mixed $v): array => \is_array($v) ? \array_values($v) : [];
-
-        $this->functions['len'] = static fn(mixed $v): int =>
-            \is_array($v) || $v instanceof \Countable ? \count($v) : \mb_strlen((string) $v);
+        $this->functions['keys']   = static fn(mixed $v): array => \array_keys(self::fnToArray($v));
+        $this->functions['values'] = static fn(mixed $v): array => \array_values(self::fnToArray($v));
+        $this->functions['first']  = static function (mixed $v): mixed {
+            $arr = self::fnToArray($v);
+            return $arr[array_key_first($arr)] ?? null;
+        };
+        $this->functions['last'] = static function (mixed $v): mixed {
+            $arr = self::fnToArray($v);
+            return $arr[array_key_last($arr)] ?? null;
+        };
+        $this->functions['len'] = static fn(mixed $v): int => self::fnLen($v);
     }
 
     private function registerBuiltinFilters(): void
@@ -663,7 +658,7 @@ class Registry
         $this->filters['map'] = static fn(mixed $v, callable $fn): array => \array_map($fn, (array) $v);
 
         $this->filters['filter'] = static fn(mixed $v, ?callable $fn = null): array =>
-            \array_values(\array_filter((array) $v, $fn));
+            \array_filter((array) $v, $fn);
 
         $this->filters['reduce'] = static fn(mixed $v, callable $fn, mixed $initial = null): mixed =>
             \array_reduce((array) $v, $fn, $initial);
@@ -682,6 +677,17 @@ class Registry
             return \trim($s, $separator);
         };
 
+        $this->filters['keys']   = static fn(mixed $v): array => \array_keys(self::fnToArray($v));
+        $this->filters['values'] = static fn(mixed $v): array => \array_values(self::fnToArray($v));
+        $this->filters['first']  = static function (mixed $v): mixed {
+            $arr = self::fnToArray($v);
+            return $arr[array_key_first($arr)] ?? null;
+        };
+        $this->filters['last'] = static function (mixed $v): mixed {
+            $arr = self::fnToArray($v);
+            return $arr[array_key_last($arr)] ?? null;
+        };
+        $this->filters['length'] = static fn(mixed $v): int => self::fnLen($v);
     }
 
     /**
@@ -750,6 +756,27 @@ class Registry
             $tplLine,
             $processExpr
         );
+    }
+
+    private static function fnToArray(mixed $v): array
+    {
+        return match (true) {
+            \is_array($v)              => $v,
+            $v instanceof \Traversable => \iterator_to_array($v, true),
+            \is_object($v)             => \get_object_vars($v),
+            default                    => []
+        };
+    }
+
+    private static function fnLen(mixed $v): int
+    {
+        return match (true) {
+            \is_string($v)           => \mb_strlen($v),
+            \is_array($v)            => \count($v),
+            $v instanceof Stringable => \mb_strlen((string) $v),
+            $v instanceof Countable  => \count($v),
+            default                  => 1
+        };
     }
 
 }

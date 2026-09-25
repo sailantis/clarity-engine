@@ -10,6 +10,7 @@ use Clarity\Debug\JsDumpRenderer;
 use Clarity\Engine\Cache;
 use Clarity\Engine\Compiler;
 use Clarity\Engine\Registry;
+use Clarity\Engine\SourceMap;
 use Clarity\Template\DomainRouterLoader;
 use Clarity\Template\FileLoader;
 use Clarity\Template\TemplateLoader;
@@ -600,9 +601,11 @@ trait ClarityEngineTrait
     {
         $this->renderDepth++;
         try {
+            // The merged scope is passed through UNCHANGED. Objects stay objects;
+            // the compiler emits real property reads for them and container
+            // operations ({@see Access}) normalise lazily where they are needed.
             $merged = [...$this->vars, ...$vars];
-            $cast   = self::castToArray($merged);
-            $output = $this->renderFile($view, $cast);
+            $output = $this->renderFile($view, $merged);
         } finally {
             $this->renderDepth--;
         }
@@ -828,8 +831,10 @@ trait ClarityEngineTrait
      */
     private function mapRenderThrowable(\Throwable $e, string $className, string $templateName): \Throwable
     {
-        // Already describes a template location → nothing to add.
-        if ($e instanceof ClarityException) {
+        // Already describes a template location → nothing to add. A
+        // ClarityException raised by the runtime (e.g. Access::iterate() on a
+        // non-iterable) carries NO location, so it still needs mapping.
+        if ($e instanceof ClarityException && ($e->templateFile !== '' || $e->templateLine > 0)) {
             return $e;
         }
 
@@ -839,7 +844,7 @@ trait ClarityEngineTrait
         }
 
         [$tplFile, $tplLine] = $this->matchSourceMapLine(
-            self::staticPropertyOrDefault($className, 'sourceMap', []),
+            SourceMap::normalise(self::staticPropertyOrDefault($className, 'sourceMap', '')),
             self::staticPropertyOrDefault($className, 'sourceFiles', []),
             $line
         );
@@ -1000,6 +1005,51 @@ trait ClarityEngineTrait
                 );
             }
 
+            // 4) Undefined property: Foo::$bar  — strict object access. With the
+            //    scope no longer converted to arrays, `a.b` compiles to a real
+            //    property read, so this is the object-side counterpart of (1).
+            if (preg_match('/Undefined property: .+?::\$?(\w+)/', $errstr, $m)) {
+                $propName = $m[1];
+                throw new ClarityException(
+                    "Property \"$propName\" is not defined on this object",
+                    $tplFile,
+                    $tplLine
+                );
+            }
+
+            // 5) Attempt to read property "y" on null|array|string|int|... —
+            //    a chain step applied to the wrong kind of value. Reports the
+            //    offending property, which is what the template author needs.
+            if (preg_match('/Attempt to read property "([^"]+)" on (\w+)/', $errstr, $m)) {
+                $propName = $m[1];
+                $onType   = $m[2];
+                throw new ClarityException(
+                    "Cannot read property \"$propName\" on $onType — check the chain before it",
+                    $tplFile,
+                    $tplLine
+                );
+            }
+
+            // 6) Cannot use object of type Foo as array — an array-style access
+            //    (a.k / a[k]) applied to an object. The fix is property syntax.
+            if (preg_match('/Cannot use object of type (\S+) as array/', $errstr, $m)) {
+                throw new ClarityException(
+                    "Cannot use object of type {$m[1]} as an array — use property access (a.b) instead of a key access (a[b])",
+                    $tplFile,
+                    $tplLine
+                );
+            }
+
+            // 7) Cannot access offset of type X on ... — the index-side
+            //    counterpart of (6), e.g. indexing a string with a non-integer.
+            if (str_starts_with($errstr, 'Cannot access offset of type')) {
+                throw new ClarityException(
+                    "Invalid key type for index access — $errstr",
+                    $tplFile,
+                    $tplLine
+                );
+            }
+
             // Any other diagnostic (e.g. `foreach() argument must be of type
             // array|object`) is annotated with the template location and handed
             // to the previous handler.  Rendering continues — the application's
@@ -1081,14 +1131,19 @@ trait ClarityEngineTrait
         }
 
         try {
-            $map   = $className::$sourceMap;
-            $files = $className::$sourceFiles;
-            $body  = $className::$renderBodyLine;
+            $packed = $className::$sourceMap;
+            $files  = $className::$sourceFiles;
+            $body   = $className::$renderBodyLine;
         } catch (\Error) {
             return [null, 0];
         }
 
-        if (!\is_array($map) || $map === [] || !\is_int($body) || $body <= 0) {
+        if (!\is_int($body) || $body <= 0) {
+            return [null, 0];
+        }
+
+        $map = SourceMap::normalise($packed);
+        if ($map === []) {
             return [null, 0];
         }
 
@@ -1099,88 +1154,4 @@ trait ClarityEngineTrait
 
         return $this->matchSourceMapLine($map, $files, $bodyLine);
     }
-
-    // -------------------------------------------------------------------------
-    // Object → array casting
-    // -------------------------------------------------------------------------
-
-    /**
-     * Recursively cast values so templates never receive live objects and
-     * cannot call methods.
-     *
-     * The general rule is **object → array of its public properties** (step 5).
-     * Steps 1-4 are recognised exceptions that produce the value the object
-     * itself defines as its template-facing representation; step 5b keeps a
-     * value object from becoming an empty array.
-     *
-     * Precedence:
-     * 1. DateTimeInterface → ISO-8601 (ATOM) string, keeping the offset. Done
-     *    first so the value survives `|> date(...)`, which accepts int|string.
-     * 2. Public toArray() → toArray() then recurse. Ranked above
-     *    JsonSerializable because `toArray(): array` declares an array return
-     *    type, whereas `jsonSerialize(): mixed` may return a scalar.
-     * 3. JsonSerializable → jsonSerialize() then recurse. Used with
-     *    get_object_vars() (never `(array)`, which would expose private and
-     *    protected properties under mangled keys).
-     * 4. Traversable (Iterator / IteratorAggregate) → iterate then recurse.
-     * 5. Other objects → get_object_vars() then recurse. This is the general
-     *    object → array conversion.
-     * 5b. …if an object exposes no public properties but is Stringable, use
-     *    its __toString(). Checked only after 5 so the general rule stays
-     *    dominant and public state is never silently dropped.
-     * 6. Arrays → recurse element by element.
-     * 7. Scalars / null → pass through.
-     *
-     * @param mixed $value Value to cast.
-     * @return mixed Arrays, scalars or null — never a live object.
-     */
-    public static function castToArray(mixed $value): mixed
-    {
-        if (\is_array($value)) {
-            $result = [];
-            foreach ($value as $k => $v) {
-                $result[$k] = self::castToArray($v);
-            }
-            return $result;
-        }
-
-        if ($value instanceof \DateTimeInterface) {
-            return $value->format(\DateTimeInterface::ATOM);
-        }
-
-        if (!\is_object($value)) {
-            return $value;
-        }
-
-        // is_callable() (not method_exists()) so a private/protected toArray()
-        // is ignored rather than throwing "Call to private method".
-        if (\is_callable([$value, 'toArray'])) {
-            return self::castToArray($value->toArray());
-        }
-
-        if ($value instanceof \JsonSerializable) {
-            $data = $value->jsonSerialize();
-            // get_object_vars() guards against a self-returning
-            // jsonSerialize() recursing forever, without leaking non-public
-            // state the way `(array)` would. Non-object results pass through
-            // unwrapped, so a string stays a string.
-            return self::castToArray(\is_object($data) ? get_object_vars($data) : $data);
-        }
-
-        if ($value instanceof \Traversable) {
-            $result = [];
-            foreach ($value as $k => $v) {
-                $result[$k] = self::castToArray($v);
-            }
-            return $result;
-        }
-
-        $vars = get_object_vars($value);
-        if ($vars === [] && $value instanceof \Stringable) {
-            return (string) $value;
-        }
-
-        return self::castToArray($vars);
-    }
-
 }

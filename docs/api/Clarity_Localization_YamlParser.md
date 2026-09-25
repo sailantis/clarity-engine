@@ -1,4 +1,4 @@
-# 🧩 Class: YamlParser
+# Class: YamlParser
 
 **Full name:** [Clarity\Localization\YamlParser](../../src/Localization/YamlParser.php)
 
@@ -19,9 +19,9 @@ This parser is intentionally simple and optimized for translation files.
 Replace with a full YAML library (e.g. symfony/yaml) when you need full spec
 compliance — the TranslationLoader only calls parse() so the swap is trivial.
 
-## 🚀 Public methods
+## Public methods
 
-### parse() · [source](../../src/Localization/YamlParser.php#L43)
+### parse() · <small>[🗎](../../src/Localization/YamlParser.php#L43)</small>
 
 `public static function parse(string $yaml): array`
 
@@ -29,13 +29,13 @@ Parse a YAML string and return a flat key → string map.
 
 Nested mappings are flattened using dot notation.
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$yaml` | string | - |  |
 
-**➡️ Return value**
+**Return value**
 
 - Type: array
 

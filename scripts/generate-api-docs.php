@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env php
+﻿﻿#!/usr/bin/env php
 <?php
 require __DIR__ . '/../vendor/autoload.php';
 
@@ -9,18 +9,19 @@ use phpDocumentor\Reflection\DocBlock\Tags\Throws as ThrowsTag;
 use phpDocumentor\Reflection\DocBlock\Tags\Example as ExampleTag;
 use phpDocumentor\Reflection\DocBlockFactory;
 
-$srcDir = 'src';
-$docsDir = 'docs/api';
+$srcDir      = 'src';
+$docsDir     = 'docs/api';
 $projectRoot = dirname(__DIR__);
+$documentTitle = 'Clarity Engine API';
 
 echo "🔍 Scanning $srcDir...\n";
 
 $docFactory = DocBlockFactory::createInstance();
 
 // Find all classes and interfaces
-$allClasses = [];
+$allClasses        = [];
 $namespacedClasses = [];
-$iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($srcDir));
+$iterator          = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($srcDir));
 foreach ($iterator as $file) {
     if ($file->isFile() && $file->getExtension() === 'php') {
         $content = file_get_contents($file->getPathname());
@@ -35,7 +36,7 @@ foreach ($iterator as $file) {
                 if (class_exists($fqcn) || interface_exists($fqcn)) {
                     $ns = substr($namespace, 0, -1);
                     $allClasses[$fqcn] = [
-                        'short' => $className,
+                        'short'     => $className,
                         'namespace' => $ns,
                     ];
                     $namespacedClasses[$ns][] = $fqcn;
@@ -49,7 +50,7 @@ echo "📝 Generating docs for " . count($allClasses) . " types (classes & inter
 
 // Build class registry: maps FQCN and short name -> metadata for link generation.
 // All src links are relative from docs/api/ (two levels up to project root).
-$classRegistry = [];
+$classRegistry   = [];
 $shortNameCounts = [];
 foreach ($allClasses as $classMeta) {
     $shortName = $classMeta['short'];
@@ -57,14 +58,14 @@ foreach ($allClasses as $classMeta) {
 }
 
 foreach ($allClasses as $fqcn => $classMeta) {
-    $shortName = $classMeta['short'];
-    $ref = new ReflectionClass($fqcn);
-    $absFile = $ref->getFileName();
+    $shortName   = $classMeta['short'];
+    $ref         = new ReflectionClass($fqcn);
+    $absFile     = $ref->getFileName();
     $relFromRoot = str_replace('\\', '/', substr($absFile, strlen($projectRoot) + 1));
-    $srcLink = '../../' . $relFromRoot;
-    $docFile = makeDocFileName($fqcn);
+    $srcLink     = '../../' . $relFromRoot;
+    $docFile     = makeDocFileName($fqcn);
     $classRegistry[$fqcn] = [
-        'short' => $shortName,
+        'short'   => $shortName,
         'srcLink' => $srcLink . '#L' . $ref->getStartLine(),
         'srcFile' => $srcLink,
         'docLink' => $docFile,
@@ -82,8 +83,8 @@ if (!is_dir($docsDir)) {
 foreach (glob($docsDir . '/*.md') as $oldDocFile) {
     @unlink($oldDocFile);
 }
-$indexContent = "# Clarity Engine API\n\n## Classes & Interfaces overview\n\n";
-$sep = '';
+$indexContent = "# $documentTitle\n\n## Classes & Interfaces overview\n\n";
+$sep          = '';
 foreach ($namespacedClasses as $namespace => $classes) {
     $indexContent .= $sep;
     $sep = "\n";
@@ -98,7 +99,7 @@ file_put_contents("$docsDir/README.md", $indexContent . "\n");
 // Individual class docs
 foreach ($allClasses as $class => $classMeta) {
     $reflector = new ReflectionClass($class);
-    $md = generateClassDoc($reflector, $docFactory, $classRegistry);
+    $md        = generateClassDoc($reflector, $docFactory, $classRegistry);
     $md .= "\n\n---\n\n[Back to the Index ⤴](README.md)\n";
     $filename = makeDocFileName($class);
     file_put_contents("$docsDir/$filename", $md);
@@ -112,26 +113,28 @@ echo "✅ API docs ready: $docsDir/\n";
 function generateClassDoc(ReflectionClass $reflector, $docFactory, array $classRegistry): string
 {
     $shortName = $reflector->getShortName();
-    $fqcn = $reflector->getName();
+    $fqcn      = $reflector->getName();
 
-    $srcInfo = $classRegistry[$fqcn] ?? null;
+    $srcInfo   = $classRegistry[$fqcn] ?? null;
     $classLink = $srcInfo ? "[{$fqcn}]({$srcInfo['srcFile']})" : "`{$fqcn}`";
-    $typeLabel = $reflector->isInterface() ? '🔌 Interface' : '🧩 Class';
-    $md = "# {$typeLabel}: {$shortName}\n\n";
+    $typeLabel = $reflector->isInterface() ? 'Interface' : 'Class';
+    $md        = "# {$typeLabel}: {$shortName}\n\n";
     $md .= "**Full name:** {$classLink}\n\n";
 
     // Class DocComment
     $docData = resolveEffectiveClassDoc($reflector, $docFactory);
     if ($docData !== null) {
         $summary = trim($docData['summary']);
-        $desc = trim($docData['description']);
-        if ($summary)
+        $desc    = trim($docData['description']);
+        if ($summary) {
             $md .= resolveInlineTags($summary, $classRegistry) . "\n\n";
-        if ($desc)
+        }
+        if ($desc) {
             $md .= resolveInlineTags($desc, $classRegistry) . "\n\n";
+        }
         if (hasResolvedTag($docData, 'deprecated')) {
             $tag = current(getResolvedTags($docData, 'deprecated'));
-            $md .= "**🛑 Deprecated**: " . safeTagToString($tag) . "\n\n";
+            $md .= "**Deprecated**: " . safeTagToString($tag) . "\n\n";
         }
         if (hasResolvedTag($docData, 'example')) {
             $md .= renderExampleTags(getResolvedTags($docData, 'example'));
@@ -144,9 +147,9 @@ function generateClassDoc(ReflectionClass $reflector, $docFactory, array $classR
         fn(ReflectionClassConstant $constant) => $constant->isPublic()
     );
     if (!empty($constants)) {
-        $md .= "## 📌 Public Constants\n\n";
+        $md .= "## Public Constants\n\n";
         foreach ($constants as $constant) {
-            $name = $constant->getName();
+            $name  = $constant->getName();
             $value = $constant->getValue();
             $md .= "- **{$name}** = `" . short_var_export($value) . "`\n";
         }
@@ -159,28 +162,29 @@ function generateClassDoc(ReflectionClass $reflector, $docFactory, array $classR
         fn(ReflectionProperty $prop) => $prop->isPublic()
     );
     if (!empty($props)) {
-        $md .= "## 🌍 Public Properties\n\n";
+        $md .= "## Public Properties\n\n";
         foreach ($props as $prop) {
-            $vis = getVisibility($prop);
-            $static = $prop->isStatic() ? ' static' : '';
-            $readonly = (method_exists($prop, 'isReadOnly') && $prop->isReadOnly()) ? ' readonly' : '';
-            $typeStr = formatReflectionType($prop->getType());
-            $linkedType = linkType($typeStr, $classRegistry, 'doc');
+            $vis         = getVisibility($prop);
+            $static      = $prop->isStatic() ? ' static' : '';
+            $readonly    = (method_exists($prop, 'isReadOnly') && $prop->isReadOnly()) ? ' readonly' : '';
+            $typeStr     = formatReflectionType($prop->getType());
+            $linkedType  = linkType($typeStr, $classRegistry, 'doc');
             $propSrcLink = ($srcInfo && method_exists($prop, 'getStartLine'))
                 ? ($srcInfo['srcFile'] . '#L' . $prop->getStartLine())
                 : ($srcInfo ? $srcInfo['srcFile'] : null);
-            $srcRef = $propSrcLink ? " · [source]($propSrcLink)" : '';
+            $srcRef = $propSrcLink ? " · <small>[🗎]($propSrcLink)</small>" : '';
             $md .= "- `{$vis}{$static}{$readonly}` {$linkedType} `\${$prop->getName()}`{$srcRef}\n";
         }
         $md .= "\n";
     }
 
     // Public methods
-    $md .= "## 🚀 Public methods\n\n";
+    $md .= "## Public methods\n\n";
     $sep = "";
     foreach ($reflector->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
-        if ($method->class !== $reflector->name)
+        if ($method->class !== $reflector->name) {
             continue;
+        }
         $md .= $sep;
         $sep = "\n---\n\n";
         $md .= generateMethodDoc($method, $docFactory, $classRegistry);
@@ -191,20 +195,20 @@ function generateClassDoc(ReflectionClass $reflector, $docFactory, array $classR
 
 function generateMethodDoc(ReflectionMethod $method, $docFactory, array $classRegistry): string
 {
-    $classSrcInfo = $classRegistry[$method->class] ?? null;
+    $classSrcInfo  = $classRegistry[$method->class] ?? null;
     $methodSrcLink = $classSrcInfo ? ($classSrcInfo['srcFile'] . '#L' . $method->getStartLine()) : null;
-    $srcBadge = $methodSrcLink ? " · [source]({$methodSrcLink})" : '';
-    $md = "### {$method->getName()}(){$srcBadge}\n\n";
+    $srcBadge      = $methodSrcLink ? " · <small>[🗎]({$methodSrcLink})</small>" : '';
+    $md            = "### {$method->getName()}(){$srcBadge}\n\n";
 
     // Build linked signature
-    $vis = getVisibility($method);
-    $static = $method->isStatic() ? ' static' : '';
+    $vis          = getVisibility($method);
+    $static       = $method->isStatic() ? ' static' : '';
     $linkedParams = [];
     foreach ($method->getParameters() as $p) {
         $linkedParams[] = formatParameter($p);
     }
     $returnTypeStr = formatReflectionType($method->getReturnType());
-    $linkedReturn = linkType($returnTypeStr, $classRegistry, 'doc', true);
+    $linkedReturn  = linkType($returnTypeStr, $classRegistry, 'doc', true);
 
     // Signature: wrap keywords/name in backticks; types rendered as inline links
     $md .= "`{$vis}{$static} function {$method->getName()}(";
@@ -215,32 +219,34 @@ function generateMethodDoc(ReflectionMethod $method, $docFactory, array $classRe
     $docData = resolveEffectiveMethodDoc($method, $docFactory);
     if ($docData !== null) {
         $summary = trim($docData['summary']);
-        $desc = trim($docData['description']);
-        if ($summary)
+        $desc    = trim($docData['description']);
+        if ($summary) {
             $md .= resolveInlineTags($summary, $classRegistry) . "\n\n";
-        if ($desc)
+        }
+        if ($desc) {
             $md .= resolveInlineTags($desc, $classRegistry) . "\n\n";
+        }
         if (hasResolvedTag($docData, 'deprecated')) {
             $tag = current(getResolvedTags($docData, 'deprecated'));
-            $md .= "**🛑 Deprecated**: " . safeTagToString($tag) . "\n\n";
+            $md .= "**Deprecated**: " . safeTagToString($tag) . "\n\n";
         }
     }
 
     // Parameters table
     if ($method->getNumberOfParameters() > 0) {
-        $md .= "**🧭 Parameters**\n\n";
+        $md .= "**Parameters**\n\n";
         $md .= "| Name | Type | Default | Description |\n";
         $md .= "|---|---|---|---|\n";
-        $paramTags = $docData !== null ? getResolvedTags($docData, 'param') : [];
+        $paramTags   = $docData !== null ? getResolvedTags($docData, 'param') : [];
         $paramTagMap = mapParamTags($paramTags);
         foreach ($method->getParameters() as $p) {
-            $name = '$' . $p->getName();
+            $name    = '$' . $p->getName();
             $typeStr = formatReflectionType($p->getType());
             // Escape union | separators for table cells, without touching link syntax
             $linkedTypeForTable = escapeTablePipes(linkType($typeStr, $classRegistry, 'doc'));
-            $default = $p->isDefaultValueAvailable() ? formatDefaultValue($p->getDefaultValue()) : null;
-            $desc = $paramTagMap[$p->getName()] ?? $paramTagMap[$p->getPosition()] ?? '';
-            $desc = $desc ? str_replace("\n", "<br>", resolveInlineTags(trim($desc), $classRegistry)) : '';
+            $default            = $p->isDefaultValueAvailable() ? formatDefaultValue($p->getDefaultValue()) : null;
+            $desc               = $paramTagMap[$p->getName()] ?? $paramTagMap[$p->getPosition()] ?? '';
+            $desc               = $desc ? str_replace("\n", "<br>", resolveInlineTags(trim($desc), $classRegistry)) : '';
             if (isset($default)) {
                 $default = "`{$default}`";
             } else {
@@ -261,7 +267,7 @@ function generateMethodDoc(ReflectionMethod $method, $docFactory, array $classRe
             $returnDesc = safeTagToString($ret);
         }
     }
-    $md .= "**➡️ Return value**\n\n";
+    $md .= "**Return value**\n\n";
     $md .= "- Type: " . $linkedReturn . "\n";
     if ($returnDesc) {
         $md .= "- Description: " . str_replace("\n", "<br>", resolveInlineTags($returnDesc, $classRegistry)) . "\n";
@@ -270,11 +276,11 @@ function generateMethodDoc(ReflectionMethod $method, $docFactory, array $classRe
 
     // Throws
     if ($docData !== null && hasResolvedTag($docData, 'throws')) {
-        $md .= "**⚠️ Throws**\n\n";
+        $md .= "**Throws**\n\n";
         foreach (getResolvedTags($docData, 'throws') as $t) {
             if ($t instanceof ThrowsTag) {
-                $exTypeStr = ltrim(trim((string) $t->getType()), '\\');
-                $exDesc = trim((string) $t->getDescription());
+                $exTypeStr    = ltrim(trim((string) $t->getType()), '\\');
+                $exDesc       = trim((string) $t->getDescription());
                 $linkedExType = linkType($exTypeStr, $classRegistry, 'doc');
                 $md .= "- " . $linkedExType . ($exDesc ? "  " . resolveInlineTags($exDesc, $classRegistry) : "") . "\n";
             } else {
@@ -310,7 +316,7 @@ function resolveEffectiveClassDoc(ReflectionClass $reflector, DocBlockFactory $d
     }
 
     $inherited = null;
-    $parent = $reflector->getParentClass();
+    $parent    = $reflector->getParentClass();
     if ($parent !== false) {
         $inherited = resolveEffectiveClassDoc($parent, $docFactory, $seen);
     }
@@ -358,24 +364,24 @@ function parseDocData(string $doc, DocBlockFactory $docFactory): ?array
     }
 
     try {
-        $block = $docFactory->create($doc);
+        $block      = $docFactory->create($doc);
         $tagsByName = [];
         foreach ($block->getTags() as $tag) {
             $tagsByName[strtolower($tag->getName())][] = $tag;
         }
 
         return [
-            'raw' => $doc,
-            'summary' => trim((string) $block->getSummary()),
+            'raw'         => $doc,
+            'summary'     => trim((string) $block->getSummary()),
             'description' => trim((string) $block->getDescription()),
-            'tagsByName' => $tagsByName,
+            'tagsByName'  => $tagsByName,
         ];
     } catch (Throwable $e) {
         return [
-            'raw' => $doc,
-            'summary' => '',
+            'raw'         => $doc,
+            'summary'     => '',
             'description' => trim(cleanDocBlock($doc)),
-            'tagsByName' => [],
+            'tagsByName'  => [],
         ];
     }
 }
@@ -392,11 +398,11 @@ function mergeResolvedDocData(?array $local, ?array $inherited, ?ReflectionMetho
     }
 
     $merged = $local;
-    $merged['summary'] = mergeInheritedText($local['summary'], $inherited['summary'] ?? '');
+    $merged['summary']     = mergeInheritedText($local['summary'], $inherited['summary'] ?? '');
     $merged['description'] = mergeInheritedText($local['description'], $inherited['description'] ?? '');
 
     if (isPureInheritdocDoc($local)) {
-        $merged['summary'] = $inherited['summary'] ?? '';
+        $merged['summary']     = $inherited['summary'] ?? '';
         $merged['description'] = $inherited['description'] ?? '';
     }
 
@@ -459,7 +465,7 @@ function mergeResolvedTags(array $localTagsByName, array $inheritedTagsByName, ?
 function mergeParamTagLists(array $localTags, array $inheritedTags, ReflectionMethod $method): array
 {
     $tagMap = [];
-    $order = [];
+    $order  = [];
 
     foreach ($inheritedTags as $index => $tag) {
         $key = resolveParamTagKey($tag, $index);
@@ -476,7 +482,7 @@ function mergeParamTagLists(array $localTags, array $inheritedTags, ReflectionMe
     }
 
     $ordered = [];
-    $used = [];
+    $used    = [];
     foreach ($method->getParameters() as $index => $parameter) {
         foreach (['name:' . $parameter->getName(), 'index:' . $index] as $key) {
             if (isset($tagMap[$key]) && !isset($used[$key])) {
@@ -517,7 +523,7 @@ function resolveParamTagKey($tag, int $fallbackIndex): string
 function mergeSequentialTags(array $inheritedTags, array $localTags): array
 {
     $merged = [];
-    $seen = [];
+    $seen   = [];
 
     foreach (array_merge($inheritedTags, $localTags) as $tag) {
         $key = trim(safeTagToString($tag));
@@ -548,10 +554,9 @@ function findInheritedMethodPrototype(ReflectionMethod $method): ?ReflectionMeth
 {
     try {
         return $method->getPrototype();
-    } catch (ReflectionException) {
-    }
+    } catch (ReflectionException) {}
 
-    $name = $method->getName();
+    $name  = $method->getName();
     $class = $method->getDeclaringClass();
 
     $parent = $class->getParentClass();
@@ -588,7 +593,7 @@ function renderExampleTags(array $exampleTags): string
     }
 
     $count = count($exampleTags);
-    $md = '**💡 ' . ($count === 1 ? 'Example' : 'Examples') . "**\n\n";
+    $md    = '**💡 ' . ($count === 1 ? 'Example' : 'Examples') . "**\n\n";
 
     foreach ($exampleTags as $tag) {
         if (!($tag instanceof ExampleTag)) {
@@ -600,7 +605,7 @@ function renderExampleTags(array $exampleTags): string
         }
 
         $filePath = trim($tag->getFilePath());
-        $desc = trim((string) $tag->getDescription());
+        $desc     = trim((string) $tag->getDescription());
 
         // Looks like a real file when it has an extension or a path separator.
         $looksLikeFile = $filePath !== '' &&
@@ -610,8 +615,8 @@ function renderExampleTags(array $exampleTags): string
 
         if ($looksLikeFile) {
             $lineInfo = '';
-            $start = $tag->getStartingLine();
-            $count = $tag->getLineCount();
+            $start    = $tag->getStartingLine();
+            $count    = $tag->getLineCount();
             if ($start > 1) {
                 $lineInfo = " (line{$start}" . ($count > 0 ? '–' . ($start + $count - 1) : '') . ')';
             }
@@ -652,31 +657,33 @@ function makeDocFileName(string $fqcn): string
  */
 function linkType(string $typeStr, array $classRegistry, string $mode = 'doc', bool $decorate = false): string
 {
-    if ($typeStr === '')
+    if ($typeStr === '') {
         return '';
+    }
     $decorate = false;
 
     // Split on | and & while keeping the delimiters
-    $parts = preg_split('/([|&])/', $typeStr, -1, PREG_SPLIT_DELIM_CAPTURE);
+    $parts  = preg_split('/([|&])/', $typeStr, -1, PREG_SPLIT_DELIM_CAPTURE);
     $result = '';
     foreach ($parts as $part) {
         if ($part === '|' || $part === '&') {
             $result .= $part;
             continue;
         }
-        $part = trim($part);
-        $lookup = ltrim($part, '\\');    // strip leading \ from docblock FQCNs
+        $part   = trim($part);
+        $lookup = ltrim($part, '\\'); // strip leading \ from docblock FQCNs
 
         if (isset($classRegistry[$lookup])) {
-            $info = $classRegistry[$lookup];
+            $info   = $classRegistry[$lookup];
             $target = $mode === 'src' ? $info['srcLink'] : $info['docLink'];
-            $name = $info['short'];
+            $name   = $info['short'];
             if ($decorate) {
-                $name = "🧩`{$name}`";
+                //$name = "🧩`{$name}`";
             }
             $result .= "[{$name}]({$target})";
         } else {
-            $result .= $decorate ? decorateType($part) : $part;
+            //$result .= $decorate ? decorateType($part) : $part;
+            $result .= $part;
         }
     }
     return $result;
@@ -698,16 +705,16 @@ function resolveInlineTags(string $text, array $classRegistry): string
     return preg_replace_callback(
         '/\{@(?:see|link)\s+(\$?\\\\?[A-Za-z0-9_\\\\]+)(?:::([A-Za-z0-9_]+))?(\(\))?\s*\}/',
         function (array $m) use ($classRegistry): string {
-            $fqcn = ltrim($m[1], '\\');
-            $method = ($m[2] ?? '') !== '' ? $m[2] : null;
+            $fqcn      = ltrim($m[1], '\\');
+            $method    = ($m[2] ?? '') !== '' ? $m[2] : null;
             $hasParens = ($m[3] ?? '') !== '';
 
             if (isset($classRegistry[$fqcn])) {
-                $info = $classRegistry[$fqcn];
+                $info    = $classRegistry[$fqcn];
                 $docLink = $info['docLink'];
                 if ($method) {
                     $anchor = strtolower($method);
-                    $label = $info['short'] . '::' . $method . '()';
+                    $label  = $info['short'] . '::' . $method . '()';
                     return "[`{$label}`]({$docLink}#{$anchor})";
                 }
                 return "[`{$info['short']}`]({$docLink})";
@@ -728,7 +735,7 @@ function resolveInlineTags(string $text, array $classRegistry): string
 function escapeTablePipes(string $linkedType): string
 {
     $result = '';
-    $depth = 0;
+    $depth  = 0;
     for ($i = 0, $len = strlen($linkedType); $i < $len; $i++) {
         $ch = $linkedType[$i];
         if ($ch === '(') {
@@ -752,11 +759,11 @@ function escapeTablePipes(string $linkedType): string
  */
 function formatLinkedParameter(ReflectionParameter $p, array $classRegistry): string
 {
-    $typeStr = formatReflectionType($p->getType());
+    $typeStr    = formatReflectionType($p->getType());
     $linkedType = $typeStr ? linkType($typeStr, $classRegistry, 'doc', false) : '';
-    $byRef = $p->isPassedByReference() ? '&' : '';
-    $variadic = $p->isVariadic() ? '...' : '';
-    $namePart = '`' . $byRef . $variadic . '$' . $p->getName();
+    $byRef      = $p->isPassedByReference() ? '&' : '';
+    $variadic   = $p->isVariadic() ? '...' : '';
+    $namePart   = '`' . $byRef . $variadic . '$' . $p->getName();
     if ($p->isDefaultValueAvailable() && !$p->isVariadic()) {
         $namePart .= ' = ' . formatDefaultValue($p->getDefaultValue());
     }
@@ -766,8 +773,8 @@ function formatLinkedParameter(ReflectionParameter $p, array $classRegistry): st
 
 function formatParameter(ReflectionParameter $p): string
 {
-    $typeStr = formatReflectionType($p->getType());
-    $byRef = $p->isPassedByReference() ? '&' : '';
+    $typeStr  = formatReflectionType($p->getType());
+    $byRef    = $p->isPassedByReference() ? '&' : '';
     $variadic = $p->isVariadic() ? '...' : '';
     $namePart = $byRef . $variadic . '$' . $p->getName();
     if ($p->isDefaultValueAvailable() && !$p->isVariadic()) {
@@ -782,7 +789,7 @@ function mapParamTags(array $paramTags): array
     foreach ($paramTags as $tag) {
         if ($tag instanceof ParamTag) {
             $varName = $tag->getVariableName();
-            $desc = (string) $tag->getDescription();
+            $desc    = (string) $tag->getDescription();
             $varName = $varName ? ltrim($varName, '$') : null;
             if ($varName) {
                 $map[$varName] = $desc;
@@ -791,8 +798,9 @@ function mapParamTags(array $paramTags): array
             }
         } else {
             $text = trim(safeTagToString($tag));
-            if ($text === '')
+            if ($text === '') {
                 continue;
+            }
             if (preg_match('/^\$?([a-zA-Z0-9_]+)\b(.*)$/s', $text, $m)) {
                 $name = $m[1];
                 $desc = trim($m[2]);
@@ -826,8 +834,9 @@ function cleanDocBlock(string $doc): string
 
 function formatReflectionType(?ReflectionType $type): string
 {
-    if ($type === null)
+    if ($type === null) {
         return 'mixed';
+    }
 
     // Intersection types (PHP 8.1+)
     if (class_exists('ReflectionIntersectionType') && $type instanceof ReflectionIntersectionType) {
@@ -861,16 +870,21 @@ function formatReflectionType(?ReflectionType $type): string
 
 function formatDefaultValue($value): string
 {
-    if (is_null($value))
+    if (is_null($value)) {
         return 'null';
-    if (is_bool($value))
+    }
+    if (is_bool($value)) {
         return $value ? 'true' : 'false';
-    if (is_string($value))
+    }
+    if (is_string($value)) {
         return "'" . str_replace("'", "\\'", $value) . "'";
-    if (is_array($value))
+    }
+    if (is_array($value)) {
         return '[]';
-    if (is_object($value))
+    }
+    if (is_object($value)) {
         return get_class($value);
+    }
     return (string) $value;
 }
 
@@ -885,9 +899,9 @@ function short_var_export($value, int $indent = 0): string
             return '[]';
         }
         $isAssoc = array_keys($value) !== range(0, count($value) - 1);
-        $pad = str_repeat(' ', $indent);
+        $pad     = str_repeat(' ', $indent);
         $padNext = str_repeat(' ', $indent + 4);
-        $items = [];
+        $items   = [];
         foreach ($value as $k => $v) {
             $exported = short_var_export($v, $indent + 4);
             if ($isAssoc) {
@@ -919,10 +933,12 @@ function short_var_export($value, int $indent = 0): string
 
 function getVisibility(ReflectionMethod|ReflectionProperty $r): string
 {
-    if ($r->isPrivate())
+    if ($r->isPrivate()) {
         return 'private';
-    if ($r->isProtected())
+    }
+    if ($r->isProtected()) {
         return 'protected';
+    }
     return 'public';
 }
 
@@ -930,17 +946,17 @@ function decorateType(string $type): string
 {
     return match ($type) {
         'string' => "🔤 `string`",
-        'int' => "🔢 `int`",
-        'float' => "🌡️ `float`",
-        'bool' => "⚙️ `bool`",
-        'array' => "📦 `array`",
+        'int'    => "🔢 `int`",
+        'float'  => "🌡️ `float`",
+        'bool'   => "⚙️ `bool`",
+        'array'  => "📦 `array`",
         'object' => "🧱 `object`",
-        'mixed' => "🎲 `mixed`",
-        'null' => "`null`",
-        'void' => "`void`",
-        'never' => "`never`",
-        'self' => "🧩 `self`",
+        'mixed'  => "🎲 `mixed`",
+        'null'   => "`null`",
+        'void'   => "`void`",
+        'never'  => "`never`",
+        'self'   => "🧩 `self`",
         'static' => "🧩 `static`",
-        default => "`{$type}`",
+        default  => "`{$type}`"
     };
 }

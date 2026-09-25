@@ -1,4 +1,4 @@
-# 🧩 Class: UnicodeString
+# Class: UnicodeString
 
 **Full name:** [Clarity\Engine\UnicodeString](../../src/Engine/UnicodeString.php)
 
@@ -15,13 +15,13 @@ Example:
 
 Note: This class is immutable, so offsetSet and offsetUnset will throw exceptions.
 
-## 🚀 Public methods
+## Public methods
 
-### __construct() · [source](../../src/Engine/UnicodeString.php#L24)
+### __construct() · <small>[🗎](../../src/Engine/UnicodeString.php#L24)</small>
 
 `public function __construct(array|string $str, int $offset = 0, int|null $length = null): mixed`
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
@@ -29,149 +29,149 @@ Note: This class is immutable, so offsetSet and offsetUnset will throw exception
 | `$offset` | int | `0` |  |
 | `$length` | int\|null | `null` |  |
 
-**➡️ Return value**
+**Return value**
 
 - Type: mixed
 
 
 ---
 
-### substring() · [source](../../src/Engine/UnicodeString.php#L41)
+### substring() · <small>[🗎](../../src/Engine/UnicodeString.php#L41)</small>
 
 `public function substring(int $offset, int|null $length = null): static`
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$offset` | int | - |  |
 | `$length` | int\|null | `null` |  |
 
-**➡️ Return value**
+**Return value**
 
 - Type: static
 
 
 ---
 
-### toUpper() · [source](../../src/Engine/UnicodeString.php#L46)
+### toUpper() · <small>[🗎](../../src/Engine/UnicodeString.php#L46)</small>
 
 `public function toUpper(): static`
 
-**➡️ Return value**
+**Return value**
 
 - Type: static
 
 
 ---
 
-### toLower() · [source](../../src/Engine/UnicodeString.php#L51)
+### toLower() · <small>[🗎](../../src/Engine/UnicodeString.php#L51)</small>
 
 `public function toLower(): static`
 
-**➡️ Return value**
+**Return value**
 
 - Type: static
 
 
 ---
 
-### offsetExists() · [source](../../src/Engine/UnicodeString.php#L56)
+### offsetExists() · <small>[🗎](../../src/Engine/UnicodeString.php#L56)</small>
 
 `public function offsetExists(mixed $offset): bool`
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$offset` | mixed | - |  |
 
-**➡️ Return value**
+**Return value**
 
 - Type: bool
 
 
 ---
 
-### offsetGet() · [source](../../src/Engine/UnicodeString.php#L62)
+### offsetGet() · <small>[🗎](../../src/Engine/UnicodeString.php#L62)</small>
 
 `public function offsetGet(mixed $offset): string`
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$offset` | mixed | - |  |
 
-**➡️ Return value**
+**Return value**
 
 - Type: string
 
 
 ---
 
-### offsetSet() · [source](../../src/Engine/UnicodeString.php#L71)
+### offsetSet() · <small>[🗎](../../src/Engine/UnicodeString.php#L71)</small>
 
 `public function offsetSet(mixed $offset, mixed $value): void`
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$offset` | mixed | - |  |
 | `$value` | mixed | - |  |
 
-**➡️ Return value**
+**Return value**
 
 - Type: void
 
 
 ---
 
-### offsetUnset() · [source](../../src/Engine/UnicodeString.php#L76)
+### offsetUnset() · <small>[🗎](../../src/Engine/UnicodeString.php#L76)</small>
 
 `public function offsetUnset(mixed $offset): void`
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$offset` | mixed | - |  |
 
-**➡️ Return value**
+**Return value**
 
 - Type: void
 
 
 ---
 
-### __toString() · [source](../../src/Engine/UnicodeString.php#L81)
+### __toString() · <small>[🗎](../../src/Engine/UnicodeString.php#L81)</small>
 
 `public function __toString(): string`
 
-**➡️ Return value**
+**Return value**
 
 - Type: string
 
 
 ---
 
-### count() · [source](../../src/Engine/UnicodeString.php#L86)
+### count() · <small>[🗎](../../src/Engine/UnicodeString.php#L86)</small>
 
 `public function count(): int`
 
-**➡️ Return value**
+**Return value**
 
 - Type: int
 
 
 ---
 
-### jsonSerialize() · [source](../../src/Engine/UnicodeString.php#L91)
+### jsonSerialize() · <small>[🗎](../../src/Engine/UnicodeString.php#L91)</small>
 
 `public function jsonSerialize(): mixed`
 
-**➡️ Return value**
+**Return value**
 
 - Type: mixed
 

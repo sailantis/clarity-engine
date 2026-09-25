@@ -43,26 +43,238 @@ To output raw HTML (use with caution!), use the `raw` filter:
 
 ### Variable Access
 
-Access variables using dot notation or bracket notation:
+Access is **strict and compile-time typed**: the operator you write states what
+the value IS, and the engine emits exactly that read. There is no conversion of
+objects to arrays before rendering, so reading an object's state costs one
+property access and nothing else.
+
+| Syntax                        | Meaning                                  | Emits                           |
+| ----------------------------- | ---------------------------------------- | ------------------------------- |
+| `a.b.c`                       | **object property** (static)             | `$vars['a']->b->c`              |
+| `a{expr}`                     | object property (dynamic)                | `$vars['a']->{$exprPhp}`        |
+| `items[expr]`                 | **array index**                          | `$vars['items'][$exprPhp]`      |
+| `a:b:c`                       | **array key** (static)                   | `$vars['a']['b']['c']`          |
+| `$a.b` / `$a->b`              | PHP-style alias for `.` (sigil required) | `$vars['a']->b`                 |
+| `a?.b` `a?[i]` `a?{k}` `a?:k` | optional **receiver**                    | `isset(…) ? … : null` / `…?->b` |
 
 ```twig
-<!-- Simple variable -->
-{{ name }}
+<!-- Object properties -->
+{{ user.name }} {{ user.address.city }}
 
-<!-- Object/array property -->
-{{ user.name }} {{ user.email }}
+<!-- Array keys -->
+{{ config:version }} {{ item:meta:title }}
 
-<!-- Nested access -->
-{{ order.customer.address.city }}
-
-<!-- Array index -->
+<!-- Array index (dynamic) -->
 {{ items[0] }} {{ items[index] }}
 
-<!-- Complex access -->
-{{ users[0].profile.avatar }} {{ data.items[currentIndex].title }}
+<!-- Dynamic property -->
+{{ user{fieldName} }}
+
+<!-- Mixed: array of objects -->
+{{ users[0].profile.avatar }} {{ data:items[currentIndex].title }}
 ```
 
-**Not allowed:** Direct PHP variable syntax (`$name`) is forbidden.
+#### Strictness
+
+Applying the wrong operator is an error, not a silent `null`:
+
+```twig
+{% set user = { name: "Alice" } %}   {# an ARRAY #}
+{{ user.name }}     {# ERROR: Cannot read property "name" on array #}
+{{ user:name }}     {# CORRECT #}
+```
+
+A missing key or property raises `ClarityException` naming the template and line.
+**Deliberately absent** is `null`, so a present-but-null value is never confused
+with a missing one: an absent key throws, while a key holding `null` returns
+`null`.
+
+#### Optional access
+
+`?` marks the value BEFORE it as possibly absent or `null`. Everything after the
+`?` is still **strict**, so a typo in the member is still an error:
+
+```twig
+{{ user?.name }}          {# fine when `user` is absent/null #}
+{{ items?[0] }}           {# fine when `items` is absent/null #}
+{{ user?.address?.city }} {# fine when `user` OR `address` is absent/null #}
+```
+
+The rule is **`?` guards the LEFT side, never the right one**:
+
+| Expression          | `user` absent/null | `user` present, `name` missing |
+| ------------------- | ------------------ | ------------------------------ |
+| `user.name`         | ERROR              | ERROR                          |
+| `user?.name`        | `null`             | **ERROR**                      |
+| `user.name ?? 'x'`  | ERROR              | `'x'`                          |
+| `user?.name ?? 'x'` | `'x'`              | `'x'`                          |
+
+Use `?` when the **receiver** may be missing, and `??` when the **member** may be.
+That separation is deliberate: if `?` also swallowed a missing member, a typo
+would render as an empty string instead of failing — the exact silence the strict
+access design exists to prevent.
+
+```twig
+{{ user?.nickname }}                  {# '' when user absent; ERROR on a typo #}
+{{ user?.nickname ?? 'anonymous' }}   {# 'anonymous' when user is absent OR nickname missing #}
+{{ settings?:theme ?? 'light' }}      {# array side, same rule #}
+```
+
+Emission differs per side because the operators differ in what they accept:
+
+| Expression | Emits                                                    |
+| ---------- | -------------------------------------------------------- |
+| `a?:b`     | `(isset($vars['a']) ? $vars['a']['b'] : null)`           |
+| `a?.b`     | `(isset($vars['a']) ? $vars['a']->b : null)`             |
+| `a?.b?.c`  | `(isset($vars['a']) ? $vars['a']->b : null)?->c`         |
+| `a?:b?:c`  | a `=== null` test that binds the receiver to a temporary |
+
+Both sides use the shortest form that tolerates an absent receiver, and a bare
+root gets `isset()` on both sides so an absent ROOT behaves the same way. Neither
+form re-embeds its receiver, so a chain of N optional segments stays a linear
+expression rather than growing exponentially — a property the test suite pins,
+because an exponential emission is behaviourally invisible and only shows up in
+what has to be parsed and cached on every request.
+
+> **Array-side note.** The array guard is a ternary, and a branch is evaluated
+> before an outer operator sees it. `items?[9] ?? 'fb'` therefore cannot suppress
+> a missing INDEX (the branch reads it first). Coalesce a STRICT read instead:
+> `items[9] ?? 'fb'` supplies the fallback with no warning. The object side has no
+> such limit, because `?->` composes with a following `??`.
+
+An absent ROOT behaves the same on both sides — `{{ missing?.name }}` renders
+empty — while the strict form reports it:
+
+```twig
+{{ missing?.name }}    {# empty — no error #}
+{{ missing.name }}     {# ERROR: Variable "missing" is not defined #}
+```
+
+#### The dollar sigil
+
+`->` is PHP-style property access and **requires** the `$` sigil, so raw PHP
+syntax can never be emitted from an unsigiled expression:
+
+```twig
+{{ $user->name }}    {# legal, identical to {{ user.name }} #}
+{{ user->name }}     {# COMPILE ERROR #}
+```
+
+#### `:` and the ternary
+
+`:` continues a chain when it is followed by a key. Whitespace on either side is
+allowed, so all four of these read the same key:
+
+```twig
+{{ config:version }}
+{{ config : version }}
+{{ config: version }}
+{{ config :version }}
+```
+
+The exception is a ternary, which also uses `:`. Once a `?` has opened a branch,
+a colon only counts as a key when it is glued on **both** sides. That single rule
+is what separates the two without forbidding whitespace anywhere:
+
+```twig
+{{ cond ? "yes" : "no" }}   {# ternary #}
+{{ cond ? "yes": "no" }}    {# ternary #}
+{{ cond ? "yes" :"no" }}    {# ternary #}
+{{ cond ? a:b : c }}        {# key read in the branch, then the separator #}
+```
+
+Two spellings are errors rather than ambiguity, because they differ from a valid
+form by one space:
+
+```twig
+{{ user ? : "fallback" }}   {# WRONG: empty then-branch (PHP's ?: shorthand) #}
+{{ user?:nickname }}        {# CORRECT: optional key read #}
+```
+
+Named arguments are unaffected, because `name: expr` is consumed as an argument
+before expression compilation.
+
+#### Nested conditions
+
+Parenthesise a nested ternary and it nests to any depth:
+
+```twig
+{{ cond ? (foo ? bar : blubb) : blobb }}
+{{ a ? (b ? (c ? d : e) : f) : g }}
+```
+
+A nested ternary in the THEN branch may omit the parentheses
+(`a ? b ? c : d : e`). One in the ELSE branch may **not**, because PHP rejects
+`a ? b : c ? d : e` outright rather than choosing an associativity:
+
+```twig
+{{ a ? b : (c ? d : e) }}   {# CORRECT: parenthesised else-branch #}
+{{ a ? b : c ? d : e }}     {# COMPILE ERROR: use the form above #}
+```
+
+The same applies to an if/else chain written as one expression — use the
+parenthesised form, or a `{% if %}` / `{% elseif %}` block.
+
+#### Whitespace and line breaks
+
+Whitespace around a chain operator is not significant, so a long chain may wrap:
+
+```twig
+{{ user.
+   address.
+   city }}
+
+{{ config:
+   version }}
+```
+
+`.` is **always** property access, never string concatenation, so a chain has
+exactly one reading. Concatenation is `~`:
+
+```twig
+{{ firstName ~ ' ' ~ lastName }}
+```
+
+An operator with no member after it (`.`, `->`) is a compile error. Optional
+access is the one operator that must stay glued, because a spaced `?` is a
+ternary: `user?:nick` reads a key, while `user ? x : y` is a condition.
+
+#### `loop`
+
+Inside a loop, `loop` is an object with the current iteration's metadata:
+`index`, `index0`, `first`, `last`, `revindex`, `revindex0`, `total`, `length`.
+
+```twig
+{% for item in items %}
+    <li class="{{ loop.first ? 'first' : '' }}">{{ loop.index }}/{{ loop.total }}</li>
+{% endfor %}
+```
+
+#### `expand`
+
+`|> expand` treats the arriving value as a variable NAME and looks it up in the
+render scope. Because the value is what is expanded, it composes anywhere in a
+pipeline:
+
+```twig
+{{ name |> expand }}                {# value of {{ name }} is a variable name #}
+{{ key |> rot13 |> expand }}        {# expand the TRANSFORMED value #}
+{{ name |> expand(true) ?? 'none' }} {# optional: absent name yields null #}
+```
+
+Absent names throw by default, consistent with every other access;
+`expand(true)` (or `expand(optional: true)`) returns `null` instead.
+
+#### Iteration and container filters
+
+Objects iterate their **public properties**, so `{% for %}` works over an object
+as well as an array. `|> length`, `|> keys`, `|> values`, `|> first`, `|> last`
+and `|> reverse` accept a container (array, `Traversable`, `Countable`, or an
+object exposing a public `toArray()`). A value object with no public state and a
+`__toString()` keeps STRING semantics, so `|> length` counts its characters.
+
+**Not allowed:** bare `->` without a sigil, method calls (`a.b()`), and direct
+PHP variable access (`$name` on its own).
 
 ## Directives
 
@@ -431,6 +643,14 @@ Whenever you need bitwise OR, use the `bor` keyword instead of `|` (see [Bitwise
 ```
 
 Syntax: `condition ? valueIfTrue : valueIfFalse`
+
+Conditions nest, but a nested ternary in the else-branch must be parenthesised —
+PHP rejects `a ? b : c ? d : e` outright. See
+[Nested conditions](#nested-conditions).
+
+```twig
+{{ cond ? (foo ? bar : blubb) : blobb }}
+```
 
 ### Null Coalescing
 
