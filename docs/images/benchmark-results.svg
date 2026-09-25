@@ -1,1 +1,62 @@
-<?xml version="1.0" encoding="UTF-8" standalone="no"?><!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd"><svg width="100%" height="100%" viewBox="0 0 700 220" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" xmlns:serif="http://www.serif.com/" style="fill-rule:evenodd;clip-rule:evenodd;"><path id="rect12-4" d="M700,7l0,206c0,3.863 -3.137,7 -7,7l-686,0c-3.863,0 -7,-3.137 -7,-7l0,-206c0,-3.863 3.137,-7 7,-7l686,0c3.863,0 7,3.137 7,7Z" style="fill:#fff;"/><path id="line1" d="M100,36l0,160" style="fill:none;fill-rule:nonzero;stroke:#333;stroke-width:1px;"/><path id="line2" d="M100,196l570.284,0" style="fill:none;fill-rule:nonzero;stroke:#333;stroke-width:1px;"/><text id="text2" x="20px" y="25px" style="font-family:'ArialMT', 'Arial', sans-serif;font-size:12px;fill:#000222;">Engine</text><text id="text3" x="520px" y="25px" style="font-family:'ArialMT', 'Arial', sans-serif;font-size:12px;fill:#000222;">Mean render time (ms)</text><text id="text3-4" x="96.558px" y="210.978px" style="font-family:'ArialMT', 'Arial', sans-serif;font-size:10px;fill:#666;">native is a template engine inside the azera framework similar to plates</text><text id="text4" x="20px" y="84px" style="font-family:'ArialMT', 'Arial', sans-serif;font-size:12px;fill:#000222;">native</text><path id="rect4" d="M311,75l0,12c0,1.656 -1.344,3 -3,3l-175,0c-1.656,0 -3,-1.344 -3,-3l0,-12c0,-1.656 1.344,-3 3,-3l175,0c1.656,0 3,1.344 3,3Z" style="fill:#2b6fbf;"/><text id="text5" x="319px" y="86px" style="font-family:'Consolas', monospace;font-size:11px;fill:#000111;">0.232 ms</text><text id="text6" x="20px" y="52px" style="font-family:'ArialMT', 'Arial', sans-serif;font-size:12px;fill:#000222;">clarity</text><path id="rect6" d="M300,43l0,12c0,1.656 -1.344,3 -3,3l-164,0c-1.656,0 -3,-1.344 -3,-3l0,-12c0,-1.656 1.344,-3 3,-3l164,0c1.656,0 3,1.344 3,3Z" style="fill:#2b9f4b;"/><text id="text7" x="308px" y="54px" style="font-family:'Consolas', monospace;font-size:11px;fill:#000111;">0.218 ms</text><text id="text8" x="20px" y="116px" style="font-family:'ArialMT', 'Arial', sans-serif;font-size:12px;fill:#000222;">plates</text><path id="rect8" d="M345,107l0,12c0,1.656 -1.344,3 -3,3l-209,0c-1.656,0 -3,-1.344 -3,-3l0,-12c0,-1.656 1.344,-3 3,-3l209,0c1.656,0 3,1.344 3,3Z" style="fill:#8a6fdf;"/><text id="text9" x="351px" y="118px" style="font-family:'Consolas', monospace;font-size:11px;fill:#000111;">0.277 ms</text><text id="text10" x="20px" y="146px" style="font-family:'ArialMT', 'Arial', sans-serif;font-size:12px;fill:#000222;">blade</text><path id="rect10" d="M406,137l0,12c0,1.656 -1.344,3 -3,3l-270,0c-1.656,0 -3,-1.344 -3,-3l0,-12c0,-1.656 1.344,-3 3,-3l270,0c1.656,0 3,1.344 3,3Z" style="fill:#f39c12;"/><text id="text11" x="412px" y="148px" style="font-family:'Consolas', monospace;font-size:11px;fill:#000111;">0.354 ms</text><text id="text12" x="20px" y="176px" style="font-family:'ArialMT', 'Arial', sans-serif;font-size:12px;fill:#000222;">twig</text><path id="rect12" d="M610,167l0,12c0,1.656 -1.344,3 -3,3l-474,0c-1.656,0 -3,-1.344 -3,-3l0,-12c0,-1.656 1.344,-3 3,-3l474,0c1.656,0 3,1.344 3,3Z" style="fill:#d35400;"/><text id="text13" x="616px" y="178px" style="font-family:'Consolas', monospace;font-size:11px;">0.617 ms</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 360" width="960" height="360" role="img" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"><title>Render time per page</title>
+<rect x="0.5" y="0.5" width="959" height="359" rx="8" fill="#ffffff" stroke="#e2e8f0"/>
+<text x="218" y="32" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="17" font-weight="700" fill="#1e293b" text-anchor="start">Render time per page</text>
+<text x="218" y="54" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#64748b" text-anchor="start" font-style="italic">logarithmic scale — equal distances are equal ratios, not equal differences · lower is better · x = median ÷ the fastest</text>
+<text x="218" y="74" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#64748b" text-anchor="start" font-style="italic">Lower is better · dot: median of every render · caps: fastest → p95</text>
+<text x="218" y="94" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#64748b" text-anchor="start" font-style="italic">Clarity dev-main · NativeEngine (Azera) 0.1.0 · Plates 3.6.0 · Blade 12.69.2 · Twig 3.27.0 · Stempler 3.17.2</text>
+<text x="206" y="122" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="11" font-weight="600" fill="#64748b" text-anchor="end">median</text>
+<line x1="218" y1="128" x2="218" y2="304" stroke="#f1f5f9" stroke-width="1"/>
+<text x="218" y="326" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="12" font-weight="500" fill="#64748b" text-anchor="middle">0.2 ms</text>
+<line x1="475.07" y1="128" x2="475.07" y2="304" stroke="#f1f5f9" stroke-width="1"/>
+<text x="475.07" y="326" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="12" font-weight="500" fill="#64748b" text-anchor="middle">0.5 ms</text>
+<line x1="669.53" y1="128" x2="669.53" y2="304" stroke="#f1f5f9" stroke-width="1"/>
+<text x="669.53" y="326" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="12" font-weight="500" fill="#64748b" text-anchor="middle">1 ms</text>
+<line x1="864" y1="128" x2="864" y2="304" stroke="#f1f5f9" stroke-width="1"/>
+<text x="864" y="326" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="12" font-weight="500" fill="#64748b" text-anchor="middle">2 ms</text>
+<line x1="218" y1="128" x2="218" y2="304" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="218" y="154" width="213.89" height="14" fill="#3459e6" fill-opacity="0.12"/>
+<line x1="409.03" y1="161" x2="484.28" y2="161" stroke="#3459e6" stroke-width="2.5" stroke-linecap="round" opacity="0.5"/>
+<line x1="409.03" y1="154" x2="409.03" y2="168" stroke="#3459e6" stroke-width="2.5" stroke-linecap="round"/>
+<line x1="484.28" y1="154" x2="484.28" y2="168" stroke="#3459e6" stroke-width="2.5" stroke-linecap="round"/>
+<circle cx="431.89" cy="161" r="5.6" fill="#3459e6" stroke="#ffffff" stroke-width="2"/>
+<text x="112" y="165.5" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="12.5" font-weight="700" fill="#3459e6" text-anchor="end">clarity</text>
+<text x="206" y="165.5" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="12.5" font-weight="700" fill="#1e293b" text-anchor="end">0.429 ms</text>
+<rect x="218" y="180" width="215.36" height="14" fill="#0b7285" fill-opacity="0.12"/>
+<line x1="413.01" y1="187" x2="486.89" y2="187" stroke="#0b7285" stroke-width="2.5" stroke-linecap="round" opacity="0.5"/>
+<line x1="413.01" y1="180" x2="413.01" y2="194" stroke="#0b7285" stroke-width="2.5" stroke-linecap="round"/>
+<line x1="486.89" y1="180" x2="486.89" y2="194" stroke="#0b7285" stroke-width="2.5" stroke-linecap="round"/>
+<circle cx="433.36" cy="187" r="5.6" fill="#0b7285" stroke="#ffffff" stroke-width="2"/>
+<text x="112" y="191.5" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="12.5" font-weight="700" fill="#0b7285" text-anchor="end">stempler</text>
+<text x="206" y="191.5" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="12.5" font-weight="700" fill="#1e293b" text-anchor="end">0.431 ms</text>
+<rect x="218" y="206" width="227.44" height="14" fill="#777bb3" fill-opacity="0.12"/>
+<line x1="427.58" y1="213" x2="497.17" y2="213" stroke="#777bb3" stroke-width="2.5" stroke-linecap="round" opacity="0.5"/>
+<line x1="427.58" y1="206" x2="427.58" y2="220" stroke="#777bb3" stroke-width="2.5" stroke-linecap="round"/>
+<line x1="497.17" y1="206" x2="497.17" y2="220" stroke="#777bb3" stroke-width="2.5" stroke-linecap="round"/>
+<circle cx="445.44" cy="213" r="5.6" fill="#777bb3" stroke="#ffffff" stroke-width="2"/>
+<text x="112" y="217.5" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="12.5" font-weight="700" fill="#777bb3" text-anchor="end">native</text>
+<text x="206" y="217.5" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="12.5" font-weight="700" fill="#1e293b" text-anchor="end">0.450 ms</text>
+<rect x="218" y="232" width="276.24" height="14" fill="#e8590c" fill-opacity="0.12"/>
+<line x1="478.67" y1="239" x2="551.56" y2="239" stroke="#e8590c" stroke-width="2.5" stroke-linecap="round" opacity="0.5"/>
+<line x1="478.67" y1="232" x2="478.67" y2="246" stroke="#e8590c" stroke-width="2.5" stroke-linecap="round"/>
+<line x1="551.56" y1="232" x2="551.56" y2="246" stroke="#e8590c" stroke-width="2.5" stroke-linecap="round"/>
+<circle cx="494.24" cy="239" r="5.6" fill="#e8590c" stroke="#ffffff" stroke-width="2"/>
+<text x="560.56" y="243.5" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#94a3b8" text-anchor="start" stroke="#ffffff" stroke-width="3" paint-order="stroke" stroke-linejoin="round">x 1.2</text>
+<text x="112" y="243.5" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="12.5" font-weight="700" fill="#e8590c" text-anchor="end">plates</text>
+<text x="206" y="243.5" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="12.5" font-weight="700" fill="#1e293b" text-anchor="end">0.535 ms</text>
+<rect x="218" y="258" width="366.57" height="14" fill="#e5484d" fill-opacity="0.12"/>
+<line x1="566.17" y1="265" x2="640.15" y2="265" stroke="#e5484d" stroke-width="2.5" stroke-linecap="round" opacity="0.5"/>
+<line x1="566.17" y1="258" x2="566.17" y2="272" stroke="#e5484d" stroke-width="2.5" stroke-linecap="round"/>
+<line x1="640.15" y1="258" x2="640.15" y2="272" stroke="#e5484d" stroke-width="2.5" stroke-linecap="round"/>
+<circle cx="584.57" cy="265" r="5.6" fill="#e5484d" stroke="#ffffff" stroke-width="2"/>
+<text x="649.15" y="269.5" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#94a3b8" text-anchor="start" stroke="#ffffff" stroke-width="3" paint-order="stroke" stroke-linejoin="round">x 1.7</text>
+<text x="112" y="269.5" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="12.5" font-weight="700" fill="#e5484d" text-anchor="end">blade</text>
+<text x="206" y="269.5" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="12.5" font-weight="700" fill="#1e293b" text-anchor="end">0.739 ms</text>
+<rect x="218" y="284" width="516.12" height="14" fill="#8044db" fill-opacity="0.12"/>
+<line x1="719.24" y1="291" x2="788.24" y2="291" stroke="#8044db" stroke-width="2.5" stroke-linecap="round" opacity="0.5"/>
+<line x1="719.24" y1="284" x2="719.24" y2="298" stroke="#8044db" stroke-width="2.5" stroke-linecap="round"/>
+<line x1="788.24" y1="284" x2="788.24" y2="298" stroke="#8044db" stroke-width="2.5" stroke-linecap="round"/>
+<circle cx="734.12" cy="291" r="5.6" fill="#8044db" stroke="#ffffff" stroke-width="2"/>
+<text x="797.24" y="295.5" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#94a3b8" text-anchor="start" stroke="#ffffff" stroke-width="3" paint-order="stroke" stroke-linejoin="round">x 2.9</text>
+<text x="112" y="295.5" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="12.5" font-weight="700" fill="#8044db" text-anchor="end">twig</text>
+<text x="206" y="295.5" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="12.5" font-weight="700" fill="#1e293b" text-anchor="end">1.26 ms</text>
+</svg>

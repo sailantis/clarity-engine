@@ -228,8 +228,8 @@ Layouts can extend other layouts, creating a hierarchy.
   <table>
     {% for user in users %}
     <tr>
-      <td>{{ user.name }}</td>
-      <td>{{ user.email }}</td>
+      <td>{{ user:name }}</td>
+      <td>{{ user:email }}</td>
     </tr>
     {% endfor %}
   </table>
@@ -332,7 +332,7 @@ Layouts can extend other layouts, creating a hierarchy.
 <ol class="breadcrumb">
   <li><a href="/">Home</a></li>
   <li><a href="/products">Products</a></li>
-  <li>{{ product.name }}</li>
+  <li>{{ product:name }}</li>
 </ol>
 {% endblock %}
 ```
@@ -580,10 +580,10 @@ Use for **reusable components** that appear multiple times:
   <div class="product-grid">
     {% for product in products %}
     <div class="product-card">
-      <img src="{{ product.image }}" alt="{{ product.name }}" />
-      <h3>{{ product.name }}</h3>
-      <p class="price">{{ product.price |> number(2) }}</p>
-      <a href="/products/{{ product.id }}" class="btn">View Details</a>
+      <img src="{{ product:image }}" alt="{{ product:name }}" />
+      <h3>{{ product:name }}</h3>
+      <p class="price">{{ product:price |> number(2) }}</p>
+      <a href="/products/{{ product:id }}" class="btn">View Details</a>
     </div>
     {% endfor %}
   </div>
@@ -597,7 +597,7 @@ Use for **reusable components** that appear multiple times:
 
 ```twig
 {% extends "layouts/base" %}
-{% block title %}{{ product.name }}{% endblock %}
+{% block title %}{{ product:name }}{% endblock %}
 {% block bodyClass %}product-detail{% endblock %}
 {% block styles %}
   <link rel="stylesheet" href="/css/product-detail.css" />
@@ -607,15 +607,15 @@ Use for **reusable components** that appear multiple times:
 
   <div class="product-detail">
     <div class="product-images">
-      {% for image in product.images %}
-      <img src="{{ image }}" alt="{{ product.name }}" />
+      {% for image in product:images %}
+      <img src="{{ image }}" alt="{{ product:name }}" />
       {% endfor %}
     </div>
 
     <div class="product-info">
-      <h1>{{ product.name }}</h1>
-      <p class="price">{{ product.price |> currency }}</p>
-      <p>{{ product.description }}</p>
+      <h1>{{ product:name }}</h1>
+      <p class="price">{{ product:price |> currency }}</p>
+      <p>{{ product:description }}</p>
 
       <button class="btn-add-cart">Add to Cart</button>
     </div>
@@ -669,7 +669,7 @@ Don't overcomplicate layouts with business logic:
 
 ```twig
 {# ❌ Bad: Logic in layout #}
-{% if user.isPremium and user.notifications > 0 %}
+{% if user:isPremium and user:notifications > 0 %}
   ...
 {% endif %}
 {# ✅ Good: Logic in PHP, simple variables in layout #}

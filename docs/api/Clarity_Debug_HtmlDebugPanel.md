@@ -1,4 +1,4 @@
-# 🧩 Class: HtmlDebugPanel
+# Class: HtmlDebugPanel
 
 **Full name:** [Clarity\Debug\HtmlDebugPanel](../../src/Debug/HtmlDebugPanel.php)
 
@@ -8,41 +8,41 @@ appended to the page bottom-right corner.
 Register it via enableDebug(new DumpOptions(showPanel: true)) or subscribe
 it manually to a DebugEventBus and call getHtml() after rendering.
 
-## 🚀 Public methods
+## Public methods
 
-### __construct() · [source](../../src/Debug/HtmlDebugPanel.php#L21)
+### __construct() · <small>[🗎](../../src/Debug/HtmlDebugPanel.php#L21)</small>
 
 `public function __construct(): mixed`
 
-**➡️ Return value**
+**Return value**
 
 - Type: mixed
 
 
 ---
 
-### onEvent() · [source](../../src/Debug/HtmlDebugPanel.php#L26)
+### onEvent() · <small>[🗎](../../src/Debug/HtmlDebugPanel.php#L26)</small>
 
 `public function onEvent(Clarity\Debug\DebugEvent $event): void`
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$event` | [DebugEvent](Clarity_Debug_DebugEvent.md) | - |  |
 
-**➡️ Return value**
+**Return value**
 
 - Type: void
 
 
 ---
 
-### getHtml() · [source](../../src/Debug/HtmlDebugPanel.php#L31)
+### getHtml() · <small>[🗎](../../src/Debug/HtmlDebugPanel.php#L31)</small>
 
 `public function getHtml(): string`
 
-**➡️ Return value**
+**Return value**
 
 - Type: string
 

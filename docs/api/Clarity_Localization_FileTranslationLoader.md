@@ -1,4 +1,4 @@
-# 🧩 Class: FileTranslationLoader
+# Class: FileTranslationLoader
 
 **Full name:** [Clarity\Localization\FileTranslationLoader](../../src/Localization/FileTranslationLoader.php)
 
@@ -15,38 +15,38 @@ Supported formats:
 For all files, the loader generates a cached PHP file containing
 the parsed translations for faster subsequent loading. The cache is automatically invalidated when the source file changes.
 
-## 🚀 Public methods
+## Public methods
 
-### __construct() · [source](../../src/Localization/FileTranslationLoader.php#L20)
+### __construct() · <small>[🗎](../../src/Localization/FileTranslationLoader.php#L20)</small>
 
 `public function __construct(string $translationsPath, string|null $cachePath = null): mixed`
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$translationsPath` | string | - |  |
 | `$cachePath` | string\|null | `null` |  |
 
-**➡️ Return value**
+**Return value**
 
 - Type: mixed
 
 
 ---
 
-### load() · [source](../../src/Localization/FileTranslationLoader.php#L29)
+### load() · <small>[🗎](../../src/Localization/FileTranslationLoader.php#L29)</small>
 
 `public function load(string $domain, string $locale): array`
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$domain` | string | - |  |
 | `$locale` | string | - |  |
 
-**➡️ Return value**
+**Return value**
 
 - Type: array
 

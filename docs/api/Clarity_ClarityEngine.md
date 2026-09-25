@@ -1,4 +1,4 @@
-# 🧩 Class: ClarityEngine
+# Class: ClarityEngine
 
 **Full name:** [Clarity\ClarityEngine](../../src/ClarityEngine.php)
 
@@ -95,9 +95,9 @@ Templates are sandboxed and cannot:
 - Execute arbitrary code (no eval, backticks, etc.)
 - Call methods on objects (objects converted to arrays)
 
-## 🚀 Public methods
+## Public methods
 
-### __construct() · [source](../../src/ClarityEngine.php#L125)
+### __construct() · <small>[🗎](../../src/ClarityEngine.php#L125)</small>
 
 `public function __construct(array $config = []): mixed`
 
@@ -112,37 +112,37 @@ This constructor accepts a single configuration array. Common keys:
 - `cachePath`: path to compiled template cache (applied after init)
 - `debug`: bool to enable debug mode
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$config` | array | `[]` | Configuration options for the engine. |
 
-**➡️ Return value**
+**Return value**
 
 - Type: mixed
 
 
 ---
 
-### create() · [source](../../src/ClarityEngine.php#L162)
+### create() · <small>[🗎](../../src/ClarityEngine.php#L162)</small>
 
 `public static function create(array $config = []): self`
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$config` | array | `[]` |  |
 
-**➡️ Return value**
+**Return value**
 
 - Type: self
 
 
 ---
 
-### setLayout() · [source](../../src/ClarityEngine.php#L176)
+### setLayout() · <small>[🗎](../../src/ClarityEngine.php#L176)</small>
 
 `public function setLayout(string|null $layout): static`
 
@@ -151,26 +151,26 @@ Set the layout template name to be used when calling `render()`.
 The layout will receive a `content` variable containing the
 rendered view output.
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$layout` | string\|null | - | Layout view name or null to disable. |
 
-**➡️ Return value**
+**Return value**
 
 - Type: static
 
 
 ---
 
-### getLayout() · [source](../../src/ClarityEngine.php#L187)
+### getLayout() · <small>[🗎](../../src/ClarityEngine.php#L187)</small>
 
 `public function getLayout(): string|null`
 
 Get the currently configured layout view name.
 
-**➡️ Return value**
+**Return value**
 
 - Type: string|null
 - Description: Layout name or null when none set.
@@ -178,27 +178,27 @@ Get the currently configured layout view name.
 
 ---
 
-### setVar() · [source](../../src/ClarityEngine.php#L199)
+### setVar() · <small>[🗎](../../src/ClarityEngine.php#L199)</small>
 
 `public function setVar(string $name, mixed $value): static`
 
 Set a single view variable.
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$name` | string | - | Variable name available inside templates. |
 | `$value` | mixed | - | Value assigned to the variable. |
 
-**➡️ Return value**
+**Return value**
 
 - Type: static
 
 
 ---
 
-### setVars() · [source](../../src/ClarityEngine.php#L213)
+### setVars() · <small>[🗎](../../src/ClarityEngine.php#L213)</small>
 
 `public function setVars(array $vars): static`
 
@@ -206,20 +206,20 @@ Merge multiple variables into the view's variable set.
 
 Later values override earlier ones for the same keys.
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$vars` | array | - | Associative array of variables. |
 
-**➡️ Return value**
+**Return value**
 
 - Type: static
 
 
 ---
 
-### setDebugMode() · [source](../../src/ClarityEngine.php#L49)
+### setDebugMode() · <small>[🗎](../../src/ClarityEngine.php#L50)</small>
 
 `public function setDebugMode(bool $debug): static`
 
@@ -230,33 +230,33 @@ dd(), DebugEventBus, optional HTML panel).  setDebugMode(true) only
 activates compiler-level assertions (range-loop safety checks) and makes
 dump() resolve at runtime instead of being pruned to ''.
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$debug` | bool | - | True to enable, false to disable. |
 
-**➡️ Return value**
+**Return value**
 
 - Type: static
 
 
 ---
 
-### isDebugMode() · [source](../../src/ClarityEngine.php#L58)
+### isDebugMode() · <small>[🗎](../../src/ClarityEngine.php#L59)</small>
 
 `public function isDebugMode(): bool`
 
 Return whether debug mode is currently enabled.
 
-**➡️ Return value**
+**Return value**
 
 - Type: bool
 
 
 ---
 
-### enableDebug() · [source](../../src/ClarityEngine.php#L78)
+### enableDebug() · <small>[🗎](../../src/ClarityEngine.php#L79)</small>
 
 `public function enableDebug(Clarity\Debug\DumpOptions|null $opts = null): static`
 
@@ -271,84 +271,84 @@ $engine->enableDebug();   // default options
 $engine->enableDebug(new DumpOptions(showPanel: true, maxDepth: 4));
 ```
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$opts` | [DumpOptions](Clarity_Debug_DumpOptions.md)\|null | `null` | Customise depth, masking, panel, etc. |
 
-**➡️ Return value**
+**Return value**
 
 - Type: static
 
 
 ---
 
-### disableDebug() · [source](../../src/ClarityEngine.php#L135)
+### disableDebug() · <small>[🗎](../../src/ClarityEngine.php#L136)</small>
 
 `public function disableDebug(): static`
 
 Disable debug mode and tear down the event bus and debug panel.
 
-**➡️ Return value**
+**Return value**
 
 - Type: static
 
 
 ---
 
-### getDebugBus() · [source](../../src/ClarityEngine.php#L146)
+### getDebugBus() · <small>[🗎](../../src/ClarityEngine.php#L147)</small>
 
 `public function getDebugBus(): Clarity\Debug\DebugEventBus|null`
 
 Return the active DebugEventBus, or null when debug mode is off.
 
-**➡️ Return value**
+**Return value**
 
 - Type: [DebugEventBus](Clarity_Debug_DebugEventBus.md)|null
 
 
 ---
 
-### getDebugPanel() · [source](../../src/ClarityEngine.php#L154)
+### getDebugPanel() · <small>[🗎](../../src/ClarityEngine.php#L155)</small>
 
 `public function getDebugPanel(): Clarity\Debug\HtmlDebugPanel|null`
 
 Return the active HtmlDebugPanel, or null when disabled.
 
-**➡️ Return value**
+**Return value**
 
 - Type: [HtmlDebugPanel](Clarity_Debug_HtmlDebugPanel.md)|null
 
 
 ---
 
-### setViewPath() · [source](../../src/ClarityEngine.php#L165)
+### setViewPath() · <small>[🗎](../../src/ClarityEngine.php#L166)</small>
 
 `public function setViewPath(string $path): static`
 
 Set the base path for resolving relative template names.
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$path` | string | - | Base directory for templates. |
 
-**➡️ Return value**
+**Return value**
 
 - Type: static
 
 
 ---
 
-### getViewPath() · [source](../../src/ClarityEngine.php#L191)
+### getViewPath() · <small>[🗎](../../src/ClarityEngine.php#L192)</small>
 
 `public function getViewPath(): string`
 
 Get the currently configured base path for view resolution.
 
-**➡️ Return value**
+**Return value**
 
 - Type: string
 - Description: Base directory for views.
@@ -356,32 +356,32 @@ Get the currently configured base path for view resolution.
 
 ---
 
-### setExtension() · [source](../../src/ClarityEngine.php#L202)
+### setExtension() · <small>[🗎](../../src/ClarityEngine.php#L203)</small>
 
 `public function setExtension(string $ext): static`
 
 Set the view file extension for this instance.
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$ext` | string | - | Extension with or without a leading dot. |
 
-**➡️ Return value**
+**Return value**
 
 - Type: static
 
 
 ---
 
-### getExtension() · [source](../../src/ClarityEngine.php#L219)
+### getExtension() · <small>[🗎](../../src/ClarityEngine.php#L220)</small>
 
 `public function getExtension(): string`
 
 Get the effective file extension used when resolving templates.
 
-**➡️ Return value**
+**Return value**
 
 - Type: string
 - Description: Extension including leading dot or empty string.
@@ -389,7 +389,7 @@ Get the effective file extension used when resolving templates.
 
 ---
 
-### addNamespace() · [source](../../src/ClarityEngine.php#L233)
+### addNamespace() · <small>[🗎](../../src/ClarityEngine.php#L234)</small>
 
 `public function addNamespace(string $name, string $path): static`
 
@@ -397,27 +397,27 @@ Add a namespace for view resolution.
 
 Views can be referenced using the syntax "namespace::view.name".
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$name` | string | - | Namespace name to register. |
 | `$path` | string | - | Filesystem path corresponding to the namespace. |
 
-**➡️ Return value**
+**Return value**
 
 - Type: static
 
 
 ---
 
-### getNamespaces() · [source](../../src/ClarityEngine.php#L260)
+### getNamespaces() · <small>[🗎](../../src/ClarityEngine.php#L261)</small>
 
 `public function getNamespaces(): array`
 
 Get the currently registered view namespaces.
 
-**➡️ Return value**
+**Return value**
 
 - Type: array
 - Description: Associative array of namespace => path mappings.
@@ -425,7 +425,7 @@ Get the currently registered view namespaces.
 
 ---
 
-### use() · [source](../../src/ClarityEngine.php#L282)
+### use() · <small>[🗎](../../src/ClarityEngine.php#L283)</small>
 
 `public function use(Clarity\ModuleInterface $module): static`
 
@@ -442,20 +442,20 @@ $engine->use(new \Clarity\LocalizationModule([
 ]));
 ```
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$module` | [ModuleInterface](Clarity_ModuleInterface.md) | - | Module to register. |
 
-**➡️ Return value**
+**Return value**
 
 - Type: static
 
 
 ---
 
-### addInlineFilter() · [source](../../src/ClarityEngine.php#L310)
+### addInlineFilter() · <small>[🗎](../../src/ClarityEngine.php#L311)</small>
 
 `public function addInlineFilter(string $name, array $definition): static`
 
@@ -476,21 +476,21 @@ $engine->addInlineFilter('my_substr', [
 Template placeholders: `{1}` for the piped value, `{2}`, `{3}`, … for
 additional parameters are declared in `params`.
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$name` | string | - | Filter name. |
 | `$definition` | array | - |  |
 
-**➡️ Return value**
+**Return value**
 
 - Type: static
 
 
 ---
 
-### addDirective() · [source](../../src/ClarityEngine.php#L335)
+### addDirective() · <small>[🗎](../../src/ClarityEngine.php#L336)</small>
 
 `public function addDirective(string $keyword, callable $handler): static`
 
@@ -508,88 +508,88 @@ $engine->addDirective('with_locale', function(string $rest, string $path, int $l
 $engine->addDirective('endwith_locale', fn(...) => "\$__sv['locale']->pop();");
 ```
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$keyword` | string | - | The directive keyword in lowercase (e.g. 'with_locale'). |
 | `$handler` | callable | - | See [`Registry`](Clarity_Engine_Registry.md) for the expected signature. |
 
-**➡️ Return value**
+**Return value**
 
 - Type: static
 
 
 ---
 
-### addService() · [source](../../src/ClarityEngine.php#L353)
+### addService() · <small>[🗎](../../src/ClarityEngine.php#L354)</small>
 
 `public function addService(string $name, mixed $service): static`
 
-Store a non-callable service object in the registry so that
-compiled template render bodies can access it via `$__sv['key']`.
+Store a service object in the registry so that compiled template render
+bodies can access it via `$__sv['key']`.
 
 This is primarily used by modules that need shared mutable state (e.g. a
 locale stack) accessible both from closures that close over the object
 *and* from inline filter PHP templates using `$__sv['key']->method()`.
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$name` | string | - | Key under which the service is accessible. |
-| `$service` | mixed | - | Service value (not required to be callable). |
+| `$service` | mixed | - | Service value, can be of any type. |
 
-**➡️ Return value**
+**Return value**
 
 - Type: static
 
 
 ---
 
-### hasService() · [source](../../src/ClarityEngine.php#L362)
+### hasService() · <small>[🗎](../../src/ClarityEngine.php#L363)</small>
 
 `public function hasService(string $name): bool`
 
 Return true if a service with the given key has been registered.
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$name` | string | - |  |
 
-**➡️ Return value**
+**Return value**
 
 - Type: bool
 
 
 ---
 
-### getService() · [source](../../src/ClarityEngine.php#L372)
+### getService() · <small>[🗎](../../src/ClarityEngine.php#L373)</small>
 
 `public function getService(string $name): mixed`
 
 Retrieve a previously registered service.
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$name` | string | - |  |
 
-**➡️ Return value**
+**Return value**
 
 - Type: mixed
 
-**⚠️ Throws**
+**Throws**
 
 - RuntimeException  if no service with that name exists.
 
 
 ---
 
-### addFilter() · [source](../../src/ClarityEngine.php#L426)
+### addFilter() · <small>[🗎](../../src/ClarityEngine.php#L427)</small>
 
 `public function addFilter(string $name, callable $fn): static`
 
@@ -637,14 +637,14 @@ Template usage:
 - Dates: `date`, `date_modify`, `format_datetime`
 - Other: `json`, `default`, `unicode`
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$name` | string | - | Filter name used in templates (e.g. 'currency'). |
 | `$fn` | callable | - | Callable with signature: fn($value, ...$args): mixed |
 
-**➡️ Return value**
+**Return value**
 
 - Type: static
 - Description: Fluent interface
@@ -652,7 +652,7 @@ Template usage:
 
 ---
 
-### addFunction() · [source](../../src/ClarityEngine.php#L442)
+### addFunction() · <small>[🗎](../../src/ClarityEngine.php#L443)</small>
 
 `public function addFunction(string $name, callable $fn): static`
 
@@ -661,79 +661,79 @@ Register a custom function callable.
 Functions are called directly in templates, e.g. `{{ name(arg) }}`.
 This is distinct from filters, which transform a piped value.
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$name` | string | - | Function name used in templates (e.g. 'formatDate'). |
 | `$fn` | callable | - | fn(...$args): mixed |
 
-**➡️ Return value**
+**Return value**
 
 - Type: static
 
 
 ---
 
-### setLoader() · [source](../../src/ClarityEngine.php#L454)
+### setLoader() · <small>[🗎](../../src/ClarityEngine.php#L455)</small>
 
 `public function setLoader(Clarity\Template\TemplateLoader $loader): static`
 
 Set a custom template loader, replacing the default FileLoader.
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$loader` | [TemplateLoader](Clarity_Template_TemplateLoader.md) | - | The loader to use. |
 
-**➡️ Return value**
+**Return value**
 
 - Type: static
 
 
 ---
 
-### getLoader() · [source](../../src/ClarityEngine.php#L467)
+### getLoader() · <small>[🗎](../../src/ClarityEngine.php#L468)</small>
 
 `public function getLoader(): Clarity\Template\TemplateLoader`
 
 Return the active template loader, lazily creating a FileLoader if none
 has been set explicitly.
 
-**➡️ Return value**
+**Return value**
 
 - Type: [TemplateLoader](Clarity_Template_TemplateLoader.md)
 
 
 ---
 
-### setCachePath() · [source](../../src/ClarityEngine.php#L506)
+### setCachePath() · <small>[🗎](../../src/ClarityEngine.php#L507)</small>
 
 `public function setCachePath(string $path): static`
 
 Set the directory where compiled templates should be cached.
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$path` | string | - | Absolute path to the cache directory. |
 
-**➡️ Return value**
+**Return value**
 
 - Type: static
 
 
 ---
 
-### getCachePath() · [source](../../src/ClarityEngine.php#L517)
+### getCachePath() · <small>[🗎](../../src/ClarityEngine.php#L518)</small>
 
 `public function getCachePath(): string`
 
 Get the currently configured cache directory.
 
-**➡️ Return value**
+**Return value**
 
 - Type: string
 - Description: Absolute path to the cache directory.
@@ -741,20 +741,20 @@ Get the currently configured cache directory.
 
 ---
 
-### flushCache() · [source](../../src/ClarityEngine.php#L527)
+### flushCache() · <small>[🗎](../../src/ClarityEngine.php#L528)</small>
 
 `public function flushCache(): static`
 
 Flush all cached compiled templates.
 
-**➡️ Return value**
+**Return value**
 
 - Type: static
 
 
 ---
 
-### render() · [source](../../src/ClarityEngine.php#L577)
+### render() · <small>[🗎](../../src/ClarityEngine.php#L578)</small>
 
 `public function render(string $view, array $vars = []): string`
 
@@ -796,39 +796,39 @@ $engine->addNamespace('admin', __DIR__ . '/admin_templates');
 $html = $engine->render('admin::dashboard', $data);
 ```
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$view` | string | - | View name to render. Can include namespace prefix (e.g. 'admin::dashboard'). |
 | `$vars` | array | `[]` | Variables to pass to the template. Objects are automatically converted to arrays. |
 
-**➡️ Return value**
+**Return value**
 
 - Type: string
 - Description: Rendered HTML/output.
 
-**⚠️ Throws**
+**Throws**
 
 - [ClarityException](Clarity_ClarityException.md)  If template not found or compilation fails.
 
 
 ---
 
-### renderPartial() · [source](../../src/ClarityEngine.php#L599)
+### renderPartial() · <small>[🗎](../../src/ClarityEngine.php#L600)</small>
 
 `public function renderPartial(string $view, array $vars = []): string`
 
 Render a partial view (without applying a layout) and return the output.
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$view` | string | - | View name to resolve and render. |
 | `$vars` | array | `[]` | Variables for this render call. |
 
-**➡️ Return value**
+**Return value**
 
 - Type: string
 - Description: Rendered HTML/output.
@@ -836,7 +836,7 @@ Render a partial view (without applying a layout) and return the output.
 
 ---
 
-### renderLayout() · [source](../../src/ClarityEngine.php#L623)
+### renderLayout() · <small>[🗎](../../src/ClarityEngine.php#L626)</small>
 
 `public function renderLayout(string $layout, string $content, array $vars = []): string`
 
@@ -844,7 +844,7 @@ Render a layout template wrapping provided content.
 
 The layout receives the rendered view in the `content` variable.
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
@@ -852,37 +852,10 @@ The layout receives the rendered view in the `content` variable.
 | `$content` | string | - | Previously rendered content. |
 | `$vars` | array | `[]` | Additional variables to pass to the layout. |
 
-**➡️ Return value**
+**Return value**
 
 - Type: string
 - Description: Rendered layout output.
-
-
----
-
-### castToArray() · [source](../../src/ClarityEngine.php#L1059)
-
-`public static function castToArray(mixed $value): mixed`
-
-Recursively cast values to arrays so templates never receive live
-objects and cannot call methods.
-
-Precedence:
-1. JsonSerializable → jsonSerialize() then recurse
-2. Objects with toArray() → toArray() then recurse
-3. Other objects → get_object_vars() then recurse
-4. Arrays → recurse element by element
-5. Scalars / null → pass through
-
-**🧭 Parameters**
-
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `$value` | mixed | - |  |
-
-**➡️ Return value**
-
-- Type: mixed
 
 
 

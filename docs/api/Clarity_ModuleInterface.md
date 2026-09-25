@@ -1,4 +1,4 @@
-# 🔌 Interface: ModuleInterface
+# Interface: ModuleInterface
 
 **Full name:** [Clarity\ModuleInterface](../../src/ModuleInterface.php)
 
@@ -28,9 +28,9 @@ class MyModule implements ModuleInterface
 }
 ```
 
-## 🚀 Public methods
+## Public methods
 
-### register() · [source](../../src/ModuleInterface.php#L43)
+### register() · <small>[🗎](../../src/ModuleInterface.php#L43)</small>
 
 `public function register(Clarity\ClarityEngine $engine): void`
 
@@ -40,13 +40,13 @@ this module provides into the given engine instance.
 This method is called once by [`ClarityEngine::use()`](Clarity_ClarityEngine.md#use) at engine
 setup time, before any templates are compiled or rendered.
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$engine` | [ClarityEngine](Clarity_ClarityEngine.md) | - | The engine to register into. |
 
-**➡️ Return value**
+**Return value**
 
 - Type: void
 

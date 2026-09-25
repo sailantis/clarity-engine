@@ -115,7 +115,7 @@
           class="{{ loop.first ? 'first' : '' }} {{ loop.last ? 'last' : '' }}">
           <td>{{ loop.index }}</td>
           <td>{{ loop.index1 }}</td>
-          <td>{{ user.name }}</td>
+          <td>{{ user : name }}</td>
           <td>
             {% if loop.first %}First{% elseif loop.last %}Last{% else %}Middle
             {% endif %}
@@ -124,7 +124,7 @@
       {% endfor %}
     </tbody>
     </table>
-    <p><em>Total users: {{ users.length }}</em></p>
+    <p><em>Total users: {{ users : length }}</em></p>
   </div>
 
   <div class="section">
@@ -163,7 +163,7 @@
 
     <h3>Uppercase Tags</h3>
     <ul>
-      {% for tag in tags |> map(t = > t |> upper) %}
+      {% for tag in tags |> map(t => t |> upper) %}
         <li>{{ tag }}</li>
       {% endfor %}
     </ul>
@@ -188,17 +188,16 @@
 
     <h3>Categories and Products</h3>
     {% for category in categories %}
-      <div
-        style="
-          background: white;
-          padding: 15px;
-          margin: 10px 0;
-          border-radius: 4px;
+      <div style="
+        background: white;
+        padding: 15px;
+        margin: 10px 0;
+        border-radius: 4px;
         ">
-        <h4>{{ category.name }} ({{ category.products.length }} products)</h4>
+        <h4>{{ category : name }} ({{ category : products : length }} products)</h4>
         <ul>
-          {% for product in category.products %}
-            <li>{{ product.name }} - {{ product.price |> number(2) }} EUR</li>
+          {% for product in category : products %}
+            <li>{{ product : name }} - {{ product : price |> number(2) }} EUR</li>
           {% endfor %}
         </ul>
       </div>
@@ -209,14 +208,14 @@
     <h2>Conditional Loop</h2>
 
     <h3>Active Products Only</h3>
-    {% set activeProducts = products |> filter(p => p.active) %}
-    {% if activeProducts.length > 0 %}
+    {% set activeProducts = products |> filter(p => p : active) %}
+    {% if activeProducts : length > 0 %}
       <div class="product-grid">
         {% for product in activeProducts %}
           <div class="product-card">
-            <h4>{{ product.name }}</h4>
-            <p><strong>{{ product.price |> number(2) }} EUR</strong></p>
-            <p><small>Stock: {{ product.stock }}</small></p>
+            <h4>{{ product : name }}</h4>
+            <p><strong>{{ product : price |> number(2) }} EUR</strong></p>
+            <p><small>Stock: {{ product : stock }}</small></p>
           </div>
         {% endfor %}
       </div>
@@ -243,13 +242,13 @@
         <tr
           class="{{ loop.first ? 'first' : '' }} {{ loop.last ? 'last' : '' }}">
           <td>{{ loop.index1 }}</td>
-          <td>{{ product.name }}</td>
-          <td>{{ product.price |> number(2) }} EUR</td>
+          <td>{{ product : name }}</td>
+          <td>{{ product : price |> number(2) }} EUR</td>
           <td>
-            {% if product.active %}✓ Active{% else %}✗ Inactive{% endif %}
+            {% if product : active %}✓ Active{% else %}✗ Inactive{% endif %}
           </td>
           <td>
-            {% if product.stock == 0 %}Out of stock{% elseif product.stock < 10 %}Low stock ({{ product.stock }} remaining){% else %}
+            {% if product : stock == 0 %}Out of stock{% elseif product : stock < 10 %}Low stock ({{ product : stock }} remaining){% else %}
               In
               stock
             {% endif %}
@@ -263,7 +262,7 @@
   <div class="section">
     <h2>Empty Loop Handling</h2>
 
-    {% if emptyArray.length > 0 %}
+    {% if emptyArray : length > 0 %}
       <ul>
         {% for item in emptyArray %}
           <li>{{ item }}</li>

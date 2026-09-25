@@ -91,8 +91,8 @@ class FiltersFunctionsTest extends BaseTestCase
     {
         self::tpl('f_format', '{{ fmt |> sprintf(name, count) }}');
         $this->assertSame('Hello Alice, 3', self::render('f_format', [
-            'fmt' => 'Hello %s, %d',
-            'name' => 'Alice',
+            'fmt'   => 'Hello %s, %d',
+            'name'  => 'Alice',
             'count' => 3,
         ]));
     }
@@ -322,7 +322,7 @@ class FiltersFunctionsTest extends BaseTestCase
 
     public function testLambdaMapFieldAccess(): void
     {
-        self::tpl('lambda_map_field', '{{ users |> map(u => u.name) |> join(",") }}');
+        self::tpl('lambda_map_field', '{{ users |> map(u => u:name) |> join(",") }}');
         $result = self::render('lambda_map_field', [
             'users' => [['name' => 'alice'], ['name' => 'bob'], ['name' => 'carol']],
         ]);
@@ -339,7 +339,7 @@ class FiltersFunctionsTest extends BaseTestCase
     {
         self::tpl('lambda_outer', '{{ items |> map(item => item ~ suffix) |> join(",") }}');
         $this->assertSame('a!,b!,c!', self::render('lambda_outer', [
-            'items' => ['a', 'b', 'c'],
+            'items'  => ['a', 'b', 'c'],
             'suffix' => '!',
         ]));
     }
@@ -348,7 +348,7 @@ class FiltersFunctionsTest extends BaseTestCase
     {
         self::tpl(
             'lambda_filter_field',
-            '{{ items |> filter(item => item.active) |> map(item => item.label) |> join(",") }}'
+            '{{ items |> filter(item => item:active) |> map(item => item:label) |> join(",") }}'
         );
         $result = self::render('lambda_filter_field', [
             'items' => [
@@ -364,10 +364,10 @@ class FiltersFunctionsTest extends BaseTestCase
     {
         self::tpl(
             'lambda_filter_outer',
-            '{{ items |> filter(item => item.score >= threshold) |> map(item => item.name) |> join(",") }}'
+            '{{ items |> filter(item => item:score >= threshold) |> map(item => item:name) |> join(",") }}'
         );
         $result = self::render('lambda_filter_outer', [
-            'items' => [['name' => 'a', 'score' => 5], ['name' => 'b', 'score' => 3], ['name' => 'c', 'score' => 7]],
+            'items'     => [['name' => 'a', 'score' => 5], ['name' => 'b', 'score' => 3], ['name' => 'c', 'score' => 7]],
             'threshold' => 5,
         ]);
         $this->assertSame('a,c', $result);
@@ -384,7 +384,7 @@ class FiltersFunctionsTest extends BaseTestCase
         self::tpl('lambda_reduce_outer', '{{ numbers |> reduce(carry, item => carry + item + bonus, 0) }}');
         $this->assertSame('14', self::render('lambda_reduce_outer', [
             'numbers' => [1, 2, 3, 4],
-            'bonus' => 1,
+            'bonus'   => 1,
         ]));
     }
 

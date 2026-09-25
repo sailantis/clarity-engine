@@ -26,6 +26,7 @@
 - [CompiledTemplate](Clarity_Engine_CompiledTemplate.md) `Clarity\Engine\CompiledTemplate`
 - [Compiler](Clarity_Engine_Compiler.md) `Clarity\Engine\Compiler`
 - [Registry](Clarity_Engine_Registry.md) `Clarity\Engine\Registry`
+- [SourceMap](Clarity_Engine_SourceMap.md) `Clarity\Engine\SourceMap`
 - [Tokenizer](Clarity_Engine_Tokenizer.md) `Clarity\Engine\Tokenizer`
 - [UnicodeString](Clarity_Engine_UnicodeString.md) `Clarity\Engine\UnicodeString`
 

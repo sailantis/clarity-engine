@@ -75,9 +75,9 @@ class ControlFlowTest extends BaseTestCase
     public function testForLoopVariableAsArrayIndex(): void
     {
         // Loop variable used as an array index must resolve to the local PHP variable,
-        // not to $vars['name']. This was a bug where platformLabels[platform] inside
-        // a for-loop compiled to $vars['platformLabels'][$vars['platform']] instead of
-        // $vars['platformLabels'][$platform].
+        // not to $__va['name']. This was a bug where platformLabels[platform] inside
+        // a for-loop compiled to $__va['platformLabels'][$__va['platform']] instead of
+        // $__va['platformLabels'][$platform].
         self::tpl(
             'for_array_index',
             '{% for key in keys %}{{ labels[key] }}-{% endfor %}'
@@ -533,6 +533,106 @@ class ControlFlowTest extends BaseTestCase
     }
 
     // =========================================================================
+    // Emitted loop shape
+    //
+    // The bounds are inlineable when they are numeric literals, which is the
+    // common case and removes three temporary-variable reads per iteration.
+    // These tests read the COMPILED body, because the rendered output is
+    // identical either way and so cannot pin the optimisation. A refactor that
+    // silently reintroduces the hoisted temps would otherwise go unnoticed and
+    // quietly cost ~2.4% on every loop.
+    // =========================================================================
+
+    /** Return the compiled render body for a template name. */
+    private function compiledBody(string $view): string
+    {
+        $cache = new \ReflectionProperty(TestEnvironment::engine(), 'cache');
+        $cache->setAccessible(true);
+        $className = $cache->getValue(TestEnvironment::engine())->getLoadedClassName($view);
+        $this->assertIsString($className, 'the template must be compiled and loaded');
+
+        $file  = (new \ReflectionClass($className))->getFileName();
+        $src   = (string) file_get_contents($file);
+        $start = strpos($src, 'try {');
+        $end   = strpos($src, 'return (string) ob_get_clean();');
+        $this->assertNotFalse($start, 'the compiled class must contain the render body');
+        $this->assertNotFalse($end, 'the compiled class must contain the render body');
+
+        return substr($src, $start, $end - $start);
+    }
+
+    public function testLiteralRangeLoopInlinesItsBounds(): void
+    {
+        self::tpl('inline_range_lit', '{% for j in 0...10 %}{{ j }}{% endfor %}');
+        $this->assertSame('0123456789', self::render('inline_range_lit'));
+
+        $body = $this->compiledBody('inline_range_lit');
+
+        $this->assertStringContainsString(
+            'for ($j = 0; $j < 10; $j += 1):',
+            $body,
+            'a fully-literal range must compile to a plain loop with the bounds inlined'
+        );
+        $this->assertStringNotContainsString(
+            '$__rb',
+            $body,
+            'no range bound temporary may be emitted when every bound is a literal'
+        );
+        $this->assertStringNotContainsString('$__re', $body);
+        $this->assertStringNotContainsString('$__rs', $body);
+    }
+
+    public function testInclusiveLiteralRangeLoopInlinesItsBounds(): void
+    {
+        self::tpl('inline_range_incl', '{% for j in 0..9 %}{{ j }}{% endfor %}');
+        $this->assertSame('0123456789', self::render('inline_range_incl'));
+
+        $body = $this->compiledBody('inline_range_incl');
+        $this->assertStringContainsString('for ($j = 0; $j <= 9; $j += 1):', $body);
+        $this->assertStringNotContainsString('$__rb', $body);
+    }
+
+    public function testLiteralRangeLoopWithLiteralStepInlinesItsBounds(): void
+    {
+        self::tpl('inline_range_step', '{% for j in 1...10 step 3 %}{{ j }}{% endfor %}');
+        $this->assertSame('147', self::render('inline_range_step'));
+
+        $body = $this->compiledBody('inline_range_step');
+        $this->assertStringContainsString('for ($j = 1; $j < 10; $j += 3):', $body);
+        $this->assertStringNotContainsString('$__rb', $body);
+        $this->assertStringNotContainsString('$__rs', $body);
+    }
+
+    /**
+     * Inlining must not change what an empty or single-iteration range does.
+     */
+    public function testInlinedRangeBoundaries(): void
+    {
+        self::tpl('inline_range_empty', '{% for j in 0...0 %}[{{ j }}]{% endfor %}');
+        $this->assertSame('', self::render('inline_range_empty'));
+
+        self::tpl('inline_range_one', '{% for j in 0...1 %}[{{ j }}]{% endfor %}');
+        $this->assertSame('[0]', self::render('inline_range_one'));
+
+        self::tpl('inline_range_incl_one', '{% for j in 3..3 %}[{{ j }}]{% endfor %}');
+        $this->assertSame('[3]', self::render('inline_range_incl_one'));
+    }
+
+    /**
+     * A negative literal is still a literal: it arrives as `-1`, and inlining it
+     * must not be mistaken for an operator expression.
+     */
+    public function testNegativeLiteralBoundsAreInlined(): void
+    {
+        self::tpl('inline_range_neg', '{% for j in -2..0 %}[{{ j }}]{% endfor %}');
+        $this->assertSame('[-2][-1][0]', self::render('inline_range_neg'));
+
+        $body = $this->compiledBody('inline_range_neg');
+        $this->assertStringContainsString('for ($j = -2; $j <= 0; $j += 1):', $body);
+        $this->assertStringNotContainsString('$__rb', $body);
+    }
+
+    // =========================================================================
     // Set directive (extended)
     // =========================================================================
 
@@ -581,7 +681,7 @@ class ControlFlowTest extends BaseTestCase
     public function testMacroParamIsolatedFromOuterScope(): void
     {
         // The macro param 'x' must not leak after the macro ends.
-        // After the macro call, {{ x }} should resolve from $vars['x'].
+        // After the macro call, {{ x }} should resolve from $__va['x'].
         self::tpl(
             'macro_isolate',
             '{% macro @show(x) %}[{{ x }}]{% endmacro %}' .

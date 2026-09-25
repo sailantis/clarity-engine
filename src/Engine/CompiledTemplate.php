@@ -8,6 +8,8 @@ namespace Clarity\Engine;
  * @property-read string   $code         Complete PHP source code of the compiled class.
  * @property-read string[] $sourceFiles  Logical template names, indexed by the integers in $sourceMap.
  * @property-read array    $sourceMap    Maps PHP line numbers → [fileIndex, templateLine].
+ *                                       In-memory shape (list of ranges); the class property
+ *                                       holds the packed string form — see {@see SourceMap}.
  * @property-read array    $dependencies Associative array of [logicalName => revision (int|string)]
  *                                       for every template (entry + extends + includes) read
  *                                       during compilation. Used for cache invalidation.

@@ -33,18 +33,29 @@ class RenderingTest extends BaseTestCase
         $this->assertSame('<b>bold</b>', $result);
     }
 
-    public function testDotAccessOnArray(): void
+    public function testDotAccessOnArrayIsRejected(): void
     {
+        // STRICT: `.` is object property access. An ARRAY must be read with a
+        // key (`user:name`) or an index (`user['name']`). Applying `.` to an
+        // array is a PHP warning ("Attempt to read property on array") which
+        // the engine maps to a located ClarityException.
         self::tpl('dot', '{{ user.name }}');
-        $result = self::render('dot', ['user' => ['name' => 'Alice']]);
-        $this->assertSame('Alice', $result);
+
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/Cannot read property "name" on array/');
+        self::render('dot', ['user' => ['name' => 'Alice']]);
     }
 
-    public function testNestedDotAccess(): void
+    public function testStaticKeyAccessOnArray(): void
     {
-        self::tpl('nested', '{{ a.b.c }}');
-        $result = self::render('nested', ['a' => ['b' => ['c' => 'deep']]]);
-        $this->assertSame('deep', $result);
+        self::tpl('colon', '{{ user:name }}');
+        $this->assertSame('Alice', self::render('colon', ['user' => ['name' => 'Alice']]));
+    }
+
+    public function testNestedStaticKeyAccess(): void
+    {
+        self::tpl('nested', '{{ a:b:c }}');
+        $this->assertSame('deep', self::render('nested', ['a' => ['b' => ['c' => 'deep']]]));
     }
 
     public function testNumericIndexAccess(): void
@@ -99,7 +110,7 @@ class RenderingTest extends BaseTestCase
 
     public function testArrayLiteralCanBePassedToFilters(): void
     {
-        self::tpl('array_literal_filter', '{{ [1, 2, user.id] |> json |> raw }}');
+        self::tpl('array_literal_filter', '{{ [1, 2, user:id] |> json |> raw }}');
         $result = self::render('array_literal_filter', ['user' => ['id' => 3]]);
         $this->assertSame('[1,2,3]', $result);
     }
@@ -108,7 +119,7 @@ class RenderingTest extends BaseTestCase
     {
         self::tpl(
             'object_literal_filter',
-            '{{ { foo: "bar", count: count, nested: { id: user.id }, items: [1, 2] } |> json |> raw }}'
+            '{{ { foo: "bar", count: count, nested: { id: user:id }, items: [1, 2] } |> json |> raw }}'
         );
 
         $result = self::render('object_literal_filter', [
@@ -123,7 +134,7 @@ class RenderingTest extends BaseTestCase
     {
         self::tpl(
             'literal_postfix_access',
-            '{{ { user: { name: "Alice" } }.user.name ~ ":" ~ [10, 20, 30][1] }}'
+            '{{ { user: { name: "Alice" } }:user:name ~ ":" ~ [10, 20, 30][1] }}'
         );
 
         $this->assertSame('Alice:20', self::render('literal_postfix_access'));
@@ -133,7 +144,7 @@ class RenderingTest extends BaseTestCase
     {
         self::tpl(
             'set_literal_collection',
-            '{% set payload = { meta: { total: count }, items: [1, 2, 3] } %}{{ payload.meta.total ~ ":" ~ payload.items[2] }}'
+            '{% set payload = { meta: { total: count }, items: [1, 2, 3] } %}{{ payload:meta:total ~ ":" ~ payload:items[2] }}'
         );
 
         $this->assertSame('5:3', self::render('set_literal_collection', ['count' => 5]));
@@ -178,6 +189,105 @@ class RenderingTest extends BaseTestCase
     }
 
     // =========================================================================
+    // Whitespace after a block tag
+    //
+    // A block or comment tag consumes ONE line break from the text that follows
+    // it, so a directive alone on its own line does not emit a blank line. This
+    // mirrors Twig's `%}\n?` / `#}\n?` and PHP's own close-tag rule, and it is
+    // why Clarity no longer emits 2 of every 3 output lines as whitespace on the
+    // competition benchmark page.
+    //
+    // NOTE: the literal close tag is deliberately NOT spelled out in this
+    // comment. A close tag inside a one-line comment ends PHP mode, so writing
+    // it here would turn the rest of this file into inline HTML and produce a
+    // parse error dozens of lines away. (Block comments are not affected.)
+    // =========================================================================
+
+    public function testDirectiveAloneOnItsLineLeavesNoBlankLine(): void
+    {
+        $tpl = "X\n{% if true %}\nY\n{% endif %}\nZ";
+        self::tpl('ws_block_alone', $tpl);
+        $this->assertSame("X\nY\nZ", self::render('ws_block_alone'));
+    }
+
+    public function testLoopBodyHasNoBlankLinePerIteration(): void
+    {
+        // The inner loop is the case that produced ~1 blank line per item.
+        //
+        // Note the FOUR-space indent on the span: the two spaces before `{% for`
+        // and the two before `<s>` MERGE, because the newline that separated
+        // them is the one the rule removes. That is not an accident of this
+        // implementation - it is exactly Twig's output for the same source.
+        $tpl = "<div>\n  {% for j in 0 .. 2 %}\n  <s>{{ j }}</s>\n  {% endfor %}\n</div>";
+        self::tpl('ws_loop_body', $tpl);
+        $this->assertSame(
+            "<div>\n    <s>0</s>\n    <s>1</s>\n    <s>2</s>\n  </div>",
+            self::render('ws_loop_body')
+        );
+    }
+
+    public function testCommentAloneOnItsLineLeavesNoBlankLine(): void
+    {
+        self::tpl('ws_comment_alone', "A\n{# note #}\nB");
+        $this->assertSame("A\nB", self::render('ws_comment_alone'));
+    }
+
+    /**
+     * The escape hatch: a space in front of the line break preserves it, which is
+     * exactly how PHP's own close-tag rule and Twig's behave — so an author who
+     * wants the blank line keeps it without needing an operator.
+     */
+    public function testSpaceBeforeTheLineBreakPreservesIt(): void
+    {
+        self::tpl('ws_spaced', "X\n{% if true %} \nY\n{% endif %}\nZ");
+        $this->assertSame("X\n \nY\nZ", self::render('ws_spaced'));
+    }
+
+    /**
+     * Only ONE break is removed: a deliberate blank line survives as one newline
+     * rather than collapsing to nothing.
+     */
+    public function testOnlyOneLineBreakIsRemoved(): void
+    {
+        self::tpl('ws_two_breaks', "X\n{% if true %}\n\nY{% endif %}");
+        $this->assertSame("X\n\nY", self::render('ws_two_breaks'));
+    }
+
+    /**
+     * An output tag must NOT consume a line break. Twig's lexer has no `\n?` after
+     * `}}` and Stempler emits a call rather than a tag boundary, so trimming here
+     * would delete newlines the other engines keep — trading one divergence for
+     * another. This is the boundary of the rule, so it is pinned.
+     */
+    public function testOutputTagDoesNotConsumeALineBreak(): void
+    {
+        self::tpl('ws_output_keeps', "A\n{{ 'X' }}\nB");
+        $this->assertSame("A\nX\nB", self::render('ws_output_keeps', []));
+    }
+
+    /**
+     * A CRLF template loses the whole CRLF, not just the LF — otherwise the left
+     * over `\r` would itself be the blank line this rule exists to remove.
+     * (Windows checkouts are CRLF, which is how the competition templates are.)
+     */
+    public function testCarriageReturnLineFeedIsRemovedWhole(): void
+    {
+        self::tpl('ws_crlf', "X\r\n{% if true %}\r\nY\r\n{% endif %}\r\nZ");
+        $this->assertSame("X\r\nY\r\nZ", self::render('ws_crlf'));
+    }
+
+    /**
+     * Spaces and tabs are NOT touched - only line breaks. So indentation survives
+     * untouched, which is what keeps this from being a general whitespace
+     * collapse. It is also the same escape hatch PHP's close-tag rule provides.
+     */
+    public function testSpacesAndTabsAfterATagArePreserved(): void
+    {
+        self::tpl('ws_spaces_kept', "A{% if true %}   \nB{% endif %}");
+        $this->assertSame("A   \nB", self::render('ws_spaces_kept'));
+    }
+
+    // =========================================================================
     // Include / Extends / Block / Object casting
     // =========================================================================
 
@@ -216,7 +326,7 @@ class RenderingTest extends BaseTestCase
         $this->assertSame('<html>Hello, World!</html>', $result);
     }
 
-    public function testObjectCasting(): void
+    public function testObjectPropertyAccess(): void
     {
         $obj = new \stdClass();
         $obj->name = 'Charlie';
@@ -225,7 +335,12 @@ class RenderingTest extends BaseTestCase
         $this->assertSame('Charlie', $result);
     }
 
-    public function testObjectWithToArray(): void
+    /**
+     * A key access on an OBJECT is a compile-time mistake the runtime reports:
+     * the strict syntax spells that read `item.key`. toArray() is a
+     * CONTAINER-only contract (loops, keys, count), never an access path.
+     */
+    public function testKeyAccessOnObjectThrows(): void
     {
         $obj = new class
         {
@@ -234,12 +349,37 @@ class RenderingTest extends BaseTestCase
                 return ['key' => 'value'];
             }
         };
-        self::tpl('toarray', '{{ item.key }}');
-        $result = self::render('toarray', ['item' => $obj]);
-        $this->assertSame('value', $result);
+        self::tpl('toarray', '{{ item:key }}');
+
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/Cannot use object of type/');
+        self::render('toarray', ['item' => $obj]);
     }
 
-    public function testJsonSerializableObjectCasting(): void
+    /**
+     * A public property is a property, not a container entry: `data:prop`
+     * (array-key read) cannot see it, while `data.prop` (property read) does.
+     * That split is the whole point of the strict syntax; the array side goes
+     * through iteration instead.
+     */
+    public function testPropertyReadDoesNotSeeIteratedEntries(): void
+    {
+        $obj = new class
+        {
+            public string $prop = 'from-property';
+        };
+
+        self::tpl('toarray_split', '{{ data.prop }}');
+        $this->assertSame('from-property', self::render('toarray_split', ['data' => $obj]));
+    }
+
+    /**
+     * JsonSerializable is NO LONGER consulted on the access path: with the
+     * eager conversion gone, an object reaches the template as an object and
+     * `data.x` is a property read. The interface keeps its meaning only for
+     * container operations (iteration/keys/count).
+     */
+    public function testJsonSerializableIsNotUsedForPropertyAccess(): void
     {
         $obj = new class implements \JsonSerializable
         {
@@ -249,17 +389,13 @@ class RenderingTest extends BaseTestCase
             }
         };
         self::tpl('jsonser', '{{ data.x }}');
-        $result = self::render('jsonser', ['data' => $obj]);
-        $this->assertSame('42', $result);
+
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/Property "x" is not defined|Cannot read property "x"/');
+        self::render('jsonser', ['data' => $obj]);
     }
 
-    /**
-     * A self-returning jsonSerialize() used to make castToArray() recurse until
-     * the memory limit was hit, because the object was re-tested against the
-     * same branch. The (array) cast that guarded against that also exposed
-     * non-public properties - see testJsonSerializableDoesNotLeakNonPublicState.
-     */
-    public function testSelfReturningJsonSerializableDoesNotRecurseForever(): void
+    public function testJsonSerializableEntriesAreVisibleToIteration(): void
     {
         $obj = new class implements \JsonSerializable
         {
@@ -271,18 +407,13 @@ class RenderingTest extends BaseTestCase
                 return $this;
             }
         };
-        // Loop in (key, value) order so the private property's absence can be
-        // asserted: dot access on a missing key throws instead.
+        // Iteration goes through get_object_vars(), so only PUBLIC state is
+        // reachable -- the private property must never appear.
         self::tpl('jsonser_self', '{% for key, value in data %}[{{ key }}={{ value }}]{% endfor %}');
         $result = self::render('jsonser_self', ['data' => $obj]);
         $this->assertSame('[name=ok]', $result);
     }
 
-    /**
-     * JsonSerializable is a wire-format contract and exposes nothing about
-     * visibility, so it must not widen what a template can reach. `(array)`
-     * did: it flattens private/protected props into mangled keys.
-     */
     public function testJsonSerializableDoesNotLeakNonPublicState(): void
     {
         $obj = new class implements \JsonSerializable
@@ -301,12 +432,7 @@ class RenderingTest extends BaseTestCase
         $this->assertSame('[owner=alice]', $result);
     }
 
-    /**
-     * A plain object of the same shape must produce the same result as the
-     * JsonSerializable one, i.e. visibility rules may not depend on whether a
-     * class happens to implement the interface.
-     */
-    public function testJsonSerializableMatchesPlainObjectVisibility(): void
+    public function testPlainObjectIterationMatchesJsonSerializableVisibility(): void
     {
         $plain = new class
         {
@@ -320,33 +446,12 @@ class RenderingTest extends BaseTestCase
     }
 
     /**
-     * toArray() declares an array return type; jsonSerialize() does not. An
-     * object offering both must therefore resolve through toArray().
+     * A plain object that is only JsonSerializable has NO string form, and the
+     * engine no longer synthesises one by casting it. Rendering an object in an
+     * output position is therefore an error -- a silent "Array" conversion is
+     * exactly what the removed cast used to do.
      */
-    public function testToArrayWinsOverJsonSerializable(): void
-    {
-        $obj = new class implements \JsonSerializable
-        {
-            public function jsonSerialize(): mixed
-            {
-                return ['winner' => 'jsonSerialize'];
-            }
-
-            public function toArray(): array
-            {
-                return ['winner' => 'toArray'];
-            }
-        };
-        self::tpl('both_contracts', '{{ data.winner }}');
-        $result = self::render('both_contracts', ['data' => $obj]);
-        $this->assertSame('toArray', $result);
-    }
-
-    /**
-     * A scalar returned from jsonSerialize() used to be wrapped in a
-     * one-element array by the (array) cast.
-     */
-    public function testJsonSerializableReturningScalarIsNotWrapped(): void
+    public function testNonStringableObjectCannotBeRendered(): void
     {
         $obj = new class implements \JsonSerializable
         {
@@ -356,13 +461,15 @@ class RenderingTest extends BaseTestCase
             }
         };
         self::tpl('jsonser_scalar', '{{ data }}');
-        $result = self::render('jsonser_scalar', ['data' => $obj]);
-        $this->assertSame('plain-string', $result);
+
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/could not be converted to string/');
+        self::render('jsonser_scalar', ['data' => $obj]);
     }
 
     /**
      * method_exists() reports true for non-public methods, so a private
-     * toArray() used to trigger "Call to private method".
+     * toArray() must be ignored rather than triggering "Call to private method".
      */
     public function testPrivateToArrayIsIgnored(): void
     {
@@ -381,18 +488,9 @@ class RenderingTest extends BaseTestCase
     }
 
     /**
-     * DateTimeInterface is neither JsonSerializable nor Traversable and exposes
-     * no public properties, so it used to cast to [] and make the date filter
-     * render 1970-01-01.
+     * A bare DateTime object is no longer stringified eagerly; the date filter
+     * accepts it directly, which is what its own contract always claimed.
      */
-    public function testDateTimeInterfaceBecomesIsoString(): void
-    {
-        $dt = new \DateTime('2026-09-21 12:00:00+02:00');
-        self::tpl('datetime', '{{ createdAt }}');
-        $result = self::render('datetime', ['createdAt' => $dt]);
-        $this->assertSame('2026-09-21T12:00:00+02:00', $result);
-    }
-
     public function testDateTimeInterfaceWorksWithDateFilter(): void
     {
         $dt = new \DateTime('2026-09-21 12:00:00+02:00');
@@ -401,12 +499,12 @@ class RenderingTest extends BaseTestCase
         $this->assertSame('2026-09-21', $result);
     }
 
-    public function testDateTimeImmutableBecomesIsoString(): void
+    public function testDateTimeImmutableWorksWithDateFilter(): void
     {
         $dt = new \DateTimeImmutable('2026-09-21 12:00:00+02:00');
-        self::tpl('datetime_immutable', '{{ createdAt }}');
-        $result = self::render('datetime_immutable', ['createdAt' => $dt]);
-        $this->assertSame('2026-09-21T12:00:00+02:00', $result);
+        self::tpl('datetime_immutable_filter', '{{ createdAt |> date("Y-m-d") }}');
+        $result = self::render('datetime_immutable_filter', ['createdAt' => $dt]);
+        $this->assertSame('2026-09-21', $result);
     }
 
     /**
@@ -430,8 +528,28 @@ class RenderingTest extends BaseTestCase
     }
 
     /**
-     * The general object -> array rule stays dominant: an object with public
-     * properties must not have them silently replaced by __toString().
+     * A value object is a STRING for the container filters, not a container
+     * with zero entries -- `length` of a money object is the length of its
+     * string form, exactly as before the object->array conversion was removed.
+     */
+    public function testStringableValueObjectKeepsStringSemanticsForLength(): void
+    {
+        $obj = new class
+        {
+            private int $cents = 1234;
+
+            public function __toString(): string
+            {
+                return '12.34';
+            }
+        };
+        self::tpl('stringable_len', '{{ price |> length }}');
+        $this->assertSame('5', self::render('stringable_len', ['price' => $obj]));
+    }
+
+    /**
+     * An object with public properties is still read by its PROPERTY names; the
+     * public state is never silently replaced by __toString().
      */
     public function testObjectWithPublicPropertiesIgnoresToString(): void
     {

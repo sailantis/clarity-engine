@@ -104,8 +104,8 @@
     <div class="feature-grid">
       {% for feature in features %}
         <div class="feature-card">
-          <h3>{{ feature.icon }} {{ feature.title }}</h3>
-          <p>{{ feature.description }}</p>
+          <h3>{{ feature:icon }} {{ feature:title }}</h3>
+          <p>{{ feature:description }}</p>
         </div>
       {% endfor %}
     </div>
@@ -116,8 +116,8 @@
     <div class="stats">
       {% for stat in stats %}
         <div class="stat">
-          <div class="number">{{ stat.value }}</div>
-          <div class="label">{{ stat.label }}</div>
+          <div class="number">{{ stat:value }}</div>
+          <div class="label">{{ stat:label }}</div>
         </div>
       {% endfor %}
     </div>
@@ -148,8 +148,8 @@
       {% for link in quickLinks %}
         <li>
           <a
-            href="{{ link.url }}"
-            style="color: #4caf50; text-decoration: none">{{ link.title }}</a
+            href="{{ link:url }}"
+            style="color: #4caf50; text-decoration: none">{{ link:title }}</a
       >
         </li>
       {% endfor %}
@@ -164,6 +164,6 @@
 {% block scripts %}
   <script>
     console.log("Page-specific JavaScript loaded");
-    console.log("Features count: {{ features.length }}");
+    console.log("Features count: {{ features:length }}");
   </script>
 {% endblock %}

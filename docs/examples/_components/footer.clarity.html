@@ -20,9 +20,9 @@
       {% for link in footerLinks ?? [ {title: 'Privacy Policy', url:
       '/privacy'}, {title: 'Terms of Service', url: '/terms'}, {title:
       'Contact', url: '/contact'} ] %}
-      <a href="{{ link.url }}" style="color: #4caf50; text-decoration: none; transition: opacity 0.3s"
+      <a href="{{ link:url }}" style="color: #4caf50; text-decoration: none; transition: opacity 0.3s"
         onmouseover="this.style.opacity = '0.8'" onmouseout="this.style.opacity = '1'">
-        {{ link.title }}
+        {{ link:title }}
       </a>
       {% if not loop.last %}<span style="color: #666">|</span>{% endif %} {%
       endfor %}
@@ -31,13 +31,13 @@
     {% if socialLinks %}
     <div style="margin-top: 20px">
       {% for social in socialLinks %}
-      <a href="{{ social.url }}" style="
+      <a href="{{ social:url }}" style="
           color: white;
           margin: 0 10px;
           text-decoration: none;
           font-size: 20px;
         " target="_blank">
-        {{ social.icon }}
+        {{ social:icon }}
       </a>
       {% endfor %}
     </div>

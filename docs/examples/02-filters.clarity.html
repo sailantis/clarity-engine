@@ -159,13 +159,13 @@
       <p>Use lambdas with map, filter, and reduce:</p>
 
       <div class="example">
-        <strong>Map (extract names):</strong> {{ users |> map(u => u.name) |>
+        <strong>Map (extract names):</strong> {{ users |> map(u => u:name) |>
         join(', ') }}
       </div>
 
       <div class="example">
-        <strong>Filter (active only):</strong> {{ users |> filter(u => u.active)
-        |> map(u => u.name) |> join(', ') }}
+        <strong>Filter (active only):</strong> {{ users |> filter(u => u:active)
+        |> map(u => u:name) |> join(', ') }}
       </div>
 
       <div class="example">

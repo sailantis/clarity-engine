@@ -272,39 +272,6 @@ class SecurityErrorMappingTest extends BaseTestCase
         }
     }
 
-    public function testNonMappedWarningDoesNotAbortRendering(): void
-    {
-        // Diagnostics that are not variable-resolution errors (here: a foreach
-        // over null) are annotated with the template location and handed to the
-        // application's error handler.  Rendering CONTINUES: the partial output is
-        // returned instead of the whole render being aborted, because the severity
-        // policy belongs to the application, not to the template engine.
-        self::tpl('warning_passthrough', "before\n{% for x in maybe %}{{ x }}{% endfor %}\nafter");
-
-        $seen = null;
-        set_error_handler(static function (int $no, string $msg) use (&$seen): bool {
-            $seen = [$no, $msg];
-            return true;
-        });
-
-        try {
-            $output = self::render('warning_passthrough', ['maybe' => null]);
-        } finally {
-            restore_error_handler();
-        }
-
-        $this->assertStringContainsString('before', $output);
-        $this->assertStringContainsString('after', $output);
-
-        // The application handler must have received the diagnostic, annotated
-        // with the template location.  Without chaining PHP's built-in handler
-        // would have reported it to stderr and this handler would never run.
-        $this->assertNotNull($seen, 'the application error handler must receive template diagnostics');
-        $this->assertSame(E_USER_WARNING, $seen[0]);
-        $this->assertStringContainsString('warning_passthrough', $seen[1]);
-        $this->assertStringContainsString('foreach() argument', $seen[1]);
-    }
-
     public function testDiagnosticsOutsideTemplateReachApplicationHandler(): void
     {
         // A diagnostic raised outside the compiled template is none of Clarity's

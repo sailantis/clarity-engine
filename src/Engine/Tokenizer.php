@@ -21,7 +21,7 @@ use Clarity\ClarityException;
  * do not perform a full grammar check here.
  *
  * Conversions performed
- * • var-chains (foo.bar[x].baz) → $vars['foo']['bar'][$vars['x']]['baz']
+ * • var-chains (foo.bar[x].baz) → $__va['foo']['bar'][$__va['x']]['baz']
  * • logical operators:  and → &&,  or → ||,  not → !
  * • bitwise operators:  bor → |,  band → &,  bxor → ^,  bnot → ~,  blsh → <<,  brsh → >>
  * • concat operator:    ~   → .
@@ -56,13 +56,29 @@ class Tokenizer
 
     private ?Registry $registry = null;
 
+    /**
+     * A BARE root dereference: `$__va['name']`. These are special because
+     * isset() on them reports an ABSENT ROOT as false with no warning, which is
+     * exactly the tolerance `?` promises.
+     *
+     * Deliberately excludes anything with `->` or a second key: isset() would
+     * suppress a missing PROPERTY or an intermediate missing KEY too, turning a
+     * mistyped strict segment into a silent null.
+     */
+    private const BARE_ROOT_RE = '/^\$__va\[\'[A-Za-z_][A-Za-z0-9_]*\'\]$/';
+
+    /**
+     * Monotonic counter for temporaries emitted by optional array guards, so two
+     * guards in one expression never collide. Per-instance, compile-time only.
+     */
+    private int $guardCounter = 0;
     private array $varChainCache = [];
 
     /**
      * Compile-time local variable context: templateVarName → PHP variable string.
      * Set by the Compiler when entering/leaving loop scopes so that expressions
      * inside loops resolve loop variables to direct PHP local variables instead
-     * of $vars['name'] lookups.
+     * of $__va['name'] lookups.
      *
      * @var array<string, string>
      */
@@ -115,7 +131,7 @@ class Tokenizer
      *
      * Called by the Compiler when entering or exiting a loop scope so that
      * variable resolution inside the loop uses direct PHP local variables
-     * ($__lv_item_0) rather than $vars['item'] array lookups.
+     * ($__lv_item_0) rather than $__va['item'] array lookups.
      *
      * @param array<string, string> $localVars  templateVarName → PHP variable string
      */
@@ -134,77 +150,226 @@ class Tokenizer
     /**
      * Split a raw template source into an ordered array of segments.
      *
+     * Tag boundaries are located by a quote-aware, brace-depth-aware scanner
+     * rather than a single flat regex. A closing delimiter may legitimately
+     * appear inside a string literal (`{{ '}}' }}`) or next to a literal brace
+     * (`{{ v }}}`, `{{ { a: 1 } }}`, `{{ user{k}}}`), none of which a naive
+     * lazy match can handle.
+     *
      * Each element is:  ['type' => TEXT|OUTPUT|BLOCK, 'content' => string, 'line' => int]
      *
      * @param string $source Raw template source.
      * @return array<int, array{int, string, int}>
+     * @throws ClarityException When a tag is opened and never closed. A stray
+     *                          delimiter is almost always an authoring bug, so
+     *                          it is reported rather than emitted as text.
      */
     public function tokenize(string $source): array
     {
-        $segments = [];
-        $pattern  = '/\{\{.*?\}\}++|\{%.*?%\}++|\{#.*?#\}++/s';
-        if (!\preg_match_all($pattern, $source, $matches, PREG_OFFSET_CAPTURE)) {
+        // All opener candidates in ONE regex pass. Openers that turn out to sit
+        // inside a previous tag's content (e.g. a literal `{{` in a string) are
+        // skipped by the $pos guard below, so this stays correct while paying
+        // for a single PCRE invocation rather than one per tag.
+        if (!\preg_match_all('/\{\{|\{%|\{#/', $source, $matches, \PREG_OFFSET_CAPTURE)) {
             return [
                 [
                     self::KEY_TYPE    => self::TEXT,
                     self::KEY_CONTENT => \trim($source),
-                    self::KEY_LINE    => 1
+                    self::KEY_LINE    => 1,
                 ]
             ];
         }
 
-        $line = 1;
-        $pos  = 0;
-        foreach ($matches[0] as [$match, $offset]) {
-            if ($offset > $pos) {
-                $text = \substr($source, $pos, $offset - $pos);
-                if (\trim($text) !== '') {
+        $segments  = [];
+        $sourceLen = \strlen($source);
+        $line      = 1;
+        $pos       = 0;
+
+        foreach ($matches[0] as [$opener, $tagPos]) {
+            if ($tagPos < $pos) {
+                continue; // opener inside the content of an already-consumed tag
+            }
+
+            switch ($opener) {
+                case '{{':
+                    $type = self::OUTPUT;
+                    break;
+                case '{%':
+                    $type = self::BLOCK;
+                    break;
+                default:
+                    $type = self::COMMENT;
+                    break;
+            }
+
+            if ($tagPos > $pos) {
+                $text = \substr($source, $pos, $tagPos - $pos);
+                if (self::hasVisibleText($text)) {
                     $segments[] = [
                         self::KEY_TYPE    => self::TEXT,
                         self::KEY_CONTENT => $text,
-                        self::KEY_LINE    => $line
+                        self::KEY_LINE    => $line,
                     ];
                 }
                 $line += \substr_count($text, "\n");
             }
 
-            $len   = \strlen($match);
-            $inner = \trim(\substr($match, 2, $len - 4));
-            switch ($match[1]) {
-                case '{':
-                    $type = self::OUTPUT;
-                    break;
-                case '%':
-                    $type = self::BLOCK;
-                    break;
-                case '#':
-                    $type = self::COMMENT;
-                    break;
-                default:
-                    throw new ClarityException("Unexpected tag type in match: {$match[0]}");
+            $innerStart = $tagPos + 2;
+
+            if ($type === self::COMMENT) {
+                $close = \strpos($source, '#}', $innerStart);
+                if ($close === false) {
+                    throw new ClarityException(
+                        'Unclosed comment tag opened on template line ' . $line
+                            . ": no matching '#}' before the end of the template.",
+                        '',
+                        $line
+                    );
+                }
+                $end = $close + 2;
+            } else {
+                $closer = $type === self::OUTPUT ? '}}' : '%}';
+                $close  = self::findTagClose($source, $innerStart, $sourceLen, $closer);
+                if ($close === null) {
+                    throw new ClarityException(
+                        'Unclosed ' . ($type === self::OUTPUT ? 'output' : 'block')
+                            . ' tag opened on template line ' . $line
+                            . ": no matching '{$closer}' before the end of the template.",
+                        '',
+                        $line
+                    );
+                }
+                $end = $close + 2;
             }
+
             $segments[] = [
                 self::KEY_TYPE    => $type,
-                self::KEY_CONTENT => $inner,
-                self::KEY_LINE    => $line
+                self::KEY_CONTENT => \trim(\substr($source, $innerStart, $end - 2 - $innerStart)),
+                self::KEY_LINE    => $line,
             ];
 
-            $line += \substr_count($match, "\n");
-            $pos = $offset + $len;
+            $line += \substr_count(\substr($source, $tagPos, $end - $tagPos), "\n");
+            $pos = $end;
         }
 
-        if ($pos < \strlen($source)) {
+        if ($pos < $sourceLen) {
             $rest = \substr($source, $pos);
-            if (\trim($rest) !== '') {
+            if (self::hasVisibleText($rest)) {
                 $segments[] = [
                     self::KEY_TYPE    => self::TEXT,
                     self::KEY_CONTENT => $rest,
-                    self::KEY_LINE    => $line
+                    self::KEY_LINE    => $line,
                 ];
             }
         }
 
         return $segments;
+    }
+
+    /**
+     * Whether a text segment carries anything other than whitespace.
+     *
+     * Equivalent to `\trim($segment) !== ''` but without materialising the
+     * trimmed copy, which matters because generated pages run to hundreds of
+     * kilobytes and a `trim()` of every text run shows up in the compile cost.
+     */
+    private static function hasVisibleText(string $segment): bool
+    {
+        return \strspn($segment, " \t\n\r\0\x0B") < \strlen($segment);
+    }
+
+    /**
+     * Locate a tag's closing delimiter, ignoring delimiters that appear inside
+     * a string literal and braces nested in a collection literal.
+     *
+     * @param string $source Full template source.
+     * @param int    $from   Offset just past the two-character opener.
+     * @param int    $len    Length of $source.
+     * @param string $closer Two-character closer ('}}' or '%}').
+     * @return int|null Offset of the closer's first character, or null when the
+     *                  source ends before a balanced closer is found.
+     */
+    private static function findTagClose(string $source, int $from, int $len, string $closer): ?int
+    {
+        // Fast path: the overwhelming majority of tags contain no quote and no
+        // brace, so the first closer found by strpos is already the answer. One
+        // bulk scan from $from decides that without entering the loop below.
+        $firstCloser = \strpos($source, $closer, $from);
+        if ($firstCloser === false) {
+            return null;
+        }
+
+        // Characters that can affect the scan. Everything else is skipped in
+        // bulk: strcspn returns the length of the run that contains none of
+        // them, so a long literal string costs one engine call, not one PHP
+        // loop iteration per byte. The closer's own characters are folded in
+        // (duplicates are harmless).
+        $special = "\"'{" . $closer;
+        $i       = $from + \strcspn($source, $special, $from, $firstCloser - $from);
+
+        if ($i >= $firstCloser) {
+            return $firstCloser;
+        }
+
+        $depth = 0;
+        $c1    = $closer[0];
+        $c2    = $closer[1];
+
+        while ($i < $len) {
+            $i += \strcspn($source, $special, $i, $len - $i);
+            if ($i >= $len) {
+                break;
+            }
+
+            $ch = $source[$i];
+
+            if ($ch === "'" || $ch === '"') {
+                $i = self::skipStringLiteral($source, $i, $len);
+                continue;
+            }
+
+            if ($ch === '{') {
+                $depth++;
+            } elseif ($ch === '}') {
+                if ($depth > 0) {
+                    $depth--;
+                } elseif ($c1 === '}' && ($source[$i + 1] ?? '') === $c2) {
+                    return $i;
+                }
+            } elseif ($depth === 0 && $ch === $c1 && ($source[$i + 1] ?? '') === $c2) {
+                return $i;
+            }
+
+            $i++;
+        }
+
+        return null;
+    }
+
+    /**
+     * Advance past a quoted string literal. $i must point at the opening quote.
+     * Backslash escapes are honoured; an unterminated literal runs to the end.
+     *
+     * @return int Offset just past the closing quote, or $len when unterminated.
+     */
+    private static function skipStringLiteral(string $source, int $i, int $len): int
+    {
+        $quote = $source[$i];
+        $i++;
+
+        while ($i < $len) {
+            $ch = $source[$i];
+            if ($ch === '\\') {
+                $i += 2;
+                continue;
+            }
+            if ($ch === $quote) {
+                return $i + 1;
+            }
+            $i++;
+        }
+
+        return $len;
     }
 
     // -------------------------------------------------------------------------
@@ -277,11 +442,11 @@ class Tokenizer
     }
 
     /**
-     * Convert a Clarity variable chain to its PHP $vars[...] equivalent.
+     * Convert a Clarity variable chain to its PHP $__va[...] equivalent.
      * Used for the left-hand side of {% set var = ... %}.
      *
      * @param string $var Clarity variable name (e.g. 'user.name', 'items[0]').
-     * @return string PHP lvalue (e.g. '$vars[\'user\'][\'name\']').
+     * @return string PHP lvalue (e.g. '$__va[\'user\'][\'name\']').
      */
     public function processLvalue(string $var): string
     {
@@ -293,17 +458,16 @@ class Tokenizer
     // -------------------------------------------------------------------------
 
     /**
-    /**
-    * Normalize bare | to |> so that both act as the filter pipe operator.
-    *
-    * Rules (applied only at the top nesting level, outside quoted strings):
-    *   ||  → passed through unchanged  (PHP logical OR)
-    *   |>  → passed through unchanged  (already the canonical pipe)
-    *   |   → rewritten to |>           (Twig/Svelte-compatible shorthand)
-    *
-    * This runs before splitPipeline() so that the rest of the pipeline logic
-    * only ever sees |> as the delimiter.
-    */
+     * Normalize bare | to |> so that both act as the filter pipe operator.
+     *
+     * Rules (applied only at the top nesting level, outside quoted strings):
+     *   ||  → passed through unchanged  (PHP logical OR)
+     *   |>  → passed through unchanged  (already the canonical pipe)
+     *   |   → rewritten to |>           (Twig/Svelte-compatible shorthand)
+     *
+     * This runs before splitPipeline() so that the rest of the pipeline logic
+     * only ever sees |> as the delimiter.
+     */
     private function normalizePipeOperator(string $expr): string
     {
         $len = \strlen($expr);
@@ -477,7 +641,7 @@ class Tokenizer
 
     /**
      * Convert a Clarity expression (no pipeline) to PHP by:
-     * 1. Replacing var-chains with $vars[...] accesses
+     * 1. Replacing var-chains with $__va[...] accesses
      * 2. Replacing logical/string operators with PHP equivalents
      * 3. Rejecting function-call syntax: any identifier followed by '(' throws
      *    a ClarityException at compile time — use the |> filter pipeline instead.
@@ -508,6 +672,27 @@ class Tokenizer
         $inSingle = false;
         $inDouble = false;
 
+        // Ternary tracking, LOCAL to this call so parentheses get their own
+        // scope for free: `(` recurses through processCondition(), and the paren
+        // body is compiled by a fresh convertVarsAndOps() with its own state.
+        // That is what lets `cond ? (foo ? bar : blubb) : blobb` nest to any
+        // depth without a shared counter.
+        //
+        // `$ternarySeen` answers the one question the parser cannot answer from
+        // spacing alone: whether a `:` is a ternary separator or an array-key
+        // read. Once a ternary is open, a colon only reads as a key when it is
+        // glued to both sides.
+        //
+        // `$ternaryPhases` records the branch each open ternary is in, because
+        // PHP rejects a ternary CHAINED in an else position
+        // (`a ? b : c ? d : e`) while accepting the nested then-branch form
+        // (`a ? b ? c : d : e`). Catching that here turns a fatal PHP parse
+        // error — which happens when the generated class is loaded and cannot be
+        // caught — into a normal compile error with a line number.
+        $ternarySeen     = false;
+        $ternaryPhases   = [];
+        $ternaryOpenedAt = [];
+
         while ($i < $len) {
             $ch = $expr[$i];
 
@@ -536,6 +721,108 @@ class Tokenizer
                 continue;
             }
 
+            // A ternary `?` opens a branch that ends at the next `:` that is not
+            // an array-key read. `??`, `?.`, `?[`, `?{` and `?->` are separate
+            // operators and leave the state alone. `?:` (optional key) is glued
+            // to a key, so it is not a ternary either.
+            if ($ch === '?') {
+                $next = $expr[$i + 1] ?? '';
+                if ($next !== '?' && $next !== '.' && $next !== '[' && $next !== '{' && $next !== ':') {
+                    $isArrow = $next === '-' && ($expr[$i + 2] ?? '') === '>';
+                    if (
+                        !$isArrow
+                        && $i > 0 && \ctype_space($expr[$i - 1])
+                        && $next !== '' && \ctype_space($next)
+                    ) {
+                        // A ternary opening inside an ELSE branch would be
+                        // chained, and PHP rejects `a ? b : c ? d : e` outright.
+                        // Because the parenthesised form recurses, an else
+                        // branch that is wrapped in `(` never reaches here, so
+                        // reaching it is unambiguous.
+                        if (\end($ternaryPhases) === 'else') {
+                            throw new ClarityException(
+                                "Unparenthesised nested ternary: PHP parses 'a ? b : c ? d : e' as invalid. "
+                                    . "Wrap the else-branch in parentheses, as in 'a ? b : (c ? d : e)', in '{$expr}'."
+                            );
+                        }
+
+                        // `cond ? cond2 ? x : y : z` nests in the THEN branch,
+                        // which PHP accepts and this engine already supported.
+                        $ternarySeen       = true;
+                        $ternaryPhases[]   = 'then';
+                        $ternaryOpenedAt[] = $i;
+                    }
+                }
+            }
+
+            // Ternary separator: reached only when a ternary is open AND the
+            // colon is not a key read. Chains are compiled before this point, so
+            // a glued `a:b` is consumed as a key and never arrives here.
+            //
+            // A ternary colon may be spaced on either side (`x : y`, `x: y`,
+            // `x :y`) because an open ternary makes the reading unambiguous. Two
+            // spellings are errors rather than ambiguity:
+            //   • `?:` glued both sides is the optional-key operator.
+            //   • a colon glued to a following identifier would read as a key
+            //     chain, which is the trap this whole rule exists to avoid.
+            if ($ch === ':' && $ternarySeen && !$this->isChainColon($expr, $i, true)) {
+                $phase  = array_pop($ternaryPhases) ?? 'then';
+                $opened = array_pop($ternaryOpenedAt) ?? 0;
+
+                // An empty then-branch would compile to PHP's `?:` shorthand
+                // (`a ?: b`), which tests the CONDITION for truthiness instead
+                // of reading an optional key. The two spellings differ by one
+                // space, so this is reported rather than left to mean something
+                // the author did not write.
+                $then = \trim(\substr($expr, $opened + 1, $i - $opened - 1));
+                if ($then === '') {
+                    throw new ClarityException(
+                        "Ternary is missing its then-branch in '{$expr}'. "
+                            . "For an optional array key write 'name?:key' without the space."
+                    );
+                }
+
+                $j = $i + 1;
+                while ($j < $len && \ctype_space($expr[$j])) {
+                    $j++;
+                }
+                $after = $expr[$j] ?? '';
+
+                // `else if` is not a Clarity construct; an if-chain is a nested
+                // ternary whose else-branch is itself a ternary. PHP only parses
+                // that when the branch is parenthesised, so require it here
+                // rather than emitting code PHP will refuse to load.
+                if (
+                    $this->startsIdentifier($after)
+                    && substr($expr, $j, 2) === 'if'
+                    && !$this->isIdentChar($expr[$j + 2] ?? '')
+                ) {
+                    throw new ClarityException(
+                        "Nested ternary else-branch must be parenthesised: write "
+                            . "'cond ? x : (cond2 ? y : z)' instead of using 'else if' in '{$expr}'."
+                    );
+                }
+
+                // The `else` branch may not itself be an unparenthesised ternary:
+                // PHP rejects `a ? b : c ? d : e` outright. `a ? b ? c : d : e`
+                // is fine (then-branch), and a parenthesised else-branch starts a
+                // fresh scope where a new ternary is legal — this call recurses
+                // for it via processCondition(), so the tracked phase there is
+                // independent.
+                //
+                // Spacing around this colon carries no meaning beyond what
+                // isChainColon() already decided: reaching this point means the
+                // colon is a separator, so `x : y`, `x: y` and `x :y` are all
+                // ternaries. (A colon glued on BOTH sides is a key read and was
+                // consumed above, which is what keeps `cond ? a:b : c` working.)
+                $next = $expr[$i + 1] ?? '';
+                if ($phase === 'then' && $next !== '(' && $next !== '') {
+                    $ternaryPhases[] = 'else';
+                }
+
+                $ternarySeen = $ternaryPhases !== [];
+            }
+
             // Map single-char operator ~ outside strings
             if ($ch === '~') {
                 $out .= '.';
@@ -554,11 +841,61 @@ class Tokenizer
                 throw new ClarityException('Heredoc/nowdoc syntax (<<<) is not allowed in Clarity expressions.');
             }
 
-            // Disallow bare PHP dollar-sign: $var or $$var inside an expression
-            // would compile to direct PHP variable access, bypassing the sandbox.
-            // All variables must be accessed via the dot-chain syntax (foo.bar).
+            // A `?->` that reaches here has no `$` sigil, so it is a plain
+            // expression. Left alone it would be copied through as raw PHP
+            // nullsafe syntax — a leak the sigil rule exists to prevent — and a
+            // SPACED `? ->` is a syntax error in PHP rather than a nullsafe read.
+            if ($ch === '?' && ($expr[$i + 1] ?? '') === '-') {
+                $afterArrow = $expr[$i + 2] ?? '';
+                if ($afterArrow === '>') {
+                    throw new ClarityException(
+                        "PHP-style property access ('->') requires the \$ sigil: "
+                            . "write \$a?->b or a?.b instead of '?->' in '{$expr}'."
+                    );
+                }
+            }
+
+            // The `$` sigil introduces a PHP-style chain: $user->name, $a.b,
+            // $a?.b. It is the ONLY way to spell `->`; a bare `a->b` is rejected
+            // by parseVarChainAt() so raw PHP property syntax can never be
+            // emitted from an unmarked expression.
             if ($ch === '$') {
-                throw new ClarityException("Direct PHP variable access ('\$') is not allowed in Clarity expressions; use dot-notation instead.");
+                $sigilStart = $i + 1;
+                $next       = $expr[$sigilStart] ?? '';
+                if (!(\ctype_alpha($next) || $next === '_')) {
+                    throw new ClarityException(
+                        "Direct PHP variable access ('\$') is not allowed in Clarity expressions; "
+                            . "use a variable name after the sigil (\$name) or dot-notation (name.field)."
+                    );
+                }
+
+                $parsed = $this->parseVarChainAt($expr, $sigilStart, true, $ternarySeen);
+                if ($parsed === null) {
+                    $out .= $ch;
+                    $i++;
+                    continue;
+                }
+
+                $i        = $parsed['end'];
+                $segments = $parsed['segments'];
+                $token    = \substr($expr, $sigilStart, $i - $sigilStart);
+
+                // Property access can never be a method call.
+                $j = $i;
+                while ($j < $len && \ctype_space($expr[$j])) {
+                    $j++;
+                }
+                if ($j < $len && $expr[$j] === '(') {
+                    $context = \substr($expr, \max(0, $sigilStart - 10), 70);
+                    throw new ClarityException("Method calls are not allowed in expressions: '\${$token}(...)' in context '{$context}'");
+                }
+
+                if (isset($this->localVars[$segments[0]['value']])) {
+                    $out .= $this->buildVarChainPhpWithLocalRoot($segments);
+                } else {
+                    $out .= $this->varChainToPhpWithSegments('$' . $token, $segments);
+                }
+                continue;
             }
 
             if (
@@ -596,7 +933,24 @@ class Tokenizer
                     $idEnd++;
                 }
                 $nextAfterIdent = $expr[$idEnd] ?? '';
-                if ($nextAfterIdent !== '.' && $nextAfterIdent !== '[') {
+                $nextTwo        = \substr($expr, $idEnd, 2);
+
+                // Whitespace may separate an identifier from its continuation,
+                // so the fast path must look past it before deciding that this
+                // is a plain name. Doing so here (rather than after the token is
+                // emitted) is what keeps `user.\nname` on the chain path.
+                $contPos = $idEnd;
+                while ($contPos < $len && \ctype_space($expr[$contPos])) {
+                    $contPos++;
+                }
+                $contChar = $expr[$contPos] ?? '';
+                $contTwo  = \substr($expr, $contPos, 2);
+
+                if (
+                    $contChar !== '.' && $contChar !== '['
+                        && $contChar !== '{' && $contChar !== ':'
+                        && $contChar !== '?' && $contTwo !== '->'
+                ) {
                     // Plain identifier — may be a keyword or a cacheable single-segment chain
                     $token = \substr($expr, $start, $idEnd - $start);
                     $i     = $idEnd;
@@ -628,7 +982,7 @@ class Tokenizer
                     }
 
                     // Check local vars (loop variables) before the cache: a locally-bound
-                    // variable must resolve to its PHP local var, not to $vars['name'].
+                    // variable must resolve to its PHP local var, not to $__va['name'].
                     if (isset($this->localVars[$token])) {
                         $out .= $this->localVars[$token];
                         continue;
@@ -637,7 +991,7 @@ class Tokenizer
                     if (isset($this->varChainCache[$token])) {
                         $out .= $this->varChainCache[$token];
                     } else {
-                        $parsed = $this->parseVarChainAt($expr, $start);
+                        $parsed = $this->parseVarChainAt($expr, $start, false, $ternarySeen);
                         $php    = $parsed !== null
                             ? $this->varChainToPhpWithSegments($token, $parsed['segments'])
                             : $token;
@@ -646,17 +1000,34 @@ class Tokenizer
                     continue;
                 }
 
-                // Identifier followed by '.' or '[' — full chain parsing required
-                $parsed = $this->parseVarChainAt($expr, $start);
+                // Identifier followed by a chain continuation — full chain parsing required.
+                $parsed = $this->parseVarChainAt($expr, $start, false, $ternarySeen);
                 if ($parsed === null) {
                     $out .= $ch;
                     $i++;
                     continue;
                 }
 
-                $i        = $parsed['end'];
                 $segments = $parsed['segments'];
-                $token    = \substr($expr, $start, $i - $start);
+
+                // A chain that could not consume anything past the identifier is not
+                // a chain at all (e.g. `a ? b`, `a - b`). Emit the bare name so the
+                // operator path below handles the rest.
+                if (\count($segments) === 1) {
+                    $token = $segments[0]['value'];
+                    $i     = $idEnd;
+                    if (isset($this->localVars[$token])) {
+                        $out .= $this->localVars[$token];
+                    } elseif (isset($this->varChainCache[$token])) {
+                        $out .= $this->varChainCache[$token];
+                    } else {
+                        $out .= $this->varChainToPhpWithSegments($token, $segments);
+                    }
+                    continue;
+                }
+
+                $i     = $parsed['end'];
+                $token = \substr($expr, $start, $i - $start);
 
                 // Dot/bracket chains cannot be function calls — always forbidden.
                 $j = $i;
@@ -674,6 +1045,34 @@ class Tokenizer
                     $out .= $this->varChainToPhpWithSegments($token, $segments);
                 }
                 continue;
+            }
+
+            // A `.` that reached the fall-through is not concatenation and not a
+            // chain continuation, so it is a mistake. Concatenation is `~`
+            // (`a ~ b`); `.` always means property access. A valid chain never
+            // arrives here, because parseVarChainAt() consumes the operator and
+            // its member together.
+            //
+            // The one non-chain reading is a DECIMAL literal, which keeps its
+            // dot: `1234.56` (digit on both sides) and `.5` (nothing binding on
+            // the left). That distinction is what keeps a float from being
+            // reported as a missing property name.
+            if ($ch === '.') {
+                $dotPrev = $i > 0 ? $expr[$i - 1] : '';
+                $dotNext = $expr[$i + 1] ?? '';
+                $binds   = \ctype_alnum($dotPrev) || $dotPrev === '_'
+                    || $dotPrev === ')' || $dotPrev === ']' || $dotPrev === '}';
+
+                if ((\ctype_digit($dotPrev) && \ctype_digit($dotNext)) || (!$binds && \ctype_digit($dotNext))) {
+                    $out .= $ch;
+                    $i++;
+                    continue;
+                }
+
+                throw new ClarityException(
+                    "Property access operator '.' must be followed by a property name in '{$expr}'. "
+                        . "Use '~' for string concatenation."
+                );
             }
 
             // default: copy
@@ -809,10 +1208,33 @@ class Tokenizer
                 break;
             }
 
-            if ($expr[$i] === '.') {
-                $nameStart = $i + 1;
-                if ($nameStart >= $len || !(\ctype_alpha($expr[$nameStart]) || $expr[$nameStart] === '_')) {
+            // Optional prefix: `?` immediately before a continuation.
+            $optional = false;
+            if ($expr[$i] === '?') {
+                $next = $expr[$i + 1] ?? '';
+                if (
+                    $next === '.' || $next === '[' || $next === '{'
+                        || ($next === ':' && $this->isChainColon($expr, $i + 1, true)
+                            && $this->startsIdentifier($expr[$i + 2] ?? ''))
+                ) {
+                    $optional = true;
+                    $i++;
+                } else {
                     break;
+                }
+            }
+
+            if ($expr[$i] === '.') {
+                // Whitespace after `.` is allowed, exactly as in parseVarChainAt.
+                $nameStart = $i + 1;
+                while ($nameStart < $len && \ctype_space($expr[$nameStart])) {
+                    $nameStart++;
+                }
+
+                if ($nameStart >= $len || !(\ctype_alpha($expr[$nameStart]) || $expr[$nameStart] === '_')) {
+                    throw new ClarityException(
+                        "Property access operator '.' must be followed by a property name in '{$expr}'."
+                    );
                 }
 
                 $nameEnd = $nameStart + 1;
@@ -820,22 +1242,49 @@ class Tokenizer
                     $nameEnd++;
                 }
 
-                $name = \substr($expr, $nameStart, $nameEnd - $nameStart);
-                $php  = '(' . $php . ')[\'' . $name . '\']';
-                $i    = $nameEnd;
+                $php = $this->appendChainSegmentPhp($php, [
+                    'type'     => 'prop',
+                    'value'    => \substr($expr, $nameStart, $nameEnd - $nameStart),
+                    'optional' => $optional,
+                ]);
+                $i = $nameEnd;
                 continue;
             }
 
-            if ($expr[$i] === '[') {
+            if ($expr[$i] === '[' || $expr[$i] === '{') {
+                $isBrace = $expr[$i] === '{';
                 [$inner, $end] = $this->extractBalancedSegment($expr, $i);
                 $inner = \trim($inner);
                 if ($inner === '') {
                     throw new ClarityException('Index access must not be empty.');
                 }
 
-                $indexPhp = \ctype_digit($inner) ? $inner : $this->processCondition($inner);
-                $php      = '(' . $php . ')[' . $indexPhp . ']';
-                $i        = $end;
+                $php = $this->appendChainSegmentPhp($php, [
+                    'type'     => $isBrace ? 'dyn' : 'index',
+                    'value'    => $inner,
+                    'optional' => $optional,
+                ]);
+                $i = $end;
+                continue;
+            }
+
+            if ($expr[$i] === ':' && $this->isChainColon($expr, $i, true)) {
+                $nameStart = $i + 1;
+                while ($nameStart < $len && \ctype_space($expr[$nameStart])) {
+                    $nameStart++;
+                }
+
+                $nameEnd = $nameStart + 1;
+                while ($nameEnd < $len && (\ctype_alnum($expr[$nameEnd]) || $expr[$nameEnd] === '_')) {
+                    $nameEnd++;
+                }
+
+                $php = $this->appendChainSegmentPhp($php, [
+                    'type'     => 'key',
+                    'value'    => \substr($expr, $nameStart, $nameEnd - $nameStart),
+                    'optional' => $optional,
+                ]);
+                $i = $nameEnd;
                 continue;
             }
 
@@ -1017,7 +1466,7 @@ class Tokenizer
                 if (\trim($argsRaw) !== '') {
                     throw new ClarityException('context() does not accept any arguments.');
                 }
-                return ['$vars', $i];
+                return ['$__va', $i];
             case 'include':
                 $this->autoEscape = false;
                 break;
@@ -1058,9 +1507,63 @@ class Tokenizer
      *
      * Returns null if no valid identifier starts at $start.
      *
-     * @return array{end:int, segments:array<int,array{type:string,value:string}>}|null
+     * Segment types
+     * -------------
+     *  key    array static key    a:b        a?:b
+     *  index  array dynamic index a[i]       a?[i]
+     *  prop   object property     a.b  a->b  a?.b  a?->b
+     *  dyn    object dyn property a{k}       a?{k}
+     *
+     * The root segment is always `key` and resolves against the render scope
+     * ($__va['name']); only its NAME is used, so the `$` sigil form ($a.b) and
+     * the bare form (a.b) produce identical segments.
+     *
+     * Every continuation carries an `optional` flag. Optional access is the
+     * author's opt-out from the strict "missing access throws" contract.
+     *
+     * Whitespace
+     * ---------
+     * A chain continuation may be separated from the value it continues by ANY
+     * amount of whitespace, including newlines, so a long chain can wrap
+     * Go-style (`user.\naddress.\ncity`, `config:\nversion`). This is safe
+     * precisely because `.` is NOT the concatenation operator — it always means
+     * property access, so `a . b` has one reading and no ambiguity to preserve.
+     *
+     * Two operators must stay GLUED to the value on their left, because a
+     * spaced spelling would collide with the ternary operator:
+     *   • `?`  — a spaced `?` is a ternary; `? .` / `?[` / `?:` / `?->` written
+     *            with a gap are therefore NOT optional access.
+     *   • a `.` or `->` with no member after it is an authoring ERROR, not a
+     *     value: there is nothing else it could mean.
+     *
+     * `:` — the ternary problem
+     * -------------------------
+     * A key colon is `:key`. Whitespace on either side is allowed
+     * (`config : version` is the same read as `config:version`), EXCEPT while a
+     * ternary is waiting for its branch separator: then a colon only counts as a
+     * key read when it is glued to BOTH sides. That single rule keeps all of
+     * these working, which no whitespace rule alone can do:
+     *   cond ? x : y     -> ternary      (spaced both sides)
+     *   cond ? x: y      -> ternary      (not glued right)
+     *   cond ? x :y      -> ternary      (not glued left)
+     *   cond ? a:b : c   -> key in then-branch, then the separator
+     *
+     * Optional access guards the RECEIVER only; the member read stays strict.
+     * (`?->` on the object side, `=== null` guard on the array side.)
+     *
+     * @param bool $allowArrow      Whether `->` / `?->` count as property access.
+     *                              True only for `$`-sigil roots; a bare `a->b` is
+     *                              rejected by the caller.
+     * @param bool $ternaryOpen  Whether a `?` is waiting for its branch
+     *                              separator in the enclosing expression.
+     * @return array{end:int, segments:array<int,array{type:string,value:string,optional:bool}>}|null
      */
-    private function parseVarChainAt(string $subject, int $start): ?array
+    private function parseVarChainAt(
+        string $subject,
+        int $start,
+        bool $allowArrow = false,
+        bool $ternaryOpen = false
+    ): ?array
     {
         $len = \strlen($subject);
         if ($start >= $len) {
@@ -1077,40 +1580,143 @@ class Tokenizer
             $i++;
         }
 
-        $segments = [
-            ['type' => 'key', 'value' => \substr($subject, $start, $i - $start)]
+        $root = [
+            'type'     => 'key',
+            'value'    => \substr($subject, $start, $i - $start),
+            'optional' => false
         ];
+        $segments = [$root];
 
         while ($i < $len) {
-            $ch = $subject[$i];
+            $ch       = $subject[$i];
+            $optional = false;
 
-            if ($ch === '.') {
-                $dotPos = $i;
-                $i++;
-                if ($i < $len && (\ctype_alpha($subject[$i]) || $subject[$i] === '_')) {
-                    $idStart = $i;
-                    $i++;
-                    while ($i < $len && (\ctype_alnum($subject[$i]) || $subject[$i] === '_')) {
-                        $i++;
-                    }
-                    $segments[] = ['type' => 'key', 'value' => \substr($subject, $idStart, $i - $idStart)];
-                    continue;
+            // Whitespace before a chain continuation is not significant, so a
+            // chain may wrap Go-style (`user.\naddress.\ncity`,
+            // `config:\nversion`). Look past it, but ONLY when a continuation
+            // really follows: if the next non-space character is an operator
+            // (`+`, `?`, `and`, …) the whitespace separates operands and the
+            // chain ends here.
+            if (\ctype_space($ch)) {
+                $k = $i;
+                while ($k < $len && \ctype_space($subject[$k])) {
+                    $k++;
                 }
 
-                // Not a valid dot-access continuation; keep '.' outside token.
-                $i = $dotPos;
-                break;
+                $nc      = $subject[$k] ?? '';
+                $ncArrow = $nc === '-' && ($subject[$k + 1] ?? '') === '>';
+
+                if (
+                    $nc === '.' || $nc === '[' || $nc === '{' || $ncArrow
+                        || ($nc === ':' && $this->isChainColon($subject, $k, $ternaryOpen))
+                ) {
+                    $i  = $k;
+                    $ch = $nc;
+                } else {
+                    break;
+                }
             }
 
-            if ($ch === '[') {
-                $i++; // skip '['
+            // ---- optional prefix: `?` glued to its continuation ------------
+            if ($ch === '?') {
+                $next    = $subject[$i + 1] ?? '';
+                $isArrow = $next === '-' && ($subject[$i + 2] ?? '') === '>';
+
+                if ($isArrow && !$allowArrow) {
+                    // `a?->b` without the `$` sigil would otherwise fall through
+                    // and emit raw PHP `?->`. Reject it here, where the `?` is
+                    // still visible, rather than at the emission point. Note
+                    // `?->` is THREE characters, so testing only the character
+                    // after `?` never matches it.
+                    throw new ClarityException(
+                        "PHP-style property access ('->') requires the \$ sigil: "
+                            . "write \${$root['value']}?->… or {$root['value']}?.… instead of {$root['value']}?->…"
+                    );
+                }
+
+                if (
+                    $next === '.' || $next === '[' || $next === '{'
+                        || ($isArrow && $allowArrow)
+                        || ($next === ':' && $this->isGlued($subject, $i + 1, $ternaryOpen)
+                            && $this->startsIdentifier($subject[$i + 2] ?? ''))
+                ) {
+                    $optional = true;
+                    $i++;
+                    $ch = $subject[$i];
+                } else {
+                    break; // `??` operator, a ternary `?`, or a spaced `?`
+                }
+            }
+
+            // ---- property access: `.` or (`$`-sigil only) `->` --------------
+            if ($ch === '.' || ($ch === '-' && ($subject[$i + 1] ?? '') === '>')) {
+                $opLen = $ch === '-' ? 2 : 1;
+
+                // A SPACED `.` or `->` after a ternary `?` is not a chain
+                // continuation — `cond ? a : b` and `x ? .5 : 1` rely on this.
+                if (!$this->isGlued($subject, $i + $opLen, $ternaryOpen)) {
+                    break;
+                }
+
+                if ($ch === '-') {
+                    // `->` is raw PHP property syntax. It is reachable two ways:
+                    // as a bare `a->b` (checked below), and as `a?->b`, where the
+                    // optional prefix has already consumed the `?` and would
+                    // otherwise fall through to the same emission. Both must be
+                    // rejected when the chain has no `$` sigil, or raw PHP
+                    // `?->` would be emitted from a plain expression.
+                    if (!$allowArrow) {
+                        throw new ClarityException(
+                            "PHP-style property access ('->') requires the \$ sigil: "
+                                . "write \${$root['value']}->… (or {$root['value']}?.…) instead of {$root['value']}->…"
+                        );
+                    }
+                }
+
+                // Whitespace after the operator is allowed: a chain may wrap.
+                $j = $i + $opLen;
+                while ($j < $len && \ctype_space($subject[$j])) {
+                    $j++;
+                }
+
+                if ($j >= $len || !(\ctype_alpha($subject[$j]) || $subject[$j] === '_')) {
+                    // A dangling `.` is never concatenation: `.` always means
+                    // property access, so an operator with no member after it is
+                    // an authoring mistake. Reporting it here is what stops a
+                    // typo from becoming a silent string concat.
+                    throw new ClarityException(
+                        "Property access operator '"
+                            . ($ch === '-' ? '->' : '.')
+                            . "' must be followed by a property name in '"
+                            . \substr($subject, $start) . "'."
+                    );
+                }
+
+                $idStart = $j;
+                $i = $idStart + 1;
+                while ($i < $len && (\ctype_alnum($subject[$i]) || $subject[$i] === '_')) {
+                    $i++;
+                }
+
+                $segments[] = [
+                    'type'     => 'prop',
+                    'value'    => \substr($subject, $idStart, $i - $idStart),
+                    'optional' => $optional,
+                ];
+                continue;
+            }
+
+            // ---- dynamic access: `[expr]` (array) or `{expr}` (property) ----
+            if ($ch === '[' || $ch === '{') {
+                $close = $ch === '[' ? ']' : '}';
+                $i++;
                 $innerStart = $i;
                 $depth      = 1;
 
                 while ($i < $len) {
                     $cc = $subject[$i];
 
-                    if (($cc === "'" || $cc === '"')) {
+                    if ($cc === "'" || $cc === '"') {
                         $quote = $cc;
                         $i++;
                         while ($i < $len) {
@@ -1127,18 +1733,21 @@ class Tokenizer
                         continue;
                     }
 
-                    if ($cc === '[') {
+                    if ($cc === '[' || $cc === '{') {
                         $depth++;
                         $i++;
                         continue;
                     }
 
-                    if ($cc === ']') {
+                    if ($cc === ']' || $cc === '}') {
                         $depth--;
                         if ($depth === 0) {
-                            $inner = \substr($subject, $innerStart, $i - $innerStart);
-                            $segments[] = ['type' => 'index', 'value' => $inner];
-                            $i++; // consume closing ']'
+                            $segments[] = [
+                                'type'     => $ch === '[' ? 'index' : 'dyn',
+                                'value'    => \substr($subject, $innerStart, $i - $innerStart),
+                                'optional' => $optional,
+                            ];
+                            $i++;
                             break;
                         }
                         $i++;
@@ -1149,11 +1758,40 @@ class Tokenizer
                 }
 
                 if ($depth > 0) {
-                    // Unterminated index expression: consume to end as one index segment.
-                    $segments[] = ['type' => 'index', 'value' => substr($subject, $innerStart)];
+                    // Unterminated access expression: consume to end as one segment.
+                    $segments[] = [
+                        'type'     => $ch === '[' ? 'index' : 'dyn',
+                        'value'    => \substr($subject, $innerStart),
+                        'optional' => $optional,
+                    ];
                     $i = $len;
                 }
 
+                continue;
+            }
+
+            // ---- static array key: `:key` ----------------------------------
+            // Whitespace may sit on either side of the colon, so the key may be
+            // on the next line. While a ternary is pending, the colon must be
+            // GLUED on both sides to count as a key read — that is what leaves
+            // `cond ? x : y` as a ternary.
+            if ($ch === ':' && $this->isChainColon($subject, $i, $ternaryOpen)) {
+                $idStart = $i + 1;
+                while ($idStart < $len && \ctype_space($subject[$idStart])) {
+                    $idStart++;
+                }
+
+                $j = $idStart + 1;
+                while ($j < $len && (\ctype_alnum($subject[$j]) || $subject[$j] === '_')) {
+                    $j++;
+                }
+
+                $segments[] = [
+                    'type'     => 'key',
+                    'value'    => \substr($subject, $idStart, $j - $idStart),
+                    'optional' => $optional,
+                ];
+                $i = $j;
                 continue;
             }
 
@@ -1164,9 +1802,89 @@ class Tokenizer
     }
 
     /**
+     * Whether the character can start a chain continuation identifier.
+     */
+    private function startsIdentifier(string $ch): bool
+    {
+        return $ch !== '' && (\ctype_alpha($ch) || $ch === '_');
+    }
+
+    /**
+     * Whether the character can appear inside an identifier (so a keyword can be
+     * told apart from a longer name that merely starts with it).
+     */
+    private function isIdentChar(string $ch): bool
+    {
+        return $ch !== '' && (\ctype_alnum($ch) || $ch === '_');
+    }
+
+    /**
+     * Whether a chain operator is GLUED to the value on its left. Meaningful
+     * only for `?`, the one chain operator that shares its character with a
+     * spaced operator (`a ? b : c`): a spaced `?` is a ternary, so it must not
+     * open an optional access.
+     */
+    private function isGlued(string $subject, int $nextPos, bool $ternaryOpen): bool
+    {
+        return !$ternaryOpen || $nextPos >= \strlen($subject) || !\ctype_space($subject[$nextPos]);
+    }
+
+    /**
+     * Whether the `:` at $pos starts an array-key continuation rather than the
+     * separator of a ternary.
+     *
+     * The colon must be followed by a key. Whitespace is allowed on either side,
+     * with ONE exception: while a ternary is pending, a colon only reads as a
+     * key when it is glued on both sides. Only the glued both-sides form is
+     * unambiguous — every other spacing belongs to a ternary:
+     *
+     *   config:version    key        a:b:c        key chain
+     *   config : version  key        config: version   key
+     *   cond ? x : y      ternary    cond ? x: y  ternary
+     *   cond ? a:b : c    key (then) + separator
+     */
+    private function isChainColon(string $subject, int $pos, bool $ternaryOpen = false): bool
+    {
+        $idStart = $pos + 1;
+        $len     = \strlen($subject);
+        while ($idStart < $len && \ctype_space($subject[$idStart])) {
+            $idStart++;
+        }
+
+        if (!$this->startsIdentifier($subject[$idStart] ?? '')) {
+            return false;
+        }
+
+        if (!$ternaryOpen) {
+            return true;
+        }
+
+        // Whitespace on the LEFT of the colon: it separates a ternary.
+        if ($pos === 0 || \ctype_space($subject[$pos - 1])) {
+            return false;
+        }
+
+        // Whitespace on the RIGHT: it separates a ternary.
+        return !\ctype_space($subject[$pos + 1] ?? '');
+    }
+
+    /**
      * Convert parsed var-chain segments to PHP.
      *
-     * @param array<int,array{type:string,value:string}> $segments
+     * Emission rules
+     * --------------
+     *  key   a:b        -> ['b']        (array key, strict)
+     *  index a[i]       -> [$i]         (array index, strict)
+     *  prop  a.b / a->b -> ->b          (object property, strict)
+     *  dyn   a{k}       -> ->{$k}       (object dynamic property, strict)
+     *
+     * A segment flagged `optional` is emitted through the matching Access::*
+     * guard, so an absent key/property yields null instead of raising. The
+     * guard is only ever used for the OPTIONAL forms — a strict read is plain
+     * PHP indexing/property access, which is what makes the strict contract
+     * cost nothing at runtime.
+     *
+     * @param array<int,array{type:string,value:string,optional?:bool}> $segments
      */
     private function buildVarChainPhp(array $segments): string
     {
@@ -1179,44 +1897,118 @@ class Tokenizer
             throw new ClarityException("Invalid identifier in var chain: {$first}");
         }
 
-        $php = '$vars[\'' . $first . '\']';
+        $php = '$__va[\'' . $first . '\']';
         $n   = \count($segments);
 
         for ($k = 1; $k < $n; $k++) {
-            $seg   = $segments[$k];
-            $value = $seg['value'];
-
-            if ($seg['type'] === 'key') {
-                if (!\preg_match(self::IDENT_RE, $value)) {
-                    throw new ClarityException("Invalid identifier in var chain: {$value}");
-                }
-                $php .= '[\'' . $value . '\']';
-                continue;
-            }
-
-            // index segment
-            $inner = $value;
-            if ($inner !== '' && \ctype_digit($inner)) {
-                $php .= '[' . $inner . ']';
-                continue;
-            }
-
-            if ($inner !== '' && \preg_match(self::CHAIN_RE, $inner)) {
-                // Use convertVarsAndOps so nested local vars (loop variables) resolve correctly
-                $php .= '[' . $this->convertVarsAndOps($inner) . ']';
-                continue;
-            }
-
-            $php .= '[' . $this->convertVarsAndOps($inner) . ']';
+            $php = $this->appendChainSegmentPhp($php, $segments[$k]);
         }
 
         return $php;
     }
 
     /**
+     * Emit one chain continuation onto an existing PHP expression.
+     *
+     * @param array{type:string,value:string,optional?:bool} $seg
+     */
+    private function appendChainSegmentPhp(string $php, array $seg): string
+    {
+        $optional = (bool) ($seg['optional'] ?? false);
+        $value    = $seg['value'];
+
+        if ($seg['type'] === 'key' || $seg['type'] === 'index') {
+            $key = $seg['type'] === 'key'
+                ? $this->staticKeyLiteral($value)
+                : $this->compileIndexExpression($value);
+
+            if (!$optional) {
+                return $php . '[' . $key . ']';
+            }
+
+            // `?` guards the RECEIVER only — the read itself stays STRICT. An
+            // absent receiver yields null, but a missing KEY still raises
+            // "Undefined array key". `$receiver[$k] ?? null` would swallow both
+            // and silently hide a mistyped key, which is the exact failure mode
+            // the strict-access design exists to prevent.
+            //
+            // Two forms:
+            //   bare root    -> (isset($__va['a'])     ? $__va['a']['k']     : null)
+            //   anything else-> (($t = RECV) === null ? null : $t['k'])
+            // The first is preferred where it is CORRECT: isset() reports an
+            // absent ROOT as false without a warning, which is precisely the
+            // tolerance asked for. It is wrong anywhere else, because isset()
+            // would also swallow a missing property or an intermediate missing
+            // key. The second form binds the receiver ONCE, so a nested optional
+            // chain stays linear instead of duplicating its receiver (the
+            // duplication is what made an earlier revision grow as 2^N — six
+            // optional segments emitted 2 245 characters for one read). Both
+            // forms keep the expression nestable.
+            if (\preg_match(self::BARE_ROOT_RE, $php)) {
+                return '(isset(' . $php . ') ? ' . $php . '[' . $key . '] : null)';
+            }
+
+            $tmp = '$__g' . (++$this->guardCounter);
+            return '((' . $tmp . ' = ' . $php . ') === null ? null : ' . $tmp . '[' . $key . '])';
+        }
+
+        // Property access (static or dynamic).
+        $prop = $seg['type'] === 'dyn'
+            ? '{' . $this->compileIndexExpression($value) . '}'
+            : $value;
+
+        if ($seg['type'] === 'prop' && !\preg_match(self::IDENT_RE, $value)) {
+            throw new ClarityException("Invalid identifier in var chain: {$value}");
+        }
+
+        if (!$optional) {
+            return $php . '->' . $prop;
+        }
+
+        // `?->` tolerates a NULL receiver while leaving the PROPERTY READ strict,
+        // so a present object lacking the property still raises "Undefined
+        // property" — the feedback we want. It short-circuits the rest of the
+        // chain and nests without any guard expression.
+        //
+        // An ABSENT root is a separate case: `$__va['a']?->b` still raises
+        // "Undefined array key 'a'", so the receiver is guarded with isset()
+        // there — the same tolerance the array side gets, which keeps `?.` and
+        // `?:` consistent about an absent root. (Emitting `?? null` instead would
+        // additionally swallow a missing property.)
+        if (\preg_match(self::BARE_ROOT_RE, $php)) {
+            return '(isset(' . $php . ') ? ' . $php . '->' . $prop . ' : null)';
+        }
+
+        return $php . '?->' . $prop;
+    }
+
+    /**
+     * A static array key emitted as a PHP string-index literal.
+     */
+    private function staticKeyLiteral(string $key): string
+    {
+        if (!\preg_match(self::IDENT_RE, $key)) {
+            throw new ClarityException("Invalid identifier in var chain: {$key}");
+        }
+        return "'" . \addslashes($key) . "'";
+    }
+
+    /**
+     * Compile an index/property-key expression: a digit run stays literal,
+     * anything else is compiled as a full Clarity expression.
+     */
+    private function compileIndexExpression(string $inner): string
+    {
+        if ($inner !== '' && \ctype_digit($inner)) {
+            return $inner;
+        }
+        return $this->convertVarsAndOps($inner);
+    }
+
+    /**
      * Convert a parsed var-chain and memoize by raw chain string.
      *
-     * @param array<int,array{type:string,value:string}> $segments
+     * @param array<int,array{type:string,value:string,optional?:bool}> $segments
      */
     private function varChainToPhpWithSegments(string $chain, array $segments): string
     {
@@ -1233,7 +2025,7 @@ class Tokenizer
      * Like buildVarChainPhp() but uses the local-var PHP variable for the root segment.
      * Called when the chain root is a locally-bound loop variable (e.g. $item.foo).
      *
-     * @param array<int,array{type:string,value:string}> $segments
+     * @param array<int,array{type:string,value:string,optional?:bool}> $segments
      */
     private function buildVarChainPhpWithLocalRoot(array $segments): string
     {
@@ -1242,34 +2034,21 @@ class Tokenizer
         $n     = \count($segments);
 
         for ($k = 1; $k < $n; $k++) {
-            $seg   = $segments[$k];
-            $value = $seg['value'];
-
-            if ($seg['type'] === 'key') {
-                $php .= '[\'' . $value . '\']';
-                continue;
-            }
-
-            // index segment — use convertVarsAndOps so nested local vars resolve correctly
-            if ($value !== '' && \ctype_digit($value)) {
-                $php .= '[' . $value . ']';
-            } else {
-                $php .= '[' . $this->convertVarsAndOps($value) . ']';
-            }
+            $php = $this->appendChainSegmentPhp($php, $segments[$k]);
         }
 
         return $php;
     }
 
     /**
-     * Convert a Clarity var-chain string to a PHP $vars[...] expression.
+     * Convert a Clarity var-chain string to a PHP $__va[...] expression.
      *
      * Supports:
-     *   foo           → $vars['foo']
-     *   foo.bar       → $vars['foo']['bar']
-     *   items[0]      → $vars['items'][0]
-     *   items[index]  → $vars['items'][$vars['index']]
-     *   a.b[c.d].e    → $vars['a']['b'][$vars['c']['d']]['e']
+     *   foo           → $__va['foo']
+     *   foo.bar       → $__va['foo']['bar']
+     *   items[0]      → $__va['items'][0]
+     *   items[index]  → $__va['items'][$__va['index']]
+     *   a.b[c.d].e    → $__va['a']['b'][$__va['c']['d']]['e']
      */
     public function varChainToPhp(string $chain): string
     {
@@ -1277,9 +2056,14 @@ class Tokenizer
             return '';
         }
 
+        // Whitespace between a value and its chain operator is not significant,
+        // so `user . name` and `user.name` must not occupy separate cache
+        // entries (and must not produce different PHP).
+        $key = \preg_replace('/\s+/', '', $chain);
+
         // Memoization
-        if (isset($this->varChainCache[$chain])) {
-            return $this->varChainCache[$chain];
+        if (isset($this->varChainCache[$key])) {
+            return $this->varChainCache[$key];
         }
 
         $parsed = $this->parseVarChainAt($chain, 0);
@@ -1293,7 +2077,7 @@ class Tokenizer
             return $chain;
         }
 
-        return $this->varChainToPhpWithSegments($chain, $parsed['segments']);
+        return $this->varChainToPhpWithSegments($key, $parsed['segments']);
     }
 
     /**
@@ -1551,8 +2335,11 @@ class Tokenizer
             return ['name' => $name, 'args' => $args, 'trailing' => ''];
         }
 
-        // Rest must be a comparison operator followed by a non-empty operand
-        if (!\preg_match('/^(===|!==|==|!=|>=|<=|<>|>|<)(.+)$/s', $rest, $cm)) {
+        // Rest must be an operator followed by a non-empty operand.
+        // `??` (null-coalescing) is included so a filter may be followed by a
+        // fallback: `{{ items |> length ?? 0 }}`, `{{ x |> expand ?? 'fb' }}`.
+        // Note: `??` catches a NULL RETURN only — it cannot catch an exception.
+        if (!\preg_match('/^(===|!==|==|!=|>=|<=|<>|\?\?|>|<)(.+)$/s', $rest, $cm)) {
             return null;
         }
 
@@ -1792,8 +2579,8 @@ class Tokenizer
      *       carry, item => carry + item
      * - The body is compiled as a full Clarity expression (including filter
      *   pipelines) with the parameter name(s) treated as local variables,
-     *   while all other identifiers are resolved from the captured $vars.
-     * - Both $vars and $this->__fl (the filter registry) are captured by value so
+     *   while all other identifiers are resolved from the captured $__va.
+     * - Both $__va and $this->__fl (the filter registry) are captured by value so
      *   the closure can access outer template variables and other filters.
      *
      * @param string $arg      The full lambda string (e.g. 'item => item.name').
@@ -1819,11 +2606,11 @@ class Tokenizer
         }
 
         // Compile the body as a full Clarity expression (handles |> pipelines).
-        // convertVarsAndOps maps all identifiers to $vars['name'], so we fix
+        // convertVarsAndOps maps all identifiers to $__va['name'], so we fix
         // up the parameter references afterwards with a targeted substitution.
         $phpBody = $this->processCondition($body);
 
-        $phpBody   = \str_replace("\$vars['{$first}']", '$' . $first, $phpBody);
+        $phpBody   = \str_replace("\$__va['{$first}']", '$' . $first, $phpBody);
         $signature = "mixed \${$first}";
 
         if ($filterName === 'reduce') {
@@ -1833,7 +2620,7 @@ class Tokenizer
                         . "(e.g. 'acc, item => acc + item'), got: '{$paramList}'"
                 );
             }
-            $phpBody = \str_replace("\$vars['{$second}']", '$' . $second, $phpBody);
+            $phpBody = \str_replace("\$__va['{$second}']", '$' . $second, $phpBody);
             $signature .= ", mixed \${$second}";
         } elseif (isset($second)) {
             throw new ClarityException(
@@ -1841,7 +2628,7 @@ class Tokenizer
             );
         }
 
-        return "static function({$signature}) use (\$vars): mixed { return {$phpBody}; }";
+        return "static function({$signature}) use (\$__va): mixed { return {$phpBody}; }";
     }
 
 }

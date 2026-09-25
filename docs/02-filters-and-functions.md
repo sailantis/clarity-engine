@@ -25,7 +25,7 @@ Chain multiple filters together—each filter receives the output of the previou
 
 ```twig
 {{ description | trim | upper }}
-{{ tags | map(t => t.name) | join(', ') }}
+{{ tags | map(t => t:name) | join(', ') }}
 {{ price | number(0) | replace('0', 'FREE') }}
 ```
 
@@ -123,7 +123,7 @@ Strip HTML and PHP tags from a string. Optionally specify tags to keep:
 Generate a URL-friendly slug from a string (lowercase, dashes, no special characters):
 
 ```twig
-{{ article.title |> slug }}               {# "Hello World!" → "hello-world" #}
+{{ article:title |> slug }}               {# "Hello World!" → "hello-world" #}
 {{ name |> slug(separator:'_') }}          {# "Hello World" → "hello_world" #}
 ```
 
@@ -144,7 +144,7 @@ Join array elements into string:
 
 ```twig
 {{ ['apple', 'banana', 'cherry'] |> join(', ') }} {# Output: "apple, banana, cherry" #}
-{{ tags |> map(t => t.name) |> join(', ') }}
+{{ tags |> map(t => t:name) |> join(', ') }}
 ```
 
 #### truncate(length, ellipsis?)
@@ -317,7 +317,7 @@ Split array into chunks:
 Transform each element (see [Lambda Expressions](#lambda-expressions)):
 
 ```twig
-{{ users |> map(u => u.name) |> join(', ') }} {# Extract names: "Alice, Bob, Charlie" #}
+{{ users |> map(u => u:name) |> join(', ') }} {# Extract names: "Alice, Bob, Charlie" #}
 {{ numbers |> map(n => n * 2) |> join(', ') }} {# Double each: "2, 4, 6" #}
 {{ tags |> map("upper") |> join(', ') }} {# Using filter reference #}
 ```
@@ -327,7 +327,7 @@ Transform each element (see [Lambda Expressions](#lambda-expressions)):
 Filter elements (see [Lambda Expressions](#lambda-expressions)):
 
 ```twig
-{{ users |> filter(u => u.isActive) |> map(u => u.name) |> join(', ') }} {# Only active users #}
+{{ users |> filter(u => u:isActive) |> map(u => u:name) |> join(', ') }} {# Only active users #}
 {{ numbers |> filter(n => n > 10) |> join(', ') }} {# Numbers greater than 10 #}
 {# Without callable: remove falsy values #}
 {{ [0, 1, false, 2, '', 3] |> filter |> join(', ') }} {# Output: "1, 2, 3" #}
@@ -349,7 +349,7 @@ Reduce array to single value (see [Lambda Expressions](#lambda-expressions)):
 Count array elements or string length:
 
 ```twig
-{{ items.length }} {# Property access also works #}
+{{ items:length }} {# Property access also works #}
 {{ items |> length }} {# Filter form #}
 {{ "hello" |> length }} {# Output: 5 #}
 ```
@@ -441,7 +441,7 @@ accumulator, item => expression
 Extract a field from objects:
 
 ```twig
-{{ users |> map(user => user.name) |> join(', ') }}
+{{ users |> map(user => user:name) |> join(', ') }}
 ```
 
 Transform values:
@@ -453,13 +453,13 @@ Transform values:
 Complex expressions:
 
 ```twig
-{{ products |> map(p => p.name ~ ' ($' ~ (p.price |> number(2)) ~ ')') |> join(', ') }}
+{{ products |> map(p => p:name ~ ' ($' ~ (p:price |> number(2)) ~ ')') |> join(', ') }}
 ```
 
 Access outer variables:
 
 ```twig
-{% set prefix = 'Item: ' %} {{ items |> map(item => prefix ~ item.name) |> join(', ') }}
+{% set prefix = 'Item: ' %} {{ items |> map(item => prefix ~ item:name) |> join(', ') }}
 ```
 
 ### Filter Examples
@@ -467,13 +467,13 @@ Access outer variables:
 Filter with condition:
 
 ```twig
-{{ users |> filter(u => u.age >= 18) |> map(u => u.name) |> join(', ') }}
+{{ users |> filter(u => u:age >= 18) |> map(u => u:name) |> join(', ') }}
 ```
 
 Multiple conditions:
 
 ```twig
-{{ products |> filter(p => p.inStock and p.price < 100) }}
+{{ products |> filter(p => p:inStock and p:price < 100) }}
 ```
 
 ### Reduce Examples
@@ -495,7 +495,7 @@ Build a string:
 Calculate total price:
 
 ```twig
-{{ cart.items |> reduce(total, item => total + (item.price * item.quantity), 0) |> number(2) }}
+{{ cart:items |> reduce(total, item => total + (item:price * item:quantity), 0) |> number(2) }}
 ```
 
 ### Filter References
@@ -542,14 +542,14 @@ With dynamic template name:
 
 ```twig
 {% for widget in widgets %}
-    {{ include("widgets/" ~ widget.type, widget.data) }}
+    {{ include("widgets/" ~ widget:type, widget:data) }}
 {% endfor %}
 ```
 
 Merge current context:
 
 ```twig
-{{ include("partials/user", { ...context(), showEmail: true }) }}
+{{ include("partials/user", { ..:context(), showEmail: true }) }}
 ```
 
 ### json(...values)
@@ -557,7 +557,7 @@ Merge current context:
 Encode values as JSON:
 
 ```twig
-{{ json(user.name, user.age) |> raw }} {# Output: ["John",30] #}
+{{ json(user:name, user:age) |> raw }} {# Output: ["John",30] #}
 {{ json(data) |> raw }} {# Encode single value #}
 ```
 
@@ -626,7 +626,7 @@ $engine->addFilter('excerpt', function($text, int $length = 100, string $ellipsi
 Use in template:
 
 ```twig
-{{ article.body |> excerpt(50) }} {{ article.body |> excerpt(150, '…') }}
+{{ article:body |> excerpt(50) }} {{ article:body |> excerpt(150, '…') }}
 ```
 
 ### Filter Accessing Template Context
@@ -738,8 +738,8 @@ Named arguments can be combined with positional ones:
 | `reverse`          | Reverse array/string   | `{{ items \|> reverse }}`                                |
 | `shuffle`          | Shuffle array          | `{{ items \|> shuffle }}`                                |
 | `batch(size)`      | Split into chunks      | `{{ items \|> batch(3) }}`                               |
-| `map(fn)`          | Transform each element | `{{ items \|> map(i => i.name) }}`                       |
-| `filter(fn)`       | Filter elements        | `{{ items \|> filter(i => i.active) }}`                  |
+| `map(fn)`          | Transform each element | `{{ items \|> map(i => i:name) }}`                       |
+| `filter(fn)`       | Filter elements        | `{{ items \|> filter(i => i:active) }}`                  |
 | `reduce(fn,init)`  | Reduce to single value | `{{ nums \|> reduce(s, v => s + v, 0) }}`                |
 | `length`           | Count/length           | `{{ items \|> length }}`                                 |
 | `default(val)`     | Fallback for null      | `{{ name \|> default('Guest') }}`                        |

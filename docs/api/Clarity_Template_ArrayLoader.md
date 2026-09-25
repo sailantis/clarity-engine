@@ -1,4 +1,4 @@
-# 🧩 Class: ArrayLoader
+# Class: ArrayLoader
 
 **Full name:** [Clarity\Template\ArrayLoader](../../src/Template/ArrayLoader.php)
 
@@ -18,26 +18,26 @@ $loader = new ArrayLoader([
 $engine->setLoader($loader);
 ```
 
-## 🚀 Public methods
+## Public methods
 
-### __construct() · [source](../../src/Template/ArrayLoader.php#L29)
+### __construct() · <small>[🗎](../../src/Template/ArrayLoader.php#L29)</small>
 
 `public function __construct(array $templates = []): mixed`
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$templates` | array | `[]` | Map of logical name → raw template source. |
 
-**➡️ Return value**
+**Return value**
 
 - Type: mixed
 
 
 ---
 
-### load() · [source](../../src/Template/ArrayLoader.php#L37)
+### load() · <small>[🗎](../../src/Template/ArrayLoader.php#L37)</small>
 
 `public function load(string $name): Clarity\Template\TemplateSource|null`
 
@@ -45,24 +45,24 @@ Load a template by its logical name and return source with revision metadata.
 
 The revision ({@see \TemplateSource::$revision}) must be available immediately with minimal I/O (e.g. a filemtime() call for file-based loaders); the actual template source could be fetched lazily via [`TemplateSource::getCode()`](Clarity_Template_TemplateSource.md#getcode) only when the engine determines compilation is needed.
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$name` | string | - | Logical template name, e.g. 'home', 'admin::dashboard',<br>'layouts/base'. Must not be empty. |
 
-**➡️ Return value**
+**Return value**
 
 - Type: [TemplateSource](Clarity_Template_TemplateSource.md)|null
 
-**⚠️ Throws**
+**Throws**
 
 - RuntimeException  If the template cannot be found or loaded.
 
 
 ---
 
-### getSubLoaders() · [source](../../src/Template/ArrayLoader.php#L52)
+### getSubLoaders() · <small>[🗎](../../src/Template/ArrayLoader.php#L52)</small>
 
 `public function getSubLoaders(): array`
 
@@ -70,7 +70,7 @@ Return the list of loaders wrapped by this loader, if any.
 
 Used by the engine to traverse loader hierarchies (e.g. DomainRouterLoader → FileLoader) and apply configuration changes like setExtension() to all relevant loaders.
 
-**➡️ Return value**
+**Return value**
 
 - Type: array
 - Description: List of loaders wrapped by this loader, or an empty array if this loader is not a wrapper.
@@ -78,7 +78,7 @@ Used by the engine to traverse loader hierarchies (e.g. DomainRouterLoader → F
 
 ---
 
-### set() · [source](../../src/Template/ArrayLoader.php#L63)
+### set() · <small>[🗎](../../src/Template/ArrayLoader.php#L63)</small>
 
 `public function set(string $name, string $code): static`
 
@@ -87,14 +87,14 @@ Add or replace a template definition.
 The cache for the template will be invalidated on the next render because
 the fnv1a64 revision of the new code will differ from the stored revision.
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$name` | string | - |  |
 | `$code` | string | - |  |
 
-**➡️ Return value**
+**Return value**
 
 - Type: static
 

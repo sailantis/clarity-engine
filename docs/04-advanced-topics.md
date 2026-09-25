@@ -32,7 +32,7 @@ Use the namespace prefix inside templates:
 ```twig
 {% include "admin::partials/sidebar" %}
 {% extends "emails::layouts/base" %}
-{{ include("components::card", { title: item.title }) }}
+{{ include("components::card", { title: item:title }) }}
 {# Unprefixed names resolve against the base viewPath: #}
 {% extends "layouts/main" %}
 ```
@@ -68,7 +68,7 @@ Templates are referenced using the `domain::path` syntax:
 ```twig
 {% include "admin::sidebar" %}
 {% extends "admin::layouts/base" %}
-{{ include("emails::welcome", { userName: user.name }) }}
+{{ include("emails::welcome", { userName: user:name }) }}
 ```
 
 Dots and slashes are interchangeable as path separators within the local name:
@@ -309,6 +309,119 @@ if (function_exists('opcache_invalidate')) {
 require $cachePath;
 ```
 
+#### `opcache.enable` does NOT cover RoadRunner
+
+There are two switches and they govern different SAPIs:
+
+| Setting              | Default | Governs                                                    |
+| -------------------- | ------- | ---------------------------------------------------------- |
+| `opcache.enable`     | `1`     | `fpm-fcgi`, `apache`, `cgi` — i.e. classic nginx → php-fpm |
+| `opcache.enable_cli` | **`0`** | the `cli` SAPI only                                        |
+
+A RoadRunner worker (and any Swoole/ReactPHP worker) is spawned as `cli`, so
+**`opcache.enable_cli` is the switch that matters**, and its default is off.
+With `opcache.enable = 1` alone, CLI scripts are never cached — every worker
+recompiles and re-allocates its own copy of every file it loads.
+
+This matters more for compiled templates than for ordinary code, because a
+compiled class carries its metadata as _static property literals_. A static
+array initialised from a literal is materialised per process when OPcache is
+off, but served as an immutable shared-memory value when it is on. Measured on
+a compiled class carrying a 1000-range source map
+(`php -d opcache.enable_cli=0` vs `=1`, same file, per process):
+
+| Configuration                      | Heap growth on load | File in OPcache script table |
+| ---------------------------------- | ------------------- | ---------------------------- |
+| OPcache off                        | 237,568 B           | no                           |
+| `opcache.enable_cli=1`             | **144 B**           | yes                          |
+| `opcache.enable=1`, `enable_cli=0` | 237,568 B           | no                           |
+
+So for a resident worker:
+
+```ini
+; required for RoadRunner / Swoole workers — opcache.enable is not enough
+opcache.enable_cli = 1
+```
+
+Verify rather than assume — the engine's own resident-memory measurements
+exclude shared memory, so a worker with `enable_cli` off looks the same as one
+with it on until you measure heap growth per worker.
+
+#### The source map is stored packed
+
+Each compiled class declares the source map used to map a runtime error back to
+a template file and line (`$sourceMap`, plus the parallel `$sourceFiles` and the
+body offset `$renderBodyLine`). These are read **only on the error path** —
+PHP does not materialise a static property until it is read, so on the happy
+path they cost nothing.
+
+The map is stored as one packed string rather than the more natural
+`list<[phpLine, fileIndex, templateLine]>` literal:
+
+```php
+public static string $sourceMap = '1,0,1;1,0,3;2,1,-3;2,1,1;...';
+```
+
+Line numbers are delta-encoded (the map is appended in ascending line order, so
+the deltas stay in single digits however large the template is). For 1000
+ranges the two encodings compare as:
+
+| Encoding                     | Source in the class file | Retained heap (OPcache off) |
+| ---------------------------- | ------------------------ | --------------------------- |
+| nested `var_export()` arrays | 65,348 B                 | 236,536 B                   |
+| packed string                | **10,450 B**             | **12,288 B**                |
+
+That is ~95% less memory and ~91% less emitted source, on a real template
+turning metadata from ~2.3× the size of the render body into a small fraction
+of it. `var_export()` writes three small integers as a nested array costing ~65
+bytes of PHP each — the encoding, not the location, was the cost.
+
+The decode cost (~0.1 ms per 500 ranges) is paid once, on a path that is already
+formatting an exception. A malformed literal decodes to an _empty_ map, so the
+engine degrades to "no line mapping" rather than reporting a shifted, wrong
+line. See `Clarity\Engine\SourceMap` for the format and
+`tests/Engine/SourceMapTest.php` for the pinned round-trip guarantees.
+
+#### Emitted annotations are line comments, not doc comments
+
+The compiled class annotates each metadata property with a `//` line comment:
+
+```php
+// sourceMap: packed "lineDelta,fileIndex,tplLineDelta;" ranges
+public static string $sourceMap = '1,0,1;...';
+```
+
+This looks like a style choice and is not. **OPcache retains doc comments but
+discards line comments.** `opcache.save_comments` (on by default) keeps
+`/** … */` in the compiled script so `ReflectionClass::getDocComment()` can work;
+`//` comments are thrown away. Anything retained is then charged to the script's
+shared-memory slot — for every cached template, for the life of the worker.
+
+Measured on one compiled page (`opcache.enable_cli=1`,
+`memory_consumption` from `opcache_get_status(true)`), the same file emitted both
+ways:
+
+| Emission                               | Source  | OPcache script memory |
+| -------------------------------------- | ------- | --------------------- |
+| `/** @var … */` doc comments           | 2,413 B | 6,672 B               |
+| `// …` line comments                   | 2,001 B | **5,880 B**           |
+| either, with `opcache.save_comments=0` | —       | 5,880 B               |
+
+That is **792 B per compiled template**, and the last row is what proves the
+whole difference is the retained annotation. A project with 1,000 templates
+therefore holds ~750 KB less shared memory. Nothing reflects the emitted
+comments (the metadata is read as a static property), so the annotation form is
+free to choose.
+
+Two caveats when measuring this yourself: an _isolated_ static-array literal is
+inlined at compile time and can show no difference at all, so it must be
+measured on a real compiled class; and `opcache_get_status(false)` returns an
+empty `scripts` array — pass `true`.
+
+The 412 B of source the change also saves per template is the smaller half of
+the win: source size only matters at compile time, whereas the shared-memory
+saving is per cached template in every worker.
+
 See [User Memory: debugging.md](memory://debugging.md) for OPcache notes.
 
 ## Auto-Escaping
@@ -362,7 +475,7 @@ The `raw` filter is a **compile-time marker** that disables the auto-escape wrap
 
 ```twig
 {# 1. Sanitized HTML from a WYSIWYG editor #}
-{{ article.sanitizedBody |> raw }}
+{{ article:sanitizedBody |> raw }}
 {# 2. Pre-rendered HTML fragments from your application #}
 {{ renderedWidget |> raw }}
 {# 3. JSON output #}
@@ -503,7 +616,7 @@ Even though the error occurs in compiled PHP, Clarity traces it back to the sour
 #### Syntax Errors
 
 ```twig
-{{ user.name |> upper( }} {# Missing closing parenthesis #}
+{{ user:name |> upper( }} {# Missing closing parenthesis #}
 ```
 
 **Error:** `Syntax error: unexpected end of expression`
@@ -644,7 +757,7 @@ The following are **rejected at compile time** (template won't compile):
 **Method calls:**
 
 ```twig
-{{ user.getName() }} {# ERROR #}
+{{ user:getName() }} {# ERROR #}
 ```
 
 **PHP statements:**
@@ -682,9 +795,9 @@ $engine->render('page', ['user' => $user]);
 **In template:**
 
 ```twig
-{{ user.name }} {# Works: public properties exposed #}
-{{ user.password }} {# NULL: private properties hidden #}
-{{ user.getName() }} {# COMPILE ERROR: method calls not allowed #}
+{{ user:name }} {# Works: public properties exposed #}
+{{ user:password }} {# NULL: private properties hidden #}
+{{ user:getName() }} {# COMPILE ERROR: method calls not allowed #}
 ```
 
 Object → array is the **general rule**: the array is the object's _public_
@@ -744,7 +857,7 @@ each recursing afterwards so nested objects are converted too):
 Two consequences worth knowing:
 
 - **`DateTime` works directly.** It becomes an ISO-8601 string, so
-  `{{ order.createdAt |> date("Y-m-d") }}` renders correctly. Previously a
+  `{{ order:createdAt |> date("Y-m-d") }}` renders correctly. Previously a
   `DateTime` object converted to `[]` and the filter printed `1970-01-01`.
 - **`__toString()` is a last resort.** It is only consulted when an object
   exposes no public properties, so a value object such as `Money` (all state
@@ -771,7 +884,7 @@ Lambdas in `map`, `filter`, `reduce` only accept:
 **Allowed:**
 
 ```twig
-{{ items |> map(i => i.name) }} {# Lambda: safe #}
+{{ items |> map(i => i:name) }} {# Lambda: safe #}
 {{ items |> map("upper") }} {# Filter reference: safe #}
 ```
 
@@ -960,8 +1073,8 @@ Registered filters: `format_number`, `format_currency`, `currency_name`, `curren
 {{ 0.75 |> percent }}
 {{ 42 |> spellout }}
 {{ 1 |> ordinal }}
-{{ order.created_at |> format_date('long') }}
-{{ order.created_at |> format_relative }}
+{{ order:created_at |> format_date('long') }}
+{{ order:created_at |> format_relative }}
 {{ "DE" |> country_name }}
 {{ "{count, plural, one{# item} other{# items}}" |> format_message({count: n}) }}
 ```
@@ -984,7 +1097,7 @@ $engine->use(new \Clarity\Localization\TranslationModule([
 {{ "logout" |> t }}
 
 {# With placeholder substitution #}
-{{ "greeting" |> t({name: user.name}) }}
+{{ "greeting" |> t({name: user:name}) }}
 
 {# Specific domain #}
 {{ "title" |> t({}, domain:"common") }}
@@ -1016,7 +1129,7 @@ $engine->use(new \Clarity\Localization\LocaleService(['locale' => 'de_DE']));
 The `with_locale` block directive (registered by `TranslationModule`) allows per-block locale switching:
 
 ```twig
-{% with_locale user.preferredLocale %}
+{% with_locale user:preferredLocale %}
     {{ "welcome" |> t }}
 {% endwith_locale %}
 ```
@@ -1088,12 +1201,15 @@ Directives extend the template compiler with custom `{% keyword %}` tags. They a
 
 ```php
 $engine->addDirective('cache', function(string $rest, string $path, int $line, callable $expr): string {
-    $key = $expr(trim($rest));
-    return "if (!\$__cache->has({$key})): ob_start();";
+    // Always open the buffer, and remember the cache key for endcache.
+    return "\$__cacheKey = {$expr(trim($rest))}; ob_start();";
 });
 
 $engine->addDirective('endcache', function(string $rest, string $path, int $line, callable $expr): string {
-    return "\$__cache->set(\$__cacheKey, ob_get_clean()); endif;";
+    // Close the buffer on BOTH branches: a hit discards it, a miss stores AND
+    // emits it (storing alone would swallow the block's output).
+    return "if (\$__sv['cache']->has(\$__cacheKey)) { ob_end_clean(); echo \$__sv['cache']->get(\$__cacheKey); } "
+         . "else { \$__cached = ob_get_clean(); \$__sv['cache']->set(\$__cacheKey, \$__cached); echo \$__cached; }";
 });
 ```
 
@@ -1109,6 +1225,38 @@ function (
     callable $processExpr  // fn(string): string — converts Clarity expr → PHP expr
 ): string                  // must return PHP statement(s) to emit
 ```
+
+### Buffer Safety
+
+A directive emits PHP into the render body, and that body already runs inside
+one output buffer opened by the compiled class. Output buffering is therefore
+safe — and is how a block-capturing directive (like the `cache` pair above)
+works — but two rules keep it that way.
+
+**Close every buffer you open, on every branch.** `ob_start()` in one handler
+and `ob_get_clean()` in its partner is only balanced when the block always opens
+one. If the open handler starts the buffer conditionally, the close handler must
+still close something on the branch where it was never opened — otherwise it
+silently closes _Clarity's_ buffer instead, and the output collected so far is
+lost. The example above avoids this by always opening and then closing on both
+branches.
+
+**Never close a buffer you did not open.** An unconditional `ob_end_clean()`
+in a directive can reach past the template into the caller's buffers (an outer
+view engine, a framework response buffer). Clarity's own buffer level is
+guaranteed by the compiled scaffold, not by your directive.
+
+You do **not** need to clean up after a block that throws. The compiled
+`render()` captures its buffer level in the local `$__obLevel` and, in its catch
+block, drains every buffer opened above that level before rethrowing — so a
+directive that opened a buffer and then let an exception escape cannot leak it.
+This is deliberately handled by the scaffold rather than by each directive,
+because a directive's close handler never runs when the block throws.
+`COMPILER_VERSION` 6 is the release that introduced this drain;
+`Clarity\Tests\Engine\OutputBufferTest` pins it.
+
+`$__obLevel` joins `$__fl`, `$__fn` and `$__sv` as a name the scaffold owns.
+Emitted directive PHP runs in the same scope, so do not reuse it.
 
 ## Services
 

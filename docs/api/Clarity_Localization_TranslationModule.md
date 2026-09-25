@@ -1,4 +1,4 @@
-# 🧩 Class: TranslationModule
+# Class: TranslationModule
 
 **Full name:** [Clarity\Localization\TranslationModule](../../src/Localization/TranslationModule.php)
 
@@ -50,49 +50,49 @@ Template usage
 {% endwith_locale %}
 ```
 
-## 🚀 Public methods
+## Public methods
 
-### __construct() · [source](../../src/Localization/TranslationModule.php#L77)
+### __construct() · <small>[🗎](../../src/Localization/TranslationModule.php#L77)</small>
 
 `public function __construct(array $config = []): mixed`
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$config` | array | `[]` |  |
 
-**➡️ Return value**
+**Return value**
 
 - Type: mixed
 
 
 ---
 
-### register() · [source](../../src/Localization/TranslationModule.php#L109)
+### register() · <small>[🗎](../../src/Localization/TranslationModule.php#L109)</small>
 
 `public function register(Clarity\ClarityEngine $engine): void`
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$engine` | [ClarityEngine](Clarity_ClarityEngine.md) | - |  |
 
-**➡️ Return value**
+**Return value**
 
 - Type: void
 
 
 ---
 
-### get() · [source](../../src/Localization/TranslationModule.php#L161)
+### get() · <small>[🗎](../../src/Localization/TranslationModule.php#L161)</small>
 
 `public function get(string $key, array|null $vars = null, string|null $domain = null): string`
 
 Look up a translation key with optional placeholder substitution.
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
@@ -100,14 +100,14 @@ Look up a translation key with optional placeholder substitution.
 | `$vars` | array\|null | `null` | Placeholder values for `{name}` substitution. |
 | `$domain` | string\|null | `null` | Override the default domain. |
 
-**➡️ Return value**
+**Return value**
 
 - Type: string
 
 
 ---
 
-### pushDomain() · [source](../../src/Localization/TranslationModule.php#L235)
+### pushDomain() · <small>[🗎](../../src/Localization/TranslationModule.php#L235)</small>
 
 `public function pushDomain(string|null $domain): void`
 
@@ -130,26 +130,26 @@ In this example, the first `t` filter looks up `welcome_subject` in the
 `emails` domain, while the second looks up `reset_subject` in the nested
 `passwords` domain.
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$domain` | string\|null | - |  |
 
-**➡️ Return value**
+**Return value**
 
 - Type: void
 
 
 ---
 
-### popDomain() · [source](../../src/Localization/TranslationModule.php#L244)
+### popDomain() · <small>[🗎](../../src/Localization/TranslationModule.php#L244)</small>
 
 `public function popDomain(): void`
 
 Pop the most recently pushed domain off the stack.
 
-**➡️ Return value**
+**Return value**
 
 - Type: void
 

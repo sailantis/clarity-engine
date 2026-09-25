@@ -99,7 +99,7 @@ $engine->setLoader(new DomainRouterLoader(
 **Correct:**
 
 ```twig
-<p>{{ user.bio }}</p>
+<p>{{ user:bio }}</p>
 <h1>{{ pageTitle }}</h1>
 ```
 
@@ -191,7 +191,7 @@ But remember: **Clarity auto-escapes by default**, so even unsanitized input is 
 **Bad: Complex logic in templates**
 
 ```twig
-{% set filteredUsers = users |> filter(u => u.age >= 18 and u.active and u.role == 'member') |> map(u => { name: u.firstName ~ ' ' ~ u.lastName, email: u.email |> lower, joined: u.createdAt |> date('Y-m-d') }) %}
+{% set filteredUsers = users |> filter(u => u:age >= 18 and u:active and u:role == 'member') |> map(u => { name: u:firstName ~ ' ' ~ u:lastName, email: u:email |> lower, joined: u:createdAt |> date('Y-m-d') }) %}
 ```
 
 **Good: Logic in PHP**
@@ -210,7 +210,7 @@ $engine->render('users', ['users' => $filteredUsers]);
 
 ```twig
 {% for user in users %}
-    <li>{{ user.name }} ({{ user.email }})</li>
+    <li>{{ user:name }} ({{ user:email }})</li>
 {% endfor %}
 ```
 
@@ -220,10 +220,10 @@ $engine->render('users', ['users' => $filteredUsers]);
 
 ```twig
 {% if user %}
-    {% if user.isActive %}
-        {% if user.hasPermission %}
-            {% for item in user.items %}
-                {% if item.isPublished %} {# Deeply nested #} {% endif %}
+    {% if user:isActive %}
+        {% if user:hasPermission %}
+            {% for item in user:items %}
+                {% if item:isPublished %} {# Deeply nested #} {% endif %}
             {% endfor %}
         {% endif %}
     {% endif %}
@@ -270,7 +270,7 @@ Use consistent indentation (2 or 4 spaces):
 {% if condition %}
     <div>
         {% for item in items %}
-            <p>{{ item.name }}</p>
+            <p>{{ item:name }}</p>
         {% endfor %}
     </div>
 {% endif %}
@@ -336,7 +336,7 @@ Templates can rely on this structure:
 ```twig
 {% for product in products %}
 <div>
-  {{ product.name }} - {% if product.inStock %}In Stock{% else %}Out of Stock{%
+  {{ product:name }} - {% if product:inStock %}In Stock{% else %}Out of Stock{%
   endif %}
 </div>
 {% endfor %}
@@ -347,14 +347,14 @@ Templates can rely on this structure:
 Use `default` filter:
 
 ```twig
-{{ user.nickname |> default(user.name) }}
+{{ user:nickname |> default(user:name) }}
 {{ customMessage |> default('No message provided') }}
 ```
 
 Or use the null coalescing operator:
 
 ```twig
-{{ user.avatar ?? '/images/default-avatar.png' }}
+{{ user:avatar ?? '/images/default-avatar.png' }}
 {{ customMessage ?? 'No message provided' }}
 ```
 
@@ -457,7 +457,7 @@ Use the `dump()` function for debugging:
 
 ```twig
 {% if user %}
-    <p>User exists: {{ user.name }}</p>
+    <p>User exists: {{ user:name }}</p>
 {% else %}
     <p>No user provided</p>
 {% endif %}
@@ -469,7 +469,7 @@ Chain `dump` in filter pipeline:
 
 ```twig
 {# See intermediate result #}
-{{ items |> filter(i => i.active) |> dump |> slice(0, 5) }}
+{{ items |> filter(i => i:active) |> dump |> slice(0, 5) }}
 ```
 
 ### Enable Error Display (Development)
@@ -498,8 +498,8 @@ Extract reusable components:
 ```twig
 <div class="avatar">
   <img
-    src="{{ user.avatar |> default('/images/default-avatar.png') }}"
-    alt="{{ user.name }}"
+    src="{{ user:avatar |> default('/images/default-avatar.png') }}"
+    alt="{{ user:name }}"
   />
 </div>
 ```

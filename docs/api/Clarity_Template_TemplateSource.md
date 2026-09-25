@@ -1,4 +1,4 @@
-# 🧩 Class: TemplateSource
+# Class: TemplateSource
 
 **Full name:** [Clarity\Template\TemplateSource](../../src/Template/TemplateSource.php)
 
@@ -12,31 +12,31 @@ Carries two pieces of information:
   the engine determines that compilation is necessary.  On warm cache paths
   (cache is still fresh) getCode() is never called, avoiding unnecessary I/O.
 
-## 🌍 Public Properties
+## Public Properties
 
-- `public readonly` string|int `$revision` · [source](../../src/Template/TemplateSource.php)
+- `public readonly` string|int `$revision` · <small>[🗎](../../src/Template/TemplateSource.php)</small>
 
-## 🚀 Public methods
+## Public methods
 
-### __construct() · [source](../../src/Template/TemplateSource.php#L24)
+### __construct() · <small>[🗎](../../src/Template/TemplateSource.php#L24)</small>
 
 `public function __construct(string|int $revision, Closure $codeLoader): mixed`
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$revision` | string\|int | - | Opaque revision token used for cache invalidation.<br>int  → mtime from a file-based loader.<br>string → hash('fnv1a64', $code) from a memory loader. |
 | `$codeLoader` | Closure | - | Lazy loader; called at most once per compile by the engine.<br>Must return the full raw template source string. |
 
-**➡️ Return value**
+**Return value**
 
 - Type: mixed
 
 
 ---
 
-### getCode() · [source](../../src/Template/TemplateSource.php#L36)
+### getCode() · <small>[🗎](../../src/Template/TemplateSource.php#L36)</small>
 
 `public function getCode(): string`
 
@@ -45,7 +45,7 @@ Return the raw template source code.
 The closure is invoked on every call, but in practice the engine calls
 getCode() at most once per compilation cycle (cold-path only).
 
-**➡️ Return value**
+**Return value**
 
 - Type: string
 

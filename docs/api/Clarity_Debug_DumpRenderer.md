@@ -1,10 +1,10 @@
-# 🔌 Interface: DumpRenderer
+# Interface: DumpRenderer
 
 **Full name:** [Clarity\Debug\DumpRenderer](../../src/Debug/DumpRenderer.php)
 
-## 🚀 Public methods
+## Public methods
 
-### render() · [source](../../src/Debug/DumpRenderer.php#L18)
+### render() · <small>[🗎](../../src/Debug/DumpRenderer.php#L18)</small>
 
 `public function render(mixed $value, Clarity\Debug\DumpOptions $opts): string`
 
@@ -14,14 +14,14 @@ May have side effects (e.g. writing to STDERR for the CLI renderer).
 Returns a string to be concatenated into the template output; returns ''
 when the output was sent directly to STDERR.
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$value` | mixed | - |  |
 | `$opts` | [DumpOptions](Clarity_Debug_DumpOptions.md) | - |  |
 
-**➡️ Return value**
+**Return value**
 
 - Type: string
 

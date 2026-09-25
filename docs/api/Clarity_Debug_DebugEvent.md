@@ -1,4 +1,4 @@
-# 🧩 Class: DebugEvent
+# Class: DebugEvent
 
 **Full name:** [Clarity\Debug\DebugEvent](../../src/Debug/DebugEvent.php)
 
@@ -6,19 +6,19 @@ DebugEvent represents a single debug event emitted on the DebugEventBus.
 
 It contains a type, an optional payload, and a timestamp of when it was emitted.
 
-## 🌍 Public Properties
+## Public Properties
 
-- `public readonly` string `$type` · [source](../../src/Debug/DebugEvent.php)
-- `public readonly` array `$payload` · [source](../../src/Debug/DebugEvent.php)
-- `public readonly` float `$timestamp` · [source](../../src/Debug/DebugEvent.php)
+- `public readonly` string `$type` · <small>[🗎](../../src/Debug/DebugEvent.php)</small>
+- `public readonly` array `$payload` · <small>[🗎](../../src/Debug/DebugEvent.php)</small>
+- `public readonly` float `$timestamp` · <small>[🗎](../../src/Debug/DebugEvent.php)</small>
 
-## 🚀 Public methods
+## Public methods
 
-### __construct() · [source](../../src/Debug/DebugEvent.php#L13)
+### __construct() · <small>[🗎](../../src/Debug/DebugEvent.php#L13)</small>
 
 `public function __construct(string $type, array $payload, float $timestamp): mixed`
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
@@ -26,7 +26,7 @@ It contains a type, an optional payload, and a timestamp of when it was emitted.
 | `$payload` | array | - |  |
 | `$timestamp` | float | - |  |
 
-**➡️ Return value**
+**Return value**
 
 - Type: mixed
 

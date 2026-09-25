@@ -1,4 +1,4 @@
-# 🧩 Class: IntlFormatModule
+# Class: IntlFormatModule
 
 **Full name:** [Clarity\Localization\IntlFormatModule](../../src/Localization/IntlFormatModule.php)
 
@@ -68,9 +68,9 @@ Template usage
 {{ timezone_name("America/New_York") }}
 ```
 
-## 🚀 Public methods
+## Public methods
 
-### __construct() · [source](../../src/Localization/IntlFormatModule.php#L100)
+### __construct() · <small>[🗎](../../src/Localization/IntlFormatModule.php#L100)</small>
 
 `public function __construct(array $config = []): mixed`
 
@@ -83,20 +83,20 @@ Config options: {
 }
 ```
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$config` | array | `[]` | Configuration options for the module. |
 
-**➡️ Return value**
+**Return value**
 
 - Type: mixed
 
 
 ---
 
-### register() · [source](../../src/Localization/IntlFormatModule.php#L108)
+### register() · <small>[🗎](../../src/Localization/IntlFormatModule.php#L108)</small>
 
 `public function register(Clarity\ClarityEngine $engine): void`
 
@@ -106,13 +106,13 @@ this module provides into the given engine instance.
 This method is called once by [`ClarityEngine::use()`](Clarity_ClarityEngine.md#use) at engine
 setup time, before any templates are compiled or rendered.
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$engine` | [ClarityEngine](Clarity_ClarityEngine.md) | - | The engine to register into. |
 
-**➡️ Return value**
+**Return value**
 
 - Type: void
 

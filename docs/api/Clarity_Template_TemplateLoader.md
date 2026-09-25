@@ -1,4 +1,4 @@
-# 🔌 Interface: TemplateLoader
+# Interface: TemplateLoader
 
 **Full name:** [Clarity\Template\TemplateLoader](../../src/Template/TemplateLoader.php)
 
@@ -15,9 +15,9 @@ Implementations:
 
 Custom loaders may source templates from databases, remote APIs, PHAR archives, etc.
 
-## 🚀 Public methods
+## Public methods
 
-### load() · [source](../../src/Template/TemplateLoader.php#L29)
+### load() · <small>[🗎](../../src/Template/TemplateLoader.php#L29)</small>
 
 `public function load(string $name): Clarity\Template\TemplateSource|null`
 
@@ -25,24 +25,24 @@ Load a template by its logical name and return source with revision metadata.
 
 The revision ({@see \TemplateSource::$revision}) must be available immediately with minimal I/O (e.g. a filemtime() call for file-based loaders); the actual template source could be fetched lazily via [`TemplateSource::getCode()`](Clarity_Template_TemplateSource.md#getcode) only when the engine determines compilation is needed.
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$name` | string | - | Logical template name, e.g. 'home', 'admin::dashboard',<br>'layouts/base'. Must not be empty. |
 
-**➡️ Return value**
+**Return value**
 
 - Type: [TemplateSource](Clarity_Template_TemplateSource.md)|null
 
-**⚠️ Throws**
+**Throws**
 
 - RuntimeException  If the template cannot be found or loaded.
 
 
 ---
 
-### getSubLoaders() · [source](../../src/Template/TemplateLoader.php#L38)
+### getSubLoaders() · <small>[🗎](../../src/Template/TemplateLoader.php#L38)</small>
 
 `public function getSubLoaders(): array`
 
@@ -50,7 +50,7 @@ Return the list of loaders wrapped by this loader, if any.
 
 Used by the engine to traverse loader hierarchies (e.g. DomainRouterLoader → FileLoader) and apply configuration changes like setExtension() to all relevant loaders.
 
-**➡️ Return value**
+**Return value**
 
 - Type: array
 - Description: List of loaders wrapped by this loader, or an empty array if this loader is not a wrapper.

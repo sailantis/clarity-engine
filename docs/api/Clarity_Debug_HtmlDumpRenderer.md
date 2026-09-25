@@ -1,4 +1,4 @@
-# 🧩 Class: HtmlDumpRenderer
+# Class: HtmlDumpRenderer
 
 **Full name:** [Clarity\Debug\HtmlDumpRenderer](../../src/Debug/HtmlDumpRenderer.php)
 
@@ -9,20 +9,20 @@ Sequential arrays are displayed as lists [item, …].
 All scalar output is HTML-escaped.  Sensitive keys are masked.
 A minimal inline <style> block is injected once per page.
 
-## 🚀 Public methods
+## Public methods
 
-### render() · [source](../../src/Debug/HtmlDumpRenderer.php#L20)
+### render() · <small>[🗎](../../src/Debug/HtmlDumpRenderer.php#L20)</small>
 
 `public function render(mixed $value, Clarity\Debug\DumpOptions $opts): string`
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$value` | mixed | - |  |
 | `$opts` | [DumpOptions](Clarity_Debug_DumpOptions.md) | - |  |
 
-**➡️ Return value**
+**Return value**
 
 - Type: string
 

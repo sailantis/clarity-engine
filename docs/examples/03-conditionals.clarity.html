@@ -75,8 +75,8 @@
 
     <div class="section">
       <h2>Simple If Statement</h2>
-      {% if user.isLoggedIn %}
-      <p>✓ Welcome back, {{ user.name }}!</p>
+      {% if user:isLoggedIn %}
+      <p>✓ Welcome back, {{ user:name }}!</p>
       {% endif %}
     </div>
 
@@ -130,24 +130,24 @@
       <h2>Logical Operators</h2>
 
       <h3>AND Operator</h3>
-      {% if user.isActive and user.role == 'admin' %}
+      {% if user:isActive and user:role == 'admin' %}
       <span class="badge badge-danger">ADMIN ACCESS</span>
       {% endif %}
 
       <h3>OR Operator</h3>
-      {% if user.role == 'admin' or user.role == 'moderator' %}
+      {% if user:role == 'admin' or user:role == 'moderator' %}
       <span class="badge badge-warning">STAFF MEMBER</span>
       {% endif %}
 
       <h3>NOT Operator</h3>
-      {% if not user.isBanned %}
+      {% if not user:isBanned %}
       <p>✓ Account is in good standing</p>
       {% else %}
       <p>⚠ Account is banned</p>
       {% endif %}
 
       <h3>Complex Condition</h3>
-      {% if (age >= 18 and not user.isBanned) or user.hasParentalConsent %}
+      {% if (age >= 18 and not user:isBanned) or user:hasParentalConsent %}
       <p>✓ User can access this content</p>
       {% else %}
       <p>✗ Access denied</p>
@@ -160,9 +160,9 @@
       <p>
         Status:
         <span
-          class="badge {{ user.isActive ? 'badge-success' : 'badge-danger' }}"
+          class="badge {{ user:isActive ? 'badge-success' : 'badge-danger' }}"
         >
-          {{ user.isActive ? 'Active' : 'Inactive' }}
+          {{ user:isActive ? 'Active' : 'Inactive' }}
         </span>
       </p>
 
@@ -176,19 +176,19 @@
     <div class="section">
       <h2>Null Coalescing</h2>
 
-      <p>User nickname: {{ user.nickname ?? user.name }}</p>
+      <p>User nickname: {{ user:nickname ?? user:name }}</p>
       <p>Custom message: {{ customMessage ?? 'No message provided' }}</p>
     </div>
 
     <div class="section">
       <h2>Nested Conditionals</h2>
 
-      {% if user.isLoggedIn %}
+      {% if user:isLoggedIn %}
       <div class="status-box success">
-        <p><strong>Logged in as:</strong> {{ user.name }}</p>
+        <p><strong>Logged in as:</strong> {{ user:name }}</p>
 
-        {% if user.hasNotifications %}
-        <p>📧 You have {{ user.notificationCount }} new notifications</p>
+        {% if user:hasNotifications %}
+        <p>📧 You have {{ user:notificationCount }} new notifications</p>
         {% else %}
         <p>No new notifications</p>
         {% endif %}
@@ -203,8 +203,8 @@
     <div class="section">
       <h2>Conditional Content Rendering</h2>
 
-      {% if products.length > 0 %}
-      <h3>Products Available ({{ products.length }})</h3>
+      {% if products:length > 0 %}
+      <h3>Products Available ({{ products:length }})</h3>
       <ul>
         {% for product in products %}
         <li>{{ product }}</li>

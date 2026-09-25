@@ -1,4 +1,4 @@
-# 🧩 Class: ChainTranslationLoader
+# Class: ChainTranslationLoader
 
 **Full name:** [Clarity\Localization\ChainTranslationLoader](../../src/Localization/ChainTranslationLoader.php)
 
@@ -13,37 +13,37 @@ This allows you to combine different loading strategies, such as a
 `FileTranslationLoader` for disk-based translations and an `ArrayTranslationLoader`
 for programmatically defined translations.
 
-## 🚀 Public methods
+## Public methods
 
-### __construct() · [source](../../src/Localization/ChainTranslationLoader.php#L21)
+### __construct() · <small>[🗎](../../src/Localization/ChainTranslationLoader.php#L21)</small>
 
 `public function __construct(Clarity\Localization\TranslationLoaderInterface ...$loaders): mixed`
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$loaders` | [TranslationLoaderInterface](Clarity_Localization_TranslationLoaderInterface.md) | - |  |
 
-**➡️ Return value**
+**Return value**
 
 - Type: mixed
 
 
 ---
 
-### load() · [source](../../src/Localization/ChainTranslationLoader.php#L26)
+### load() · <small>[🗎](../../src/Localization/ChainTranslationLoader.php#L26)</small>
 
 `public function load(string $domain, string $locale): array`
 
-**🧭 Parameters**
+**Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$domain` | string | - |  |
 | `$locale` | string | - |  |
 
-**➡️ Return value**
+**Return value**
 
 - Type: array
 
