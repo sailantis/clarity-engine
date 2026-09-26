@@ -290,6 +290,92 @@ class Compiler
         );
     }
 
+    /** PHP variables that must not be shadowed by a template local. */
+    private const RESERVED_NAMES = [
+        'GLOBALS',
+        '_SERVER',
+        '_GET',
+        '_POST',
+        '_FILES',
+        '_COOKIE',
+        '_SESSION',
+        '_REQUEST',
+        '_ENV',
+        'this',
+    ];
+
+    /**
+     * Register a local variable in the compile-time context.
+     *
+     * @param string   $name    The name of the variable to register.
+     * @param int|null $tplLine Line of the directive that requested the
+     *                          registration, when known.  It is only used to
+     *                          point the error at the offending directive
+     *                          rather than at a bare variable name.
+     */
+    public function registerVar(string $name, ?int $tplLine = null)
+    {
+        // Accept `name` (what the tokenizer passes) as well as `$name`, the
+        // spelling a directive author is more likely to use.  Exactly ONE sigil
+        // is stripped: `$$x` is not a variable name, and stripping both would
+        // silently register `x` — a name the caller never asked for.
+        if ($name !== '' && $name[0] === '$') {
+            if (($name[1] ?? '') === '$') {
+                $this->rejectVar("Invalid variable name: '{$name}'", $tplLine);
+            }
+            $raw  = $name;
+            $name = \substr($name, 1);
+        } else {
+            $raw = $name;
+        }
+
+        // PHP's variable-name grammar, bytes 128-255 included — see
+        // Tokenizer::isIdentifier().  Shared with the tokenizer so this method's
+        // accepted set can never drift from what the scanner produces, which is
+        // the set it will later resolve back out of the local-variable map.
+        if (!Tokenizer::isIdentifier($name)) {
+            $this->rejectVar("Invalid variable name: '{$raw}'", $tplLine);
+        }
+
+        if (\str_starts_with($name, '__')) {
+            $this->rejectVar("Variable names starting with '__' are reserved for internal use.", $tplLine);
+        }
+
+        if (\in_array($name, self::RESERVED_NAMES, true)) {
+            $this->rejectVar("Variable '{$name}' is reserved and cannot be used as a local variable.", $tplLine);
+        }
+
+        $this->localVars[$name] = '$' . $name;
+        $this->tokenizer->setLocalVars($this->localVars);
+    }
+
+    private function rejectVar(string $message, ?int $tplLine): void
+    {
+        [$file, $line] = $this->resolveCurrentLocation($tplLine);
+        throw new ClarityException($message, $file, $line);
+    }
+
+    /**
+     * Unregister a local variable from the compile-time context.
+     *
+     * @param string $name  The name of the variable to unregister.
+     */
+    public function unregisterVar(string $name)
+    {
+        unset($this->localVars[$name]);
+        $this->tokenizer->setLocalVars($this->localVars);
+    }
+
+    /**
+     * Get the currently registered local variables.
+     *
+     * @return array<string, string> Map of local variable names to their PHP representations.
+     */
+    public function getVars(): array
+    {
+        return $this->localVars;
+    }
+
     // -------------------------------------------------------------------------
     // Extends / Block resolution (static, at compile-time)
     // -------------------------------------------------------------------------
@@ -807,7 +893,8 @@ class Compiler
                 $rest,
                 $sourcePath,
                 $tplLine,
-                fn(string $e) => $this->tokenizer->processCondition($e)
+                fn(string $e) => $this->tokenizer->processCondition($e),
+                $this
             )
             : throw new ClarityException(
                 "Unknown directive '{$keyword}'",
@@ -946,7 +1033,15 @@ class Compiler
         return $parts;
     }
 
-    private const RE_FOR_IN = '/^([a-zA-Z_][a-zA-Z0-9_.]*)(?:\s*,\s*([a-zA-Z_][a-zA-Z0-9_]*))?\s+in\s+(.+?)(?:(\.\.\.?)(.+?)(?:\s+step\s+(.+))?)?$/s';
+    /**
+     * `{% for %} … ` header: `name in expr`, `key, value in expr`, or
+     * `var in start..end [step n]`.
+     *
+     * The bound names use PHP's variable-name grammar (high bytes included), so
+     * a non-ASCII loop variable parses here and is then validated by
+     * registerVar()/Tokenizer::isIdentifier().
+     */
+    private const RE_FOR_IN = '/^([a-zA-Z_\x80-\xff][a-zA-Z0-9_.\x80-\xff]*)(?:\s*,\s*([a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*))?\s+in\s+(.+?)(?:(\.\.\.?)(.+?)(?:\s+step\s+(.+))?)?$/s';
 
     /**
      * Compile {% for item in list %} → PHP foreach.
@@ -982,8 +1077,7 @@ class Compiler
             $itemTplName = trim($m[1]);
             $itemPhpVar  = '$' . $itemTplName;
             $restore     = [$itemTplName => $this->localVars[$itemTplName] ?? null];
-            $this->localVars[$itemTplName] = $itemPhpVar;
-            $this->tokenizer->setLocalVars($this->localVars);
+            $this->registerVar($itemTplName, $tplLine);
 
             $this->forStack[] = ['type' => 'for', 'restore' => $restore];
 
@@ -1018,10 +1112,9 @@ class Compiler
                 continue;
             }
             $restore[$tplName] = $this->localVars[$tplName] ?? null;
-            $this->localVars[$tplName] = '$' . $tplName;
+            $this->registerVar($tplName);
         }
 
-        $this->tokenizer->setLocalVars($this->localVars);
         $this->forStack[] = ['type' => 'foreach', 'restore' => $restore];
 
         if ($keyTplName !== null) {
@@ -1087,15 +1180,6 @@ class Compiler
                 unset($this->localVars[$name]);
             } else {
                 $this->localVars[$name] = $oldValue;
-            }
-        }
-
-        // Restore the `loop` binding (the outer loop's object, or nothing).
-        if (isset($entry['loop'])) {
-            if ($entry['loop']['old'] === null) {
-                unset($this->localVars['loop']);
-            } else {
-                $this->localVars['loop'] = $entry['loop']['old'];
             }
         }
 
@@ -1355,6 +1439,37 @@ class Compiler
         }
 
         return [$activeSourceName, $activeSourceLine + max(0, $mergedLine - $activeMergedLine)];
+    }
+
+    /**
+     * Resolve the logical template name and 1-based line a compile error should
+     * point at, for the compilation unit currently being processed.
+     *
+     * The current unit is the top of $compileStack: the root template, an
+     * included template, or `<owner>#macro@<name>` for a macro body.
+     *
+     * The mapping cursor ($mappedSourcePath and its companions) only describes
+     * the merged top-level source.  A macro body is compiled as its own unit and
+     * its line numbers are relative to the macro definition, so there the cursor
+     * would name an unrelated file and line: fall back to the macro's own logical
+     * name and the unit-relative line instead.
+     *
+     * @return array{0: string, 1: int}
+     */
+    private function resolveCurrentLocation(?int $tplLine): array
+    {
+        $sourceName = $this->compileStack === [] ? '' : \end($this->compileStack);
+        $macroAt    = \strpos($sourceName, '#macro@');
+
+        if ($macroAt !== false) {
+            return [\substr($sourceName, 0, $macroAt), $tplLine ?? 0];
+        }
+
+        if ($tplLine === null) {
+            return [$sourceName, 0];
+        }
+
+        return $this->resolveSegmentSource($sourceName, $tplLine);
     }
 
     private function resolveSegmentSource(string $defaultSourcePath, int $tplLine): array

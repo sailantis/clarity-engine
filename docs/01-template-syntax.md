@@ -257,13 +257,24 @@ render scope. Because the value is what is expanded, it composes anywhere in a
 pipeline:
 
 ```twig
-{{ name |> expand }}                {# value of {{ name }} is a variable name #}
-{{ key |> rot13 |> expand }}        {# expand the TRANSFORMED value #}
-{{ name |> expand(true) ?? 'none' }} {# optional: absent name yields null #}
+{{ name |> expand }}                           {# value of {{ name }} is a variable name #}
+{{ key |> rot13 |> expand }}                   {# expand the TRANSFORMED value #}
+{{ name |> expand(optional: true) ?? 'none' }} {# optional: absent name yields null #}
+{{ name |> expand(fallback: 'none') }}         {# eager fallback for an absent name #}
 ```
 
-Absent names throw by default, consistent with every other access;
-`expand(true)` (or `expand(optional: true)`) returns `null` instead.
+Absent names throw by default, consistent with every other access. Pass
+`optional: true` to make an absent name yield `null` instead, so a following
+`??` (or `|> default(...)`) supplies the value. `optional` must be a literal
+`true`/`false`, because which branch is emitted is decided at compile time.
+
+`fallback:` (or a single positional argument) is the eager alternative: it
+decides the value directly and needs no `??`. Both spellings are the author's
+opt-out from the strict contract.
+
+> `??` suppresses a `null` RETURN only — it cannot catch the strict throw, so
+> `{{ x |> expand ?? 'none' }}` still errors when the name is absent. Write
+> `expand(optional: true) ?? 'none'` or `expand('none')`.
 
 #### Iteration and container filters
 

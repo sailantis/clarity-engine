@@ -1,5 +1,3 @@
-# Clarity Template Engine
-
 ![Clarity Logo](docs/images/clarity-engine-logo.svg)
 
 > **A fast, secure, and expressive PHP template engine** – Clarity compiles `.clarity.html` templates into cached PHP classes for maximum performance while maintaining a sandboxed, secure execution environment.
