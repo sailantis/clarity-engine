@@ -21,7 +21,7 @@ use Clarity\ClarityException;
  * do not perform a full grammar check here.
  *
  * Conversions performed
- * • var-chains (foo.bar[x].baz) → $__va['foo']['bar'][$__va['x']]['baz']
+ * • var-chains (foo.bar[x].baz) → $__c_va['foo']['bar'][$__c_va['x']]['baz']
  * • logical operators:  and → &&,  or → ||,  not → !
  * • bitwise operators:  bor → |,  band → &,  bxor → ^,  bnot → ~,  blsh → <<,  brsh → >>
  * • concat operator:    ~   → .
@@ -31,7 +31,7 @@ use Clarity\ClarityException;
  * • Both | and |> act as the filter pipe operator (| is normalized to |> before processing)
  * • Each step after the pipe is a filter: name  or  name(arg1, arg2)
  * • Arguments are themselves processed as expressions
- * • Result: nested $this->__fl['name']($this->__fl['name']($expr, arg), …)
+ * • Result: nested $this->__c_fl['name']($this->__c_fl['name']($expr, arg), …)
  *
  * Named arguments
  * • Clarity uses `=` syntax: filter(precision=2) or fn(from="system")
@@ -57,7 +57,7 @@ class Tokenizer
     private ?Registry $registry = null;
 
     /**
-     * A BARE root dereference: `$__va['name']`. These are special because
+     * A BARE root dereference: `$__c_va['name']`. These are special because
      * isset() on them reports an ABSENT ROOT as false with no warning, which is
      * exactly the tolerance `?` promises.
      *
@@ -65,7 +65,7 @@ class Tokenizer
      * suppress a missing PROPERTY or an intermediate missing KEY too, turning a
      * mistyped strict segment into a silent null.
      */
-    private const BARE_ROOT_RE = '/^\$__va\[\'[A-Za-z_][A-Za-z0-9_]*\'\]$/';
+    private const BARE_ROOT_RE = '/^\$__c_va\[\'[A-Za-z_][A-Za-z0-9_]*\'\]$/';
 
     /**
      * Monotonic counter for temporaries emitted by optional array guards, so two
@@ -78,7 +78,7 @@ class Tokenizer
      * Compile-time local variable context: templateVarName → PHP variable string.
      * Set by the Compiler when entering/leaving loop scopes so that expressions
      * inside loops resolve loop variables to direct PHP local variables instead
-     * of $__va['name'] lookups.
+     * of $__c_va['name'] lookups.
      *
      * @var array<string, string>
      */
@@ -127,6 +127,65 @@ class Tokenizer
      */
     private array $contextInjectedFunctions = [];
 
+    /**
+     * When true (default) templates are sandboxed: PHP function calls and
+     * method calls are rejected unless the callee is registered.  When false
+     * ("open mode") templates may call arbitrary PHP functions and methods,
+     * for parity with Blade / Stempler / Plates.
+     *
+     * Set by the Compiler from the engine's `sandbox` configuration.
+     */
+    private bool $sandboxMode = true;
+
+    /**
+     * Open mode only: the render scope is seeded into PHP LOCALS (the Compiler
+     * emits `extract($__c_va, EXTR_SKIP)` at the top of render()), so a chain root
+     * is emitted as a plain local variable instead of a `$__c_va` lookup.
+     *
+     * This is what lets one name work in both worlds — `{{ title }}` and
+     * `{% php echo $title; %}` are then the same variable, not two.
+     *
+     * No guard expression is emitted with the read: an unknown name raises PHP's
+     * own "Undefined variable" warning, which the engine's error handler maps to
+     * a ClarityException with the template line.  That keeps strict access
+     * identical to sandbox mode.
+     */
+    private bool $localRoots = false;
+
+    /**
+     * True while compiling a lambda body.
+     *
+     * A lambda is emitted as a `static function (...) use ($__c_va) { … }`, so the
+     * render scope's locals are NOT in scope inside it.  Roots there must keep
+     * reading `$__c_va` or every outer variable in a lambda body would read as
+     * undefined.
+     */
+    private bool $inLambda = false;
+
+    /**
+     * Function names that stay blocked in open mode.  Empty by default (open
+     * mode is full PHP access); an application may add its own guardrails via
+     * the engine's setDeniedFunctions().  Keys are lowercase names.
+     *
+     * @var array<string, true>
+     */
+    private array $deniedFunctions = Registry::DEFAULT_DENIED_FUNCTIONS;
+
+    /**
+     * True while compiling the argument list of a filter routed to a PHP
+     * function in open mode, so `_` resolves to the piped value instead of the
+     * template variable named `_`.  Scoped with try/finally around the compile
+     * of one filter segment.
+     */
+    private bool $inOpenFilterArgs = false;
+
+    /**
+     * The piped value that `_` resolves to while $inOpenFilterArgs is true.
+     * Saved and restored around nested open-filter argument compilation so the
+     * nearest enclosing filter wins.
+     */
+    private string $openFilterValue = '';
+
     /** @param array<string, true> $names */
     public function setPrunedFunctions(array $names): void
     {
@@ -139,6 +198,54 @@ class Tokenizer
         $this->contextInjectedFunctions = $names;
     }
 
+    /**
+     * Enable or disable sandbox mode.  `true` (default) rejects arbitrary PHP
+     * function and method calls; `false` allows them (see class docs).
+     */
+    public function setSandboxMode(bool $sandboxed): void
+    {
+        $this->sandboxMode = $sandboxed;
+    }
+
+    /**
+     * Open mode only: emit chain roots as PHP locals (see {@see $localRoots}).
+     *
+     * The Compiler enables this together with the `extract()` seeding, so a
+     * compiler that seeds no locals never emits a local read.
+     */
+    public function setLocalRoots(bool $enabled): void
+    {
+        $this->localRoots    = $enabled;
+        $this->varChainCache = [];
+    }
+
+    public function isSandboxed(): bool
+    {
+        return $this->sandboxMode;
+    }
+
+    /**
+     * Replace the open-mode function guardrails.  Keys are lowercase function
+     * names; empty (the default) allows every PHP function.
+     *
+     * @param array<string, true> $names
+     */
+    public function setDeniedFunctions(array $names): void
+    {
+        $this->deniedFunctions = $names;
+    }
+
+    /**
+     * Whether a PHP function may be called in open mode.
+     *
+     * PHP function names are case-insensitive and may be written with a leading
+     * namespace separator, so both are normalised before the deny-list lookup.
+     */
+    private function isFunctionCallAllowed(string $name): bool
+    {
+        return !isset($this->deniedFunctions[\strtolower(\ltrim($name, '\\'))]);
+    }
+
     public function setRegistry(Registry $registry): void
     {
         $this->registry = $registry;
@@ -149,7 +256,7 @@ class Tokenizer
      *
      * Called by the Compiler when entering or exiting a loop scope so that
      * variable resolution inside the loop uses direct PHP local variables
-     * ($__lv_item_0) rather than $__va['item'] array lookups.
+     * (e.g. `$item`) rather than $__c_va['item'] array lookups.
      *
      * @param array<string, string> $localVars  templateVarName → PHP variable string
      */
@@ -460,11 +567,16 @@ class Tokenizer
     }
 
     /**
-     * Convert a Clarity variable chain to its PHP $__va[...] equivalent.
-     * Used for the left-hand side of {% set var = ... %}.
+     * Convert a Clarity variable chain to its PHP lvalue equivalent, for the
+     * left-hand side of {% set var = ... %}.
+     *
+     * Scope-aware by construction: open mode seeds the render scope into locals,
+     * so `{% set a = … %}` compiles to a plain `$a = …` and both worlds read the
+     * SAME slot.  Sandbox mode targets `$__c_va['a']` exactly as before.  The
+     * choice lives in the chain emitter, so it cannot drift from the read path.
      *
      * @param string $var Clarity variable name (e.g. 'user.name', 'items[0]').
-     * @return string PHP lvalue (e.g. '$__va[\'user\'][\'name\']').
+     * @return string PHP lvalue (e.g. '$user', or '$__c_va[\'user\'][\'name\']').
      */
     public function processLvalue(string $var): string
     {
@@ -659,7 +771,7 @@ class Tokenizer
 
     /**
      * Convert a Clarity expression (no pipeline) to PHP by:
-     * 1. Replacing var-chains with $__va[...] accesses
+     * 1. Replacing var-chains with $__c_va[...] accesses
      * 2. Replacing logical/string operators with PHP equivalents
      * 3. Rejecting function-call syntax: any identifier followed by '(' throws
      *    a ClarityException at compile time — use the |> filter pipeline instead.
@@ -881,13 +993,39 @@ class Tokenizer
                 $sigilStart = $i + 1;
                 $next       = $expr[$sigilStart] ?? '';
                 if (!self::isIdentifierStart($next)) {
+                    // `$$name` is variable-variable expansion: the name of the
+                    // variable to read comes from another variable.
+                    //
+                    // Open mode allows it — the mode grants the full power of
+                    // PHP, and a dynamic dereference is an ordinary LOCAL lookup,
+                    // so it is strictly weaker than the literal `$_SERVER`
+                    // spelling open mode already permits (a literal auto-global
+                    // name binds the global; a dynamic one does not).
+                    //
+                    // Sandbox mode rejects it and points at `|> expand`, which is
+                    // the auditable equivalent: it resolves against `$__c_va` and
+                    // reports an absent name with a template line.
+                    if ($next === '$') {
+                        if ($this->sandboxMode) {
+                            throw new ClarityException(
+                                "Variable-variable expansion ('\$\$name') is not allowed while the sandbox is enabled; "
+                                    . "look a name up with the 'expand' filter instead (e.g. which |> expand)."
+                            );
+                        }
+                        // Emit ONE `$` and let the identifier that follows compile
+                        // as usual, so `$$name` becomes `$` + `$name`.  Skipping
+                        // both dollars would emit `$$$name`.
+                        $out .= '$';
+                        $i = $sigilStart + 1;
+                        continue;
+                    }
                     throw new ClarityException(
                         "Direct PHP variable access ('\$') is not allowed in Clarity expressions; "
                             . "use a variable name after the sigil (\$name) or dot-notation (name.field)."
                     );
                 }
 
-                $parsed = $this->parseVarChainAt($expr, $sigilStart, true, $ternarySeen);
+                $parsed = $this->parseVarChainAt($expr, $sigilStart, true, $ternarySeen, !$this->sandboxMode);
                 if ($parsed === null) {
                     $out .= $ch;
                     $i++;
@@ -898,7 +1036,11 @@ class Tokenizer
                 $segments = $parsed['segments'];
                 $token    = \substr($expr, $sigilStart, $i - $sigilStart);
 
-                // Property access can never be a method call.
+                // A `(` that survives chain parsing is a call on the ROOT value
+                // (e.g. `$fn()`), not a method call — method calls are consumed
+                // into their property segment.  Root invocation stays rejected:
+                // a variable-driven callable is the function-level equivalent of
+                // variable-variable expansion.
                 $j = $i;
                 while ($j < $len && \ctype_space($expr[$j])) {
                     $j++;
@@ -964,6 +1106,24 @@ class Tokenizer
                 $contChar = $expr[$contPos] ?? '';
                 $contTwo  = \substr($expr, $contPos, 2);
 
+                // Open-mode filter placeholder: a lone `_` stands for the piped
+                // value while compiling a PHP function's argument list.  It is
+                // recognised ONLY there (and only when not a chain root), so a
+                // template variable named `_` keeps working everywhere else.
+                if (
+                    $this->inOpenFilterArgs
+                        && $idEnd - $start === 1
+                        && $expr[$start] === '_'
+                        && $contChar !== '('
+                        && $contChar !== '.'
+                        && $contChar !== '['
+                        && $contChar !== '{'
+                ) {
+                    $out .= '(' . $this->openFilterValue . ')';
+                    $i = $idEnd;
+                    continue;
+                }
+
                 if (
                     $contChar !== '.' && $contChar !== '['
                         && $contChar !== '{' && $contChar !== ':'
@@ -995,12 +1155,24 @@ class Tokenizer
                             $out .= $call;
                             continue;
                         }
+                        // Open mode: an unregistered name is emitted as a direct
+                        // PHP function call, minus the deny-list.
+                        if (!$this->sandboxMode) {
+                            if (!$this->isFunctionCallAllowed($token)) {
+                                throw new ClarityException(
+                                    "Function '{$token}()' is blocked in open mode. Allow it by removing it from the deny-list."
+                                );
+                            }
+                            [$call, $i] = $this->buildFunctionCallInExpr($token, $expr, $j, $len);
+                            $out .= $call;
+                            continue;
+                        }
                         $context = \substr($expr, \max(0, $start - 10), \min(60, $len - $start + 10));
                         throw new ClarityException("Call to unregistered function in context '{$context}'. Register it via addFunction() first.");
                     }
 
                     // Check local vars (loop variables) before the cache: a locally-bound
-                    // variable must resolve to its PHP local var, not to $__va['name'].
+                    // variable must resolve to its PHP local var, not to $__c_va['name'].
                     if (isset($this->localVars[$token])) {
                         $out .= $this->localVars[$token];
                         continue;
@@ -1013,6 +1185,9 @@ class Tokenizer
                         $php    = $parsed !== null
                             ? $this->varChainToPhpWithSegments($token, $parsed['segments'])
                             : $token;
+                        if ($parsed !== null) {
+                            $this->varChainCache[$token] = $php;
+                        }
                         $out .= $php;
                     }
                     continue;
@@ -1039,7 +1214,9 @@ class Tokenizer
                     } elseif (isset($this->varChainCache[$token])) {
                         $out .= $this->varChainCache[$token];
                     } else {
-                        $out .= $this->varChainToPhpWithSegments($token, $segments);
+                        $php = $this->varChainToPhpWithSegments($token, $segments);
+                        $this->varChainCache[$token] = $php;
+                        $out .= $php;
                     }
                     continue;
                 }
@@ -1433,7 +1610,7 @@ class Tokenizer
      * Clarity `name=expression` syntax and are emitted as PHP named arguments
      * (`name: phpExpr`).
      *
-     * Generated code: $this->__fn['name']($phpArg1, name2: $phpArg2, ...)
+     * Generated code: $this->__c_fn['name']($phpArg1, name2: $phpArg2, ...)
      *
      * @param string $name      The function name (already validated as registered).
      * @param string $expr      The full expression string being compiled.
@@ -1484,10 +1661,20 @@ class Tokenizer
                 if (\trim($argsRaw) !== '') {
                     throw new ClarityException('context() does not accept any arguments.');
                 }
-                return ['$__va', $i];
+                return ['$__c_va', $i];
             case 'include':
                 $this->autoEscape = false;
                 break;
+        }
+
+        // Open mode: a name that is not a registered function is emitted as a
+        // direct PHP call.  Registered names keep precedence so engine- and
+        // extension-defined functions are never shadowed by a PHP builtin.
+        if ($this->registry === null || !$this->registry->hasFunction($name)) {
+            $argList = \trim($argsRaw) !== '' ? $this->splitRespectingStrings($argsRaw, ',') : [];
+            $callee  = '\\' . \ltrim($name, '\\');
+            $call    = $callee . '(' . \implode(', ', $this->compileArgList($argList)) . ')';
+            return [$call, $i];
         }
 
         $safeName = "'" . \addslashes($name) . "'";
@@ -1499,7 +1686,7 @@ class Tokenizer
         if (isset($this->contextInjectedFunctions[$name])) {
             $this->autoEscape = false;
             $contextLit = "'" . $this->escapeContext . "'";
-            $call       = "\$__fn[{$safeName}]({$contextLit}";
+            $call       = "\$__c_fn[{$safeName}]({$contextLit}";
             if (\trim($argsRaw) !== '') {
                 $argList = $this->splitRespectingStrings($argsRaw, ',');
                 $call .= ', ' . \implode(', ', $this->compileArgList($argList));
@@ -1508,7 +1695,7 @@ class Tokenizer
             return [$call, $i];
         }
 
-        $call = "\$__fn[{$safeName}](";
+        $call = "\$__c_fn[{$safeName}](";
 
         if (\trim($argsRaw) !== '') {
             $argList = $this->splitRespectingStrings($argsRaw, ',');
@@ -1532,9 +1719,10 @@ class Tokenizer
      *  prop   object property     a.b  a->b  a?.b  a?->b
      *  dyn    object dyn property a{k}       a?{k}
      *
-     * The root segment is always `key` and resolves against the render scope
-     * ($__va['name']); only its NAME is used, so the `$` sigil form ($a.b) and
-     * the bare form (a.b) produce identical segments.
+     * The root segment is always `key` and resolves against the render scope;
+     * only its NAME is used, so the `$` sigil form ($a.b) and the bare form
+     * (a.b) produce identical segments.  A scope-seeded root (open mode) is
+     * emitted as a PHP local, otherwise as a `$__c_va['name']` lookup.
      *
      * Every continuation carries an `optional` flag. Optional access is the
      * author's opt-out from the strict "missing access throws" contract.
@@ -1574,13 +1762,18 @@ class Tokenizer
      *                              rejected by the caller.
      * @param bool $ternaryOpen  Whether a `?` is waiting for its branch
      *                              separator in the enclosing expression.
-     * @return array{end:int, segments:array<int,array{type:string,value:string,optional:bool}>}|null
+     * @param bool $allowCall    Whether a property read may be followed by a
+     *                              method-call argument list (`$obj->m(...)`).
+     *                              True only in open mode, and only on the
+     *                              `$`-sigil path.
+     * @return array{end:int, segments:array<int,array{type:string,value:string,optional:bool,call?:string}>}|null
      */
     private function parseVarChainAt(
         string $subject,
         int $start,
         bool $allowArrow = false,
-        bool $ternaryOpen = false
+        bool $ternaryOpen = false,
+        bool $allowCall = false
     ): ?array {
         $len = \strlen($subject);
         if ($start >= $len) {
@@ -1696,6 +1889,34 @@ class Tokenizer
                     $j++;
                 }
 
+                // Dynamic property/method name after `->`: `$obj->{$m}` and
+                // `$obj->{$m}(...)`.  Emitted as a `dyn` segment, exactly like
+                // the standalone `a{k}` form.
+                if ($j < $len && $subject[$j] === '{') {
+                    [$inner, $end] = $this->extractBalancedSegment($subject, $j);
+
+                    $segIndex = \count($segments);
+                    $segments[] = [
+                        'type'     => 'dyn',
+                        'value'    => $inner,
+                        'optional' => $optional,
+                    ];
+                    $i = $end;
+
+                    if ($allowCall) {
+                        $k2 = $i;
+                        while ($k2 < $len && \ctype_space($subject[$k2])) {
+                            $k2++;
+                        }
+                        if ($k2 < $len && $subject[$k2] === '(') {
+                            [$callArgs, $callEnd] = $this->extractBalancedSegment($subject, $k2);
+                            $segments[$segIndex]['call'] = $callArgs;
+                            $i = $callEnd;
+                        }
+                    }
+                    continue;
+                }
+
                 if ($j >= $len || !self::isIdentifierStart($subject[$j])) {
                     // A dangling `.` is never concatenation: `.` always means
                     // property access, so an operator with no member after it is
@@ -1715,11 +1936,28 @@ class Tokenizer
                     $i++;
                 }
 
+                $segIndex = \count($segments);
                 $segments[] = [
                     'type'     => 'prop',
                     'value'    => \substr($subject, $idStart, $i - $idStart),
                     'optional' => $optional,
                 ];
+
+                // Method call: attach the argument list to the property segment
+                // so a nullsafe receiver stays one `?->m(args)` expression (PHP
+                // short-circuits the whole call) instead of a guarded read that
+                // a trailing `(...)` could never legally follow.
+                if ($allowCall) {
+                    $k2 = $i;
+                    while ($k2 < $len && \ctype_space($subject[$k2])) {
+                        $k2++;
+                    }
+                    if ($k2 < $len && $subject[$k2] === '(') {
+                        [$callArgs, $callEnd] = $this->extractBalancedSegment($subject, $k2);
+                        $segments[$segIndex]['call'] = $callArgs;
+                        $i = $callEnd;
+                    }
+                }
                 continue;
             }
 
@@ -1759,12 +1997,25 @@ class Tokenizer
                     if ($cc === ']' || $cc === '}') {
                         $depth--;
                         if ($depth === 0) {
+                            $segIndex = \count($segments);
                             $segments[] = [
                                 'type'     => $ch === '[' ? 'index' : 'dyn',
                                 'value'    => \substr($subject, $innerStart, $i - $innerStart),
                                 'optional' => $optional,
                             ];
                             $i++;
+                            // Dynamic method call: `$obj->{$m}(...)`.
+                            if ($allowCall && $ch === '{') {
+                                $k2 = $i;
+                                while ($k2 < $len && \ctype_space($subject[$k2])) {
+                                    $k2++;
+                                }
+                                if ($k2 < $len && $subject[$k2] === '(') {
+                                    [$callArgs, $callEnd] = $this->extractBalancedSegment($subject, $k2);
+                                    $segments[$segIndex]['call'] = $callArgs;
+                                    $i = $callEnd;
+                                }
+                            }
                             break;
                         }
                         $i++;
@@ -1958,7 +2209,7 @@ class Tokenizer
             throw new ClarityException("Invalid identifier in var chain: {$first}");
         }
 
-        $php = '$__va[\'' . $first . '\']';
+        $php = $this->rootPhp($first);
         $n   = \count($segments);
 
         for ($k = 1; $k < $n; $k++) {
@@ -1971,7 +2222,11 @@ class Tokenizer
     /**
      * Emit one chain continuation onto an existing PHP expression.
      *
-     * @param array{type:string,value:string,optional?:bool} $seg
+     * A `prop`/`dyn` segment may carry an optional `call` (its raw argument
+     * list) and `dynName` (the compiled PHP for a computed method name), which
+     * together emit `->method(args)` / `->{$expr}(args)`.
+     *
+     * @param array{type:string,value:string,optional?:bool,call?:string,dynName?:string} $seg
      */
     private function appendChainSegmentPhp(string $php, array $seg): string
     {
@@ -1994,7 +2249,7 @@ class Tokenizer
             // the strict-access design exists to prevent.
             //
             // Two forms:
-            //   bare root    -> (isset($__va['a'])     ? $__va['a']['k']     : null)
+            //   bare root    -> (isset($a)           ? $a['k']           : null)
             //   anything else-> (($t = RECV) === null ? null : $t['k'])
             // The first is preferred where it is CORRECT: isset() reports an
             // absent ROOT as false without a warning, which is precisely the
@@ -2005,11 +2260,15 @@ class Tokenizer
             // duplication is what made an earlier revision grow as 2^N — six
             // optional segments emitted 2 245 characters for one read). Both
             // forms keep the expression nestable.
-            if (\preg_match(self::BARE_ROOT_RE, $php)) {
-                return '(isset(' . $php . ') ? ' . $php . '[' . $key . '] : null)';
+            //
+            // The guarded subject is the SHORT root (no `?? …` tail): wrapping an
+            // already-coalesced root in isset() is invalid PHP.
+            $subject = $this->toLocalSubject($php);
+            if (\preg_match(self::BARE_ROOT_RE, $subject)) {
+                return '(isset(' . $subject . ') ? ' . $subject . '[' . $key . '] : null)';
             }
 
-            $tmp = '$__g' . (++$this->guardCounter);
+            $tmp = '$__c_g' . (++$this->guardCounter);
             return '((' . $tmp . ' = ' . $php . ') === null ? null : ' . $tmp . '[' . $key . '])';
         }
 
@@ -2022,8 +2281,13 @@ class Tokenizer
             throw new ClarityException("Invalid identifier in var chain: {$value}");
         }
 
+        // Method call attached to the property read (open mode only).
+        $call = isset($seg['call'])
+            ? '(' . $this->compileMethodArgs((string) $seg['call']) . ')'
+            : '';
+
         if (!$optional) {
-            return $php . '->' . $prop;
+            return $php . '->' . $prop . $call;
         }
 
         // `?->` tolerates a NULL receiver while leaving the PROPERTY READ strict,
@@ -2031,16 +2295,32 @@ class Tokenizer
         // property" — the feedback we want. It short-circuits the rest of the
         // chain and nests without any guard expression.
         //
-        // An ABSENT root is a separate case: `$__va['a']?->b` still raises
+        // An ABSENT root is a separate case: `$__c_va['a']?->b` still raises
         // "Undefined array key 'a'", so the receiver is guarded with isset()
         // there — the same tolerance the array side gets, which keeps `?.` and
         // `?:` consistent about an absent root. (Emitting `?? null` instead would
         // additionally swallow a missing property.)
-        if (\preg_match(self::BARE_ROOT_RE, $php)) {
-            return '(isset(' . $php . ') ? ' . $php . '->' . $prop . ' : null)';
+        $subject = $this->toLocalSubject($php);
+        if (\preg_match(self::BARE_ROOT_RE, $subject)) {
+            return '(isset(' . $subject . ') ? ' . $subject . '->' . $prop . $call . ' : null)';
         }
 
-        return $php . '?->' . $prop;
+        return $php . '?->' . $prop . $call;
+    }
+
+    /**
+     * Compile a method-call argument list to PHP.
+     *
+     * Only reachable in open mode: method calls require both the `$` sigil and
+     * the sandbox disabled.  Arguments are full Clarity expressions and named
+     * arguments become PHP named arguments.
+     */
+    private function compileMethodArgs(string $argsRaw): string
+    {
+        if (\trim($argsRaw) === '') {
+            return '';
+        }
+        return \implode(', ', $this->compileArgList($this->splitRespectingStrings($argsRaw, ',')));
     }
 
     /**
@@ -2102,14 +2382,56 @@ class Tokenizer
     }
 
     /**
-     * Convert a Clarity var-chain string to a PHP $__va[...] expression.
+     * Emit a chain root: a PHP local in open mode, else a `$__c_va` lookup.
+     *
+     * Open mode seeds the render scope into locals, so the root IS the local.
+     * No guard expression is emitted: an unknown name then raises PHP's own
+     * "Undefined variable" warning, which {@see ClarityEngineTrait::buildErrorHandler()}
+     * already maps to a ClarityException carrying the template line. That keeps
+     * the strict-access contract identical to sandbox mode — and a `?? $__c_va[…]`
+     * fallback would silently suppress it, which is the failure strict access
+     * exists to prevent.
+     *
+     * Read and write are therefore the SAME text (`$name`), so no lvalue flag is
+     * needed in either mode.
+     */
+    private function rootPhp(string $name): string
+    {
+        if (!$this->localRoots || $this->inLambda) {
+            return '$__c_va[\'' . $name . '\']';
+        }
+
+        return '$' . $name;
+    }
+
+    /**
+     * `$__c_va['a']` → `$a` in open mode.  The guard helpers only care about the
+     * subject, so the emitted form must match what rootPhp() produces for a
+     * bare root.  A root that is not a bare `$__c_va[...]` (an already-guarded
+     * expression, or a nested chain) is returned unchanged.
+     */
+    private function toLocalSubject(string $php): string
+    {
+        if (!$this->localRoots || $this->inLambda) {
+            return $php;
+        }
+
+        return (string) \preg_replace(
+            '/^\$__c_va\[\'([A-Za-z_][A-Za-z0-9_]*)\'\]$/',
+            '$$1',
+            $php
+        );
+    }
+
+    /**
+     * Convert a Clarity var-chain string to a PHP $__c_va[...] expression.
      *
      * Supports:
-     *   foo           → $__va['foo']
-     *   foo.bar       → $__va['foo']['bar']
-     *   items[0]      → $__va['items'][0]
-     *   items[index]  → $__va['items'][$__va['index']]
-     *   a.b[c.d].e    → $__va['a']['b'][$__va['c']['d']]['e']
+     *   foo           → $__c_va['foo']
+     *   foo.bar       → $__c_va['foo']['bar']
+     *   items[0]      → $__c_va['items'][0]
+     *   items[index]  → $__c_va['items'][$__c_va['index']]
+     *   a.b[c.d].e    → $__c_va['a']['b'][$__c_va['c']['d']]['e']
      */
     public function varChainToPhp(string $chain): string
     {
@@ -2289,7 +2611,7 @@ class Tokenizer
     }
 
     /**
-     * Build a PHP filter call:  $this->__fl['name']($value, arg1, name2: arg2)
+     * Build a PHP filter call:  $this->__c_fl['name']($value, arg1, name2: arg2)
      *
      * For map / filter / reduce the first argument must be either:
      *   - a lambda expression:  param => expression
@@ -2329,41 +2651,142 @@ class Tokenizer
             $argList = $this->splitRespectingStrings($args, ',');
         }
 
-        $inlineCall = $this->buildInlineFilterCall($name, $phpValue, $argList);
-        if ($inlineCall !== null) {
-            return $trailing !== '' ? $inlineCall . $this->convertVarsAndOps($trailing) : $inlineCall;
-        }
+        $isCallableFilter = isset(self::CALLABLE_ARG_FILTERS[$name]);
+        $isRegistered     = $isCallableFilter
+            || ($this->registry !== null && ($this->registry->hasInlineFilter($name) || $this->registry->hasFilter($name)));
 
-        $safeName = "'" . \addslashes($name) . "'";
-        $call     = "\$__fl[{$safeName}]({$phpValue}";
+        // Registered filters win over PHP functions of the same name.  In
+        // sandbox mode an unregistered name ALSO takes this path, exactly as
+        // before: it compiles to a $__c_fl lookup and fails at runtime.
+        if ($isRegistered || $this->sandboxMode) {
+            $inlineCall = $this->buildInlineFilterCall($name, $phpValue, $argList);
+            if ($inlineCall !== null) {
+                return $trailing !== '' ? $inlineCall . $this->convertVarsAndOps($trailing) : $inlineCall;
+            }
 
-        if ($argList !== []) {
-            $isCallableFilter = isset(self::CALLABLE_ARG_FILTERS[$name]);
+            $safeName = "'" . \addslashes($name) . "'";
+            $call     = "\$__c_fl[{$safeName}]({$phpValue}";
 
-            if ($isCallableFilter) {
-                // map/filter/reduce: first arg is a lambda/filter-ref, rest are positional only.
-                foreach ($argList as $i => $arg) {
-                    $arg = \trim($arg);
-                    $call .= ', ';
-                    if ($i === 0) {
-                        $call .= $this->compileCallableArg($arg, $name);
-                    } else {
-                        $call .= $this->processCondition($arg);
+            if ($argList !== []) {
+                if ($isCallableFilter) {
+                    // map/filter/reduce: first arg is a lambda/filter-ref, rest are positional only.
+                    foreach ($argList as $i => $arg) {
+                        $arg = \trim($arg);
+                        $call .= ', ';
+                        if ($i === 0) {
+                            $call .= $this->compileCallableArg($arg, $name);
+                        } else {
+                            $call .= $this->processCondition($arg);
+                        }
+                    }
+                } else {
+                    // Standard filter: emit args directly; named args become PHP named args.
+                    foreach ($this->compileArgList($argList) as $phpArg) {
+                        $call .= ', ' . $phpArg;
                     }
                 }
-            } else {
-                // Standard filter: emit args directly; named args become PHP named args.
-                foreach ($this->compileArgList($argList) as $phpArg) {
-                    $call .= ', ' . $phpArg;
-                }
             }
+
+            $call .= ')';
+            if ($trailing !== '') {
+                $call .= $this->convertVarsAndOps($trailing);
+            }
+            return $call;
         }
 
-        $call .= ')';
-        if ($trailing !== '') {
-            $call .= $this->convertVarsAndOps($trailing);
+        // Open mode: a filter name that is not registered resolves to a PHP
+        // function of the same name (Blade / Stempler / Plates parity).
+        return $this->buildOpenFilterCall($name, $phpValue, $argList, $trailing);
+    }
+
+    /**
+     * Compile a filter segment that resolves to a PHP function (open mode only).
+     *
+     * By default the piped value becomes the first argument:
+     *   {{ 'ab' |> strtoupper }}               → \strtoupper($value)
+     *   {{ 'a' |> str_replace('a', 'b') }}     → \str_replace($value, 'a', 'b')
+     *
+     * A single `_` placeholder in the argument list positions the value
+     * explicitly, for functions whose value argument is not first:
+     *   {{ 'k' |> array_key_exists(_, $arr) }} → \array_key_exists($value, $arr)
+     *
+     * @param list<string> $argList Raw argument strings (already comma-split).
+     * @param string       $phpValue Already-compiled PHP for the piped value.
+     * @param string       $trailing Trailing comparison operator, if any.
+     */
+    private function buildOpenFilterCall(string $name, string $phpValue, array $argList, string $trailing): string
+    {
+        if (!$this->isFunctionCallAllowed($name)) {
+            throw new ClarityException(
+                "Function '{$name}' is blocked in open mode. Allow it by removing it from the deny-list."
+            );
         }
-        return $call;
+
+        $fn = \ltrim($name, '\\');
+        if (!\function_exists($fn)) {
+            throw new ClarityException(
+                "Unknown filter '{$name}': no filter is registered under that name and no PHP function '{$fn}()' exists."
+            );
+        }
+
+        $callee = '\\' . $fn;
+
+        if ($argList === []) {
+            $call = $callee . '(' . $phpValue . ')';
+            return $trailing !== '' ? $call . $this->convertVarsAndOps($trailing) : $call;
+        }
+
+        $prevInArgs = $this->inOpenFilterArgs;
+        $prevValue  = $this->openFilterValue;
+        $this->inOpenFilterArgs = true;
+        $this->openFilterValue  = $phpValue;
+
+        try {
+            $outArgs   = [];
+            $seenNamed = false;
+            $valuePos  = null;
+
+            foreach ($argList as $idx => $arg) {
+                $arg = \trim($arg);
+                if (\str_starts_with($arg, '...')) {
+                    throw new ClarityException('Spread operator is only allowed inside array and object literals.');
+                }
+
+                if ($arg === '_') {
+                    if ($valuePos !== null) {
+                        throw new ClarityException("Filter '{$name}' may use the '_' placeholder only once.");
+                    }
+                    $valuePos = $idx;
+                    $outArgs[$idx] = $phpValue;
+                    continue;
+                }
+
+                $named = $this->parseNamedArg($arg);
+                if ($named !== null) {
+                    $seenNamed = true;
+                    $outArgs[$idx] = $named['name'] . ': ' . $this->processCondition($named['expr']);
+                    continue;
+                }
+
+                if ($seenNamed) {
+                    throw new ClarityException(
+                        "Positional argument after named argument in argument list: '{$arg}'"
+                    );
+                }
+
+                $outArgs[$idx] = $this->processCondition($arg);
+            }
+        } finally {
+            $this->inOpenFilterArgs = $prevInArgs;
+            $this->openFilterValue  = $prevValue;
+        }
+
+        if ($valuePos === null) {
+            \array_unshift($outArgs, $phpValue);
+        }
+
+        $call = $callee . '(' . \implode(', ', $outArgs) . ')';
+        return $trailing !== '' ? $call . $this->convertVarsAndOps($trailing) : $call;
     }
 
     /**
@@ -2563,7 +2986,30 @@ class Tokenizer
                     return $this->buildInlineCallableFilterReference($refName);
                 }
 
-                return "\$__fl['" . \addslashes($refName) . "']";
+                // Open mode: a quoted name that is not a registered filter may
+                // name a PHP function (Blade parity).  Registered filters keep
+                // precedence, so the callable-injection guard is unchanged in
+                // sandbox mode.
+                if (
+                    !$this->sandboxMode
+                        && $this->registry !== null
+                        && !$this->registry->hasFilter($refName)
+                        && !$this->registry->hasInlineFilter($refName)
+                ) {
+                    if (!$this->isFunctionCallAllowed($refName)) {
+                        throw new ClarityException(
+                            "Function '{$refName}' is blocked in open mode. Allow it by removing it from the deny-list."
+                        );
+                    }
+                    if (!\function_exists(\ltrim($refName, '\\'))) {
+                        throw new ClarityException(
+                            "Unknown callable '{$refName}': not a registered filter and no PHP function exists."
+                        );
+                    }
+                    return "'" . \addslashes(\ltrim($refName, '\\')) . "'";
+                }
+
+                return "\$__c_fl['" . \addslashes($refName) . "']";
             }
         }
 
@@ -2587,12 +3033,12 @@ class Tokenizer
 
     private function buildInlineCallableFilterReference(string $referenceName): string
     {
-        $inlineCall = $this->buildInlineFilterCall($referenceName, '$__val', []);
+        $inlineCall = $this->buildInlineFilterCall($referenceName, '$__c_val', []);
         if ($inlineCall === null) {
             throw new ClarityException("Unknown inline filter reference: '{$referenceName}'");
         }
 
-        return "static fn(mixed \$__val): mixed => {$inlineCall}";
+        return "static fn(mixed \$__c_val): mixed => {$inlineCall}";
     }
 
     /**
@@ -2643,8 +3089,8 @@ class Tokenizer
      *       carry, item => carry + item
      * - The body is compiled as a full Clarity expression (including filter
      *   pipelines) with the parameter name(s) treated as local variables,
-     *   while all other identifiers are resolved from the captured $__va.
-     * - Both $__va and $this->__fl (the filter registry) are captured by value so
+     *   while all other identifiers are resolved from the captured $__c_va.
+     * - Both $__c_va and $this->__c_fl (the filter registry) are captured by value so
      *   the closure can access outer template variables and other filters.
      *
      * @param string $arg      The full lambda string (e.g. 'item => item.name').
@@ -2670,11 +3116,20 @@ class Tokenizer
         }
 
         // Compile the body as a full Clarity expression (handles |> pipelines).
-        // convertVarsAndOps maps all identifiers to $__va['name'], so we fix
+        // convertVarsAndOps maps all identifiers to $__c_va['name'], so we fix
         // up the parameter references afterwards with a targeted substitution.
-        $phpBody = $this->processCondition($body);
+        //
+        // The body is compiled with $inLambda set: the closure captures $__c_va
+        // but NOT the render frame's locals, so a root there must stay a $__c_va
+        // lookup (or every outer variable in the lambda would read as null).
+        $this->inLambda = true;
+        try {
+            $phpBody = $this->processCondition($body);
+        } finally {
+            $this->inLambda = false;
+        }
 
-        $phpBody   = \str_replace("\$__va['{$first}']", '$' . $first, $phpBody);
+        $phpBody   = \str_replace("\$__c_va['{$first}']", '$' . $first, $phpBody);
         $signature = "mixed \${$first}";
 
         if ($filterName === 'reduce') {
@@ -2684,7 +3139,7 @@ class Tokenizer
                         . "(e.g. 'acc, item => acc + item'), got: '{$paramList}'"
                 );
             }
-            $phpBody = \str_replace("\$__va['{$second}']", '$' . $second, $phpBody);
+            $phpBody = \str_replace("\$__c_va['{$second}']", '$' . $second, $phpBody);
             $signature .= ", mixed \${$second}";
         } elseif (isset($second)) {
             throw new ClarityException(
@@ -2692,7 +3147,7 @@ class Tokenizer
             );
         }
 
-        return "static function({$signature}) use (\$__va): mixed { return {$phpBody}; }";
+        return "static function({$signature}) use (\$__c_va): mixed { return {$phpBody}; }";
     }
 
     /**
@@ -2738,31 +3193,46 @@ class Tokenizer
         $fallback = $named['fallback'] ?? $positional[0] ?? null;
         $optional = $named['optional'] ?? null;
 
-        if ($optional !== null && $optional !== 'true' && $optional !== 'false') {
-            throw new ClarityException(
-                "Filter 'expand' expects a literal true or false for 'optional', got: '{$optional}'."
-            );
-        }
-
         // The absent-branch value: an explicit fallback, else null when the
         // author opted out of the strict contract, else the strict throw.
-        $missing = $fallback
-            ?? ($optional === 'true'
-                ? 'null'
-                : 'throw new \\Clarity\\ClarityException("Undefined variable: $__tmp")');
+        //
+        // The throw names the missing variable: `$__c_tmp` is the temporary the
+        // lookup assigns, so the message carries the actual name.
+        if ($fallback !== null) {
+            $missing = $fallback;
+        } else {
+            if ($optional) {
+                $missing = "$optional ? null : ";
+            } else {
+                $missing = "";
+            }
+            $missing .= 'throw new \\Clarity\\ClarityException("Undefined variable: $__c_tmp")';
+        }
 
-        if (!empty($this->localVars)) {
+        // The lookup follows the SAME variable model as every other access.
+        // Sandbox reads the name out of `$__c_va`; open mode reads the local
+        // that `extract()` seeded, which is what makes `expand` agree with
+        // `{{ name }}` about where a variable lives.
+        //
+        // Both forms are safe: a dynamic dereference is an ordinary LOCAL
+        // lookup, so `${$__c_tmp}` cannot reach a superglobal the way a literal
+        // `$_SERVER` spelling can.
+
+        if ($this->localRoots && !$this->inLambda) {
+            // In local-roots mode, the variable is already in scope as a local.
+            $call = "\$\{{$phpValue}\}";
+        } elseif (!empty($this->localVars)) {
             $entries = [];
             foreach ($this->localVars as $tplName => $phpVar) {
                 $entries[] = \var_export($tplName, true) . ' => 1';
             }
             $mapLiteral = '[' . \implode(', ', $entries) . ']';
-            $call       = "(\\array_key_exists(\$__tmp = (string) {$phpValue}, {$mapLiteral})"
-                . " ? \${\$__tmp}"
-                . " : (isset(\$__va[\$__tmp]) ? \$__va[\$__tmp]"
+            $call       = "(\\array_key_exists(\$__c_tmp = (string) {$phpValue}, {$mapLiteral})"
+                . " ? \${\$__c_tmp}"
+                . " : (isset(\$__c_va[\$__c_tmp]) ? \$__c_va[\$__c_tmp]"
                 . " : ({$missing})))";
         } else {
-            $call = "(isset(\$__va[\$__tmp = (string) {$phpValue}]) ? \$__va[\$__tmp]"
+            $call = "(isset(\$__c_va[\$__c_tmp = (string) {$phpValue}]) ? \$__c_va[\$__c_tmp]"
                 . " : ({$missing}))";
         }
 

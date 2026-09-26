@@ -4,9 +4,9 @@ namespace Clarity;
 /**
  * Clarity Template Engine
  *
- * A fast, secure, and expressive PHP template engine that compiles `.clarity.html` 
- * templates into cached PHP classes. Templates execute in a sandboxed environment 
- * with NO access to arbitrary PHP — they can only use variables passed to render() 
+ * A fast, secure, and expressive PHP template engine that compiles `.clarity.html`
+ * templates into cached PHP classes. Templates execute in a sandboxed environment
+ * with NO access to arbitrary PHP — they can only use variables passed to render()
  * and registered filters/functions.
  *
  * Key Features
@@ -22,7 +22,7 @@ namespace Clarity;
  * -----------
  * ```php
  * use Clarity\ClarityEngine;
- * 
+ *
  * $engine = new ClarityEngine([
  *    'viewPath' => __DIR__ . '/templates',
  *    'cachePath' => __DIR__ . '/cache',
@@ -31,12 +31,12 @@ namespace Clarity;
  * $engine = ClarityEngine::create()
  *    ->setViewPath(__DIR__ . '/templates')
  *    ->setCachePath(__DIR__ . '/cache');
- * 
+ *
  * // Register a custom filter
- * $engine->addFilter('currency', fn($v, string $symbol = '€') => 
+ * $engine->addFilter('currency', fn($v, string $symbol = '€') =>
  *     $symbol . ' ' . number_format($v, 2)
  * );
- * 
+ *
  * // Render a template
  * echo $engine->render('welcome', [
  *     'user' => ['name' => 'John'],
@@ -49,15 +49,15 @@ namespace Clarity;
  * ```twig
  * {# Output with auto-escaping #}
  * <h1>Hello, {{ user.name }}!</h1>
- * 
+ *
  * {# Filters transform values #}
  * <p>Balance: {{ balance |> currency('$') }}</p>
- * 
+ *
  * {# Control flow #}
  * {% if user.isActive %}
  *   <span>Active</span>
  * {% endif %}
- * 
+ *
  * {# Loops #}
  * {% for item in items %}
  *   <li>{{ item.name }}</li>
@@ -73,7 +73,7 @@ namespace Clarity;
  *   <head><title>{% block title %}Default{% endblock %}</title></head>
  *   <body>{% block content %}{% endblock %}</body>
  * </html>
- * 
+ *
  * {# pages/home.clarity.html #}
  * {% extends "layouts/base" %}
  * {% block title %}Home{% endblock %}
@@ -89,11 +89,17 @@ namespace Clarity;
  *
  * Security
  * --------
- * Templates are sandboxed and cannot:
+ * Templates are sandboxed by default and cannot:
  * - Access PHP variables directly ($var forbidden)
  * - Call arbitrary PHP functions (use filters instead)
  * - Execute arbitrary code (no eval, backticks, etc.)
- * - Call methods on objects (objects converted to arrays)
+ * - Call methods on objects
+ *
+ * The sandbox can be disabled on purpose with setSandboxMode(false), which
+ * grants templates the full power of PHP (arbitrary function calls, PHP
+ * functions as filters, method calls, and {% php %} blocks).  That mode is
+ * equivalent to executing arbitrary PHP and is intended for trusted template
+ * authors only; see ClarityEngineTrait::setSandboxMode().
  *
  * @see https://github.com/clarity/engine Documentation and examples
  */
@@ -119,6 +125,11 @@ class ClarityEngine
      * - `namespaces`: associative array of namespace => path
      * - `cachePath`: path to compiled template cache (applied after init)
      * - `debug`: bool to enable debug mode
+     * - `sandbox`: bool — true (default) keeps templates sandboxed; false grants
+     *   templates full PHP access (arbitrary calls, PHP functions as filters,
+     *   method calls, raw PHP blocks)
+     * - `deniedFunctions`: list<string> — extra functions to block in open mode;
+     *   empty by default, since open mode is full PHP access
      *
      * @param array $config Configuration options for the engine.
      */
@@ -146,6 +157,14 @@ class ClarityEngine
 
         if (isset($config['layout']) && \is_string($config['layout'])) {
             $this->setLayout($config['layout']);
+        }
+
+        // Open mode: `sandbox => false` grants templates full PHP access.
+        if (\array_key_exists('sandbox', $config)) {
+            $this->setSandboxMode((bool) $config['sandbox']);
+        }
+        if (isset($config['deniedFunctions']) && \is_array($config['deniedFunctions'])) {
+            $this->setDeniedFunctions($config['deniedFunctions']);
         }
 
         $this->initializeClarityEngine();

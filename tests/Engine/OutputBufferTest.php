@@ -229,7 +229,7 @@ class OutputBufferTest extends BaseTestCase
         $src = (string) file_get_contents($this->compiledFileFor('scaffold'));
 
         $openPos    = strpos($src, 'ob_start();');
-        $capturePos = strpos($src, '$__obLevel = ob_get_level();');
+        $capturePos = strpos($src, '$__c_ob_level = ob_get_level();');
 
         $this->assertNotFalse($openPos, 'the scaffold must open a buffer');
         $this->assertNotFalse($capturePos, 'the scaffold must capture the buffer level');
@@ -248,7 +248,7 @@ class OutputBufferTest extends BaseTestCase
         $src = (string) file_get_contents($this->compiledFileFor('scaffold2'));
 
         $this->assertStringContainsString(
-            'while (ob_get_level() >= $__obLevel) {',
+            'while (ob_get_level() >= $__c_ob_level) {',
             $src,
             'the catch block must drain to the captured level, not call ob_end_clean() once'
         );

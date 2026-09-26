@@ -127,14 +127,14 @@ class LocaleService
                     );
                 }
                 $param = $processExpr($rest);
-                return "\$__sv['locale']->push({$param});";
+                return "\$__c_sv['locale']->push({$param});";
             }
         );
 
         $engine->addDirective(
             'endwith_locale',
             static function (string $rest, string $sourcePath, int $tplLine, callable $processExpr): string {
-                return "\$__sv['locale']->pop();";
+                return "\$__c_sv['locale']->pop();";
             }
         );
     }

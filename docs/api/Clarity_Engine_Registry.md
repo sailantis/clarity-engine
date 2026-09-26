@@ -68,6 +68,10 @@ Built-in Filters Catalog
 **Utility Filters**
 - `json`                      : JSON encode (use with |> raw)
 - `default($fallback)`        : Return fallback if value is empty/falsy
+- `expand [fallback: | optional:]` : Treat the value as a variable NAME and look it up
+  Usage: `{{ name |> expand }}`, `{{ name |> expand(optional: true) ?? 'none' }}`
+  Compiled specially (see Tokenizer::buildExpandCall) so it can see loop locals;
+  absent names throw unless `optional: true` or a fallback is supplied.
 - `url_encode`                : URL-encode value (rawurlencode)
 - `data_uri [$mimeType]`      : Generate base64-encoded data: URI
 - `unicode`                   : Wrap in UnicodeString for advanced operations
@@ -100,9 +104,13 @@ Template usage:
 {{ article.body |> excerpt(200) }}
 ```
 
+## Public Constants
+
+- **DEFAULT_DENIED_FUNCTIONS** = `[]`
+
 ## Public methods
 
-### setDumpHandler() · <small>[🗎](../../src/Engine/Registry.php#L326)</small>
+### setDumpHandler() · <small>[🗎](../../src/Engine/Registry.php#L354)</small>
 
 `public function setDumpHandler(Closure $fn): void`
 
@@ -123,7 +131,7 @@ Called internally — not part of the public engine API.
 
 ---
 
-### setDdHandler() · <small>[🗎](../../src/Engine/Registry.php#L331)</small>
+### setDdHandler() · <small>[🗎](../../src/Engine/Registry.php#L359)</small>
 
 `public function setDdHandler(Closure $fn): void`
 
@@ -140,7 +148,7 @@ Called internally — not part of the public engine API.
 
 ---
 
-### __construct() · <small>[🗎](../../src/Engine/Registry.php#L336)</small>
+### __construct() · <small>[🗎](../../src/Engine/Registry.php#L364)</small>
 
 `public function __construct(callable|null $includeRenderer = null): mixed`
 
@@ -157,7 +165,7 @@ Called internally — not part of the public engine API.
 
 ---
 
-### addFilter() · <small>[🗎](../../src/Engine/Registry.php#L350)</small>
+### addFilter() · <small>[🗎](../../src/Engine/Registry.php#L378)</small>
 
 `public function addFilter(string $name, callable $fn): static`
 
@@ -177,7 +185,7 @@ Register a user-defined filter.
 
 ---
 
-### hasFilter() · <small>[🗎](../../src/Engine/Registry.php#L359)</small>
+### hasFilter() · <small>[🗎](../../src/Engine/Registry.php#L387)</small>
 
 `public function hasFilter(string $name): bool`
 
@@ -196,7 +204,7 @@ Check whether a named filter is registered.
 
 ---
 
-### addInlineFilter() · <small>[🗎](../../src/Engine/Registry.php#L378)</small>
+### addInlineFilter() · <small>[🗎](../../src/Engine/Registry.php#L406)</small>
 
 `public function addInlineFilter(string $name, array $definition): void`
 
@@ -224,7 +232,7 @@ The definition must follow the same structure as the built-in entries:
 
 ---
 
-### hasInlineFilter() · <small>[🗎](../../src/Engine/Registry.php#L387)</small>
+### hasInlineFilter() · <small>[🗎](../../src/Engine/Registry.php#L415)</small>
 
 `public function hasInlineFilter(string $name): bool`
 
@@ -243,7 +251,7 @@ Check whether a named inline filter is registered.
 
 ---
 
-### getInlineFilter() · <small>[🗎](../../src/Engine/Registry.php#L395)</small>
+### getInlineFilter() · <small>[🗎](../../src/Engine/Registry.php#L423)</small>
 
 `public function getInlineFilter(string $name): array|null`
 
@@ -262,7 +270,7 @@ Get the definition of a named inline filter.
 
 ---
 
-### registerInlineFilter() · <small>[🗎](../../src/Engine/Registry.php#L406)</small>
+### registerInlineFilter() · <small>[🗎](../../src/Engine/Registry.php#L434)</small>
 
 `public function registerInlineFilter(string $name): void`
 
@@ -284,12 +292,12 @@ hasFilter() returns true for the new name.
 
 ---
 
-### addService() · <small>[🗎](../../src/Engine/Registry.php#L421)</small>
+### addService() · <small>[🗎](../../src/Engine/Registry.php#L449)</small>
 
 `public function addService(string $name, mixed $service): static`
 
 Store a non-callable service object under a named key so that compiled
-template render bodies can access it via `$__sv['key']->method()`.
+template render bodies can access it via `$__c_sv['key']->method()`.
 
 The key is conventionally prefixed with `__` to avoid collisions with
 real filter names (e.g. `__locale`, `__translator`).
@@ -308,7 +316,7 @@ real filter names (e.g. `__locale`, `__translator`).
 
 ---
 
-### hasService() · <small>[🗎](../../src/Engine/Registry.php#L430)</small>
+### hasService() · <small>[🗎](../../src/Engine/Registry.php#L458)</small>
 
 `public function hasService(string $name): bool`
 
@@ -327,7 +335,7 @@ Check whether a named service is registered.
 
 ---
 
-### getService() · <small>[🗎](../../src/Engine/Registry.php#L440)</small>
+### getService() · <small>[🗎](../../src/Engine/Registry.php#L468)</small>
 
 `public function getService(string $name): mixed`
 
@@ -350,7 +358,7 @@ Retrieve a named service.
 
 ---
 
-### allServices() · <small>[🗎](../../src/Engine/Registry.php#L456)</small>
+### allServices() · <small>[🗎](../../src/Engine/Registry.php#L484)</small>
 
 `public function allServices(): array`
 
@@ -366,7 +374,7 @@ The returned array includes callable filters, inline-filter markers
 
 ---
 
-### allFilters() · <small>[🗎](../../src/Engine/Registry.php#L469)</small>
+### allFilters() · <small>[🗎](../../src/Engine/Registry.php#L497)</small>
 
 `public function allFilters(): array`
 
@@ -382,7 +390,7 @@ The returned array includes callable filters, inline-filter markers
 
 ---
 
-### addFunction() · <small>[🗎](../../src/Engine/Registry.php#L481)</small>
+### addFunction() · <small>[🗎](../../src/Engine/Registry.php#L509)</small>
 
 `public function addFunction(string $name, callable $fn): static`
 
@@ -402,7 +410,7 @@ Register a user-defined function.
 
 ---
 
-### hasFunction() · <small>[🗎](../../src/Engine/Registry.php#L490)</small>
+### hasFunction() · <small>[🗎](../../src/Engine/Registry.php#L518)</small>
 
 `public function hasFunction(string $name): bool`
 
@@ -421,7 +429,7 @@ Check whether a named function is registered.
 
 ---
 
-### allFunctions() · <small>[🗎](../../src/Engine/Registry.php#L500)</small>
+### allFunctions() · <small>[🗎](../../src/Engine/Registry.php#L528)</small>
 
 `public function allFunctions(): array`
 
@@ -434,7 +442,7 @@ Get all registered functions as a name → callable map.
 
 ---
 
-### addDirective() · <small>[🗎](../../src/Engine/Registry.php#L721)</small>
+### addDirective() · <small>[🗎](../../src/Engine/Registry.php#L749)</small>
 
 `public function addDirective(string $keyword, callable $handler): static`
 
@@ -457,9 +465,9 @@ Example registration (inside a Module::register() call):
 ```php
 $engine->addDirective('with_locale', function(string $rest, string $path, int $line, callable $processExpr): string {
     $param = $processExpr(trim($rest));
-    return "\$__sv['locale']->push({$param});";
+    return "\$__c_sv['locale']->push({$param});";
 });
-$engine->addDirective('endwith_locale', fn(...) => "\$__sv['locale']->pop();");
+$engine->addDirective('endwith_locale', fn(...) => "\$__c_sv['locale']->pop();");
 ```
 
 **Parameters**
@@ -476,7 +484,7 @@ $engine->addDirective('endwith_locale', fn(...) => "\$__sv['locale']->pop();");
 
 ---
 
-### hasDirective() · <small>[🗎](../../src/Engine/Registry.php#L730)</small>
+### hasDirective() · <small>[🗎](../../src/Engine/Registry.php#L758)</small>
 
 `public function hasDirective(string $keyword): bool`
 
@@ -495,9 +503,9 @@ Check whether a handler is registered for the given keyword.
 
 ---
 
-### compileDirective() · <small>[🗎](../../src/Engine/Registry.php#L746)</small>
+### compileDirective() · <small>[🗎](../../src/Engine/Registry.php#L775)</small>
 
-`public function compileDirective(string $keyword, string $rest, string $sourcePath, int $tplLine, callable $processExpr): string`
+`public function compileDirective(string $keyword, string $rest, string $sourcePath, int $tplLine, callable $processExpr, Clarity\Engine\Compiler $compiler): string`
 
 Invoke the registered handler for $keyword and return compiled PHP.
 
@@ -510,6 +518,7 @@ Invoke the registered handler for $keyword and return compiled PHP.
 | `$sourcePath` | string | - | Source file path (for error messages). |
 | `$tplLine` | int | - | Template line number (for error messages). |
 | `$processExpr` | callable | - | fn(string $clarityExpr): string converter. |
+| `$compiler` | [Compiler](Clarity_Engine_Compiler.md) | - | The compiler invoking this directive. |
 
 **Return value**
 

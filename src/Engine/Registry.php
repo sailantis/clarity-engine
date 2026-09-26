@@ -110,6 +110,33 @@ use Stringable;
  */
 class Registry
 {
+    /**
+     * Functions blocked by default when the engine runs in open mode (sandbox
+     * disabled).
+     *
+     * EMPTY on purpose: open mode means "the full power of PHP", so the engine
+     * does not smuggle a second, weaker sandbox into it.  A fixed subset of
+     * "sinks" could never be a security boundary anyway -- hundreds of ordinary
+     * functions read the environment, write files or spawn processes -- and a
+     * list that silently blocks `exec` while allowing `proc_open` reads as
+     * protection that the switch has already declined to give.  The switch is
+     * the security decision; this constant exists only so an application can
+     * still add its own guardrails on top of it:
+     *
+     *     $engine->setDeniedFunctions(['exec', 'system']);
+     *
+     * What remains out of reach in both modes is the engine's own render-frame
+     * namespace: a template may not BIND a `__c_`-prefixed name (it would swap an
+     * internal for the rest of the render), and `$$name` variable-variable
+     * expansion is compile-time rejected while the sandbox is enabled.  Open mode
+     * lifts the latter — a dynamic dereference there is an ordinary local lookup,
+     * which is strictly weaker than the literal `$_SERVER` spelling open mode
+     * already permits.
+     *
+     * @var array<string, true>
+     */
+    public const DEFAULT_DENIED_FUNCTIONS = [];
+
     private mixed $includeRenderer;
 
     /** @var array<string, callable> */
@@ -169,7 +196,7 @@ class Registry
             'php' => '\abs({1} + 0)',
         ],
         'capitalize' => [
-            'php' => '($__tmp = (string){1}) === "" ? "" : \mb_strtoupper(\mb_substr($__tmp, 0, 1)) . \mb_strtolower(\mb_substr($__tmp, 1))',
+            'php' => '($__c_tmp = (string){1}) === "" ? "" : \mb_strtoupper(\mb_substr($__c_tmp, 0, 1)) . \mb_strtolower(\mb_substr($__c_tmp, 1))',
         ],
         'ceil' => [
             'php' => '\ceil((float){1})',
@@ -180,12 +207,12 @@ class Registry
             'defaults' => ['mime' => "'application/octet-stream'"],
         ],
         'date' => [
-            'php'      => '\date({2}, ($__tmp = {1}) instanceof \DateTimeInterface ? $__tmp->getTimestamp() : (\is_int($__tmp) ? $__tmp : (int) \strtotime((string) $__tmp)))',
+            'php'      => '\date({2}, ($__c_tmp = {1}) instanceof \DateTimeInterface ? $__c_tmp->getTimestamp() : (\is_int($__c_tmp) ? $__c_tmp : (int) \strtotime((string) $__c_tmp)))',
             'params'   => ['format'],
             'defaults' => ['format' => "'Y-m-d'"],
         ],
         'date_modify' => [
-            'php'    => '(int) ((new \DateTimeImmutable("@" . (($__tmp = {1}) instanceof \DateTimeInterface ? $__tmp->getTimestamp() : (\is_int($__tmp) ? $__tmp : (int) \strtotime((string) $__tmp)))))->modify({2})->getTimestamp())',
+            'php'    => '(int) ((new \DateTimeImmutable("@" . (($__c_tmp = {1}) instanceof \DateTimeInterface ? $__c_tmp->getTimestamp() : (\is_int($__c_tmp) ? $__c_tmp : (int) \strtotime((string) $__c_tmp)))))->modify({2})->getTimestamp())',
             'params' => ['modifier'],
         ],
         'default' => [
@@ -243,7 +270,7 @@ class Registry
             'defaults' => ['replace' => "''"],
         ],
         'reverse' => [
-            'php' => '(\is_array($__tmp = {1}) ? \array_reverse($__tmp) : \implode("", \array_reverse(\preg_split("//u", (string) $__tmp, -1, \PREG_SPLIT_NO_EMPTY) ?: [])))',
+            'php' => '(\is_array($__c_tmp = {1}) ? \array_reverse($__c_tmp) : \implode("", \array_reverse(\preg_split("//u", (string) $__c_tmp, -1, \PREG_SPLIT_NO_EMPTY) ?: [])))',
         ],
         'round' => [
             'php'      => '\round((float){1}, {2})',
@@ -251,7 +278,7 @@ class Registry
             'defaults' => ['precision' => '0'],
         ],
         'slice' => [
-            'php'      => '(\is_array($__tmp = {1}) ? \array_slice($__tmp, {2}, {3}) : \mb_substr((string) $__tmp, {2}, {3}))',
+            'php'      => '(\is_array($__c_tmp = {1}) ? \array_slice($__c_tmp, {2}, {3}) : \mb_substr((string) $__c_tmp, {2}, {3}))',
             'params'   => ['start', 'length'],
             'defaults' => ['length' => 'null'],
         ],
@@ -277,7 +304,7 @@ class Registry
             'php' => '\trim((string){1})',
         ],
         'truncate' => [
-            'php'      => '(\mb_strlen($__tmp = ((string){1})) <= {2} ? $__tmp : \mb_substr($__tmp, 0, {2}) . {3})',
+            'php'      => '(\mb_strlen($__c_tmp = ((string){1})) <= {2} ? $__c_tmp : \mb_substr($__c_tmp, 0, {2}) . {3})',
             'params'   => ['length', 'ellipsis'],
             'defaults' => ['ellipsis' => "'\\u{2026}'"],
         ],
@@ -296,10 +323,10 @@ class Registry
 
     /**
      * Non-callable service objects stored under a named key and passed into
-     * compiled templates via the $__fl array.
+     * compiled templates via the $__c_fl array.
      *
      * Modules use this to inject shared state (e.g. a locale stack) that
-     * inline filter PHP templates can access as `$this->__fl['__key']->method()`.
+     * inline filter PHP templates can access as `$this->__c_fl['__key']->method()`.
      *
      * @var array<string, mixed>
      */
@@ -411,7 +438,7 @@ class Registry
 
     /**
      * Store a non-callable service object under a named key so that compiled
-     * template render bodies can access it via `$__sv['key']->method()`.
+     * template render bodies can access it via `$__c_sv['key']->method()`.
      *
      * The key is conventionally prefixed with `__` to avoid collisions with
      * real filter names (e.g. `__locale`, `__translator`).
@@ -711,9 +738,9 @@ class Registry
      * ```php
      * $engine->addDirective('with_locale', function(string $rest, string $path, int $line, callable $processExpr): string {
      *     $param = $processExpr(trim($rest));
-     *     return "\$__sv['locale']->push({$param});";
+     *     return "\$__c_sv['locale']->push({$param});";
      * });
-     * $engine->addDirective('endwith_locale', fn(...) => "\$__sv['locale']->pop();");
+     * $engine->addDirective('endwith_locale', fn(...) => "\$__c_sv['locale']->pop();");
      * ```
      *
      * @param string   $keyword  Directive keyword (lowercase, e.g. 'with_locale').

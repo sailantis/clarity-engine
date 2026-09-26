@@ -486,7 +486,7 @@ class AccessSyntaxTest extends BaseTestCase
 
         $body = $this->compiledBody('a_emit_prop');
         $this->assertStringNotContainsString('Access::', $body, 'a property read must not touch the container runtime');
-        $this->assertStringContainsString('$__va[\'user\']->name', $body);
+        $this->assertStringContainsString('$__c_va[\'user\']->name', $body);
     }
 
     public function testArrayKeyTemplateEmitsNoContainerCall(): void
@@ -496,7 +496,7 @@ class AccessSyntaxTest extends BaseTestCase
 
         $body = $this->compiledBody('a_emit_key');
         $this->assertStringNotContainsString('Access::', $body);
-        $this->assertStringContainsString('$__va[\'user\'][\'name\']', $body);
+        $this->assertStringContainsString('$__c_va[\'user\'][\'name\']', $body);
     }
 
     /**
@@ -633,7 +633,7 @@ class AccessSyntaxTest extends BaseTestCase
         $this->assertSame('V', self::render('a_opt_emits_isset', ['list' => ['k' => 'V']]));
 
         $body = $this->compiledBody('a_opt_emits_isset');
-        $this->assertStringContainsString("isset(\$__va['list'])", $body);
+        $this->assertStringContainsString("isset(\$__c_va['list'])", $body);
         $this->assertStringNotContainsString('?? null', $body);
     }
 

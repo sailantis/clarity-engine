@@ -26,9 +26,15 @@ use Clarity\Template\TemplateLoader;
  *   class __Clarity_<slug>_<hash> {
  *       public static array $dependencies = ['name' => revision, ...];
  *       public static string $sourceMap   = 'lineDelta,fileIdx,tplDelta;...';
- *       public function __construct(private array $__fl, private array $__fn) {}
- *       public function render(array $__va): string { ... }
+ *       public function __construct(private array $__c_fl, private array $__c_fn, private array $__c_sv) {}
+ *       public function render(array $__c_va): string { ... }
  *   }
+ *
+ * Every PHP variable the engine binds into the render frame carries the `__c_`
+ * prefix ("c" for Clarity).  The prefix IS the reservation rule: an engine
+ * internal is covered by choosing to spell it `__c_…`, so a newly added
+ * internal cannot silently collide with a template variable whose author never
+ * heard of it.  See Compiler::INTERNAL_PREFIX.
  *
  * $dependencies and $sourceMap are read via reflection for cache invalidation
  * and error mapping — no file I/O needed on warm paths (OPcache serves them).
@@ -65,8 +71,33 @@ class Compiler
 {
     /**
      * Bump this whenever a change alters the PHP that a template compiles to.
+     *
+     * Version 8: sandbox mode.  Open-mode templates may emit raw PHP calls that
+     * sandboxed templates never do, so previously cached classes must be rebuilt.
+     * Version 9: raw PHP blocks.  The standalone `{% php <code> %}` spelling and
+     * per-line source mapping for every php block both change the emitted body
+     * and its map, so version-8 classes must be rebuilt.
+     * Version 10: open mode seeds the render scope into PHP locals.  Chain roots
+     * are emitted as locals and the body gains an `extract()`, so every
+     * open-mode class must be rebuilt.
+     * Version 11: engine internals renamed to the `__c_` prefix, and the open-mode
+     * `expand` filter reads the local scope instead of the variable array.  Both
+     * change the emitted body, so version-10 classes must be rebuilt.
      */
-    public const COMPILER_VERSION = 7;
+    public const COMPILER_VERSION = 11;
+
+    /**
+     * Prefix owned by the engine for every PHP variable it binds into the render
+     * frame: `__c_va`, `__c_fl`, `__c_fn`, `__c_sv`, `__c_tmp`, `__c_val`,
+     * `__c_ob_level`, `__c_e`, `__c_m_<macro param>`.
+     *
+     * This is a PREFIX rule rather than a name list so it stays correct as the
+     * engine grows: a new internal is protected by being spelled with this
+     * prefix, with no second place to update.  Everything else starting with
+     * underscores — `__foo`, `_c_foo`, `___foo` — is an ordinary template
+     * variable in both modes.
+     */
+    public const INTERNAL_PREFIX = '__c_';
 
     private const SOURCE_MARKER_RE = '/^@source\s+([A-Za-z0-9+\/=]+)\s+(\d+)$/';
 
@@ -122,8 +153,14 @@ class Compiler
     private bool $debugMode = false;
 
     /**
+     * When true (default) templates are sandboxed; when false ("open mode") the
+     * tokenizer permits arbitrary PHP function and method calls.
+     */
+    private bool $sandboxMode = true;
+
+    /**
      * @var array<string, string>  templateVarName → PHP variable string for locally-bound loop vars.
-     * Checked first during expression resolution; falls back to $__va[name] when absent.
+     * Checked first during expression resolution; falls back to $__c_va[name] when absent.
      * Simple mapping: 'item' → '$item', 'key' → '$key', etc.
      */
     private array $localVars = [];
@@ -159,6 +196,34 @@ class Compiler
     private int $mappedSourceLineBase = 1;
 
     private int $mappedMergedLineBase = 1;
+
+    /**
+     * Raw-PHP block bodies extracted during the pre-scan of the current
+     * template, keyed by the sentinel token that replaced them in the source.
+     *
+     * `offset` is the number of template lines between the sentinel's own line
+     * and the block's first PHP line (the breaks the opening tag spans, plus one
+     * when the body starts on the following line).  It is what turns a block into
+     * a per-line source map instead of a single range.
+     *
+     * @var array<string, array{body: string, offset: int}>
+     */
+    private array $phpBlockBodies = [];
+
+    /**
+     * Whether the render body must seed the scope into PHP locals.
+     *
+     * Always ON in open mode and always OFF while sandboxed, decided from the
+     * sandbox flag rather than per template: includes are inlined into the SAME
+     * render body, so a partial containing raw PHP would otherwise be emitted
+     * into a body that never seeded the locals it reads.  Tying it to the mode
+     * removes that failure entirely, and open mode already means "full PHP", so
+     * the seeding is part of the same bargain.
+     */
+    private bool $seedsScope = false;
+
+    /** Monotonic counter for raw-PHP block sentinels. */
+    private int $phpBlockSeq = 0;
 
     private ?Registry $registry = null;
 
@@ -201,6 +266,34 @@ class Compiler
         return $this;
     }
 
+    /**
+     * Enable or disable sandbox mode.  When disabled ("open mode") templates may
+     * call arbitrary PHP functions and methods and may embed raw PHP, subject
+     * only to the application's own guardrails (empty by default).
+     */
+    public function setSandboxMode(bool $sandboxed): static
+    {
+        $this->sandboxMode = $sandboxed;
+        $this->tokenizer->setSandboxMode($sandboxed);
+        return $this;
+    }
+    public function isSandboxed(): bool
+    {
+        return $this->sandboxMode;
+    }
+
+    /**
+     * Replace the open-mode function guardrails.  Empty by default, because open
+     * mode is full PHP access; set names only for application-chosen limits.
+     *
+     * @param array<string, true> $names Lowercase function names.
+     */
+    public function setDeniedFunctions(array $names): static
+    {
+        $this->tokenizer->setDeniedFunctions($names);
+        return $this;
+    }
+
     // -------------------------------------------------------------------------
     // Public API
     // -------------------------------------------------------------------------
@@ -233,6 +326,17 @@ class Compiler
         $this->mappedSourcePath     = null;
         $this->mappedSourceLineBase = 1;
         $this->mappedMergedLineBase = 1;
+        // Raw-PHP sentinels are per-compilation: a body from an earlier template
+        // must never be resolvable out of a later one's source.
+        $this->phpBlockBodies = [];
+        $this->phpBlockSeq    = 0;
+
+        // Open mode seeds the render scope into PHP locals (see $seedsScope).
+        // Decided from the MODE, not per template, so an inlined include can
+        // never read locals its host body did not seed.  Applied before any
+        // expression is compiled, because it changes every chain root.
+        $this->seedsScope = !$this->sandboxMode;
+        $this->tokenizer->setLocalRoots($this->seedsScope);
 
         try {
             $source = $this->readWithDep($templateName);
@@ -290,19 +394,59 @@ class Compiler
         );
     }
 
-    /** PHP variables that must not be shadowed by a template local. */
-    private const RESERVED_NAMES = [
-        'GLOBALS',
-        '_SERVER',
-        '_GET',
-        '_POST',
-        '_FILES',
-        '_COOKIE',
-        '_SESSION',
-        '_REQUEST',
-        '_ENV',
-        'this',
-    ];
+    /**
+     * Names a template may never BIND, because PHP itself cannot accept them as
+     * an assignment target: `$this` and `$GLOBALS` both raise an UNCATCHABLE
+     * fatal ("Cannot re-assign $this" / "Cannot re-assign $GLOBALS"), so they
+     * have to be caught while compiling rather than while rendering.
+     *
+     * This is a syntax-validity list, not a security one.  Every other name —
+     * superglobals included — is an ordinary template variable: in open mode
+     * `_SERVER` resolves to the real superglobal exactly as raw PHP would, and
+     * in sandbox mode it resolves inside `$__c_va` like any other name.
+     */
+    private const RESERVED_NAMES = ['this', 'GLOBALS'];
+
+    /**
+     * Validate a name a template wants to BIND (a `{% for %}` variable, or the
+     * root of a `{% set %}` lvalue).
+     *
+     * Two rules, for two different reasons:
+     *  - `__c_…` is the engine's own namespace in the render frame.  Binding one
+     *    would clobber an internal for the rest of the render (a filter registry
+     *    swapped out at line 3 breaks every filter after it), so it is refused in
+     *    BOTH modes.  This is collision avoidance, not a boundary — open mode
+     *    reaches the same internals through raw PHP anyway.
+     *  - `$this` / `$GLOBALS` are PHP grammar, and fail uncatchably at runtime.
+     *
+     * Every other name is allowed, including `_SERVER` and the other
+     * superglobals, and including ordinary `__foo` / `_c_foo` / `___foo` names.
+     *
+     * @param string   $name    Identifier, sigil already stripped.
+     * @param string   $raw     Original spelling, for the error message.
+     * @param int|null $tplLine Directive line, when known.
+     */
+    private function assertBindableName(string $name, string $raw, ?int $tplLine): void
+    {
+        // PHP's variable-name grammar, bytes 128-255 included — see
+        // Tokenizer::isIdentifier().  Shared with the tokenizer so this method's
+        // accepted set can never drift from what the scanner produces, which is
+        // the set it will later resolve back out of the local-variable map.
+        if (!Tokenizer::isIdentifier($name)) {
+            $this->rejectVar("Invalid variable name: '{$raw}'", $tplLine);
+        }
+
+        if (\str_starts_with($name, self::INTERNAL_PREFIX)) {
+            $this->rejectVar(
+                "Variable names starting with '" . self::INTERNAL_PREFIX . "' are reserved for internal use.",
+                $tplLine
+            );
+        }
+
+        if (\in_array($name, self::RESERVED_NAMES, true)) {
+            $this->rejectVar("Variable '{$name}' cannot be assigned to in a template.", $tplLine);
+        }
+    }
 
     /**
      * Register a local variable in the compile-time context.
@@ -329,21 +473,7 @@ class Compiler
             $raw = $name;
         }
 
-        // PHP's variable-name grammar, bytes 128-255 included — see
-        // Tokenizer::isIdentifier().  Shared with the tokenizer so this method's
-        // accepted set can never drift from what the scanner produces, which is
-        // the set it will later resolve back out of the local-variable map.
-        if (!Tokenizer::isIdentifier($name)) {
-            $this->rejectVar("Invalid variable name: '{$raw}'", $tplLine);
-        }
-
-        if (\str_starts_with($name, '__')) {
-            $this->rejectVar("Variable names starting with '__' are reserved for internal use.", $tplLine);
-        }
-
-        if (\in_array($name, self::RESERVED_NAMES, true)) {
-            $this->rejectVar("Variable '{$name}' is reserved and cannot be used as a local variable.", $tplLine);
-        }
+        $this->assertBindableName($name, $raw, $tplLine);
 
         $this->localVars[$name] = '$' . $name;
         $this->tokenizer->setLocalVars($this->localVars);
@@ -727,6 +857,7 @@ class Compiler
         }
 
         $this->compileStack[] = $sourcePath;
+        $this->extractPhpBlocks($source);
         $segments = $this->tokenizer->tokenize($source);
 
         // Type of the segment immediately PRECEDING the current one, in source
@@ -784,8 +915,19 @@ class Compiler
                         break;
 
                     case Tokenizer::BLOCK:
+                        $blockContent = $seg[Tokenizer::KEY_CONTENT];
+                        if (isset($this->phpBlockBodies[$blockContent])) {
+                            $phpBlock = $this->phpBlockBodies[$blockContent];
+                            $this->addPhpBlockLines(
+                                $lines,
+                                $phpBlock['body'],
+                                $mappedTplLine + $phpBlock['offset'],
+                                $mappedSourcePath
+                            );
+                            break;
+                        }
                         $compiled = $this->compileBlock(
-                            $seg[Tokenizer::KEY_CONTENT],
+                            $blockContent,
                             $mappedSourcePath,
                             $mappedTplLine,
                             $lines
@@ -887,6 +1029,23 @@ class Compiler
             // extends/block/endblock/include are handled before this stage; if seen here → ignore
             'extends', 'block', 'endblock' => '',
             'include'                      => $this->compileInclude($rest, $sourcePath, $tplLine, $lines),
+            // A `php` keyword that reaches code generation was NOT extracted by
+            // extractPhpBlocks(): the raw form was written but never closed.  A
+            // complete form never gets here -- extraction handles it, and rejects
+            // it outright while the sandbox is enabled.
+            'php'                          => throw new ClarityException(
+                $this->sandboxMode
+                    ? "'{% php %}' is not allowed in sandbox mode. "
+                        . "Call setSandboxMode(false) to allow raw PHP."
+                    : "Unclosed '{% php %}': expected a matching '{% endphp %}'.",
+                $sourcePath,
+                $tplLine
+            ),
+            'endphp'                       => throw new ClarityException(
+                "Unexpected '{% endphp %}': no matching '{% php %}' block.",
+                $sourcePath,
+                $tplLine
+            ),
             default                        => $this->registry->hasDirective($keyword)
             ? $this->registry->compileDirective(
                 $keyword,
@@ -924,8 +1083,123 @@ class Compiler
     }
 
     /**
+     * Extract `{% php %}…{% endphp %}` regions from the source, replacing each
+     * with a line-preserving sentinel tag that {@see compileSourceInto()} later
+     * turns back into raw PHP.
+     *
+     * Two interchangeable spellings are accepted:
+     *
+     *   block form       {% php %} ... {% endphp %}
+     *   standalone form  {% php <code> %}
+     *
+     * The standalone form carries one statement -- or one fragment of a control
+     * structure -- per tag, which is what lets PHP structure wrap template
+     * markup without a single block spanning it:
+     *
+     *   {% php if ($items) : %}
+     *   ... markup ...
+     *   {% php endif %}
+     *
+     * Both are OPEN-MODE features and are rejected while the sandbox is enabled.
+     *
+     * The body is held aside rather than tokenized, for two reasons:
+     *  - It must reach the compiled class VERBATIM: only the surrounding `{% %}`
+     *    trivia is stripped, the body's own whitespace is kept.
+     *  - Its interior may be text the template tokenizer would mis-scan (an
+     *    unbalanced `{`, a `?>` tag, a template fragment), so the sentinel keeps
+     *    only the region's LINE COUNT, which preserves the mapping of every
+     *    following segment.
+     *
+     * LIMITATION: the closing delimiter is found by a plain non-greedy match, so
+     * a literal `%}` inside the body ends the region early -- spell it `'%' . '}'`
+     * when that exact sequence is needed.  (The block form has the same rule
+     * about a literal `endphp %}`.)
+     *
+     * @param string $source Merged template source (mutated in place).
+     */
+    private function extractPhpBlocks(string &$source): void
+    {
+        if (!\str_contains($source, '{%')) {
+            return;
+        }
+
+        // Block form first: its opener is indistinguishable from an empty
+        // standalone tag, so consuming it here keeps the two passes from ever
+        // competing for the same text.
+        $source = (string) \preg_replace_callback(
+            '/(\{%-?\s*php\s*-?%\})(.*?)(\{%-?\s*endphp\s*-?%\})/is',
+            fn(array $m): string =>
+                $this->storePhpBlock($m[1], $m[2], \substr_count($m[0], "\n")),
+            $source
+        );
+
+        // Standalone form.  The body must begin with a non-whitespace character,
+        // which is exactly what keeps an empty `{% php %}` opener out.
+        $source = (string) \preg_replace_callback(
+            '/(\{%-?\s*php\s+)(.+?)(-?%\})/is',
+            function (array $m): string {
+                if (\trim($m[2]) === '') {
+                    return $m[0];
+                }
+                return $this->storePhpBlock($m[1], $m[2], \substr_count($m[0], "\n"));
+            },
+            $source
+        );
+    }
+
+    /**
+     * Register one raw-PHP body and return the sentinel tag that replaces it.
+     *
+     * @param string $openTag     The region's opening tag, verbatim.
+     * @param string $bodyRaw     Body exactly as written between the delimiters.
+     * @param int    $regionLines Line breaks the whole region spans; the sentinel
+     *                            carries them so following segments stay aligned.
+     */
+    private function storePhpBlock(string $openTag, string $bodyRaw, int $regionLines): string
+    {
+        if ($this->sandboxMode) {
+            throw new ClarityException(
+                "'{% php %}' is not allowed in sandbox mode. "
+                    . "Call setSandboxMode(false) to allow raw PHP."
+            );
+        }
+
+        // Template line of the body's FIRST line, relative to the region's line:
+        // the breaks the opening tag itself spans, plus one when the layout put
+        // the body on the following line.
+        $offset = \substr_count($openTag, "\n");
+
+        $body = $bodyRaw;
+        if (\preg_match('/^\r?\n/', $body) === 1) {
+            // ONE leading break is layout, not code: strip it, but count it, so
+            // the mapping stays exact and the body's own indentation survives.
+            $body = (string) \preg_replace('/^\r?\n/', '', $body, 1);
+            $offset++;
+        }
+        $body = \rtrim($body);
+
+        // Give a complete statement its terminator, but never a fragment that
+        // ends INSIDE a control structure: `if ($x) :`, `else:`, `{` and `}` are
+        // decided by the author's last character (`endif` still needs its `;`).
+        // Appending after `:` or `{` would be legal but would also mangle the
+        // text a reader sees in the compiled class.
+        if ($body !== '' && !\str_contains(';}{:', $body[-1])) {
+            $body .= ';';
+        }
+
+        $token = '@@CLARITY_PHP_' . (++$this->phpBlockSeq) . '@@';
+        $this->phpBlockBodies[$token] = ['body' => $body, 'offset' => $offset];
+
+        // Keep it a BLOCK tag so the tokenizer routes it to the block arm.  The
+        // region's newlines go INSIDE the tag (not after it): that preserves
+        // every following segment's original line number for the source map
+        // without turning the padding into output text.
+        return '{%' . $token . \str_repeat("\n", $regionLines) . '%}';
+    }
+
+    /**
      * Inline a macro call into the current output.
-     * Params become PHP locals ($__m_paramName) scoped to the macro body.
+     * Params become PHP locals ($__c_m_paramName) scoped to the macro body.
      */
     private function compileMacroCall(
         string $name,
@@ -963,7 +1237,7 @@ class Compiler
         // Assign each argument to a unique PHP local; save compile-scope for restore.
         $restore = [];
         foreach ($params as $idx => $param) {
-            $phpVar  = '$__m_' . $param;
+            $phpVar  = '$__c_m_' . $param;
             $phpExpr = $this->tokenizer->processCondition(\trim($args[$idx]));
             $this->addPhpLines($lines, $phpVar . ' = ' . $phpExpr . ';', $tplLine, $sourcePath);
             $restore[$param] = $this->localVars[$param] ?? null;
@@ -1204,6 +1478,16 @@ class Compiler
             throw new ClarityException("Malformed set directive: 'set {$rest}'", $sourcePath, $tplLine);
         }
 
+        // Validate the ROOT of the lvalue, not its segments: `items[0].name` is a
+        // legitimate target, but its root still has to be bindable.  Without this
+        // `{% set this = … %}` reached PHP and died with an uncatchable
+        // "Cannot re-assign $this", and `{% set __c_fl = … %}` silently swapped
+        // the filter registry for the rest of the render.
+        if (!\preg_match('/^\$?([a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*)/', \trim($m[1]), $rootMatch)) {
+            throw new ClarityException("Invalid assignment target: '{$m[1]}'", $sourcePath, $tplLine);
+        }
+        $this->assertBindableName($rootMatch[1], $rootMatch[1], $tplLine);
+
         $lvalue = $this->tokenizer->processLvalue($m[1]);
         $rvalue = $this->tokenizer->processCondition(trim($m[2]));
 
@@ -1387,6 +1671,26 @@ class Compiler
                 $this->sourceMap[] = [$this->phpLine, $fileIdx, $tplLine];
             }
             $lines[] = $codeLine;
+        }
+    }
+
+    /**
+     * Append a raw-PHP block, mapping each of its lines to its OWN template line.
+     *
+     * A raw block is the one construct whose compiled lines and template lines
+     * run in lockstep, so an exact one-to-one mapping is both possible and worth
+     * the extra source-map ranges: a runtime error inside the block then points
+     * at the offending template line instead of at the block's opening tag.
+     *
+     * @param array  $lines        The accumulated render-body lines (mutated).
+     * @param string $php          Verbatim PHP body.
+     * @param int    $startTplLine Template line of the body's first line.
+     * @param string $file         Absolute path of the owning template.
+     */
+    private function addPhpBlockLines(array &$lines, string $php, int $startTplLine, string $file): void
+    {
+        foreach (\explode("\n", $php) as $index => $codeLine) {
+            $this->addPhpLines($lines, $codeLine, $startTplLine + $index, $file);
         }
     }
 
@@ -1583,26 +1887,45 @@ class Compiler
         $filesExport = var_export($this->sourceFiles, true);
         // Compact packed form (see SourceMap): one short single-quoted string
         // instead of a nested array literal per range.
-        $mapExport  = SourceMap::packedLiteral($this->sourceMap);
-        $debugFlag  = $this->debugMode ? 'true' : 'false';
-        $versionInt = self::COMPILER_VERSION;
+        $mapExport   = SourceMap::packedLiteral($this->sourceMap);
+        $debugFlag   = $this->debugMode ? 'true' : 'false';
+        $sandboxFlag = $this->sandboxMode ? 'true' : 'false';
+        $versionInt  = self::COMPILER_VERSION;
 
         // Detect which registries are actually referenced in the compiled body.
         // The constructor always accepts all three (so the caller stays simple),
         // but render() only unpacks the ones that are actually used.
-        $usesFilters   = \str_contains($body, '$__fl');
-        $usesFunctions = \str_contains($body, '$__fn');
-        $usesServices  = \str_contains($body, '$__sv');
+        $usesFilters   = \str_contains($body, '$__c_fl');
+        $usesFunctions = \str_contains($body, '$__c_fn');
+        $usesServices  = \str_contains($body, '$__c_sv');
 
         $unpacks = '';
         if ($usesFilters) {
-            $unpacks .= "                \$__fl = \$this->__fl;\n";
+            $unpacks .= "                \$__c_fl = \$this->__c_fl;\n";
         }
         if ($usesFunctions) {
-            $unpacks .= "                \$__fn = \$this->__fn;\n";
+            $unpacks .= "                \$__c_fn = \$this->__c_fn;\n";
         }
         if ($usesServices) {
-            $unpacks .= "                \$__sv = \$this->__sv;\n";
+            $unpacks .= "                \$__c_sv = \$this->__c_sv;\n";
+        }
+
+        // Open mode only: seed the render scope into PHP locals so a template
+        // variable is the same thing in `{{ title }}` and `{% php echo $title; %}`.
+        //
+        // The internals are bound FIRST so EXTR_SKIP protects them: a view
+        // variable named `__c_fl` cannot shadow the filter registry, and `this`
+        // cannot be handed to the engine (which PHP would fatal on anyway).
+        //
+        // EXTR_SKIP only shields those names because they are bound above it;
+        // the guard is the binding order, not the prefix, which is why the
+        // prefix rule and the ordering are both needed.
+        //
+        // extract() on the parameter itself needs no copy — `$__c_va` stays a valid
+        // array for the explicit `$__c_va['x']` escape hatch — and costs ~180 ns
+        // once per render.
+        if ($this->seedsScope) {
+            $unpacks .= "                extract(\$__c_va, EXTR_SKIP);\n";
         }
 
         return <<<PHP
@@ -1618,7 +1941,11 @@ class Compiler
             // sourceMap: packed "lineDelta,fileIndex,tplLineDelta;" ranges
             public static string \$sourceMap = {$mapExport};
 
+            // debugCompiled: whether the compiler was in debug mode when this class was generated
             public static bool \$debugCompiled = {$debugFlag};
+
+            // sandboxCompiled: whether the compiler was in sandbox mode when this class was generated
+            public static bool \$sandboxCompiled = {$sandboxFlag};
 
             // compilerVersion: the compiler that produced this class
             public static int \$compilerVersion = {$versionInt};
@@ -1626,21 +1953,32 @@ class Compiler
             // renderBodyLine: cache-file line where the render body starts
             public static int \$renderBodyLine = 0;
 
-            public function __construct(private array \$__fl, private array \$__fn, private array \$__sv) {}
+            /**
+             * @param array \$__c_fl Filter registry (name => callable)
+             * @param array \$__c_fn Function registry (name => callable)
+             * @param array \$__c_sv Service registry (name => mixed)
+             */
+            public function __construct(private array \$__c_fl, private array \$__c_fn, private array \$__c_sv) {}
 
-            public function render(array \$__va): string
+            /**
+             * Render the template with the given variables.
+             *
+             * @param array \$__c_va Template variables (name => value)
+             * @return string Rendered output
+             */
+            public function render(array \$__c_va): string
             {
         {$unpacks}                ob_start();
-                \$__obLevel = ob_get_level();
+                \$__c_ob_level = ob_get_level();
                 try {
         /* @@CLARITY_BODY_LINE@@ */
         {$indented}
                     return (string) ob_get_clean();
-                } catch (\Throwable \$__e) {
-                    while (ob_get_level() >= \$__obLevel) {
+                } catch (\Throwable \$__c_e) {
+                    while (ob_get_level() >= \$__c_ob_level) {
                         ob_end_clean();
                     }
-                    throw \$__e;
+                    throw \$__c_e;
                 }
             }
         }

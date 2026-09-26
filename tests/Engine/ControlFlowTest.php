@@ -75,9 +75,9 @@ class ControlFlowTest extends BaseTestCase
     public function testForLoopVariableAsArrayIndex(): void
     {
         // Loop variable used as an array index must resolve to the local PHP variable,
-        // not to $__va['name']. This was a bug where platformLabels[platform] inside
-        // a for-loop compiled to $__va['platformLabels'][$__va['platform']] instead of
-        // $__va['platformLabels'][$platform].
+        // not to $__c_va['name']. This was a bug where platformLabels[platform] inside
+        // a for-loop compiled to $__c_va['platformLabels'][$__c_va['platform']] instead of
+        // $__c_va['platformLabels'][$platform].
         self::tpl(
             'for_array_index',
             '{% for key in keys %}{{ labels[key] }}-{% endfor %}'
@@ -681,7 +681,7 @@ class ControlFlowTest extends BaseTestCase
     public function testMacroParamIsolatedFromOuterScope(): void
     {
         // The macro param 'x' must not leak after the macro ends.
-        // After the macro call, {{ x }} should resolve from $__va['x'].
+        // After the macro call, {{ x }} should resolve from $__c_va['x'].
         self::tpl(
             'macro_isolate',
             '{% macro @show(x) %}[{{ x }}]{% endmacro %}' .

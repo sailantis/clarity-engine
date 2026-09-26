@@ -21,9 +21,15 @@ Each compiled template becomes exactly one PHP class:
   class __Clarity_<slug>_<hash> {
       public static array $dependencies = ['name' => revision, ...];
       public static string $sourceMap   = 'lineDelta,fileIdx,tplDelta;...';
-      public function __construct(private array $__fl, private array $__fn) }
-      public function render(array $__va): string { ... }
+      public function __construct(private array $__c_fl, private array $__c_fn, private array $__c_sv) }
+      public function render(array $__c_va): string { ... }
   }
+
+Every PHP variable the engine binds into the render frame carries the `__c_`
+prefix ("c" for Clarity).  The prefix IS the reservation rule: an engine
+internal is covered by choosing to spell it `__c_…`, so a newly added
+internal cannot silently collide with a template variable whose author never
+heard of it.  See Compiler::INTERNAL_PREFIX.
 
 $dependencies and $sourceMap are read via reflection for cache invalidation
 and error mapping — no file I/O needed on warm paths (OPcache serves them).
@@ -58,11 +64,12 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ## Public Constants
 
-- **COMPILER_VERSION** = `7`
+- **COMPILER_VERSION** = `11`
+- **INTERNAL_PREFIX** = `'__c_'`
 
 ## Public methods
 
-### __construct() · <small>[🗎](../../src/Engine/Compiler.php#L165)</small>
+### __construct() · <small>[🗎](../../src/Engine/Compiler.php#L230)</small>
 
 `public function __construct(): mixed`
 
@@ -73,7 +80,7 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ---
 
-### setRegistry() · <small>[🗎](../../src/Engine/Compiler.php#L170)</small>
+### setRegistry() · <small>[🗎](../../src/Engine/Compiler.php#L235)</small>
 
 `public function setRegistry(Clarity\Engine\Registry $registry): static`
 
@@ -90,7 +97,7 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ---
 
-### setExtension() · <small>[🗎](../../src/Engine/Compiler.php#L181)</small>
+### setExtension() · <small>[🗎](../../src/Engine/Compiler.php#L246)</small>
 
 `public function setExtension(string $extension): static`
 
@@ -107,7 +114,7 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ---
 
-### setDebugMode() · <small>[🗎](../../src/Engine/Compiler.php#L187)</small>
+### setDebugMode() · <small>[🗎](../../src/Engine/Compiler.php#L252)</small>
 
 `public function setDebugMode(bool $debug): static`
 
@@ -124,7 +131,59 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ---
 
-### compile() · <small>[🗎](../../src/Engine/Compiler.php#L216)</small>
+### setSandboxMode() · <small>[🗎](../../src/Engine/Compiler.php#L274)</small>
+
+`public function setSandboxMode(bool $sandboxed): static`
+
+Enable or disable sandbox mode.  When disabled ("open mode") templates may
+call arbitrary PHP functions and methods and may embed raw PHP, subject
+only to the application's own guardrails (empty by default).
+
+**Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$sandboxed` | bool | - |  |
+
+**Return value**
+
+- Type: static
+
+
+---
+
+### isSandboxed() · <small>[🗎](../../src/Engine/Compiler.php#L280)</small>
+
+`public function isSandboxed(): bool`
+
+**Return value**
+
+- Type: bool
+
+
+---
+
+### setDeniedFunctions() · <small>[🗎](../../src/Engine/Compiler.php#L291)</small>
+
+`public function setDeniedFunctions(array $names): static`
+
+Replace the open-mode function guardrails.  Empty by default, because open
+mode is full PHP access; set names only for application-chosen limits.
+
+**Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$names` | array | - | Lowercase function names. |
+
+**Return value**
+
+- Type: static
+
+
+---
+
+### compile() · <small>[🗎](../../src/Engine/Compiler.php#L309)</small>
 
 `public function compile(string $templateName, Clarity\Template\TemplateLoader $loader): Clarity\Engine\CompiledTemplate`
 
@@ -144,6 +203,59 @@ Compile a template and return a CompiledTemplate value object.
 **Throws**
 
 - [ClarityException](Clarity_ClarityException.md)  On compilation errors.
+
+
+---
+
+### registerVar() · <small>[🗎](../../src/Engine/Compiler.php#L460)</small>
+
+`public function registerVar(string $name, int|null $tplLine = null): mixed`
+
+Register a local variable in the compile-time context.
+
+**Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$name` | string | - | The name of the variable to register. |
+| `$tplLine` | int\|null | `null` | Line of the directive that requested the<br>registration, when known.  It is only used to<br>point the error at the offending directive<br>rather than at a bare variable name. |
+
+**Return value**
+
+- Type: mixed
+
+
+---
+
+### unregisterVar() · <small>[🗎](../../src/Engine/Compiler.php#L493)</small>
+
+`public function unregisterVar(string $name): mixed`
+
+Unregister a local variable from the compile-time context.
+
+**Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$name` | string | - | The name of the variable to unregister. |
+
+**Return value**
+
+- Type: mixed
+
+
+---
+
+### getVars() · <small>[🗎](../../src/Engine/Compiler.php#L504)</small>
+
+`public function getVars(): array`
+
+Get the currently registered local variables.
+
+**Return value**
+
+- Type: array
+- Description: Map of local variable names to their PHP representations.
 
 
 

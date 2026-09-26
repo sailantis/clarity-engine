@@ -28,6 +28,22 @@ trait ClarityEngineTrait
     protected ?DebugEventBus $debugBus = null;
     protected ?HtmlDebugPanel $debugPanel = null;
 
+    /**
+     * When true (default) templates are sandboxed.  When false ("open mode") the
+     * engine grants templates the full power of PHP: arbitrary function calls,
+     * PHP functions as filters, and method calls.
+     */
+    protected bool $sandboxMode = true;
+
+    /**
+     * Functions blocked in open mode (lowercase name => true).  Empty by
+     * default: open mode is full PHP access, so any restriction here is an
+     * application-chosen guardrail rather than part of the switch.
+     *
+     * @var array<string, true>
+     */
+    protected array $deniedFunctions = Registry::DEFAULT_DENIED_FUNCTIONS;
+
     protected function initializeClarityEngine(): void
     {
         $this->registry = new Registry(
@@ -59,6 +75,83 @@ trait ClarityEngineTrait
     public function isDebugMode(): bool
     {
         return $this->debugMode;
+    }
+
+    /**
+     * Enable or disable the template sandbox.
+     *
+     * Sandboxed (the default) is the safe mode the engine has always had:
+     * templates cannot call arbitrary PHP functions or methods.  Passing `false`
+     * switches to "open mode", where templates have the full power of PHP —
+     * any function call, any PHP function used as a filter, and `$obj->method()`
+     * method calls.  This is intended for templates written by trusted authors
+     * (Blade / Stempler / Plates parity).
+     *
+     * SECURITY: open mode is equivalent to executing arbitrary PHP.  Templates
+     * compiled in either mode record which mode built them and are automatically
+     * recompiled when the setting changes.
+     *
+     * ```php
+     * $engine->setSandboxMode(false);   // grant full PHP access
+     * ```
+     *
+     * @param bool $sandboxed True to keep templates sandboxed, false for open mode.
+     * @return $this
+     */
+    public function setSandboxMode(bool $sandboxed): static
+    {
+        $this->sandboxMode = $sandboxed;
+        return $this;
+    }
+
+    /**
+     * Whether the sandbox is currently enabled (true = safe mode).
+     */
+    public function isSandboxed(): bool
+    {
+        return $this->sandboxMode;
+    }
+
+    /**
+     * Replace the list of functions blocked in open mode.
+     *
+     * Accepts a list of function names (case-insensitive, leading `\` allowed).
+     * Nothing is blocked by default, because
+     * {@see Registry::DEFAULT_DENIED_FUNCTIONS} is empty; set names here only if
+     * the application wants its own guardrails, or pass `[]` to clear them.
+     *
+     * NOTE: the compiled cache embeds the function names it calls, so changing
+     * this list does not invalidate already-compiled templates.  Clear the
+     * compiled-template cache after changing it.
+     *
+     * ```php
+     * $engine->setDeniedFunctions(['exec', 'system']);  // add guardrails
+     * $engine->setDeniedFunctions([]);                  // block nothing
+     * ```
+     *
+     * @param list<string> $names Function names to block in open mode.
+     * @return $this
+     */
+    public function setDeniedFunctions(array $names): static
+    {
+        $map = [];
+        foreach ($names as $name) {
+            if (\is_string($name) && $name !== '') {
+                $map[\strtolower(\ltrim($name, '\\'))] = true;
+            }
+        }
+        $this->deniedFunctions = $map;
+        return $this;
+    }
+
+    /**
+     * Return the function names currently blocked in open mode.
+     *
+     * @return list<string>
+     */
+    public function getDeniedFunctions(): array
+    {
+        return \array_keys($this->deniedFunctions);
     }
 
     /**
@@ -324,9 +417,9 @@ trait ClarityEngineTrait
      *
      * ```php
      * $engine->addDirective('with_locale', function(string $rest, string $path, int $line, callable $expr): string {
-     *     return "\$__sv['locale']->push({$expr(trim($rest))});"
+     *     return "\$__c_sv['locale']->push({$expr(trim($rest))});"
      * });
-     * $engine->addDirective('endwith_locale', fn(...) => "\$__sv['locale']->pop();");
+     * $engine->addDirective('endwith_locale', fn(...) => "\$__c_sv['locale']->pop();");
      * ```
      *
      * @param string   $keyword The directive keyword in lowercase (e.g. 'with_locale').
@@ -341,11 +434,11 @@ trait ClarityEngineTrait
 
     /**
      * Store a service object in the registry so that compiled template render
-     * bodies can access it via `$__sv['key']`.
+     * bodies can access it via `$__c_sv['key']`.
      *
      * This is primarily used by modules that need shared mutable state (e.g. a
      * locale stack) accessible both from closures that close over the object
-     * *and* from inline filter PHP templates using `$__sv['key']->method()`.
+     * *and* from inline filter PHP templates using `$__c_sv['key']->method()`.
      *
      * @param string $name    Key under which the service is accessible.
      * @param mixed  $service Service value, can be of any type.
@@ -736,9 +829,14 @@ trait ClarityEngineTrait
                 $className = null;
             }
             if ($className !== null) {
-                // Recompile if debug mode changed since the template was last compiled
-                $compiledDebug = $className::$debugCompiled ?? false;
-                if ($compiledDebug !== $this->debugMode) {
+                // Recompile if debug mode or sandbox mode changed since the
+                // template was last compiled.  The compiled body is
+                // mode-specific (pruning, escape context, permitted calls), so
+                // a template built under one mode must never be served under
+                // the other.
+                $compiledDebug   = $className::$debugCompiled ?? false;
+                $compiledSandbox = $className::$sandboxCompiled ?? true;
+                if ($compiledDebug !== $this->debugMode || $compiledSandbox !== $this->sandboxMode) {
                     $this->cache->invalidate($templateName);
                 } else {
                     if ($this->debugMode) {
@@ -755,7 +853,9 @@ trait ClarityEngineTrait
         $this->compiler
             ->setExtension($this->extension ?? FileLoader::DEFAULT_EXTENSION)
             ->setRegistry($this->registry)
-            ->setDebugMode($this->debugMode);
+            ->setDebugMode($this->debugMode)
+            ->setSandboxMode($this->sandboxMode)
+            ->setDeniedFunctions($this->deniedFunctions);
         $compileStart = $this->debugMode ? \microtime(true) : 0.0;
         $compiled     = $this->compiler->compile($templateName, $loader);
         if ($this->debugMode) {

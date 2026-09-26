@@ -114,7 +114,7 @@ class FilterTrailingOperatorTest extends BaseTestCase
         // `wrap(nullish('x') ?? 'fb')` — the fallback is INSIDE the outer call,
         // not appended after it.
         $this->assertStringContainsString(
-            "\$__fl['wrap'](\$__fl['nullish']('x') ?? 'fb')",
+            "\$__c_fl['wrap'](\$__c_fl['nullish']('x') ?? 'fb')",
             $body,
             'the trailing ?? must be grouped inside the following filter call'
         );

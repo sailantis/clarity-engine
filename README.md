@@ -7,7 +7,8 @@
 ## Features
 
 - **Compiled & Cached** – Templates compile to PHP classes and leverage OPcache for blazing-fast rendering
-- **Secure Sandbox** – No arbitrary PHP execution; templates are strictly sandboxed with controlled access
+- **Secure Sandbox** – No arbitrary PHP execution by default; templates are strictly sandboxed with controlled access
+- **Opt-In Open Mode** – Disable the sandbox to give templates the full power of PHP (any function call or filter, method calls, `{% php %}` blocks) — Blade / Stempler / Plates parity, for trusted authors
 - **Expressive Syntax** – Clean, readable template syntax inspired by modern template engines
 - **Template Inheritance** – Reusable layouts with `extends` and `blocks` for DRY template architecture
 - **Macros** – Define reusable template fragments with parameters and call them inline
@@ -252,13 +253,30 @@ $engine->use(new \Clarity\Localization\TranslationModule([
 
 ## Security
 
-Clarity provides a secure sandbox environment:
+Clarity is sandboxed by default:
 
 - **No arbitrary PHP execution** – Templates cannot call PHP functions or access global state
 - **Auto-escaping by default** – All output is HTML-escaped to prevent XSS attacks
 - **Compile-time validation** – Syntax errors caught during compilation, not at runtime
 - **Object safety** – Objects are converted to their public properties, preventing method calls from templates (`DateTimeInterface` becomes an ISO-8601 string; `toArray()` / `JsonSerializable` can supply a custom array)
 - **Controlled lambdas** – Lambda expressions can only use registered filters
+
+### Open Mode
+
+The sandbox can be disabled deliberately, granting templates the full power of
+PHP (any function call or filter, `$obj->method()`, and raw PHP through either
+`{% php %}…{% endphp %}` or the standalone `{% php CODE %}` form):
+
+```php
+$engine->setSandboxMode(false);
+```
+
+Open mode is intended for templates written by trusted authors. It is
+**equivalent to executing arbitrary PHP** and disables every guarantee listed
+above. Templates record which mode compiled them and are recompiled
+automatically when the setting changes. Nothing is blocked by default — open
+mode is the security decision; if you want extra guardrails, add them with
+`setDeniedFunctions([...])`.
 
 **[Security best practices →](docs/05-best-practices.md#security)**
 
