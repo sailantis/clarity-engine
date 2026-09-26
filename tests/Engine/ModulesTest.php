@@ -50,7 +50,9 @@ class ModulesTest extends BaseTestCase
         $registered = false;
         $module     = new class ($registered) implements ModuleInterface
         {
-            public function __construct(private bool &$flag) {}
+            public function __construct(private bool &$flag)
+            {
+            }
             public function register(ClarityEngine $e): void
             {
                 $this->flag = true;
@@ -67,7 +69,9 @@ class ModulesTest extends BaseTestCase
         $engine = new ClarityEngine();
         $module = new class implements ModuleInterface
         {
-            public function register(ClarityEngine $e): void {}
+            public function register(ClarityEngine $e): void
+            {
+            }
         };
         $result = $engine->use($module);
         $this->assertSame($engine, $result);
@@ -141,8 +145,8 @@ class ModulesTest extends BaseTestCase
 
     /**
      * A directive that gates a block on the engine's debug state must read that
-     * state through the compiled body's unpacked locals. Only `$__fl`, `$__fn`
-     * and `$__sv` exist inside `render()`; a literal `$__debug` local is never
+     * state through the compiled body's unpacked locals. Only `$__c_fl`, `$__c_fn`
+     * and `$__c_sv` exist inside `render()`; a literal `$__debug` local is never
      * defined, so such a block would silently never render (and raise an
      * "Undefined variable" warning whenever the guard is truthy).
      */
@@ -155,7 +159,7 @@ class ModulesTest extends BaseTestCase
         $engine->addDirective(
             'debug_if',
             function (string $rest, string $path, int $line, callable $processExpr): string {
-                return 'if (' . $processExpr($rest) . ' && $__sv["__debug"]()) {';
+                return 'if (' . $processExpr($rest) . ' && $__c_sv["__debug"]()) {';
             }
         );
         $engine->addDirective('enddebug_if', fn() => '}');
@@ -228,7 +232,7 @@ class ModulesTest extends BaseTestCase
         };
         $engine->addService('counter', $counter);
         $engine->addInlineFilter('counted', [
-            'php' => '((string) {1}) . "#" . $__sv[\'counter\']->next()',
+            'php' => '((string) {1}) . "#" . $__c_sv[\'counter\']->next()',
         ]);
 
         self::tpl('svc_filter', '{{ a |> counted }}:{{ b |> counted }}');

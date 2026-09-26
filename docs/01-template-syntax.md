@@ -272,6 +272,11 @@ Absent names throw by default, consistent with every other access. Pass
 decides the value directly and needs no `??`. Both spellings are the author's
 opt-out from the strict contract.
 
+`expand` follows the same variable model as every other access, which means it
+agrees with `{{ name }}` about where a variable lives: in sandbox mode it reads
+the variables array, and in open mode it reads the local the scope was seeded
+with.
+
 > `??` suppresses a `null` RETURN only — it cannot catch the strict throw, so
 > `{{ x |> expand ?? 'none' }}` still errors when the name is absent. Write
 > `expand(optional: true) ?? 'none'` or `expand('none')`.
@@ -284,8 +289,112 @@ and `|> reverse` accept a container (array, `Traversable`, `Countable`, or an
 object exposing a public `toArray()`). A value object with no public state and a
 `__toString()` keeps STRING semantics, so `|> length` counts its characters.
 
-**Not allowed:** bare `->` without a sigil, method calls (`a.b()`), and direct
-PHP variable access (`$name` on its own).
+**Not allowed (in sandbox mode):** bare `->` without a sigil, method calls
+(`a.b()`, `$a->b()`), and direct PHP variable access (`$name` on its own,
+including variable-variable expansion `$$name`). Open mode lifts all three — see
+[Open Mode](#open-mode).
+
+## Open Mode
+
+Disabling the sandbox (`$engine->setSandboxMode(false)`) turns off the function
+allow-list and the method-call restriction, giving templates the full power of
+PHP. Everything below still resolves **registered** filters and functions first;
+open mode only changes what happens when a name is *not* registered.
+
+### PHP functions as calls
+
+```twig
+{{ strtoupper('ab') }}          {# \strtoupper('ab') #}
+{{ implode(',', items) }}       {# \implode(',', $__c_va['items']) #}
+```
+
+### PHP functions as filters
+
+An unregistered pipe step resolves to a PHP function of the same name. The
+piped value becomes the **first argument**:
+
+```twig
+{{ 'ab' |> strtoupper }}              {# \strtoupper($value) #}
+{{ 'x' |> str_pad(3, '-') }}          {# \str_pad($value, 3, '-') #}
+```
+
+When the value does not belong first, a single `_` placeholder positions it:
+
+```twig
+{{ 'k' |> array_key_exists(_, m) }}   {# \array_key_exists($value, $m) #}
+```
+
+`_` may appear at most once, and only in an open-mode filter argument list;
+elsewhere `_` keeps its meaning as an ordinary variable.
+
+### Method calls
+
+Method calls require the `$` sigil (the same sigil that spells `->` in sandbox
+mode), so they stay greppable in a trusted template:
+
+```twig
+{{ $user->name() }}              {# static method #}
+{{ $user?->name() }}             {# nullsafe #}
+{{ $user->{$method}() }}         {# dynamic method name #}
+```
+
+A call on the *root* value (`$fn()`) is still rejected: a variable-driven
+callable is the function-level equivalent of variable-variable expansion.
+
+### Raw PHP blocks
+
+Two interchangeable spellings give a trusted template the full power of PHP:
+
+```twig
+{% php %}
+$total = 0;
+foreach ($items as $item) { $total += $item['qty']; }
+echo $total;
+{% endphp %}
+```
+
+**Standalone form** — one statement, or one fragment of a control structure,
+per tag. This is what lets PHP structure wrap template markup:
+
+```twig
+{% php if ($items) : %}
+    <ul>
+    {% php foreach ($items as $item) : %}
+        <li>{{ $item['name'] }}</li>
+    {% php endforeach %}
+    </ul>
+{% php else : %}
+    <p>No items.</p>
+{% php endif %}
+```
+
+In both forms the body is emitted **verbatim** into the compiled class. Because a
+body may contain text that is not valid PHP in isolation, it is extracted before
+tokenization and each of its lines is mapped one-to-one back to the template, so
+a runtime error inside a block points at the offending line. Inside a `{% php %}`
+tag a loop local is a genuine PHP variable (`echo $n;`), and it reaches `{{ }}`
+only through the variables array (`$__c_va['n'] = $n;`).
+
+In **open mode** template variables are also PHP locals: the render scope is
+seeded with `extract($__c_va, EXTR_SKIP)`, so `{{ title }}` and
+`{% php echo $title; %}` are the same variable. The backing array is always
+reachable as `$__c_va` when a dynamic name is needed.
+
+> The closing delimiter is matched non-greedily, so a literal `%}` inside a body
+> ends the region early — spell it `'%' . '}'` when that exact sequence is needed.
+
+### Function guardrails
+
+**Nothing is blocked by default.** Open mode means the full power of PHP, so the
+engine does not add a second, weaker sandbox on top of it. If an application
+wants its own guardrails it can add them:
+
+```php
+$engine->setDeniedFunctions(['exec', 'system']);
+```
+
+Changing the list does not recompile already-cached templates — clear the cache
+afterwards.
 
 ## Directives
 
@@ -836,7 +945,8 @@ title: widget.title, data: widget.data, config: widget.config }) }} {% endfor %}
 
 ## What's Not Allowed
 
-Clarity is sandboxed for security. The following are **not permitted**:
+Clarity is sandboxed by default. In that mode the following are **not
+permitted** (each becomes available in [open mode](#open-mode)):
 
 Direct PHP variables:
 
@@ -866,6 +976,16 @@ PHP statements or semicolons:
 
 ```twig
 {{ $x = 5; }} {# ERROR #}
+```
+
+Variable-variable expansion (`$$name`) is rejected while the sandbox is
+enabled. In **open mode** it is allowed, because a dynamic dereference is an
+ordinary local lookup — strictly weaker than the literal `$_SERVER` spelling
+open mode already permits:
+
+```twig
+{{ $$name }}             {# ERROR while sandboxed; open mode reads the local $x #}
+{{ which |> expand }} {# CORRECT: look a name up indirectly, in both modes #}
 ```
 
 Instead, use `{% set %}`:

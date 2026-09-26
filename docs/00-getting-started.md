@@ -94,7 +94,21 @@ $engine->setLayout('layouts/main');
 
 // Override file extension (default: .clarity.html)
 $engine->setExtension('.tpl.html');
+
+// Sandbox (default: true). Pass false to grant templates full PHP access.
+$engine->setSandboxMode(false);
+
+// Optional guardrails. Nothing is blocked by default, because open mode is
+// full PHP access; add names here only if you want to restrict it again.
+$engine->setDeniedFunctions(['exec', 'system']);   // add guardrails
+$engine->setDeniedFunctions([]);                   // block nothing (default)
 ```
+
+> **Open mode.** `setSandboxMode(false)` is equivalent to executing arbitrary
+> PHP from templates. See
+> [Advanced Topics → Security Model](04-advanced-topics.md#security-model) for
+> what it disables and how to restrict it. The same options are accepted in the
+> constructor as `sandbox` and `deniedFunctions`.
 
 ### Registering Template Namespaces
 

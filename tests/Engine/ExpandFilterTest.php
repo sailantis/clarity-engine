@@ -122,8 +122,8 @@ class ExpandFilterTest extends BaseTestCase
 
     /**
      * Inside a loop the iteration variable is a PHP local (`$item`), not a scope
-     * entry, so the name is not reachable through $__va. The locals map is what
-     * makes `expand` find it, and the emitted read is the direct `${$__tmp}`
+     * entry, so the name is not reachable through $__c_va. The locals map is what
+     * makes `expand` find it, and the emitted read is the direct `${$__c_tmp}`
      * variable rather than a scope lookup.
      */
     public function testExpandResolvesALoopVariableInsideALoop(): void

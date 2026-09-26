@@ -704,6 +704,43 @@ Named arguments can be combined with positional ones:
 
 > **Note:** Named arguments use `:` in Clarity syntax and are emitted as PHP 8 named arguments. PHP validates parameter names and arity at runtime. Positional arguments must come before named ones.
 
+## PHP Functions as Filters (Open Mode)
+
+When the sandbox is disabled (`$engine->setSandboxMode(false)`), any PHP function
+can be used directly as a filter or a function call, so no PHP API needs to be
+re-wrapped as a custom filter. Registered filters and functions always win over a
+PHP function of the same name.
+
+```php
+$engine->setSandboxMode(false);
+```
+
+As a filter, the piped value becomes the **first argument**:
+
+```twig
+{{ 'ab' |> strtoupper }}          {# \strtoupper($value) #}
+{{ 'x' |> str_pad(3, '-') }}      {# \str_pad($value, 3, '-') #}
+```
+
+When the value does not belong first, a single `_` placeholder positions it:
+
+```twig
+{{ 'k' |> array_key_exists(_, m) }}   {# \array_key_exists($value, $m) #}
+```
+
+As a call, arguments are passed as written:
+
+```twig
+{{ strtoupper('ab') }}
+{{ implode(',', items) }}
+```
+
+Nothing is blocked by default: open mode is full PHP access. An application can
+add its own guardrails with `setDeniedFunctions([...])`.
+
+> See [Advanced Topics → Open Mode](04-advanced-topics.md#open-mode) for the
+> security consequences. Open mode is equivalent to executing arbitrary PHP.
+
 ## Filter Reference Quick Table
 
 | Filter             | Purpose                | Example                                                  |

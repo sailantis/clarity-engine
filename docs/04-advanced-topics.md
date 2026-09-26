@@ -737,6 +737,11 @@ $engine->render('page', $data);
 
 Clarity enforces strict security through compilation-time checks and runtime sandboxing.
 
+> **Sandbox is on by default.** Every restriction in this section applies while
+> the sandbox is enabled. Calling `setSandboxMode(false)` switches to
+> [open mode](#open-mode), which relaxes all of them. See that section for the
+> full consequences before disabling the sandbox.
+
 ### Compile-Time Restrictions
 
 The following are **rejected at compile time** (template won't compile):
@@ -901,6 +906,61 @@ $engine->addFilter('customFilter', $callable);
 {{ value |> notRegistered }} {# ERROR: not registered #}
 ```
 
+### Open Mode
+
+Disabling the sandbox grants templates the full power of PHP, for parity with
+Blade / Stempler / Plates:
+
+```php
+$engine->setSandboxMode(false);
+```
+
+With the sandbox off:
+
+| Capability                     | Sandboxed | Open mode |
+| ------------------------------ | --------- | --------- |
+| Registered filters/functions   | ✅        | ✅        |
+| Arbitrary PHP function calls   | ❌        | ✅        |
+| Any PHP function as a filter   | ❌        | ✅        |
+| Method calls (`$obj->m()`)     | ❌        | ✅        |
+| `{% php %}` blocks             | ❌        | ✅        |
+| `{% php CODE %}` directives    | ❌        | ✅        |
+| Auto-escaping                  | ✅        | ✅        |
+| Strict variable access         | ✅        | ✅        |
+
+**This is equivalent to executing arbitrary PHP.** Open mode disables every
+compile-time restriction listed above; only the `$$name` ban remains. Use it
+only for templates written and reviewed by trusted authors.
+
+#### Function guardrails
+
+**Empty by default.** Open mode is full PHP access, so the engine does not
+smuggle a second, weaker sandbox into it: a fixed subset of "sinks" could never
+be a security boundary (hundreds of ordinary functions read the environment,
+write files or spawn processes), and blocking `exec` while allowing `proc_open`
+reads as protection the switch has already declined to give.
+
+What still matters, in both modes, is that `$$name` variable-variable expansion
+is rejected — that hazard comes from the expression syntax itself.
+
+An application may still add its own guardrails on top of the switch:
+
+```php
+$engine->setDeniedFunctions(['exec', 'system']);   // add guardrails
+$engine->setDeniedFunctions([]);                   // block nothing (default)
+```
+
+> Changing the list does **not** recompile already-cached templates, because the
+> compiled class embeds the function names it calls — clear the compiled-template
+> cache after changing it.
+
+#### Mode changes and the cache
+
+Every compiled template records whether it was built sandboxed
+(`$sandboxCompiled`), and the loader recompiles when that differs from the
+current setting. Without this, a template compiled under one mode could be
+served under the other, since the cache keys on template source only.
+
 ## Performance Optimization
 
 ### Pre-Compilation
@@ -961,6 +1021,10 @@ opcache.revalidate_freq=2
 | `setExtension(string $ext)`                 | File extension (default: `.clarity.html`) |
 | `setCachePath(string $path)`                | Cache directory                           |
 | `getCachePath(): string`                    | Get current cache path                    |
+| `setSandboxMode(bool $enabled)`             | Enable/disable the sandbox (default on)   |
+| `isSandboxed(): bool`                       | Whether the sandbox is enabled            |
+| `setDeniedFunctions(array $names)`          | Add open-mode function guardrails         |
+| `getDeniedFunctions(): array`               | Current open-mode function guardrails     |
 | `flushCache(): void`                        | Delete all cached files                   |
 | `addFilter(string $name, callable $fn)`     | Register custom filter                    |
 | `addFunction(string $name, callable $fn)`   | Register custom function                  |
@@ -1208,8 +1272,8 @@ $engine->addDirective('cache', function(string $rest, string $path, int $line, c
 $engine->addDirective('endcache', function(string $rest, string $path, int $line, callable $expr): string {
     // Close the buffer on BOTH branches: a hit discards it, a miss stores AND
     // emits it (storing alone would swallow the block's output).
-    return "if (\$__sv['cache']->has(\$__cacheKey)) { ob_end_clean(); echo \$__sv['cache']->get(\$__cacheKey); } "
-         . "else { \$__cached = ob_get_clean(); \$__sv['cache']->set(\$__cacheKey, \$__cached); echo \$__cached; }";
+    return "if (\$__c_sv['cache']->has(\$__cacheKey)) { ob_end_clean(); echo \$__c_sv['cache']->get(\$__cacheKey); } "
+         . "else { \$__cached = ob_get_clean(); \$__c_sv['cache']->set(\$__cacheKey, \$__cached); echo \$__cached; }";
 });
 ```
 
@@ -1247,7 +1311,7 @@ view engine, a framework response buffer). Clarity's own buffer level is
 guaranteed by the compiled scaffold, not by your directive.
 
 You do **not** need to clean up after a block that throws. The compiled
-`render()` captures its buffer level in the local `$__obLevel` and, in its catch
+`render()` captures its buffer level in the local `$__c_ob_level` and, in its catch
 block, drains every buffer opened above that level before rethrowing — so a
 directive that opened a buffer and then let an exception escape cannot leak it.
 This is deliberately handled by the scaffold rather than by each directive,
@@ -1255,12 +1319,27 @@ because a directive's close handler never runs when the block throws.
 `COMPILER_VERSION` 6 is the release that introduced this drain;
 `Clarity\Tests\Engine\OutputBufferTest` pins it.
 
-`$__obLevel` joins `$__fl`, `$__fn` and `$__sv` as a name the scaffold owns.
-Emitted directive PHP runs in the same scope, so do not reuse it.
+### The `__c_` prefix
+
+Every PHP variable the engine binds into the render frame carries the `__c_`
+prefix (`c` for Clarity): `$__c_fl`, `$__c_fn`, `$__c_sv`, `$__c_va`,
+`$__c_ob_level`, `$__c_e`, and the `$__c_tmp` / `$__c_val` temporaries that
+inlined filters and callable-filter lambdas assign.
+
+Emitted directive and inline-filter PHP runs in that same scope, so use these
+names and do not bind your own with the prefix. It is a **prefix rule**, not a
+list: a name is protected by being spelled `__c_…`, so a new internal cannot
+silently collide with a template variable.
+
+Template authors cannot bind a `__c_`-prefixed name (the compiler rejects it in
+both modes), because doing so would swap an internal for the rest of the render
+— binding `__c_fl` would break every filter after that line. Every other name
+starting with underscores — `__foo`, `_c_foo`, `___foo` — is an ordinary
+template variable.
 
 ## Services
 
-Services are arbitrary objects registered into the engine and made available inside compiled templates via `$__sv['key']`. They're primarily used by modules to share mutable state (e.g. a locale stack or cache object) between registered filters/directives and inline filter PHP templates.
+Services are arbitrary objects registered into the engine and made available inside compiled templates via `$__c_sv['key']`. They're primarily used by modules to share mutable state (e.g. a locale stack or cache object) between registered filters/directives and inline filter PHP templates.
 
 ### Registering a Service
 
@@ -1280,11 +1359,11 @@ if ($engine->hasService('my_service')) {
 
 ### Accessing Services in Inline Filters
 
-Inline filter PHP templates can reference services via `$__sv['key']`:
+Inline filter PHP templates can reference services via `$__c_sv['key']`:
 
 ```php
 $engine->addInlineFilter('t', [
-    'php'     => "\$__sv['translator']->get(\$__sv['locale']->current(), {1})",
+    'php'     => "\$__c_sv['translator']->get(\$__c_sv['locale']->current(), {1})",
     'params'  => ['vars'],
     'defaults'=> ['vars' => 'null'],
 ]);

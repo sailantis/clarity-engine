@@ -202,7 +202,7 @@ class FiltersFunctionsTest extends BaseTestCase
         $compiled = $tokenizer->buildFilterCall('date("Y")', '$ts');
 
         $this->assertStringContainsString('\\date(', $compiled);
-        $this->assertStringNotContainsString('$this->__fl[\'date\']', $compiled);
+        $this->assertStringNotContainsString('$this->__c_fl[\'date\']', $compiled);
     }
 
     // -- Date filters ---------------------------------------------------------
@@ -283,9 +283,9 @@ class FiltersFunctionsTest extends BaseTestCase
 
         $compiled = $tokenizer->buildFilterCall('map("upper")', '$items');
 
-        $this->assertStringContainsString('static fn(mixed $__val): mixed =>', $compiled);
+        $this->assertStringContainsString('static fn(mixed $__c_val): mixed =>', $compiled);
         $this->assertStringContainsString('\\mb_strtoupper', $compiled);
-        $this->assertStringNotContainsString('$this->__fl[\'upper\']', $compiled);
+        $this->assertStringNotContainsString('$this->__c_fl[\'upper\']', $compiled);
     }
 
     public function testFilterMapCompilesInlineUnicodeReference(): void
@@ -295,9 +295,9 @@ class FiltersFunctionsTest extends BaseTestCase
 
         $compiled = $tokenizer->buildFilterCall('map("unicode")', '$items');
 
-        $this->assertStringContainsString('static fn(mixed $__val): mixed =>', $compiled);
+        $this->assertStringContainsString('static fn(mixed $__c_val): mixed =>', $compiled);
         $this->assertStringContainsString('new \\Clarity\\Engine\\UnicodeString', $compiled);
-        $this->assertStringNotContainsString('$this->__fl[\'unicode\']', $compiled);
+        $this->assertStringNotContainsString('$this->__c_fl[\'unicode\']', $compiled);
     }
 
     public function testFilterFilter(): void

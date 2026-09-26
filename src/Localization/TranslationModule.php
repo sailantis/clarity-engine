@@ -76,11 +76,11 @@ class TranslationModule implements ModuleInterface
 
     public function __construct(array $config = [])
     {
-        $this->locale = $config['locale'] ?? LocaleService::detectLocale();
-        $this->fallbackLocale = $config['fallback_locale'] ?? 'en_US';
+        $this->locale           = $config['locale'] ?? LocaleService::detectLocale();
+        $this->fallbackLocale   = $config['fallback_locale'] ?? 'en_US';
         $this->translationsPath = $config['translations_path'] ?? null;
-        $this->defaultDomain = $config['default_domain'] ?? 'messages';
-        $this->currentDomain = $this->defaultDomain;
+        $this->defaultDomain    = $config['default_domain'] ?? 'messages';
+        $this->currentDomain    = $this->defaultDomain;
 
         if ($this->translationsPath !== null) {
             $this->translationsPath = rtrim($this->translationsPath, '/\\');
@@ -100,9 +100,9 @@ class TranslationModule implements ModuleInterface
         $this->cachePath = rtrim($cachePath, '/\\');
 
         $this->loader = $config['loader'] ?? new FileTranslationLoader(
-            $this->translationsPath ?? '',
-            $this->cachePath
-        );
+                $this->translationsPath ?? '',
+                $this->cachePath
+            );
 
     }
 
@@ -117,8 +117,8 @@ class TranslationModule implements ModuleInterface
         // Named arg: {{ "key" |> t(domain:"books") }}     → vars defaults to null
         //            {{ "key" |> t({name: v}, domain:"common") }}
         $engine->addInlineFilter('t', [
-            'php' => "\$__sv['t']->get({1}, {2}, {3})",
-            'params' => ['vars', 'domain'],
+            'php'      => "\$__c_sv['t']->get({1}, {2}, {3})",
+            'params'   => ['vars', 'domain'],
             'defaults' => ['vars' => 'null', 'domain' => 'null'],
         ]);
 
@@ -134,14 +134,16 @@ class TranslationModule implements ModuleInterface
                     );
                 }
                 $param = $processExpr($rest);
-                return "\$__sv['t']->pushDomain({$param});";
+                return "\$__c_sv['t']->pushDomain({$param});";
+                ;
             }
         );
 
         $engine->addDirective(
             'endwith_t_domain',
             static function (string $rest, string $sourcePath, int $tplLine, callable $processExpr): string {
-                return "\$__sv['t']->popDomain();";
+                return "\$__c_sv['t']->popDomain();";
+                ;
             }
         );
 
@@ -163,14 +165,14 @@ class TranslationModule implements ModuleInterface
         ?array $vars = null,
         ?string $domain = null
     ): string {
-        $locale = $this->localeService?->current() ??  $this->locale;
+        $locale = $this->localeService?->current() ?? $this->locale;
 
         $domain ??= $this->currentDomain;
 
         // Quick path: direct lookup without loading if we already have the catalog and key
         $msg = $this->catalog[$domain][$locale][$key]
             ?? $this->catalog[$domain][$this->fallbackLocale][$key]
-            ?? null;
+                ?? null;
 
         // If we got a hit, we can skip the loading logic and go straight to substitution
         if ($msg !== null) {
@@ -181,7 +183,7 @@ class TranslationModule implements ModuleInterface
         // 1. Requested locale
         if (!isset($this->catalog[$domain][$locale])) {
             $catalog = $this->loader->load($domain, $locale);
-            $msg = $catalog[$key] ?? null;
+            $msg     = $catalog[$key] ?? null;
             if ($msg !== null) {
                 goto buildPairs;
             }
@@ -190,7 +192,7 @@ class TranslationModule implements ModuleInterface
         // 2. Fallback locale (if different from requested)
         if ($locale !== $this->fallbackLocale && !isset($this->catalog[$domain][$this->fallbackLocale])) {
             $fallback = $this->loader->load($domain, $this->fallbackLocale);
-            $msg = $fallback[$key] ?? null;
+            $msg      = $fallback[$key] ?? null;
             if ($msg !== null) {
                 goto buildPairs;
             }
@@ -199,7 +201,7 @@ class TranslationModule implements ModuleInterface
         // 3. Nothing found → return key
         $msg = $key;
 
-        buildPairs:
+    buildPairs:
 
         if ($vars === null) {
             return $msg;

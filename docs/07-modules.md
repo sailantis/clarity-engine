@@ -48,7 +48,7 @@ class MyModule implements ModuleInterface
         $engine->addFunction('asset', fn(string $path) => '/assets/' . ltrim($path, '/'));
 
         // Shared service (accessible from inline filters and directive PHP
-        // via $__sv['key'])
+        // via $__c_sv['key'])
         $engine->addService('myapi', new MyApiClient($this->apiKey));
 
         // Custom directive
@@ -58,7 +58,7 @@ class MyModule implements ModuleInterface
         $engine->addDirective(
             'debug_if',
             function (string $rest, string $path, int $line, callable $processExpr): string {
-                return 'if (' . $processExpr($rest) . ' && $__sv["checkDebug"]()) {';
+                return 'if (' . $processExpr($rest) . ' && $__c_sv["checkDebug"]()) {';
             }
         });
         $engine->addDirective('debug_endif', fn() => '}');
@@ -74,7 +74,7 @@ class MyModule implements ModuleInterface
 | `addInlineFilter(name, definition)` | Filter expression compiled directly into the template PHP                     |
 | `addFunction(name, callable)`       | Function callable available in template expressions                           |
 | `addDirective(keyword, handler)`    | Custom `{% keyword %}` directive processed at compile time                    |
-| `addService(key, object)`           | Shared value/object, read in template PHP and directive PHP as `$__sv['key']` |
+| `addService(key, object)`           | Shared value/object, read in template PHP and directive PHP as `$__c_sv['key']` |
 
 ---
 

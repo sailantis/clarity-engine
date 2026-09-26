@@ -89,7 +89,7 @@ class CacheTest extends BaseTestCase
 
         $this->assertIsString($compiled);
         $this->assertStringContainsString('mb_strtoupper', $compiled);
-        $this->assertStringNotContainsString("__fl['upper']", $compiled);
+        $this->assertStringNotContainsString("__c_fl['upper']", $compiled);
     }
 
     public function testCacheInvalidatedOnTemplateChange(): void
