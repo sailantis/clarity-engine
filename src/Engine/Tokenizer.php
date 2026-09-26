@@ -83,8 +83,26 @@ class Tokenizer
      * @var array<string, string>
      */
     private array $localVars = [];
-    private const IDENT_RE = '/^[A-Za-z_][A-Za-z0-9_]*$/';
-    private const CHAIN_RE = '/^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$/';
+    /**
+     * PHP's variable-name grammar, byte-wise:
+     *
+     *     ^[a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*$
+     *
+     * This is the grammar from the PHP manual ("the bytes from 128 through
+     * 255"), which is exactly what the PHP lexer accepts, so a name this
+     * class accepts always compiles to a real PHP variable.  The high range is
+     * what makes `$öä` / `$täyte` work in UTF-8: every byte of a multi-byte
+     * sequence falls inside it.
+     *
+     * Deliberate divergence from Twig: Twig's lexer uses `\x7f-\xff`, i.e. it
+     * also accepts DEL (0x7F), which PHP's own documented range excludes.  A
+     * DEL in a template identifier is never intentional, so this follows PHP.
+     *
+     * Byte comparison, not `/u`: PHP compares variable names as BYTES and never
+     * validates their encoding, so an invalid-UTF-8 name is a legal variable
+     * that a `\p{L}`-style class would wrongly reject.
+     */
+    private const IDENT_RE = '/^[a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*$/';
 
     /**
      * Filters whose first argument must be a lambda expression or a filter
@@ -731,8 +749,8 @@ class Tokenizer
                     $isArrow = $next === '-' && ($expr[$i + 2] ?? '') === '>';
                     if (
                         !$isArrow
-                        && $i > 0 && \ctype_space($expr[$i - 1])
-                        && $next !== '' && \ctype_space($next)
+                            && $i > 0 && \ctype_space($expr[$i - 1])
+                            && $next !== '' && \ctype_space($next)
                     ) {
                         // A ternary opening inside an ELSE branch would be
                         // chained, and PHP rejects `a ? b : c ? d : e` outright.
@@ -748,8 +766,8 @@ class Tokenizer
 
                         // `cond ? cond2 ? x : y : z` nests in the THEN branch,
                         // which PHP accepts and this engine already supported.
-                        $ternarySeen       = true;
-                        $ternaryPhases[]   = 'then';
+                        $ternarySeen = true;
+                        $ternaryPhases[] = 'then';
                         $ternaryOpenedAt[] = $i;
                     }
                 }
@@ -794,8 +812,8 @@ class Tokenizer
                 // rather than emitting code PHP will refuse to load.
                 if (
                     $this->startsIdentifier($after)
-                    && substr($expr, $j, 2) === 'if'
-                    && !$this->isIdentChar($expr[$j + 2] ?? '')
+                        && substr($expr, $j, 2) === 'if'
+                        && !$this->isIdentChar($expr[$j + 2] ?? '')
                 ) {
                     throw new ClarityException(
                         "Nested ternary else-branch must be parenthesised: write "
@@ -862,7 +880,7 @@ class Tokenizer
             if ($ch === '$') {
                 $sigilStart = $i + 1;
                 $next       = $expr[$sigilStart] ?? '';
-                if (!(\ctype_alpha($next) || $next === '_')) {
+                if (!self::isIdentifierStart($next)) {
                     throw new ClarityException(
                         "Direct PHP variable access ('\$') is not allowed in Clarity expressions; "
                             . "use a variable name after the sigil (\$name) or dot-notation (name.field)."
@@ -920,7 +938,7 @@ class Tokenizer
             }
 
             // Identifier / var-chain detection
-            if (\ctype_alpha($ch) || $ch === '_') {
+            if (self::isIdentifierStart($ch)) {
                 $start = $i;
 
                 // --- Performance: try the cache with just the raw identifier first.
@@ -929,7 +947,7 @@ class Tokenizer
                 // check the cache, and only fall through to full parsing on a miss or
                 // when the identifier is followed by '.' or '['.
                 $idEnd = $i + 1;
-                while ($idEnd < $len && (\ctype_alnum($expr[$idEnd]) || $expr[$idEnd] === '_')) {
+                while ($idEnd < $len && self::isIdentifierChar($expr[$idEnd])) {
                     $idEnd++;
                 }
                 $nextAfterIdent = $expr[$idEnd] ?? '';
@@ -957,8 +975,8 @@ class Tokenizer
 
                     $prevChar = ($start - 1 >= 0) ? $expr[$start - 1] : null;
                     $nextChar = $nextAfterIdent !== '' ? $nextAfterIdent : null;
-                    $prevIsId = $prevChar !== null && (\ctype_alnum($prevChar) || $prevChar === '_');
-                    $nextIsId = $nextChar !== null && (\ctype_alnum($nextChar) || $nextChar === '_');
+                    $prevIsId = $prevChar !== null && self::isIdentifierChar($prevChar);
+                    $nextIsId = $nextChar !== null && self::isIdentifierChar($nextChar);
                     $lower    = \strtolower($token);
 
                     if (!$prevIsId && !$nextIsId && isset($keywordMap[$lower])) {
@@ -1231,14 +1249,14 @@ class Tokenizer
                     $nameStart++;
                 }
 
-                if ($nameStart >= $len || !(\ctype_alpha($expr[$nameStart]) || $expr[$nameStart] === '_')) {
+                if ($nameStart >= $len || !self::isIdentifierStart($expr[$nameStart])) {
                     throw new ClarityException(
                         "Property access operator '.' must be followed by a property name in '{$expr}'."
                     );
                 }
 
                 $nameEnd = $nameStart + 1;
-                while ($nameEnd < $len && (\ctype_alnum($expr[$nameEnd]) || $expr[$nameEnd] === '_')) {
+                while ($nameEnd < $len && self::isIdentifierChar($expr[$nameEnd])) {
                     $nameEnd++;
                 }
 
@@ -1275,7 +1293,7 @@ class Tokenizer
                 }
 
                 $nameEnd = $nameStart + 1;
-                while ($nameEnd < $len && (\ctype_alnum($expr[$nameEnd]) || $expr[$nameEnd] === '_')) {
+                while ($nameEnd < $len && self::isIdentifierChar($expr[$nameEnd])) {
                     $nameEnd++;
                 }
 
@@ -1563,20 +1581,19 @@ class Tokenizer
         int $start,
         bool $allowArrow = false,
         bool $ternaryOpen = false
-    ): ?array
-    {
+    ): ?array {
         $len = \strlen($subject);
         if ($start >= $len) {
             return null;
         }
 
         $first = $subject[$start];
-        if (!(\ctype_alpha($first) || $first === '_')) {
+        if (!self::isIdentifierStart($first)) {
             return null;
         }
 
         $i = $start + 1;
-        while ($i < $len && (\ctype_alnum($subject[$i]) || $subject[$i] === '_')) {
+        while ($i < $len && self::isIdentifierChar($subject[$i])) {
             $i++;
         }
 
@@ -1679,7 +1696,7 @@ class Tokenizer
                     $j++;
                 }
 
-                if ($j >= $len || !(\ctype_alpha($subject[$j]) || $subject[$j] === '_')) {
+                if ($j >= $len || !self::isIdentifierStart($subject[$j])) {
                     // A dangling `.` is never concatenation: `.` always means
                     // property access, so an operator with no member after it is
                     // an authoring mistake. Reporting it here is what stops a
@@ -1693,8 +1710,8 @@ class Tokenizer
                 }
 
                 $idStart = $j;
-                $i = $idStart + 1;
-                while ($i < $len && (\ctype_alnum($subject[$i]) || $subject[$i] === '_')) {
+                $i       = $idStart + 1;
+                while ($i < $len && self::isIdentifierChar($subject[$i])) {
                     $i++;
                 }
 
@@ -1782,7 +1799,7 @@ class Tokenizer
                 }
 
                 $j = $idStart + 1;
-                while ($j < $len && (\ctype_alnum($subject[$j]) || $subject[$j] === '_')) {
+                while ($j < $len && self::isIdentifierChar($subject[$j])) {
                     $j++;
                 }
 
@@ -1802,11 +1819,55 @@ class Tokenizer
     }
 
     /**
+     * Whether the character (a single BYTE) can start an identifier.
+     *
+     * Mirrors PHP's variable-name rule: a letter, an underscore, or a byte in
+     * 0x80-0xFF.  Uses `ord()` rather than ctype_alpha(), which is
+     * locale-dependent and would disagree with the runtime on a non-C locale.
+     */
+    public static function isIdentifierStart(string $ch): bool
+    {
+        if ($ch === '') {
+            return false;
+        }
+        $b = \ord($ch);
+        return ($b >= 0x41 && $b <= 0x5A)
+            || ($b >= 0x61 && $b <= 0x7A)
+            || $b === 0x5F
+            || $b >= 0x80; // PHP accepts bytes 128-255
+    }
+
+    /**
+     * Whether the character (a single BYTE) can appear inside an identifier.
+     */
+    public static function isIdentifierChar(string $ch): bool
+    {
+        if ($ch === '') {
+            return false;
+        }
+        $b = \ord($ch);
+        return ($b >= 0x30 && $b <= 0x39)
+            || self::isIdentifierStart($ch);
+    }
+
+    /**
+     * Whether the whole string is one PHP variable name.
+     *
+     * Callers that VALIDATE a name (rather than scan for one) must use this so
+     * their accepted set can never drift from what the scanner above will
+     * tokenize back out.
+     */
+    public static function isIdentifier(string $name): bool
+    {
+        return (bool) \preg_match(self::IDENT_RE, $name);
+    }
+
+    /**
      * Whether the character can start a chain continuation identifier.
      */
     private function startsIdentifier(string $ch): bool
     {
-        return $ch !== '' && (\ctype_alpha($ch) || $ch === '_');
+        return self::isIdentifierStart($ch);
     }
 
     /**
@@ -1815,7 +1876,7 @@ class Tokenizer
      */
     private function isIdentChar(string $ch): bool
     {
-        return $ch !== '' && (\ctype_alnum($ch) || $ch === '_');
+        return self::isIdentifierChar($ch);
     }
 
     /**
@@ -2088,7 +2149,7 @@ class Tokenizer
     private function parseNamedArg(string $arg): ?array
     {
         // identifier followed by = that is not == ; also must not be !=, <=, >=
-        if (\preg_match('/^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*:(?!:)(.+)$/s', $arg, $m)) {
+        if (\preg_match('/^\s*([a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*)\s*:(?!:)(.+)$/s', $arg, $m)) {
             return ['name' => $m[1], 'expr' => \trim($m[2])];
         }
         return null;
@@ -2256,6 +2317,9 @@ class Tokenizer
             $this->autoEscape = false;
             return $phpValue;
         }
+        if ($name === 'expand') {
+            return $this->buildExpandCall($args, $phpValue, $trailing);
+        }
 
         if ($args === '') {
             $argList = [];
@@ -2317,7 +2381,7 @@ class Tokenizer
         $segment = \ltrim($filterSegment);
 
         // Must start with a valid identifier
-        if (!\preg_match('/^([a-zA-Z_][a-zA-Z0-9_]*)/', $segment, $m)) {
+        if (!\preg_match('/^([a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*)/', $segment, $m)) {
             return null;
         }
         $name = $m[1];
@@ -2489,7 +2553,7 @@ class Tokenizer
             $last  = $trimmed[-1];
             if (($first === '"' && $last === '"') || ($first === "'" && $last === "'")) {
                 $refName = \substr($trimmed, 1, -1);
-                if (!\preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $refName)) {
+                if (!\preg_match(self::IDENT_RE, $refName)) {
                     throw new ClarityException(
                         "Filter reference must be a plain identifier, got: '{$refName}'"
                     );
@@ -2597,11 +2661,11 @@ class Tokenizer
             $first = $paramList;
         } else {
             $second = \ltrim(\substr($paramList, \strpos($paramList, ',') + 1));
-            if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $second)) {
+            if (!\preg_match(self::IDENT_RE, $second)) {
                 throw new ClarityException("Invalid lambda parameter: '{$second}'");
             }
         }
-        if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $first)) {
+        if (!\preg_match(self::IDENT_RE, $first)) {
             throw new ClarityException("Invalid lambda parameter: '{$first}'");
         }
 
@@ -2631,4 +2695,77 @@ class Tokenizer
         return "static function({$signature}) use (\$__va): mixed { return {$phpBody}; }";
     }
 
+    /**
+     * Compile `… |> expand` — dynamic variable lookup by name.
+     *
+     * Arguments (all optional)
+     * ------------------------
+     *  • positional 1, or `fallback:` — value used when the name is absent.
+     *    Supplying one implies optional, since an eager fallback already
+     *    replaces the strict throw.
+     *  • `optional:` — a literal true/false. When true an absent name yields
+     *    null instead of raising, so a following `??` can supply the fallback:
+     *    `expand(optional: true) ?? 'none'`.
+     *
+     * `fallback` and `optional` differ in WHERE the fallback is decided:
+     * `fallback` bakes the value into the absent branch, while `optional`
+     * leaves that branch null so the engine's value-level `??` sees it. That
+     * is what lets the optional form compose with later pipeline steps.
+     *
+     * `optional` must be a compile-time literal because the absence branch is
+     * chosen while compiling; a runtime expression cannot be honoured, so it
+     * is reported rather than silently read as false.
+     *
+     * Both are the author's opt-out from the strict "absent name throws"
+     * contract that every other access follows.
+     */
+    private function buildExpandCall(string $args, string $phpValue, string $trailing): string
+    {
+        $argList = $args === '' ? [] : $this->splitRespectingStrings($args, ',');
+        [$positional, $named] = $this->compileFilterArguments($argList);
+
+        foreach (\array_keys($named) as $name) {
+            if ($name !== 'fallback' && $name !== 'optional') {
+                throw new ClarityException(
+                    "Unknown named argument '{$name}' for filter 'expand'."
+                );
+            }
+        }
+        if (\count($positional) > 1) {
+            throw new ClarityException("Filter 'expand' received too many positional arguments.");
+        }
+
+        $fallback = $named['fallback'] ?? $positional[0] ?? null;
+        $optional = $named['optional'] ?? null;
+
+        if ($optional !== null && $optional !== 'true' && $optional !== 'false') {
+            throw new ClarityException(
+                "Filter 'expand' expects a literal true or false for 'optional', got: '{$optional}'."
+            );
+        }
+
+        // The absent-branch value: an explicit fallback, else null when the
+        // author opted out of the strict contract, else the strict throw.
+        $missing = $fallback
+            ?? ($optional === 'true'
+                ? 'null'
+                : 'throw new \\Clarity\\ClarityException("Undefined variable: $__tmp")');
+
+        if (!empty($this->localVars)) {
+            $entries = [];
+            foreach ($this->localVars as $tplName => $phpVar) {
+                $entries[] = \var_export($tplName, true) . ' => 1';
+            }
+            $mapLiteral = '[' . \implode(', ', $entries) . ']';
+            $call       = "(\\array_key_exists(\$__tmp = (string) {$phpValue}, {$mapLiteral})"
+                . " ? \${\$__tmp}"
+                . " : (isset(\$__va[\$__tmp]) ? \$__va[\$__tmp]"
+                . " : ({$missing})))";
+        } else {
+            $call = "(isset(\$__va[\$__tmp = (string) {$phpValue}]) ? \$__va[\$__tmp]"
+                . " : ({$missing}))";
+        }
+
+        return $trailing !== '' ? $call . $this->convertVarsAndOps($trailing) : $call;
+    }
 }

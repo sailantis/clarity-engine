@@ -72,6 +72,10 @@ use Stringable;
  * **Utility Filters**
  * - `json`                      : JSON encode (use with |> raw)
  * - `default($fallback)`        : Return fallback if value is empty/falsy
+ * - `expand [fallback: | optional:]` : Treat the value as a variable NAME and look it up
+ *   Usage: `{{ name |> expand }}`, `{{ name |> expand(optional: true) ?? 'none' }}`
+ *   Compiled specially (see Tokenizer::buildExpandCall) so it can see loop locals;
+ *   absent names throw unless `optional: true` or a fallback is supplied.
  * - `url_encode`                : URL-encode value (rawurlencode)
  * - `data_uri [$mimeType]`      : Generate base64-encoded data: URI
  * - `unicode`                   : Wrap in UnicodeString for advanced operations
@@ -161,6 +165,29 @@ class Registry
      * @var array<string, array{php?: string, params?: string[], defaults?: array<string, string>, variadic?: bool}>
      */
     private array $inlineFilters = [
+        'abs' => [
+            'php' => '\abs({1} + 0)',
+        ],
+        'capitalize' => [
+            'php' => '($__tmp = (string){1}) === "" ? "" : \mb_strtoupper(\mb_substr($__tmp, 0, 1)) . \mb_strtolower(\mb_substr($__tmp, 1))',
+        ],
+        'ceil' => [
+            'php' => '\ceil((float){1})',
+        ],
+        'data_uri' => [
+            'php'      => '"data:" . {2} . ";base64," . \base64_encode((string){1})',
+            'params'   => ['mime'],
+            'defaults' => ['mime' => "'application/octet-stream'"],
+        ],
+        'date' => [
+            'php'      => '\date({2}, ($__tmp = {1}) instanceof \DateTimeInterface ? $__tmp->getTimestamp() : (\is_int($__tmp) ? $__tmp : (int) \strtotime((string) $__tmp)))',
+            'params'   => ['format'],
+            'defaults' => ['format' => "'Y-m-d'"],
+        ],
+        'date_modify' => [
+            'php'    => '(int) ((new \DateTimeImmutable("@" . (($__tmp = {1}) instanceof \DateTimeInterface ? $__tmp->getTimestamp() : (\is_int($__tmp) ? $__tmp : (int) \strtotime((string) $__tmp)))))->modify({2})->getTimestamp())',
+            'params' => ['modifier'],
+        ],
         'default' => [
             'php'      => '({1} ?? {2})',
             'params'   => ['fallback'],
@@ -171,125 +198,99 @@ class Registry
             'params'   => ['fallback'],
             'defaults' => ['fallback' => '""'],
         ],
-        'slice' => [
-            'php'      => '(\is_array($__tmp = {1}) ? \array_slice($__tmp, {2}, {3}) : \mb_substr((string) $__tmp, {2}, {3}))',
-            'params'   => ['start', 'length'],
-            'defaults' => ['length' => 'null'],
-        ],
-        'escape' => [
+        'e' => [
             'php' => '\htmlspecialchars((string){1}, \ENT_QUOTES | \ENT_SUBSTITUTE, "UTF-8")',
-        ],
-        'expand' => [
-            'php'      => 'isset($__va[$__tmp = (string) {1}]) ? $__va[$__tmp] : ({2} ?? throw new \Clarity\ClarityException("Undefined variable: $__tmp"))',
-            'params'   => ['fallback'],
-            'defaults' => ['fallback' => 'null'],
         ],
         'esc' => [
             'php' => '\htmlspecialchars((string){1}, \ENT_QUOTES | \ENT_SUBSTITUTE, "UTF-8")',
         ],
-        'trim' => [
-            'php' => '\trim((string){1})',
+        'escape' => [
+            'php' => '\htmlspecialchars((string){1}, \ENT_QUOTES | \ENT_SUBSTITUTE, "UTF-8")',
         ],
-        'upper' => [
-            'php' => '\mb_strtoupper((string){1})',
-        ],
-        'lower' => [
-            'php' => '\mb_strtolower((string){1})',
-        ],
-        'capitalize' => [
-            'php' => '($__tmp = (string){1}) === "" ? "" : \mb_strtoupper(\mb_substr($__tmp, 0, 1)) . \mb_strtolower(\mb_substr($__tmp, 1))',
-        ],
-        'title' => [
-            'php' => '\mb_convert_case((string){1}, \MB_CASE_TITLE)',
-        ],
-        'replace' => [
-            'php'      => '\str_replace({2}, {3}, (string){1})',
-            'params'   => ['search', 'replace'],
-            'defaults' => ['replace' => "''"],
-        ],
-        'nl2br' => [
-            'php' => '\nl2br((string){1})',
-        ],
-        'split' => [
-            'php'      => '\explode({2}, (string){1}, {3})',
-            'params'   => ['delimiter', 'limit'],
-            'defaults' => ['limit' => '\\PHP_INT_MAX'],
+        // `expand` is compiled specially by Tokenizer::buildExpandCall() to see loop locals.
+        'floor' => [
+            'php' => '\floor((float){1})',
         ],
         'join' => [
             'php'      => '\implode({2}, (array){1})',
             'params'   => ['glue'],
             'defaults' => ['glue' => "''"],
         ],
-        'truncate' => [
-            'php'      => '(\mb_strlen($__tmp = ((string){1})) <= {2} ? $__tmp : \mb_substr($__tmp, 0, {2}) . {3})',
-            'params'   => ['length', 'ellipsis'],
-            'defaults' => ['ellipsis' => "'\\u{2026}'"],
+        'json' => [
+            // SON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE | JSON_PARTIAL_OUTPUT_ON_ERROR
+            'php' => '\json_encode({1}, 0x200340)',
         ],
-        'number' => [
-            'php'      => '\number_format((float){1}, {2})',
-            'params'   => ['decimals'],
-            'defaults' => ['decimals' => '2'],
-        ],
-        'sprintf' => [
-            'php'      => '\sprintf',
-            'params'   => ['args'],
-            'variadic' => true,
-        ],
-        'abs' => [
-            'php' => '\abs({1} + 0)',
-        ],
-        'round' => [
-            'php'      => '\round((float){1}, {2})',
-            'params'   => ['precision'],
-            'defaults' => ['precision' => '0'],
-        ],
-        'ceil' => [
-            'php' => '\ceil((float){1})',
-        ],
-        'floor' => [
-            'php' => '\floor((float){1})',
-        ],
-        'date' => [
-            // The parenthesised assignment matters: `$__tmp = {1} instanceof X`
-            // parses as `$__tmp = ({1} instanceof X)` because `instanceof` binds
-            // tighter than `=`, leaving $__tmp a bool.
-            'php'      => '\date({2}, ($__tmp = {1}) instanceof \DateTimeInterface ? $__tmp->getTimestamp() : (\is_int($__tmp) ? $__tmp : (int) \strtotime((string) $__tmp)))',
-            'params'   => ['format'],
-            'defaults' => ['format' => "'Y-m-d'"],
-        ],
-        'date_modify' => [
-            'php'    => '(int) ((new \DateTimeImmutable("@" . (\is_int($__tmp = {1}) ? $__tmp : (int) \strtotime((string) $__tmp))))->modify({2})->getTimestamp())',
-            'params' => ['modifier'],
+        'lower' => [
+            'php' => '\mb_strtolower((string){1})',
         ],
         'merge' => [
             'php'      => '[...(array){1}, ...(array){2}]',
             'params'   => ['other'],
             'defaults' => ['other' => '[]'],
         ],
+        'nl2br' => [
+            'php' => '\nl2br((string){1})',
+        ],
+        'number' => [
+            'php'      => '\number_format((float){1}, {2})',
+            'params'   => ['decimals'],
+            'defaults' => ['decimals' => '2'],
+        ],
+        // `raw` is handled specially by the compiler to disable auto-escaping; it is not a real filter.
+        'replace' => [
+            'php'      => '\str_replace({2}, {3}, (string){1})',
+            'params'   => ['search', 'replace'],
+            'defaults' => ['replace' => "''"],
+        ],
         'reverse' => [
             'php' => '(\is_array($__tmp = {1}) ? \array_reverse($__tmp) : \implode("", \array_reverse(\preg_split("//u", (string) $__tmp, -1, \PREG_SPLIT_NO_EMPTY) ?: [])))',
         ],
-        'data_uri' => [
-            'php'      => '"data:" . {2} . ";base64," . \base64_encode((string){1})',
-            'params'   => ['mime'],
-            'defaults' => ['mime' => "'application/octet-stream'"],
+        'round' => [
+            'php'      => '\round((float){1}, {2})',
+            'params'   => ['precision'],
+            'defaults' => ['precision' => '0'],
         ],
-        'url_encode' => [
-            'php' => '\rawurlencode((string) {1})',
+        'slice' => [
+            'php'      => '(\is_array($__tmp = {1}) ? \array_slice($__tmp, {2}, {3}) : \mb_substr((string) $__tmp, {2}, {3}))',
+            'params'   => ['start', 'length'],
+            'defaults' => ['length' => 'null'],
+        ],
+        'split' => [
+            'php'      => '\explode({2}, (string){1}, {3})',
+            'params'   => ['delimiter', 'limit'],
+            'defaults' => ['limit' => '\\PHP_INT_MAX'],
+        ],
+        'sprintf' => [
+            'php'      => '\sprintf',
+            'params'   => ['args'],
+            'variadic' => true,
         ],
         'striptags' => [
             'php'      => '\strip_tags((string) {1}, {2})',
             'params'   => ['allowedTags'],
             'defaults' => ['allowedTags' => "''"],
         ],
-        'json' => [
-            // SON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE | JSON_PARTIAL_OUTPUT_ON_ERROR
-            'php' => '\json_encode({1}, 0x200340)',
+        'title' => [
+            'php' => '\mb_convert_case((string){1}, \MB_CASE_TITLE)',
+        ],
+        'trim' => [
+            'php' => '\trim((string){1})',
+        ],
+        'truncate' => [
+            'php'      => '(\mb_strlen($__tmp = ((string){1})) <= {2} ? $__tmp : \mb_substr($__tmp, 0, {2}) . {3})',
+            'params'   => ['length', 'ellipsis'],
+            'defaults' => ['ellipsis' => "'\\u{2026}'"],
         ],
         'unicode' => [
             'php'      => 'new \Clarity\Engine\UnicodeString((string){1}, {2}, {3})',
             'params'   => ['start', 'length'],
             'defaults' => ['start' => '0', 'length' => 'null'],
+        ],
+        'upper' => [
+            'php' => '\mb_strtoupper((string){1})',
+        ],
+        'url_encode' => [
+            'php' => '\rawurlencode((string) {1})',
         ],
     ];
 
@@ -740,6 +741,7 @@ class Registry
      * @param string   $sourcePath  Source file path (for error messages).
      * @param int      $tplLine     Template line number (for error messages).
      * @param callable $processExpr fn(string $clarityExpr): string converter.
+     * @param Compiler $compiler    The compiler invoking this directive.
      * @return string Compiled PHP statement(s).
      * @throws ClarityException If the handler itself throws one.
      */
@@ -749,12 +751,14 @@ class Registry
         string $sourcePath,
         int $tplLine,
         callable $processExpr,
+        Compiler $compiler,
     ): string {
         return ($this->directiveHandlers[$keyword])(
             $rest,
             $sourcePath,
             $tplLine,
-            $processExpr
+            $processExpr,
+            $compiler,
         );
     }
 

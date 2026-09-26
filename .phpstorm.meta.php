@@ -79,6 +79,12 @@ namespace PHPSTORM_META
             'description' => 'Alias of escape.',
             'example'     => '{{ x |> esc }}',
         ],
+        'expand' => [
+            'return'      => 'mixed',
+            'params'      => [['fallback', 'null'], ['optional', 'false']],
+            'description' => 'Treat the piped value as a variable NAME and look it up in the render scope. Absent names throw unless optional: true or a fallback is given.',
+            'example'     => "{{ name |> expand(optional: true) ?? 'none' }}",
+        ],
         'first' => [
             'return'      => 'mixed',
             'description' => 'Get the first element of an array or first character of a string.',
