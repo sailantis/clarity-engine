@@ -143,7 +143,6 @@ class TranslationModule implements ModuleInterface
             'endwith_t_domain',
             static function (string $rest, string $sourcePath, int $tplLine, callable $processExpr): string {
                 return "\$__c_sv['t']->popDomain();";
-                ;
             }
         );
 

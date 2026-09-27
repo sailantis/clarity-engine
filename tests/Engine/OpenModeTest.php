@@ -189,25 +189,55 @@ class OpenModeTest extends BaseTestCase
     }
 
     // =========================================================================
-    // $$name hardening
+    // ${expr} / $$name — dynamic variable lookup (works in BOTH modes)
+    //
+    // The lookup resolves against the render scope and loop locals, so it can
+    // reach neither a superglobal nor an engine internal in either mode; the
+    // sandbox therefore has nothing extra to deny, and the construct replaced the
+    // old `expand` filter.
     // =========================================================================
 
-    public function testVariableVariableRejectedWhenSandboxed(): void
+    public function testDynamicLookupResolvesInSandboxMode(): void
     {
-        self::tpl('om_dd_sandbox', "{{ \$\$name }}");
+        self::tpl('om_dd_sandbox', '{{ $$name }}');
+        $this->assertSame('v', self::render('om_dd_sandbox', ['name' => 'x', 'x' => 'v']));
+    }
+
+    public function testBracedLookupMatchesTheDollarShorthand(): void
+    {
+        self::tpl('om_dd_braced', '{{ ${name} }}');
+        $this->assertSame('v', self::render('om_dd_braced', ['name' => 'x', 'x' => 'v']));
+    }
+
+    public function testDynamicLookupIsStrictForAnAbsentName(): void
+    {
+        self::tpl('om_dd_absent', '{{ ${missing} }}');
 
         $this->expectException(ClarityException::class);
-        $this->expectExceptionMessageMatches('/Variable-variable expansion/');
-        self::render('om_dd_sandbox', ['name' => 'x', 'x' => 'v']);
+        self::render('om_dd_absent', ['missing' => 'nope']);
+    }
+
+    public function testDynamicLookupComposesWithNullCoalescing(): void
+    {
+        self::tpl('om_dd_coalesce', '{{ ${missing} ?? "DEF" }}');
+        $this->assertSame('DEF', self::render('om_dd_coalesce', []));
+    }
+
+    public function testDynamicLookupCannotReachEngineInternals(): void
+    {
+        // `__c_fn` names the callable registry, but it is not a scope entry, so a
+        // dynamic lookup reports it absent instead of exposing the internal.
+        self::tpl('om_dd_internal', '{{ ${which} }}');
+
+        $this->expectException(ClarityException::class);
+        self::render('om_dd_internal', ['which' => '__c_fn']);
     }
 
     public function testVariableVariableIsAllowedInOpenMode(): void
     {
-        // Open mode grants the full power of PHP, and a dynamic dereference is an
-        // ordinary LOCAL lookup -- strictly weaker than the literal `$_SERVER`
-        // spelling open mode already permits, because a literal auto-global name
-        // binds the global while a dynamic one does not.
-        self::tpl('om_dd_open', "{{ \$\$name }}");
+        // Open mode grants the full power of PHP, and the dynamic lookup is an
+        // ordinary scope read in both modes.
+        self::tpl('om_dd_open', '{{ $$name }}');
 
         $this->assertSame('v', self::openEngine()->renderPartial('om_dd_open', ['name' => 'x', 'x' => 'v']));
     }
@@ -216,7 +246,7 @@ class OpenModeTest extends BaseTestCase
     {
         // The dynamic form resolves in the render frame, which holds no
         // superglobal slot, so it fails strict access rather than leaking one.
-        self::tpl('om_dd_super', "{{ \$\$name }}");
+        self::tpl('om_dd_super', '{{ $$name }}');
 
         $this->expectException(ClarityException::class);
         self::openEngine()->renderPartial('om_dd_super', ['name' => '_SERVER']);
@@ -341,7 +371,7 @@ class OpenModeTest extends BaseTestCase
         self::tpl('om_php_sandbox', "{% php %}echo 'x';{% endphp %}");
 
         $this->expectException(ClarityException::class);
-        $this->expectExceptionMessageMatches('/requires open mode/');
+        $this->expectExceptionMessageMatches('/not allowed in sandbox mode/');
         self::render('om_php_sandbox');
     }
 
@@ -542,7 +572,7 @@ class OpenModeTest extends BaseTestCase
         self::tpl('om_php_sa_deny', '{% php echo "x"; %}');
 
         $this->expectException(ClarityException::class);
-        $this->expectExceptionMessageMatches('/requires open mode/');
+        $this->expectExceptionMessageMatches('/not allowed in sandbox mode/');
         self::render('om_php_sa_deny');
     }
 
@@ -594,9 +624,9 @@ class OpenModeTest extends BaseTestCase
     public function testSetInternalPrefixIsRejectedInBothModes(): void
     {
         // `__c_` is the engine's namespace in the render frame: binding one would
-        // swap an internal for the rest of the render (e.g. the filter registry).
+        // swap an internal for the rest of the render (e.g. the callable registry).
         foreach ([self::openEngine(), self::sandboxedEngine()] as $engine) {
-            self::tpl('om_set_internal_' . ($engine->isSandboxed() ? 'sb' : 'op'), "{% set __c_fl = 'x' %}");
+            self::tpl('om_set_internal_' . ($engine->isSandboxed() ? 'sb' : 'op'), "{% set __c_fn = 'x' %}");
 
             try {
                 $engine->renderPartial('om_set_internal_' . ($engine->isSandboxed() ? 'sb' : 'op'));
@@ -633,27 +663,27 @@ class OpenModeTest extends BaseTestCase
     }
 
     // =========================================================================
-    // expand follows the same variable model as every other access
+    // ${expr} follows the same variable model as every other access
     // =========================================================================
 
-    public function testExpandResolvesTheScopeInOpenMode(): void
+    public function testDynamicLookupResolvesTheScopeInOpenMode(): void
     {
-        self::tpl('om_expand_open', '{{ which |> expand }}');
-        $this->assertSame('v', self::openEngine()->renderPartial('om_expand_open', ['which' => 'x', 'x' => 'v']));
+        self::tpl('om_dyn_open', '{{ ${which} }}');
+        $this->assertSame('v', self::openEngine()->renderPartial('om_dyn_open', ['which' => 'x', 'x' => 'v']));
     }
 
-    public function testExpandStillThrowsForAnAbsentNameInOpenMode(): void
+    public function testDynamicLookupThrowsForAnAbsentNameInOpenMode(): void
     {
-        self::tpl('om_expand_absent', '{{ which |> expand }}');
+        self::tpl('om_dyn_absent', '{{ ${which} }}');
 
         $this->expectException(ClarityException::class);
-        self::openEngine()->renderPartial('om_expand_absent', ['which' => 'nope']);
+        self::openEngine()->renderPartial('om_dyn_absent', ['which' => 'nope']);
     }
 
-    public function testExpandFallbackStillWorksInOpenMode(): void
+    public function testDynamicLookupCoalescesInOpenMode(): void
     {
-        self::tpl('om_expand_fallback', "{{ which |> expand(fallback: 'fb') }}");
-        $this->assertSame('fb', self::openEngine()->renderPartial('om_expand_fallback', ['which' => 'nope']));
+        self::tpl('om_dyn_fallback', "{{ \${which} ?? 'fb' }}");
+        $this->assertSame('fb', self::openEngine()->renderPartial('om_dyn_fallback', ['which' => 'nope']));
     }
 
     // =========================================================================

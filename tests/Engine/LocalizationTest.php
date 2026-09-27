@@ -13,14 +13,14 @@ class LocalizationTest extends BaseTestCase
     public function testNamespacedViewResolution(): void
     {
         $viewDir = TestEnvironment::viewDir();
-        $nsDir = $viewDir . '/admin';
+        $nsDir   = $viewDir . '/admin';
         if (!is_dir($nsDir)) {
             mkdir($nsDir, 0755, true);
         }
 
         file_put_contents($nsDir . '/hello.clarity.html', 'ns-hello');
 
-        $engine = TestEnvironment::engine();
+        $engine         = TestEnvironment::engine();
         $originalLoader = $engine->getLoader();
         $engine->setLoader(new DomainRouterLoader(
             ['admin' => new FileLoader($nsDir)],
@@ -83,8 +83,8 @@ class LocalizationTest extends BaseTestCase
 
         $loader = new \Clarity\Localization\TranslationModule(
             [
-                'locale' => 'en_US',
-                'fallback_locale' => 'en_US',
+                'locale'            => 'en_US',
+                'fallback_locale'   => 'en_US',
                 'translations_path' => $dir,
             ]
         );
@@ -103,8 +103,8 @@ class LocalizationTest extends BaseTestCase
 
         $loader = new \Clarity\Localization\TranslationModule(
             [
-                'locale' => 'en_US',
-                'fallback_locale' => 'en_US',
+                'locale'            => 'en_US',
+                'fallback_locale'   => 'en_US',
                 'translations_path' => $dir,
             ]
         );
@@ -119,8 +119,8 @@ class LocalizationTest extends BaseTestCase
     {
         $loader = new \Clarity\Localization\TranslationModule(
             [
-                'locale' => 'en_US',
-                'fallback_locale' => 'en_US',
+                'locale'            => 'en_US',
+                'fallback_locale'   => 'en_US',
                 'translations_path' => null,
             ]
         );
@@ -137,8 +137,8 @@ class LocalizationTest extends BaseTestCase
         $engine = new ClarityEngine();
         $engine->setViewPath(TestEnvironment::viewDir())->setCachePath(TestEnvironment::cacheDir());
         $engine->use(new \Clarity\Localization\TranslationModule([
-            'locale' => 'en_US',
-            'fallback_locale' => 'en_US',
+            'locale'            => 'en_US',
+            'fallback_locale'   => 'en_US',
             'translations_path' => $translationsDir,
         ]));
         return $engine;
@@ -165,6 +165,44 @@ class LocalizationTest extends BaseTestCase
         self::tpl('lmod_t_missing', '{{ "missing.key" |> t }}');
         $result = $engine->renderPartial('lmod_t_missing');
         $this->assertSame('missing.key', $result);
+    }
+
+    /**
+     * The ICU MessageFormat filter is registered as `format_message` — the name
+     * the module's own docblock, `.phpstorm.meta.php`, and the user docs all use.
+     *
+     * It used to be registered as `format`, which nothing documented; that made
+     * the documented name `format_message` fail at runtime. This test exists so
+     * the two can never drift apart again.
+     */
+    public function testFormatMessageFilterIsRegisteredUnderItsDocumentedName(): void
+    {
+        $engine = new ClarityEngine();
+        $engine->setViewPath(TestEnvironment::viewDir())->setCachePath(TestEnvironment::cacheDir());
+        $engine->use(new \Clarity\Localization\IntlFormatModule(['locale' => 'en_US']));
+
+        // Rendering a documented example is the assertion that matters: before
+        // the rename the filter was registered as `format`, so this threw
+        // "Unknown filter 'format_message'".
+        self::tpl('lmod_format_message_pipe', '{{ "{name}!" |> format_message({ name: who }) }}');
+        $this->assertSame(
+            'Joe!',
+            $engine->renderPartial('lmod_format_message_pipe', ['who' => 'Joe'])
+        );
+    }
+
+    public function testFormatMessageFilterFormatsAPattern(): void
+    {
+        $engine = new ClarityEngine();
+        $engine->setViewPath(TestEnvironment::viewDir())->setCachePath(TestEnvironment::cacheDir());
+        $engine->use(new \Clarity\Localization\IntlFormatModule(['locale' => 'en_US']));
+
+        // A simple `{placeholder}` pattern is handled by the local fallback, so
+        // this asserts the filter is wired up without requiring the intl extension.
+        self::tpl('lmod_format_message', '{{ "{name} has {count}" |> format_message({ name: who, count: n }) }}');
+        $result = $engine->renderPartial('lmod_format_message', ['who' => 'Joe', 'n' => 3]);
+
+        $this->assertSame('Joe has 3', $result);
     }
 
     public function testCurrencyFilter(): void

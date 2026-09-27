@@ -97,6 +97,44 @@ class FiltersFunctionsTest extends BaseTestCase
         ]));
     }
 
+    /**
+     * `format` is an alias of `sprintf`, kept for Twig parity — Twig's variadic
+     * formatter is spelled `format` and also takes the value first, so the two
+     * names are behaviourally identical.
+     */
+    public function testFilterFormatAlias(): void
+    {
+        self::tpl('f_format_alias', '{{ fmt |> format(name, count) }}');
+        $this->assertSame('Hello Alice, 3', self::render('f_format_alias', [
+            'fmt'   => 'Hello %s, %d',
+            'name'  => 'Alice',
+            'count' => 3,
+        ]));
+    }
+
+    public function testFilterFormatAndSprintfAreInterchangeable(): void
+    {
+        self::tpl('f_fmt_pipe', '{{ fmt |> format(name, count) }}');
+        self::tpl('f_sprintf_pipe', '{{ fmt |> sprintf(name, count) }}');
+
+        $vars = ['fmt' => '%s/%d', 'name' => 'x', 'count' => 7];
+        $this->assertSame('x/7', self::render('f_fmt_pipe', $vars));
+        $this->assertSame(self::render('f_fmt_pipe', $vars), self::render('f_sprintf_pipe', $vars));
+    }
+
+    public function testFilterFormatAliasIsInline(): void
+    {
+        // The alias compiles to the SAME inline PHP as `sprintf`, so it must not
+        // reach the runtime registry.
+        self::tpl('f_format_alias_inline', '{{ fmt |> format(name) }}');
+        self::render('f_format_alias_inline', ['fmt' => '%s', 'name' => 'x']);
+
+        $compiled = $this->compiledSource('f_format_alias_inline');
+
+        $this->assertStringContainsString('\sprintf', $compiled);
+        $this->assertStringNotContainsString("\$__c_fn['format']", $compiled);
+    }
+
     public function testFilterJson(): void
     {
         self::tpl('f_json', '{{ data |> json |> raw }}');
@@ -141,6 +179,30 @@ class FiltersFunctionsTest extends BaseTestCase
     {
         self::tpl('f_replace', '{{ v |> replace("world", "earth") }}');
         $this->assertSame('hello earth', self::render('f_replace', ['v' => 'hello world']));
+    }
+
+    /**
+     * The default ellipsis must be the actual ellipsis character, not the
+     * literal escape sequence `\u{2026}`. The default is emitted verbatim into
+     * the compiled PHP, so it is written as a double-quoted literal — a
+     * single-quoted one would pass seven literal characters straight through.
+     */
+    public function testFilterTruncateDefaultEllipsis(): void
+    {
+        self::tpl('f_truncate_default', "{{ v |> truncate(5) }}");
+        $this->assertSame('abcde…', self::render('f_truncate_default', ['v' => 'abcdefghij']));
+    }
+
+    public function testFilterTruncateWithoutTruncationIsUntouched(): void
+    {
+        self::tpl('f_truncate_short', '{{ v |> truncate(20) }}');
+        $this->assertSame('short', self::render('f_truncate_short', ['v' => 'short']));
+    }
+
+    public function testFilterTruncateCustomEllipsis(): void
+    {
+        self::tpl('f_truncate_custom', "{{ v |> truncate(5, '...') }}");
+        $this->assertSame('abcde...', self::render('f_truncate_custom', ['v' => 'abcdefghij']));
     }
 
     public function testFilterSplitJoin(): void
@@ -202,7 +264,7 @@ class FiltersFunctionsTest extends BaseTestCase
         $compiled = $tokenizer->buildFilterCall('date("Y")', '$ts');
 
         $this->assertStringContainsString('\\date(', $compiled);
-        $this->assertStringNotContainsString('$this->__c_fl[\'date\']', $compiled);
+        $this->assertStringNotContainsString('$this->__c_fn[\'date\']', $compiled);
     }
 
     // -- Date filters ---------------------------------------------------------
@@ -285,7 +347,7 @@ class FiltersFunctionsTest extends BaseTestCase
 
         $this->assertStringContainsString('static fn(mixed $__c_val): mixed =>', $compiled);
         $this->assertStringContainsString('\\mb_strtoupper', $compiled);
-        $this->assertStringNotContainsString('$this->__c_fl[\'upper\']', $compiled);
+        $this->assertStringNotContainsString('$this->__c_fn[\'upper\']', $compiled);
     }
 
     public function testFilterMapCompilesInlineUnicodeReference(): void
@@ -297,13 +359,79 @@ class FiltersFunctionsTest extends BaseTestCase
 
         $this->assertStringContainsString('static fn(mixed $__c_val): mixed =>', $compiled);
         $this->assertStringContainsString('new \\Clarity\\Engine\\UnicodeString', $compiled);
-        $this->assertStringNotContainsString('$this->__c_fl[\'unicode\']', $compiled);
+        $this->assertStringNotContainsString('$this->__c_fn[\'unicode\']', $compiled);
     }
 
     public function testFilterFilter(): void
     {
         self::tpl('f_filter', '{{ items |> filter(item => item) |> join(",") }}');
         $this->assertSame('a,b', self::render('f_filter', ['items' => ['a', '', 'b', '']]));
+    }
+
+    // -- Key preservation -----------------------------------------------------
+    //
+    // `array_map` with a single array and `array_filter` both PRESERVE keys.
+    // These pin that contract: a hand-rolled loop using `$out[] = …` would
+    // silently reindex and destroy associative structures, and these tests are
+    // what would catch it.
+
+    public function testMapPreservesAssociativeKeys(): void
+    {
+        self::tpl('f_map_keys', '{{ data |> map("upper") |> json |> raw }}');
+        $this->assertSame(
+            '{"a":"X","b":"Y"}',
+            self::render('f_map_keys', ['data' => ['a' => 'x', 'b' => 'y']])
+        );
+    }
+
+    public function testMapPreservesLambdaResultKeys(): void
+    {
+        self::tpl('f_map_keys_lam', '{{ data |> map(v => v ~ "!") |> json |> raw }}');
+        $this->assertSame(
+            '{"a":"x!","b":"y!"}',
+            self::render('f_map_keys_lam', ['data' => ['a' => 'x', 'b' => 'y']])
+        );
+    }
+
+    public function testFilterPreservesKeysAndDoesNotReindex(): void
+    {
+        self::tpl('f_filter_keys', '{{ data |> filter("length") |> json |> raw }}');
+        $this->assertSame(
+            '{"a":"x","c":"yy"}',
+            self::render('f_filter_keys', ['data' => ['a' => 'x', 'b' => '', 'c' => 'yy']]),
+            'filter must drop failing elements WITHOUT reindexing the survivors'
+        );
+    }
+
+    public function testFilterFollowedByValuesReindexes(): void
+    {
+        // `values` is the documented escape hatch for a zero-based list.
+        self::tpl('f_filter_values', '{{ data |> filter("length") |> values |> json |> raw }}');
+        $this->assertSame(
+            '["x","yy"]',
+            self::render('f_filter_values', ['data' => ['a' => 'x', 'b' => '', 'c' => 'yy']])
+        );
+    }
+
+    public function testFilterPredicateDoesNotReplaceTheElement(): void
+    {
+        // The callable is a PREDICATE: its result is tested and the ORIGINAL
+        // element passes through. `trim` yields a truthy string for ' a ', but
+        // the element is kept verbatim — not replaced by the trimmed value.
+        self::tpl('f_filter_predicate', '{{ data |> filter("trim") |> join(",") }}');
+        $this->assertSame(' a ,b', self::render('f_filter_predicate', ['data' => [' a ', 'b']]));
+    }
+
+    public function testMapOnAnEmptyArrayYieldsAnEmptyArray(): void
+    {
+        self::tpl('f_map_empty', '{{ data |> map("upper") |> json |> raw }}');
+        $this->assertSame('[]', self::render('f_map_empty', ['data' => []]));
+    }
+
+    public function testReduceOnAnEmptyArrayReturnsTheInitialValue(): void
+    {
+        self::tpl('f_reduce_empty', '{{ data |> reduce(c, i => c + i, 42) }}');
+        $this->assertSame('42', self::render('f_reduce_empty', ['data' => []]));
     }
 
     public function testFilterReduce(): void

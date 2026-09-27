@@ -248,9 +248,8 @@ class Cache
     /**
      * Return the base class-name prefix for a template name.
      *
-     * Note: the actual in-memory class name includes a unique compile-time
-     * suffix to prevent redeclaration collisions.  Use {@see getLoadedClassName()}
-     * to obtain the real class name after a template has been loaded.
+     * Note: the actual in-memory class name includes a unique compile-time suffix to prevent redeclaration collisions.
+     * Use {@see getLoadedClassName()} to obtain the real class name after a template has been loaded.
      */
     public function classNameFor(string $templateName): string
     {

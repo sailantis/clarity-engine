@@ -26,7 +26,7 @@ use Clarity\Template\TemplateLoader;
  *   class __Clarity_<slug>_<hash> {
  *       public static array $dependencies = ['name' => revision, ...];
  *       public static string $sourceMap   = 'lineDelta,fileIdx,tplDelta;...';
- *       public function __construct(private array $__c_fl, private array $__c_fn, private array $__c_sv) {}
+ *       public function __construct(private array $__c_fn, private array $__c_sv) {}
  *       public function render(array $__c_va): string { ... }
  *   }
  *
@@ -83,12 +83,32 @@ class Compiler
      * Version 11: engine internals renamed to the `__c_` prefix, and the open-mode
      * `expand` filter reads the local scope instead of the variable array.  Both
      * change the emitted body, so version-10 classes must be rebuilt.
+     * Version 12: `${expr}` / `$$name` replace the `expand` filter as a scope
+     * read, and filters gained a call form (`round(x, 2)`) derived from the
+     * same template as the pipe.  Affects every class.
+     * Version 13: `truncate`'s default ellipsis is emitted as the real ellipsis
+     * character instead of the literal `\u{2026}` sequence.  Changes the body of
+     * any template using `truncate` without an explicit ellipsis.
+     * Version 14: `len` aliases `length`, and piping a call-only name
+     * (`context`, `include`, `dump`, `dd`) is now a compile error.  Templates
+     * that used `|> len` only compiled by accident before; version-13 classes
+     * must be rebuilt so the new guard and alias take effect.
+     * Version 15: the two runtime registries `$__c_fl` and `$__c_fn` collapse
+     * into ONE `$__c_fn` callable table.  Every emitted registry call and the
+     * generated class constructor change, so version-14 classes must be rebuilt.
+     * Version 16: an inline filter reference (`filter(items, "upper")`) now
+     * compiles to a closure for `filter` as well as `map`, and a unary inline
+     * reference for `reduce` is rejected.  Changes the emitted body of any
+     * template using a callable reference.
+     * Version 17: `format` is an alias of `sprintf` again (Twig parity), so
+     * `|> format` compiles inline to `\sprintf(...)` instead of a runtime
+     * registry lookup.  Version-16 classes must be rebuilt.
      */
-    public const COMPILER_VERSION = 11;
+    public const COMPILER_VERSION = 17;
 
     /**
      * Prefix owned by the engine for every PHP variable it binds into the render
-     * frame: `__c_va`, `__c_fl`, `__c_fn`, `__c_sv`, `__c_tmp`, `__c_val`,
+     * frame: `__c_va`, `__c_fn`, `__c_sv`, `__c_tmp`, `__c_val`,
      * `__c_ob_level`, `__c_e`, `__c_m_<macro param>`.
      *
      * This is a PREFIX rule rather than a name list so it stays correct as the
@@ -1481,8 +1501,8 @@ class Compiler
         // Validate the ROOT of the lvalue, not its segments: `items[0].name` is a
         // legitimate target, but its root still has to be bindable.  Without this
         // `{% set this = … %}` reached PHP and died with an uncatchable
-        // "Cannot re-assign $this", and `{% set __c_fl = … %}` silently swapped
-        // the filter registry for the rest of the render.
+        // "Cannot re-assign $this", and `{% set __c_fn = … %}` silently swapped
+        // the callable registry for the rest of the render.
         if (!\preg_match('/^\$?([a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*)/', \trim($m[1]), $rootMatch)) {
             throw new ClarityException("Invalid assignment target: '{$m[1]}'", $sourcePath, $tplLine);
         }
@@ -1893,16 +1913,12 @@ class Compiler
         $versionInt  = self::COMPILER_VERSION;
 
         // Detect which registries are actually referenced in the compiled body.
-        // The constructor always accepts all three (so the caller stays simple),
-        // but render() only unpacks the ones that are actually used.
-        $usesFilters   = \str_contains($body, '$__c_fl');
+        // The constructor always accepts both (so the caller stays simple), but
+        // render() only unpacks the one(s) that are actually used.
         $usesFunctions = \str_contains($body, '$__c_fn');
         $usesServices  = \str_contains($body, '$__c_sv');
 
         $unpacks = '';
-        if ($usesFilters) {
-            $unpacks .= "                \$__c_fl = \$this->__c_fl;\n";
-        }
         if ($usesFunctions) {
             $unpacks .= "                \$__c_fn = \$this->__c_fn;\n";
         }
@@ -1914,7 +1930,7 @@ class Compiler
         // variable is the same thing in `{{ title }}` and `{% php echo $title; %}`.
         //
         // The internals are bound FIRST so EXTR_SKIP protects them: a view
-        // variable named `__c_fl` cannot shadow the filter registry, and `this`
+        // variable named `__c_fn` cannot shadow the callable registry, and `this`
         // cannot be handed to the engine (which PHP would fatal on anyway).
         //
         // EXTR_SKIP only shields those names because they are bound above it;
@@ -1954,11 +1970,10 @@ class Compiler
             public static int \$renderBodyLine = 0;
 
             /**
-             * @param array \$__c_fl Filter registry (name => callable)
-             * @param array \$__c_fn Function registry (name => callable)
+             * @param array \$__c_fn Callable registry (name => callable)
              * @param array \$__c_sv Service registry (name => mixed)
              */
-            public function __construct(private array \$__c_fl, private array \$__c_fn, private array \$__c_sv) {}
+            public function __construct(private array \$__c_fn, private array \$__c_sv) {}
 
             /**
              * Render the template with the given variables.

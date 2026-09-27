@@ -9,9 +9,9 @@ use Clarity\ClarityException;
  *
  * Segment types (constants on this class)
  * ----------------------------------------
- * TEXT        – raw HTML/text passed through verbatim
- * OUTPUT_TAG  – {{ expression }} – rendered (auto-escaped by default)
- * BLOCK_TAG   – {% directive %}  – control structures / directives
+ * TEXT        â€“ raw HTML/text passed through verbatim
+ * OUTPUT_TAG  â€“ {{ expression }} â€“ rendered (auto-escaped by default)
+ * BLOCK_TAG   â€“ {% directive %}  â€“ control structures / directives
  *
  * Expression processing
  * ---------------------
@@ -21,22 +21,22 @@ use Clarity\ClarityException;
  * do not perform a full grammar check here.
  *
  * Conversions performed
- * • var-chains (foo.bar[x].baz) → $__c_va['foo']['bar'][$__c_va['x']]['baz']
- * • logical operators:  and → &&,  or → ||,  not → !
- * • bitwise operators:  bor → |,  band → &,  bxor → ^,  bnot → ~,  blsh → <<,  brsh → >>
- * • concat operator:    ~   → .
- * • all other tokens pass through unchanged (PHP validates them)
+ * â€¢ var-chains (foo.bar[x].baz) â†’ $__c_va['foo']['bar'][$__c_va['x']]['baz']
+ * â€¢ logical operators:  and â†’ &&,  or â†’ ||,  not â†’ !
+ * â€¢ bitwise operators:  bor â†’ |,  band â†’ &,  bxor â†’ ^,  bnot â†’ ~,  blsh â†’ <<,  brsh â†’ >>
+ * â€¢ concat operator:    ~   â†’ .
+ * â€¢ all other tokens pass through unchanged (PHP validates them)
  *
  * Pipeline (| or |>)
- * • Both | and |> act as the filter pipe operator (| is normalized to |> before processing)
- * • Each step after the pipe is a filter: name  or  name(arg1, arg2)
- * • Arguments are themselves processed as expressions
- * • Result: nested $this->__c_fl['name']($this->__c_fl['name']($expr, arg), …)
+ * â€¢ Both | and |> act as the filter pipe operator (| is normalized to |> before processing)
+ * â€¢ Each step after the pipe is a filter: name  or  name(arg1, arg2)
+ * â€¢ Arguments are themselves processed as expressions
+ * â€¢ Result: nested $__c_fn['name']($__c_fn['name']($expr, arg), â€¦)
  *
  * Named arguments
- * • Clarity uses `=` syntax: filter(precision=2) or fn(from="system")
- * • These are emitted directly as PHP named arguments: `precision: 2`, `from: 'system'`
- * • PHP itself validates parameter names and arity at runtime — no reflection needed
+ * â€¢ Clarity uses `=` syntax: filter(precision=2) or fn(from="system")
+ * â€¢ These are emitted directly as PHP named arguments: `precision: 2`, `from: 'system'`
+ * â€¢ PHP itself validates parameter names and arity at runtime â€” no reflection needed
  */
 class Tokenizer
 {
@@ -68,6 +68,15 @@ class Tokenizer
     private const BARE_ROOT_RE = '/^\$__c_va\[\'[A-Za-z_][A-Za-z0-9_]*\'\]$/';
 
     /**
+     * A lambda PARAMETER as it appears in a compiled body: `$name`.
+     *
+     * Kept separate from {@see BARE_ROOT_RE} because the two mean opposite
+     * things — a bare root is a scope read that may be absent, whereas a
+     * parameter is a real local that is always bound.
+     */
+    private const BARE_PARAM_RE = '/^\$[A-Za-z_][A-Za-z0-9_]*$/';
+
+    /**
      * Monotonic counter for temporaries emitted by optional array guards, so two
      * guards in one expression never collide. Per-instance, compile-time only.
      */
@@ -75,7 +84,7 @@ class Tokenizer
     private array $varChainCache = [];
 
     /**
-     * Compile-time local variable context: templateVarName → PHP variable string.
+     * Compile-time local variable context: templateVarName â†’ PHP variable string.
      * Set by the Compiler when entering/leaving loop scopes so that expressions
      * inside loops resolve loop variables to direct PHP local variables instead
      * of $__c_va['name'] lookups.
@@ -91,7 +100,7 @@ class Tokenizer
      * This is the grammar from the PHP manual ("the bytes from 128 through
      * 255"), which is exactly what the PHP lexer accepts, so a name this
      * class accepts always compiles to a real PHP variable.  The high range is
-     * what makes `$öä` / `$täyte` work in UTF-8: every byte of a multi-byte
+     * what makes `$Ã¶Ã¤` / `$tÃ¤yte` work in UTF-8: every byte of a multi-byte
      * sequence falls inside it.
      *
      * Deliberate divergence from Twig: Twig's lexer uses `\x7f-\xff`, i.e. it
@@ -142,7 +151,7 @@ class Tokenizer
      * emits `extract($__c_va, EXTR_SKIP)` at the top of render()), so a chain root
      * is emitted as a plain local variable instead of a `$__c_va` lookup.
      *
-     * This is what lets one name work in both worlds — `{{ title }}` and
+     * This is what lets one name work in both worlds â€” `{{ title }}` and
      * `{% php echo $title; %}` are then the same variable, not two.
      *
      * No guard expression is emitted with the read: an unknown name raises PHP's
@@ -153,14 +162,22 @@ class Tokenizer
     private bool $localRoots = false;
 
     /**
-     * True while compiling a lambda body.
+     * Stack of lambda PARAMETER frames, innermost LAST.
      *
-     * A lambda is emitted as a `static function (...) use ($__c_va) { … }`, so the
-     * render scope's locals are NOT in scope inside it.  Roots there must keep
-     * reading `$__c_va` or every outer variable in a lambda body would read as
-     * undefined.
+     * A lambda is emitted as a `static function (...) use (...) { … }`, so the
+     * render scope's locals are not in scope inside it: a root must keep reading
+     * `$__c_va`. A lambda PARAMETER, however, IS a real local — and because
+     * lambdas NEST (`map(rows, r => map(r.vals, v => v ~ r.name))`), a parameter
+     * of an enclosing lambda stays visible to the body being compiled.
+     *
+     * So a root name matching a parameter of ANY enclosing frame is emitted as
+     * the bare `$name`: the closure that declares it is the enclosing one, and
+     * PHP binds it lexically. An empty stack means "not inside a lambda", which
+     * is also what the former `inLambda` boolean expressed.
+     *
+     * @var list<array<string, true>>
      */
-    private bool $inLambda = false;
+    private array $lambdaFrames = [];
 
     /**
      * Function names that stay blocked in open mode.  Empty by default (open
@@ -258,7 +275,7 @@ class Tokenizer
      * variable resolution inside the loop uses direct PHP local variables
      * (e.g. `$item`) rather than $__c_va['item'] array lookups.
      *
-     * @param array<string, string> $localVars  templateVarName → PHP variable string
+     * @param array<string, string> $localVars  templateVarName â†’ PHP variable string
      */
     public function setLocalVars(array $localVars): void
     {
@@ -531,7 +548,7 @@ class Tokenizer
 
         $phpExpr = $this->convertVarsAndOps($expr);
 
-        // Wrap in filter calls (innermost first → outermost last)
+        // Wrap in filter calls (innermost first â†’ outermost last)
         foreach ($filters as $filterSegment) {
             $phpExpr = $this->buildFilterCall($filterSegment, $phpExpr);
         }
@@ -539,7 +556,7 @@ class Tokenizer
         if ($this->autoEscape) {
             $phpExpr = match ($this->escapeContext) {
                 'js'    => '\\json_encode(' . $phpExpr . ', 271)', // HEX_TAG|HEX_AMP|HEX_APOS|HEX_QUOT|UNESCAPED_UNICODE
-                'css'   => '(string)(' . $phpExpr . ')',           // raw — CSS values are not HTML-escaped
+                'css'   => '(string)(' . $phpExpr . ')',           // raw â€” CSS values are not HTML-escaped
                 default => "\\htmlspecialchars((string)({$phpExpr}), 11, 'UTF-8')",
             };
         }
@@ -548,7 +565,7 @@ class Tokenizer
     }
 
     /**
-     * Convert a Clarity expression without pipeline — used for control
+     * Convert a Clarity expression without pipeline â€” used for control
      * structure conditions (if, for, set) where auto-escape is meaningless.
      *
      * @param string $expression Raw Clarity expression.
@@ -571,7 +588,7 @@ class Tokenizer
      * left-hand side of {% set var = ... %}.
      *
      * Scope-aware by construction: open mode seeds the render scope into locals,
-     * so `{% set a = … %}` compiles to a plain `$a = …` and both worlds read the
+     * so `{% set a = â€¦ %}` compiles to a plain `$a = â€¦` and both worlds read the
      * SAME slot.  Sandbox mode targets `$__c_va['a']` exactly as before.  The
      * choice lives in the chain emitter, so it cannot drift from the read path.
      *
@@ -591,9 +608,9 @@ class Tokenizer
      * Normalize bare | to |> so that both act as the filter pipe operator.
      *
      * Rules (applied only at the top nesting level, outside quoted strings):
-     *   ||  → passed through unchanged  (PHP logical OR)
-     *   |>  → passed through unchanged  (already the canonical pipe)
-     *   |   → rewritten to |>           (Twig/Svelte-compatible shorthand)
+     *   ||  â†’ passed through unchanged  (PHP logical OR)
+     *   |>  â†’ passed through unchanged  (already the canonical pipe)
+     *   |   â†’ rewritten to |>           (Twig/Svelte-compatible shorthand)
      *
      * This runs before splitPipeline() so that the rest of the pipeline logic
      * only ever sees |> as the delimiter.
@@ -656,22 +673,22 @@ class Tokenizer
                 continue;
             }
 
-            // Pipe handling — only at top level
+            // Pipe handling â€” only at top level
             if ($depth === 0 && $ch === '|') {
                 $next = $expr[$i + 1] ?? '';
                 if ($next === '|') {
-                    // || → logical OR, pass through
+                    // || â†’ logical OR, pass through
                     $out .= '||';
                     $i += 2;
                     continue;
                 }
                 if ($next === '>') {
-                    // |> → already canonical, pass through
+                    // |> â†’ already canonical, pass through
                     $out .= '|>';
                     $i += 2;
                     continue;
                 }
-                // bare | → normalize to |>
+                // bare | â†’ normalize to |>
                 $out .= '|>';
                 $i++;
                 continue;
@@ -689,7 +706,7 @@ class Tokenizer
      *
      * Returns [expressionString, [filterSegment, ...]].
      * The expression string may still contain quoted strings, so we cannot
-     * simply explode — we split only on |> that are not inside quotes.
+     * simply explode â€” we split only on |> that are not inside quotes.
      *
      * @return array{0: string, 1: string[]}
      */
@@ -774,7 +791,7 @@ class Tokenizer
      * 1. Replacing var-chains with $__c_va[...] accesses
      * 2. Replacing logical/string operators with PHP equivalents
      * 3. Rejecting function-call syntax: any identifier followed by '(' throws
-     *    a ClarityException at compile time — use the |> filter pipeline instead.
+     *    a ClarityException at compile time â€” use the |> filter pipeline instead.
      *
      * Strategy: tokenize the expression into atoms (quoted strings, numbers,
      * identifiers/var-chains, operators, punctuation) and process each atom.
@@ -817,8 +834,8 @@ class Tokenizer
         // PHP rejects a ternary CHAINED in an else position
         // (`a ? b : c ? d : e`) while accepting the nested then-branch form
         // (`a ? b ? c : d : e`). Catching that here turns a fatal PHP parse
-        // error — which happens when the generated class is loaded and cannot be
-        // caught — into a normal compile error with a line number.
+        // error â€” which happens when the generated class is loaded and cannot be
+        // caught â€” into a normal compile error with a line number.
         $ternarySeen     = false;
         $ternaryPhases   = [];
         $ternaryOpenedAt = [];
@@ -846,6 +863,17 @@ class Tokenizer
                 continue;
             }
             if ($inSingle || $inDouble) {
+                // A string literal is TEXT, never PHP interpolation.  A `$`
+                // inside a double-quoted string would otherwise be interpolated
+                // by PHP (`"$name"`, and the deprecated `"${name}"`) â€” a leak of
+                // PHP semantics into a template literal, and the reason
+                // `{{ "${x}" }}` used to emit a deprecation instead of the
+                // literal text.  Escaping the dollar keeps the literal literal.
+                if ($inDouble && $ch === '$') {
+                    $out .= '\\$';
+                    $i++;
+                    continue;
+                }
                 $out .= $ch;
                 $i++;
                 continue;
@@ -892,8 +920,8 @@ class Tokenizer
             // A ternary colon may be spaced on either side (`x : y`, `x: y`,
             // `x :y`) because an open ternary makes the reading unambiguous. Two
             // spellings are errors rather than ambiguity:
-            //   • `?:` glued both sides is the optional-key operator.
-            //   • a colon glued to a following identifier would read as a key
+            //   â€¢ `?:` glued both sides is the optional-key operator.
+            //   â€¢ a colon glued to a following identifier would read as a key
             //     chain, which is the trap this whole rule exists to avoid.
             if ($ch === ':' && $ternarySeen && !$this->isChainColon($expr, $i, true)) {
                 $phase  = array_pop($ternaryPhases) ?? 'then';
@@ -936,7 +964,7 @@ class Tokenizer
                 // The `else` branch may not itself be an unparenthesised ternary:
                 // PHP rejects `a ? b : c ? d : e` outright. `a ? b ? c : d : e`
                 // is fine (then-branch), and a parenthesised else-branch starts a
-                // fresh scope where a new ternary is legal — this call recurses
+                // fresh scope where a new ternary is legal â€” this call recurses
                 // for it via processCondition(), so the tracked phase there is
                 // independent.
                 //
@@ -973,7 +1001,7 @@ class Tokenizer
 
             // A `?->` that reaches here has no `$` sigil, so it is a plain
             // expression. Left alone it would be copied through as raw PHP
-            // nullsafe syntax — a leak the sigil rule exists to prevent — and a
+            // nullsafe syntax â€” a leak the sigil rule exists to prevent â€” and a
             // SPACED `? ->` is a syntax error in PHP rather than a nullsafe read.
             if ($ch === '?' && ($expr[$i + 1] ?? '') === '-') {
                 $afterArrow = $expr[$i + 2] ?? '';
@@ -992,33 +1020,60 @@ class Tokenizer
             if ($ch === '$') {
                 $sigilStart = $i + 1;
                 $next       = $expr[$sigilStart] ?? '';
-                if (!self::isIdentifierStart($next)) {
-                    // `$$name` is variable-variable expansion: the name of the
-                    // variable to read comes from another variable.
-                    //
-                    // Open mode allows it — the mode grants the full power of
-                    // PHP, and a dynamic dereference is an ordinary LOCAL lookup,
-                    // so it is strictly weaker than the literal `$_SERVER`
-                    // spelling open mode already permits (a literal auto-global
-                    // name binds the global; a dynamic one does not).
-                    //
-                    // Sandbox mode rejects it and points at `|> expand`, which is
-                    // the auditable equivalent: it resolves against `$__c_va` and
-                    // reports an absent name with a template line.
-                    if ($next === '$') {
-                        if ($this->sandboxMode) {
+
+                // `${expr}` â€” and its shorthand `$$name` â€” read the variable
+                // whose NAME is produced by an expression.  The two spellings
+                // are the same construct (`$$name` is `${name}`) and compile to
+                // the same lookup.
+                //
+                // The lookup resolves against `$__c_va` and the loop-local map
+                // (never a PHP dynamic variable), so it can reach neither a
+                // superglobal nor an engine internal: a name such as `__c_fn` is
+                // simply absent from the scope.  An absent name is STRICT unless
+                // a `??` follows, in which case the absent branch yields null so
+                // the operator can supply the fallback â€” exactly the behaviour of
+                // a literal `{{ name }}` / `{{ name ?? 'x' }}`.
+                if ($next === '{' || $next === '$') {
+                    if ($next === '{') {
+                        [$inner, $end] = $this->extractBalancedSegment($expr, $sigilStart);
+                        $nameRaw = \trim($inner);
+                        if ($nameRaw === '') {
+                            throw new ClarityException('Dynamic variable name must not be empty (${}).');
+                        }
+                        $namePhp = $this->processCondition($nameRaw);
+                    } else {
+                        $nameEnd = $sigilStart + 1; // after the second '$'
+                        if (!self::isIdentifierStart($expr[$nameEnd] ?? '')) {
                             throw new ClarityException(
-                                "Variable-variable expansion ('\$\$name') is not allowed while the sandbox is enabled; "
-                                    . "look a name up with the 'expand' filter instead (e.g. which |> expand)."
+                                "Direct PHP variable access ('\$') is not allowed in Clarity expressions; "
+                                    . "use a variable name after the sigil (\$name) or dot-notation (name.field)."
                             );
                         }
-                        // Emit ONE `$` and let the identifier that follows compile
-                        // as usual, so `$$name` becomes `$` + `$name`.  Skipping
-                        // both dollars would emit `$$$name`.
-                        $out .= '$';
-                        $i = $sigilStart + 1;
-                        continue;
+                        $nameEnd++;
+                        while ($nameEnd < $len && self::isIdentifierChar($expr[$nameEnd])) {
+                            $nameEnd++;
+                        }
+                        // `$$name` names the variable read from `name` itself.
+                        $namePhp = $this->processCondition(\substr($expr, $sigilStart + 1, $nameEnd - $sigilStart - 1));
+                        $end     = $nameEnd;
                     }
+
+                    $k = $end;
+                    while ($k < $len && \ctype_space($expr[$k])) {
+                        $k++;
+                    }
+                    $coalesces = ($expr[$k] ?? '') === '?' && ($expr[$k + 1] ?? '') === '?';
+
+                    $root = $this->buildDynamicLookup($namePhp, $coalesces);
+
+                    // Chained access applies to the LOOKED-UP value:
+                    // `${ref}.name`, `${ref}[0]`.
+                    [$root, $i] = $this->compilePostfixAccessChain($expr, $end, $root);
+                    $out .= $root;
+                    continue;
+                }
+
+                if (!self::isIdentifierStart($next)) {
                     throw new ClarityException(
                         "Direct PHP variable access ('\$') is not allowed in Clarity expressions; "
                             . "use a variable name after the sigil (\$name) or dot-notation (name.field)."
@@ -1037,7 +1092,7 @@ class Tokenizer
                 $token    = \substr($expr, $sigilStart, $i - $sigilStart);
 
                 // A `(` that survives chain parsing is a call on the ROOT value
-                // (e.g. `$fn()`), not a method call — method calls are consumed
+                // (e.g. `$fn()`), not a method call â€” method calls are consumed
                 // into their property segment.  Root invocation stays rejected:
                 // a variable-driven callable is the function-level equivalent of
                 // variable-variable expansion.
@@ -1129,7 +1184,7 @@ class Tokenizer
                         && $contChar !== '{' && $contChar !== ':'
                         && $contChar !== '?' && $contTwo !== '->'
                 ) {
-                    // Plain identifier — may be a keyword or a cacheable single-segment chain
+                    // Plain identifier â€” may be a keyword or a cacheable single-segment chain
                     $token = \substr($expr, $start, $idEnd - $start);
                     $i     = $idEnd;
 
@@ -1193,7 +1248,7 @@ class Tokenizer
                     continue;
                 }
 
-                // Identifier followed by a chain continuation — full chain parsing required.
+                // Identifier followed by a chain continuation â€” full chain parsing required.
                 $parsed = $this->parseVarChainAt($expr, $start, false, $ternarySeen);
                 if ($parsed === null) {
                     $out .= $ch;
@@ -1224,7 +1279,7 @@ class Tokenizer
                 $i     = $parsed['end'];
                 $token = \substr($expr, $start, $i - $start);
 
-                // Dot/bracket chains cannot be function calls — always forbidden.
+                // Dot/bracket chains cannot be function calls â€” always forbidden.
                 $j = $i;
                 while ($j < $len && \ctype_space($expr[$j])) {
                     $j++;
@@ -1677,34 +1732,60 @@ class Tokenizer
             return [$call, $i];
         }
 
-        $safeName = "'" . \addslashes($name) . "'";
-
         // Context-injected function: prepend compile-time escape context as a
         // string literal first argument (e.g. dump/dd receive 'html'|'js'|'css').
         // These functions return raw HTML/JS markup — disable auto-escaping so
         // their output is never passed through htmlspecialchars/json_encode.
         if (isset($this->contextInjectedFunctions[$name])) {
             $this->autoEscape = false;
-            $contextLit = "'" . $this->escapeContext . "'";
-            $call       = "\$__c_fn[{$safeName}]({$contextLit}";
+            $compiledArgs = ["'" . $this->escapeContext . "'"];
             if (\trim($argsRaw) !== '') {
                 $argList = $this->splitRespectingStrings($argsRaw, ',');
-                $call .= ', ' . \implode(', ', $this->compileArgList($argList));
+                foreach ($this->compileArgList($argList) as $phpArg) {
+                    $compiledArgs[] = $phpArg;
+                }
             }
-            $call .= ')';
-            return [$call, $i];
+            return [$this->buildCall($name, $compiledArgs), $i];
         }
 
-        $call = "\$__c_fn[{$safeName}](";
+        // A registered callable (context, include, json at runtime, user
+        // addFunction) dispatches through $__c_fn.
+        if ($this->registry->getCallable($name) !== null) {
+            // map/filter/reduce take a lambda/filter-ref as their SECOND argument
+            // in call form (`map(items, x => …)`); compile it like the filter form.
+            if (isset(self::CALLABLE_ARG_FILTERS[$name]) && \trim($argsRaw) !== '') {
+                $argList      = $this->splitCallableArgs($argsRaw, true);
+                $compiledArgs = [];
+                foreach ($argList as $idx => $arg) {
+                    $compiledArgs[] = $idx === 1
+                        ? $this->compileCallableArg(\trim($arg), $name)
+                        : $this->processCondition(\trim($arg));
+                }
+                return [$this->buildCall($name, $compiledArgs), $i];
+            }
 
-        if (\trim($argsRaw) !== '') {
-            $argList = $this->splitRespectingStrings($argsRaw, ',');
-            $call .= \implode(', ', $this->compileArgList($argList));
+            $compiledArgs = \trim($argsRaw) !== ''
+                ? $this->compileArgList($this->splitRespectingStrings($argsRaw, ','))
+                : [];
+            return [$this->buildCall($name, $compiledArgs), $i];
         }
 
-        $call .= ')';
+        // Inline-only filter used under call syntax: derive the call from the
+        // same template as the filter form. This is where `round(x, 2)` and
+        // `date('Y-m-d', ts)` compile without any runtime dispatch.
+        $argList = \trim($argsRaw) !== '' ? $this->splitRespectingStrings($argsRaw, ',') : [];
+        $inline  = $this->buildInlineCallForm($name, $argList);
+        if ($inline !== null) {
+            return [$inline, $i];
+        }
 
-        return [$call, $i];
+        // Registered, but neither a runtime callable nor an inline template
+        // (a bare `filter` marker with no implementation): call `$__c_fn` so the
+        // failure is a clear runtime error rather than a compile-time dead end.
+        $compiledArgs = \trim($argsRaw) !== ''
+            ? $this->compileArgList($this->splitRespectingStrings($argsRaw, ','))
+            : [];
+        return [$this->buildCall($name, $compiledArgs), $i];
     }
 
     /**
@@ -1732,17 +1813,17 @@ class Tokenizer
      * A chain continuation may be separated from the value it continues by ANY
      * amount of whitespace, including newlines, so a long chain can wrap
      * Go-style (`user.\naddress.\ncity`, `config:\nversion`). This is safe
-     * precisely because `.` is NOT the concatenation operator — it always means
+     * precisely because `.` is NOT the concatenation operator â€” it always means
      * property access, so `a . b` has one reading and no ambiguity to preserve.
      *
      * Two operators must stay GLUED to the value on their left, because a
      * spaced spelling would collide with the ternary operator:
-     *   • `?`  — a spaced `?` is a ternary; `? .` / `?[` / `?:` / `?->` written
+     *   â€¢ `?`  â€” a spaced `?` is a ternary; `? .` / `?[` / `?:` / `?->` written
      *            with a gap are therefore NOT optional access.
-     *   • a `.` or `->` with no member after it is an authoring ERROR, not a
+     *   â€¢ a `.` or `->` with no member after it is an authoring ERROR, not a
      *     value: there is nothing else it could mean.
      *
-     * `:` — the ternary problem
+     * `:` â€” the ternary problem
      * -------------------------
      * A key colon is `:key`. Whitespace on either side is allowed
      * (`config : version` is the same read as `config:version`), EXCEPT while a
@@ -1805,7 +1886,7 @@ class Tokenizer
             // chain may wrap Go-style (`user.\naddress.\ncity`,
             // `config:\nversion`). Look past it, but ONLY when a continuation
             // really follows: if the next non-space character is an operator
-            // (`+`, `?`, `and`, …) the whitespace separates operands and the
+            // (`+`, `?`, `and`, â€¦) the whitespace separates operands and the
             // chain ends here.
             if (\ctype_space($ch)) {
                 $k = $i;
@@ -1840,7 +1921,7 @@ class Tokenizer
                     // after `?` never matches it.
                     throw new ClarityException(
                         "PHP-style property access ('->') requires the \$ sigil: "
-                            . "write \${$root['value']}?->… or {$root['value']}?.… instead of {$root['value']}?->…"
+                            . "write \${$root['value']}?->â€¦ or {$root['value']}?.â€¦ instead of {$root['value']}?->â€¦"
                     );
                 }
 
@@ -1863,7 +1944,7 @@ class Tokenizer
                 $opLen = $ch === '-' ? 2 : 1;
 
                 // A SPACED `.` or `->` after a ternary `?` is not a chain
-                // continuation — `cond ? a : b` and `x ? .5 : 1` rely on this.
+                // continuation â€” `cond ? a : b` and `x ? .5 : 1` rely on this.
                 if (!$this->isGlued($subject, $i + $opLen, $ternaryOpen)) {
                     break;
                 }
@@ -1878,7 +1959,7 @@ class Tokenizer
                     if (!$allowArrow) {
                         throw new ClarityException(
                             "PHP-style property access ('->') requires the \$ sigil: "
-                                . "write \${$root['value']}->… (or {$root['value']}?.…) instead of {$root['value']}->…"
+                                . "write \${$root['value']}->â€¦ (or {$root['value']}?.â€¦) instead of {$root['value']}->â€¦"
                         );
                     }
                 }
@@ -2041,7 +2122,7 @@ class Tokenizer
             // ---- static array key: `:key` ----------------------------------
             // Whitespace may sit on either side of the colon, so the key may be
             // on the next line. While a ternary is pending, the colon must be
-            // GLUED on both sides to count as a key read — that is what leaves
+            // GLUED on both sides to count as a key read â€” that is what leaves
             // `cond ? x : y` as a ternary.
             if ($ch === ':' && $this->isChainColon($subject, $i, $ternaryOpen)) {
                 $idStart = $i + 1;
@@ -2148,7 +2229,7 @@ class Tokenizer
      * The colon must be followed by a key. Whitespace is allowed on either side,
      * with ONE exception: while a ternary is pending, a colon only reads as a
      * key when it is glued on both sides. Only the glued both-sides form is
-     * unambiguous — every other spacing belongs to a ternary:
+     * unambiguous â€” every other spacing belongs to a ternary:
      *
      *   config:version    key        a:b:c        key chain
      *   config : version  key        config: version   key
@@ -2192,7 +2273,7 @@ class Tokenizer
      *
      * A segment flagged `optional` is emitted through the matching Access::*
      * guard, so an absent key/property yields null instead of raising. The
-     * guard is only ever used for the OPTIONAL forms — a strict read is plain
+     * guard is only ever used for the OPTIONAL forms â€” a strict read is plain
      * PHP indexing/property access, which is what makes the strict contract
      * cost nothing at runtime.
      *
@@ -2242,7 +2323,7 @@ class Tokenizer
                 return $php . '[' . $key . ']';
             }
 
-            // `?` guards the RECEIVER only — the read itself stays STRICT. An
+            // `?` guards the RECEIVER only â€” the read itself stays STRICT. An
             // absent receiver yields null, but a missing KEY still raises
             // "Undefined array key". `$receiver[$k] ?? null` would swallow both
             // and silently hide a mistyped key, which is the exact failure mode
@@ -2257,11 +2338,11 @@ class Tokenizer
             // would also swallow a missing property or an intermediate missing
             // key. The second form binds the receiver ONCE, so a nested optional
             // chain stays linear instead of duplicating its receiver (the
-            // duplication is what made an earlier revision grow as 2^N — six
+            // duplication is what made an earlier revision grow as 2^N â€” six
             // optional segments emitted 2 245 characters for one read). Both
             // forms keep the expression nestable.
             //
-            // The guarded subject is the SHORT root (no `?? …` tail): wrapping an
+            // The guarded subject is the SHORT root (no `?? â€¦` tail): wrapping an
             // already-coalesced root in isset() is invalid PHP.
             $subject = $this->toLocalSubject($php);
             if (\preg_match(self::BARE_ROOT_RE, $subject)) {
@@ -2292,12 +2373,12 @@ class Tokenizer
 
         // `?->` tolerates a NULL receiver while leaving the PROPERTY READ strict,
         // so a present object lacking the property still raises "Undefined
-        // property" — the feedback we want. It short-circuits the rest of the
+        // property" â€” the feedback we want. It short-circuits the rest of the
         // chain and nests without any guard expression.
         //
         // An ABSENT root is a separate case: `$__c_va['a']?->b` still raises
         // "Undefined array key 'a'", so the receiver is guarded with isset()
-        // there — the same tolerance the array side gets, which keeps `?.` and
+        // there â€” the same tolerance the array side gets, which keeps `?.` and
         // `?:` consistent about an absent root. (Emitting `?? null` instead would
         // additionally swallow a missing property.)
         $subject = $this->toLocalSubject($php);
@@ -2388,16 +2469,24 @@ class Tokenizer
      * No guard expression is emitted: an unknown name then raises PHP's own
      * "Undefined variable" warning, which {@see ClarityEngineTrait::buildErrorHandler()}
      * already maps to a ClarityException carrying the template line. That keeps
-     * the strict-access contract identical to sandbox mode — and a `?? $__c_va[…]`
+     * the strict-access contract identical to sandbox mode â€” and a `?? $__c_va[â€¦]`
      * fallback would silently suppress it, which is the failure strict access
      * exists to prevent.
      *
      * Read and write are therefore the SAME text (`$name`), so no lvalue flag is
      * needed in either mode.
+     *
+     * A name matching an enclosing lambda's PARAMETER is emitted bare as well:
+     * that parameter is a real local of the enclosing closure, so reading it
+     * through `$__c_va` would report it absent. See {@see $lambdaFrames}.
      */
     private function rootPhp(string $name): string
     {
-        if (!$this->localRoots || $this->inLambda) {
+        if ($this->isLambdaParam($name)) {
+            return '$' . $name;
+        }
+
+        if (!$this->localRoots || $this->lambdaFrames !== []) {
             return '$__c_va[\'' . $name . '\']';
         }
 
@@ -2405,14 +2494,34 @@ class Tokenizer
     }
 
     /**
-     * `$__c_va['a']` → `$a` in open mode.  The guard helpers only care about the
+     * Is $name a parameter declared by an enclosing lambda (or the one being
+     * compiled)?
+     */
+    private function isLambdaParam(string $name): bool
+    {
+        for ($i = \count($this->lambdaFrames) - 1; $i >= 0; $i--) {
+            if (isset($this->lambdaFrames[$i][$name])) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * `$__c_va['a']` â†’ `$a` in open mode.  The guard helpers only care about the
      * subject, so the emitted form must match what rootPhp() produces for a
      * bare root.  A root that is not a bare `$__c_va[...]` (an already-guarded
      * expression, or a nested chain) is returned unchanged.
      */
     private function toLocalSubject(string $php): string
     {
-        if (!$this->localRoots || $this->inLambda) {
+        // A lambda parameter is already a real local, so it is a valid
+        // isset()/`?->` subject as emitted.
+        if (\preg_match(self::BARE_PARAM_RE, $php) && $this->isLambdaParam(\substr($php, 1))) {
+            return $php;
+        }
+
+        if (!$this->localRoots || $this->lambdaFrames !== []) {
             return $php;
         }
 
@@ -2427,11 +2536,11 @@ class Tokenizer
      * Convert a Clarity var-chain string to a PHP $__c_va[...] expression.
      *
      * Supports:
-     *   foo           → $__c_va['foo']
-     *   foo.bar       → $__c_va['foo']['bar']
-     *   items[0]      → $__c_va['items'][0]
-     *   items[index]  → $__c_va['items'][$__c_va['index']]
-     *   a.b[c.d].e    → $__c_va['a']['b'][$__c_va['c']['d']]['e']
+     *   foo           â†’ $__c_va['foo']
+     *   foo.bar       â†’ $__c_va['foo']['bar']
+     *   items[0]      â†’ $__c_va['items'][0]
+     *   items[index]  â†’ $__c_va['items'][$__c_va['index']]
+     *   a.b[c.d].e    â†’ $__c_va['a']['b'][$__c_va['c']['d']]['e']
      */
     public function varChainToPhp(string $chain): string
     {
@@ -2465,7 +2574,7 @@ class Tokenizer
 
     /**
      * If $arg is a named argument of the form  identifier:expression  (where
-     * : is not part of ::), return ['name'=>…, 'expr'=>…].
+     * : is not part of ::), return ['name'=>â€¦, 'expr'=>â€¦].
      * Returns null for ordinary positional arguments.
      */
     private function parseNamedArg(string $arg): ?array
@@ -2563,6 +2672,23 @@ class Tokenizer
      */
     private function splitCallableFilterArgs(string $args): array
     {
+        return $this->splitCallableArgs($args, false);
+    }
+
+    /**
+     * Split an argument list in which the CALLABLE argument (a lambda or a
+     * quoted filter reference) may span several comma-separated segments,
+     * because `reduce` lambdas declare two parameters before the arrow
+     * (`carry, item => …`).
+     *
+     * @param bool $valueFirst When true, the value leads the argument list and
+     *                         the callable is the SECOND argument (call form
+     *                         `map(items, x => …)`); when false the callable is
+     *                         the first argument (filter form `items |> map(…)`).
+     * @return string[]
+     */
+    private function splitCallableArgs(string $args, bool $valueFirst): array
+    {
         // Split top-level commas (your existing helper)
         $parts = $this->splitRespectingStrings($args, ',');
 
@@ -2570,38 +2696,58 @@ class Tokenizer
             return [];
         }
 
-        // Case 1: first argument already contains =>
-        if ($this->findLambdaArrow($parts[0]) !== false) {
+        // Call form: the value leads, so leave it untouched and merge the
+        // lambda across the segments that follow it.
+        $offset = $valueFirst ? 1 : 0;
+
+        if ($valueFirst && $this->findLambdaArrow($parts[0]) !== false) {
+            // `map(x => …, …)` — the value is itself a lambda (nonsensical but
+            // must not be mistaken for the callable). Treat segment 0 as value.
+            $offset = 1;
+        }
+
+        if ($offset >= \count($parts)) {
             return $parts;
         }
 
-        // Case 2: find the first argument that contains =>
+        // Case 1: the callable segment already contains =>
+        if ($this->findLambdaArrow($parts[$offset]) !== false) {
+            return $parts;
+        }
+
+        // Case 2: find the first later segment that contains =>
         $lambdaEnd = null;
         $count     = \count($parts);
 
-        for ($i = 1; $i < $count; $i++) {
+        for ($i = $offset + 1; $i < $count; $i++) {
             if ($this->findLambdaArrow($parts[$i]) !== false) {
                 $lambdaEnd = $i;
                 break;
             }
         }
 
-        // No lambda found or lambda is first argument → nothing to merge
+        // No lambda found → nothing to merge
         if ($lambdaEnd === null) {
             return $parts;
         }
 
-        // Merge everything up to the lambda arrow into one argument
+        // Merge everything from the callable's start up to the lambda arrow
+        // into one argument.
         $lambdaArg = '';
-        for ($i = 0; $i <= $lambdaEnd; $i++) {
-            if ($i > 0) {
+        for ($i = $offset; $i <= $lambdaEnd; $i++) {
+            if ($i > $offset) {
                 $lambdaArg .= ', ';
             }
             $lambdaArg .= \trim($parts[$i]);
         }
 
-        // Build final argument list
-        $result = [$lambdaArg];
+        // Build final argument list: everything before the callable (the value,
+        // in the call form), then the merged callable, then the rest.
+        $result = [];
+        for ($i = 0; $i < $offset; $i++) {
+            $result[] = $parts[$i];
+        }
+        $result[] = $lambdaArg;
 
         for ($i = $lambdaEnd + 1; $i < $count; $i++) {
             $result[] = $parts[$i];
@@ -2611,7 +2757,7 @@ class Tokenizer
     }
 
     /**
-     * Build a PHP filter call:  $this->__c_fl['name']($value, arg1, name2: arg2)
+     * Build a PHP filter call:  $__c_fn['name']($value, arg1, name2: arg2)
      *
      * For map / filter / reduce the first argument must be either:
      *   - a lambda expression:  param => expression
@@ -2639,9 +2785,6 @@ class Tokenizer
             $this->autoEscape = false;
             return $phpValue;
         }
-        if ($name === 'expand') {
-            return $this->buildExpandCall($args, $phpValue, $trailing);
-        }
 
         if ($args === '') {
             $argList = [];
@@ -2655,39 +2798,54 @@ class Tokenizer
         $isRegistered     = $isCallableFilter
             || ($this->registry !== null && ($this->registry->hasInlineFilter($name) || $this->registry->hasFilter($name)));
 
+        // A name that is callable but NOT filterable (`context`, `include`,
+        // `dump`, `dd`) was registered for call syntax only; its first parameter
+        // is not a piped value. Rejecting it here turns `{{ x |> context }}`
+        // into a clear compile-time error in BOTH modes — the runtime table no
+        // longer carries these names, so without this guard the failure would
+        // surface as an opaque "call to undefined array key" mid-render.
+        if (
+            $this->registry !== null
+                && !$isRegistered
+                && $this->registry->hasCallable($name)
+                && !$this->registry->hasFilter($name)
+        ) {
+            throw new ClarityException(
+                "'{$name}' is a function, not a filter; call it as {$name}(…)."
+            );
+        }
+
         // Registered filters win over PHP functions of the same name.  In
         // sandbox mode an unregistered name ALSO takes this path, exactly as
-        // before: it compiles to a $__c_fl lookup and fails at runtime.
+        // before: it compiles to a $__c_fn lookup and fails at runtime.
         if ($isRegistered || $this->sandboxMode) {
             $inlineCall = $this->buildInlineFilterCall($name, $phpValue, $argList);
             if ($inlineCall !== null) {
                 return $trailing !== '' ? $inlineCall . $this->convertVarsAndOps($trailing) : $inlineCall;
             }
 
-            $safeName = "'" . \addslashes($name) . "'";
-            $call     = "\$__c_fl[{$safeName}]({$phpValue}";
+            $compiledArgs = [];
 
             if ($argList !== []) {
                 if ($isCallableFilter) {
                     // map/filter/reduce: first arg is a lambda/filter-ref, rest are positional only.
                     foreach ($argList as $i => $arg) {
                         $arg = \trim($arg);
-                        $call .= ', ';
-                        if ($i === 0) {
-                            $call .= $this->compileCallableArg($arg, $name);
-                        } else {
-                            $call .= $this->processCondition($arg);
-                        }
+                        $compiledArgs[] = $i === 0
+                            ? $this->compileCallableArg($arg, $name)
+                            : $this->processCondition($arg);
                     }
                 } else {
                     // Standard filter: emit args directly; named args become PHP named args.
-                    foreach ($this->compileArgList($argList) as $phpArg) {
-                        $call .= ', ' . $phpArg;
-                    }
+                    $compiledArgs = $this->compileArgList($argList);
                 }
             }
 
-            $call .= ')';
+            // The filter form binds the piped value first (or, when the filter
+            // declares a `valueParam`, in that parameter's slot — Phase 2).
+            \array_unshift($compiledArgs, $phpValue);
+            $call = $this->buildCall($name, $compiledArgs);
+
             if ($trailing !== '') {
                 $call .= $this->convertVarsAndOps($trailing);
             }
@@ -2700,15 +2858,35 @@ class Tokenizer
     }
 
     /**
+     * Emit a registry-dispatched call: `$__c_fn['name'](args)`.
+     *
+     * This is the ONE place a registered name becomes PHP. Both the pipe form
+     * ({@see buildFilterCall()}) and the call-syntax form
+     * ({@see buildFunctionCallInExpr()}) funnel through it after compiling
+     * their own argument lists; the only difference is whether the piped value
+     * leads the arguments (and where the value slot lands — see
+     * {@see resolveInlineFilterSlots()}). There is one runtime table, not two:
+     * a registered name is callable, and whether it may be piped is a separate,
+     * compile-time question ({@see buildFilterCall()}).
+     *
+     * @param list<string> $compiledArgs Already-compiled PHP argument expressions.
+     */
+    private function buildCall(string $name, array $compiledArgs): string
+    {
+        $safeName = "'" . \addslashes($name) . "'";
+        return '$__c_fn' . '[' . $safeName . '](' . \implode(', ', $compiledArgs) . ')';
+    }
+
+    /**
      * Compile a filter segment that resolves to a PHP function (open mode only).
      *
      * By default the piped value becomes the first argument:
-     *   {{ 'ab' |> strtoupper }}               → \strtoupper($value)
-     *   {{ 'a' |> str_replace('a', 'b') }}     → \str_replace($value, 'a', 'b')
+     *   {{ 'ab' |> strtoupper }}               â†’ \strtoupper($value)
+     *   {{ 'a' |> str_replace('a', 'b') }}     â†’ \str_replace($value, 'a', 'b')
      *
      * A single `_` placeholder in the argument list positions the value
      * explicitly, for functions whose value argument is not first:
-     *   {{ 'k' |> array_key_exists(_, $arr) }} → \array_key_exists($value, $arr)
+     *   {{ 'k' |> array_key_exists(_, $arr) }} â†’ \array_key_exists($value, $arr)
      *
      * @param list<string> $argList Raw argument strings (already comma-split).
      * @param string       $phpValue Already-compiled PHP for the piped value.
@@ -2817,15 +2995,15 @@ class Tokenizer
             $rest = \ltrim(\substr($rest, $endPos));
         }
 
-        // Plain filter — no trailing comparison operator
+        // Plain filter â€” no trailing comparison operator
         if (\trim($rest) === '') {
             return ['name' => $name, 'args' => $args, 'trailing' => ''];
         }
 
         // Rest must be an operator followed by a non-empty operand.
         // `??` (null-coalescing) is included so a filter may be followed by a
-        // fallback: `{{ items |> length ?? 0 }}`, `{{ x |> expand ?? 'fb' }}`.
-        // Note: `??` catches a NULL RETURN only — it cannot catch an exception.
+        // fallback: `{{ items |> length ?? 0 }}`, `{{ x ?? 'fb' }}`.
+        // Note: `??` catches a NULL RETURN only â€” it cannot catch an exception.
         if (!\preg_match('/^(===|!==|==|!=|>=|<=|<>|\?\?|>|<)(.+)$/s', $rest, $cm)) {
             return null;
         }
@@ -2858,16 +3036,201 @@ class Tokenizer
     }
 
     /**
-     * @param array{php?: string, params?: string[], defaults?: array<string, string>, variadic?: bool} $definition
+     * Compile an inline filter's CALL form: `name(a1, a2, …)`.
+     *
+     * The call form is derived from the same `php` template as the filter form;
+     * only the SLOT ASSIGNMENT differs:
+     *   - valueParam UNSET: `arg[0]` is the value (`{1}`), the rest fill `params`.
+     *     This is byte-identical to the filter form, so `round(x, 2)` compiles
+     *     exactly like `x |> round(2)`.
+     *   - valueParam SET: every argument fills its `params` slot in order; the
+     *     value param has no default (e.g. `join`), so calling it without
+     *     supplying it is a loud compile error.
+     *
+     * Returns null when the name has no inline template (callable-only or
+     * unregistered); the caller then falls back to `$__c_fn` dispatch or a
+     * direct PHP call.
+     *
+     * @param string[] $argList Raw, comma-split argument strings.
+     */
+    private function buildInlineCallForm(string $name, array $argList): ?string
+    {
+        $definition = $this->registry->getInlineFilter($name);
+        if ($definition === null) {
+            return null;
+        }
+
+        [$positionalArgs, $namedArgs] = $this->compileFilterArguments($argList);
+
+        if (($definition['variadic'] ?? false) === true) {
+            // Value-led variadic: the first argument is the value (the format
+            // string), the rest are the variadic arguments.
+            if ($positionalArgs === [] || $namedArgs !== []) {
+                throw new ClarityException(
+                    "Function '{$name}' requires a positional value argument."
+                );
+            }
+            $value = $positionalArgs[0];
+            $rest  = \array_slice($positionalArgs, 1);
+
+            return $this->buildInlineVariadicFilterCall($name, $definition['php'], $value, $rest, []);
+        }
+
+        $params     = $definition['params'] ?? [];
+        $defaults   = $definition['defaults'] ?? [];
+        $valueParam = $definition['valueParam'] ?? null;
+
+        if ($valueParam === null) {
+            // Value-led: the first argument is the value; the rest are params.
+            if ($positionalArgs === [] && $namedArgs === []) {
+                throw new ClarityException(
+                    "Function '{$name}' requires at least the value argument."
+                );
+            }
+
+            $value = $positionalArgs[0] ?? null;
+            if ($value === null) {
+                throw new ClarityException(
+                    "Function '{$name}' cannot take the value as a named argument."
+                );
+            }
+            $restPositional = \array_slice($positionalArgs, 1);
+
+            $slots    = [1 => $value];
+            $assigned = [];
+            foreach ($restPositional as $index => $phpArg) {
+                if (!isset($params[$index])) {
+                    throw new ClarityException(
+                        "Function '{$name}' received too many positional arguments."
+                    );
+                }
+                $slots[$index + 2] = $phpArg;
+                $assigned[$params[$index]] = true;
+            }
+            $this->fillDefaultSlots($name, 'Function', $params, $defaults, 2, $slots, $assigned, $namedArgs);
+
+            return $this->substituteInlineFilterTemplate($definition['php'], $slots);
+        }
+
+        // Params-led: every argument is a declared param (value included).
+        $slots    = [];
+        $assigned = [];
+        foreach ($positionalArgs as $index => $phpArg) {
+            if (!isset($params[$index])) {
+                throw new ClarityException(
+                    "Function '{$name}' received too many positional arguments."
+                );
+            }
+            $slots[$index + 1] = $phpArg;
+            $assigned[$params[$index]] = true;
+        }
+
+        if (\array_key_exists($valueParam, $namedArgs)) {
+            $valueIndex = \array_search($valueParam, $params, true);
+            if ($valueIndex === false) {
+                throw new ClarityException(
+                    "Function '{$name}' declares valueParam '{$valueParam}', which is not one of its params."
+                );
+            }
+            $slots[$valueIndex + 1] = $namedArgs[$valueParam];
+            $assigned[$valueParam] = true;
+            unset($namedArgs[$valueParam]);
+        }
+
+        $this->fillDefaultSlots($name, 'Function', $params, $defaults, 1, $slots, $assigned, $namedArgs);
+
+        return $this->substituteInlineFilterTemplate($definition['php'], $slots);
+    }
+
+    /**
+     * Fill unfilled `params` slots from `$namedArgs` or `$defaults`, throwing
+     * on an unknown name, a duplicate, or a missing required argument.
+     *
+     * @param list<string>          $params
+     * @param array<string, string> $defaults
+     * @param array<int, string>    $slots    Modified in place.
+     * @param array<string, true>   $assigned Modified in place.
+     * @param array<string, string> $namedArgs
+     */
+    private function fillDefaultSlots(
+        string $name,
+        string $form,
+        array $params,
+        array $defaults,
+        int $base,
+        array &$slots,
+        array &$assigned,
+        array $namedArgs,
+    ): void {
+        foreach ($namedArgs as $paramName => $phpArg) {
+            $paramIndex = \array_search($paramName, $params, true);
+            if ($paramIndex === false) {
+                throw new ClarityException(
+                    "Unknown named argument '{$paramName}' for {$form} '{$name}'."
+                );
+            }
+            if (isset($assigned[$paramName])) {
+                throw new ClarityException(
+                    "{$form} '{$name}' received '{$paramName}' more than once."
+                );
+            }
+            $slots[$paramIndex + $base] = $phpArg;
+            $assigned[$paramName] = true;
+        }
+
+        foreach ($params as $index => $paramName) {
+            $slotIndex = $index + $base;
+            if (isset($slots[$slotIndex])) {
+                continue;
+            }
+            if (isset($defaults[$paramName])) {
+                $slots[$slotIndex] = $defaults[$paramName];
+                continue;
+            }
+            throw new ClarityException(
+                "Missing required argument '{$paramName}' for {$form} '{$name}'."
+            );
+        }
+    }
+
+    /**
+     * Resolve a filter template's numeric slots for the FILTER form.
+     *
+     * Slot model
+     * ----------
+     *   valueParam UNSET : `{1}` = the piped value, `{2}`, `{3}`, … = `params`.
+     *   valueParam SET   : `{1}`, `{2}`, … = `params` in declared order, and the
+     *                      piped value lands on the slot of the named param
+     *                      (so `join`'s `{2}` is its `array`, `date`'s `{2}` is
+     *                      its `date`). This lets a template be written in the
+     *                      same order as the PHP call it compiles to.
+     *
+     * @param array{php?: string, params?: string[], defaults?: array<string, string>, variadic?: bool, valueParam?: string} $definition
      * @param string[] $positionalArgs
      * @param array<string, string> $namedArgs
      * @return array<int, string>
      */
     private function resolveInlineFilterSlots(string $filterName, array $definition, string $phpValue, array $positionalArgs, array $namedArgs): array
     {
-        $params   = $definition['params'] ?? [];
-        $defaults = $definition['defaults'] ?? [];
-        $slots    = [1 => $phpValue];
+        $params     = $definition['params'] ?? [];
+        $defaults   = $definition['defaults'] ?? [];
+        $valueParam = $definition['valueParam'] ?? null;
+
+        if ($valueParam === null) {
+            $slotBase  = 2;
+            $valueSlot = 1;
+        } else {
+            $valueIndex = \array_search($valueParam, $params, true);
+            if ($valueIndex === false) {
+                throw new ClarityException(
+                    "Filter '{$filterName}' declares valueParam '{$valueParam}', which is not one of its params."
+                );
+            }
+            $slotBase  = 1;
+            $valueSlot = $valueIndex + 1;
+        }
+
+        $slots    = [$valueSlot => $phpValue];
         $assigned = [];
 
         foreach ($positionalArgs as $index => $phpArg) {
@@ -2878,7 +3241,14 @@ class Tokenizer
             }
 
             $paramName = $params[$index];
-            $slots[$index + 2] = $phpArg;
+            $slotIndex = $index + $slotBase;
+            if ($slotIndex === $valueSlot) {
+                throw new ClarityException(
+                    "Filter '{$filterName}' received a positional argument for '{$paramName}', which receives the piped value."
+                );
+            }
+
+            $slots[$slotIndex] = $phpArg;
             $assigned[$paramName] = true;
         }
 
@@ -2889,18 +3259,23 @@ class Tokenizer
                     "Unknown named argument '{$paramName}' for filter '{$filterName}'."
                 );
             }
+            if ($paramName === $valueParam) {
+                throw new ClarityException(
+                    "Filter '{$filterName}' cannot bind '{$paramName}': it receives the piped value."
+                );
+            }
             if (isset($assigned[$paramName])) {
                 throw new ClarityException(
                     "Filter '{$filterName}' received '{$paramName}' more than once."
                 );
             }
 
-            $slots[$paramIndex + 2] = $phpArg;
+            $slots[$paramIndex + $slotBase] = $phpArg;
             $assigned[$paramName] = true;
         }
 
         foreach ($params as $index => $paramName) {
-            $slotIndex = $index + 2;
+            $slotIndex = $index + $slotBase;
             if (isset($slots[$slotIndex])) {
                 continue;
             }
@@ -2962,14 +3337,16 @@ class Tokenizer
      * Accepted forms:
      *   param => expression                  single-parameter lambda
      *   acc, item => expression             explicit two-parameter reduce lambda
-     *   'filterName' / "filterName"         reference to a registered filter
-     *                                        or to an inline built-in filter for map()
+     *   'filterName' / "filterName"         reference to a registered filter or
+     *                                        to an inline built-in filter, which
+     *                                        is compiled into a closure (see
+     *                                        {@see shouldInlineCallableFilterReference()})
      *
-     * Anything else (bare variable names, function calls, …) is rejected.
+     * Anything else (bare variable names, function calls, â€¦) is rejected.
      */
     private function compileCallableArg(string $arg, string $filterName): string
     {
-        // ── Filter reference: 'name' or "name" ───────────────────────────────
+        // â”€â”€ Filter reference: 'name' or "name" â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         $trimmed = \trim($arg);
         if (\strlen($trimmed) >= 2) {
             $first = $trimmed[0];
@@ -2982,20 +3359,38 @@ class Tokenizer
                     );
                 }
 
-                if ($this->shouldInlineCallableFilterReference($filterName, $refName)) {
+                if ($this->shouldInlineCallableFilterReference($refName)) {
+                    // `reduce` needs a BINARY callable — carry, item. An inline
+                    // filter is a unary template with one `{1}` slot, so there is
+                    // no way to express "combine the carry with the element".
+                    // PHP would bind the ACCUMULATOR to that slot, the closure
+                    // would ignore the element, and reduce would silently return
+                    // the initial value. Reject it instead of compiling a
+                    // no-op.
+                    if ($filterName === 'reduce') {
+                        throw new ClarityException(
+                            "The 'reduce' filter needs a two-parameter lambda (e.g. 'carry, item => carry + item');"
+                                . " the inline filter '{$refName}' is unary and cannot combine elements."
+                        );
+                    }
+
                     return $this->buildInlineCallableFilterReference($refName);
                 }
 
+                // A registered filter (inline template or runtime callable) is
+                // dispatched through the ONE runtime table, `$__c_fn`. Whether a
+                // name may be used as a filter at all is decided HERE, at compile
+                // time, so the runtime table stays a plain callable map.
+                $isRegisteredFilter = $this->registry !== null
+                    && ($this->registry->hasFilter($refName) || $this->registry->hasInlineFilter($refName));
+
+                if ($isRegisteredFilter) {
+                    return "\$__c_fn['" . \addslashes($refName) . "']";
+                }
+
                 // Open mode: a quoted name that is not a registered filter may
-                // name a PHP function (Blade parity).  Registered filters keep
-                // precedence, so the callable-injection guard is unchanged in
-                // sandbox mode.
-                if (
-                    !$this->sandboxMode
-                        && $this->registry !== null
-                        && !$this->registry->hasFilter($refName)
-                        && !$this->registry->hasInlineFilter($refName)
-                ) {
+                // name a PHP function (Blade parity).
+                if (!$this->sandboxMode && $this->registry !== null) {
                     if (!$this->isFunctionCallAllowed($refName)) {
                         throw new ClarityException(
                             "Function '{$refName}' is blocked in open mode. Allow it by removing it from the deny-list."
@@ -3009,11 +3404,18 @@ class Tokenizer
                     return "'" . \addslashes(\ltrim($refName, '\\')) . "'";
                 }
 
-                return "\$__c_fl['" . \addslashes($refName) . "']";
+                // Sandbox: an unknown reference is a compile-time error — the
+                // callable-injection guard rejects anything not a filter.
+                throw new ClarityException(
+                    "Filter reference '{$refName}' is not a filter"
+                        . ($this->registry !== null && $this->registry->hasCallable($refName)
+                            ? "; it is a function, not a filter."
+                            : " and no filter is registered under that name.")
+                );
             }
         }
 
-        // ── Lambda: param => expression / acc, item => expression ───────────
+        // â”€â”€ Lambda: param => expression / acc, item => expression â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         $arrowPos = $this->findLambdaArrow($arg);
         if ($arrowPos !== false) {
             return $this->compileLambda($arg, $arrowPos, $filterName);
@@ -3025,10 +3427,20 @@ class Tokenizer
         );
     }
 
-    private function shouldInlineCallableFilterReference(string $filterName, string $referenceName): bool
+    /**
+     * Decide how a quoted filter reference (`map(items, "upper")`) compiles.
+     *
+     * An INLINE-only filter has no runtime entry — it is codegen, not a
+     * callable — so it must be compiled into a closure right here, exactly as
+     * the compiler does for any other inline filter use. Emitting a registry
+     * lookup for it would produce code that can never resolve. Callable
+     * filters (`slug`) are the opposite: they live in the runtime table and are
+     * dispatched as `$__c_fn['slug']`, which keeps the registry as the one
+     * source of callables and avoids re-emitting an equivalent closure.
+     */
+    private function shouldInlineCallableFilterReference(string $referenceName): bool
     {
-        return $filterName === 'map'
-            && $this->registry->hasInlineFilter($referenceName);
+        return $this->registry !== null && $this->registry->hasInlineFilter($referenceName);
     }
 
     private function buildInlineCallableFilterReference(string $referenceName): string
@@ -3090,8 +3502,10 @@ class Tokenizer
      * - The body is compiled as a full Clarity expression (including filter
      *   pipelines) with the parameter name(s) treated as local variables,
      *   while all other identifiers are resolved from the captured $__c_va.
-     * - Both $__c_va and $this->__c_fl (the filter registry) are captured by value so
-     *   the closure can access outer template variables and other filters.
+     * - $__c_va is always captured; $__c_fn and $__c_sv are added to the `use`
+     *   clause only when the compiled body actually references them (they are
+     *   render-frame locals, so an uncaptured reference would fatal at render
+     *   time — see {@see $captures} below).
      *
      * @param string $arg      The full lambda string (e.g. 'item => item.name').
      * @param int    $arrow    Position of '=>' in $arg.
@@ -3116,20 +3530,28 @@ class Tokenizer
         }
 
         // Compile the body as a full Clarity expression (handles |> pipelines).
-        // convertVarsAndOps maps all identifiers to $__c_va['name'], so we fix
-        // up the parameter references afterwards with a targeted substitution.
         //
-        // The body is compiled with $inLambda set: the closure captures $__c_va
-        // but NOT the render frame's locals, so a root there must stay a $__c_va
-        // lookup (or every outer variable in the lambda would read as null).
-        $this->inLambda = true;
+        // The parameter frame is pushed FIRST, so during compilation a root that
+        // names a parameter of THIS lambda — or of any enclosing one — is emitted
+        // as the bare `$name` by rootPhp(). No post-hoc string substitution is
+        // needed, and a NESTED lambda's inner body can reference the outer
+        // lambda's parameter directly, because that name is still on the stack.
+        //
+        // The stack (not a boolean) is what makes nesting work: `inLambda` alone
+        // only said "not the render scope", which turned an outer parameter into
+        // an absent `$__c_va[...]` read.
+        $params = [$first => true];
+        if (isset($second)) {
+            $params[$second] = true;
+        }
+
+        $this->lambdaFrames[] = $params;
         try {
             $phpBody = $this->processCondition($body);
         } finally {
-            $this->inLambda = false;
+            \array_pop($this->lambdaFrames);
         }
 
-        $phpBody   = \str_replace("\$__c_va['{$first}']", '$' . $first, $phpBody);
         $signature = "mixed \${$first}";
 
         if ($filterName === 'reduce') {
@@ -3139,7 +3561,6 @@ class Tokenizer
                         . "(e.g. 'acc, item => acc + item'), got: '{$paramList}'"
                 );
             }
-            $phpBody = \str_replace("\$__c_va['{$second}']", '$' . $second, $phpBody);
             $signature .= ", mixed \${$second}";
         } elseif (isset($second)) {
             throw new ClarityException(
@@ -3147,95 +3568,104 @@ class Tokenizer
             );
         }
 
-        return "static function({$signature}) use (\$__c_va): mixed { return {$phpBody}; }";
+        // The closure captures $__c_va unconditionally (outer template variables
+        // are always read through it). Two further groups of names are captured
+        // only when the compiled body actually references them:
+        //
+        //   • $__c_fn / $__c_sv — render-frame LOCALS, not parameters. Without
+        //     the capture a body reaching the callable registry or a service
+        //     fatals with "Variable $__c_fn is not defined".
+        //   • an ENCLOSING lambda's parameter — a local of the closure that
+        //     declared it. A nested lambda referencing it compiles to a bare
+        //     `$name` (see rootPhp()), and PHP only binds that from an explicit
+        //     `use (...)`; without it the reference is undefined at render time.
+        //
+        // $this->lambdaFrames now holds only the ENCLOSING frames (this lambda's
+        // own frame was popped above), so its parameters are exactly the ones
+        // that need capturing.
+        $captures = ['$__c_va'];
+        foreach (['$__c_fn', '$__c_sv'] as $internal) {
+            if (\str_contains($phpBody, $internal)) {
+                $captures[] = $internal;
+            }
+        }
+        foreach ($this->lambdaFrames as $frame) {
+            foreach ($frame as $enclosing => $_) {
+                if (isset($params[$enclosing]) || \in_array('$' . $enclosing, $captures, true)) {
+                    continue;
+                }
+                // Word-boundary match so `$c` does not match `$count`, and `$x`
+                // does not match `$__c_va['x']` (the quote is not a word char).
+                if (\preg_match('/\$' . \preg_quote($enclosing, '/') . '\b/', $phpBody)) {
+                    $captures[] = '$' . $enclosing;
+                }
+            }
+        }
+        $useClause = 'use (' . \implode(', ', $captures) . ')';
+
+        return "static function({$signature}) {$useClause}: mixed { return {$phpBody}; }";
     }
 
     /**
-     * Compile `… |> expand` — dynamic variable lookup by name.
+     * Emit the lookup for `${expr}` / `$$name`: read the variable whose NAME is
+     * produced by a runtime expression.
      *
-     * Arguments (all optional)
-     * ------------------------
-     *  • positional 1, or `fallback:` — value used when the name is absent.
-     *    Supplying one implies optional, since an eager fallback already
-     *    replaces the strict throw.
-     *  • `optional:` — a literal true/false. When true an absent name yields
-     *    null instead of raising, so a following `??` can supply the fallback:
-     *    `expand(optional: true) ?? 'none'`.
+     * The lookup uses the SAME variable model as a literal `{{ name }}`:
      *
-     * `fallback` and `optional` differ in WHERE the fallback is decided:
-     * `fallback` bakes the value into the absent branch, while `optional`
-     * leaves that branch null so the engine's value-level `??` sees it. That
-     * is what lets the optional form compose with later pipeline steps.
+     *  â€¢ outside a loop  â†’ `$__c_va[$name]`
+     *  â€¢ inside a loop   â†’ loop locals first (they are real PHP locals, not
+     *                      scope entries), then `$__c_va[$name]`
      *
-     * `optional` must be a compile-time literal because the absence branch is
-     * chosen while compiling; a runtime expression cannot be honoured, so it
-     * is reported rather than silently read as false.
+     * Presence is tested with `array_key_exists`, NOT `isset`: a NULL value is
+     * PRESENT, exactly as a literal `{{ name }}` treats it (isset would report it
+     * absent and trigger the strict throw).
      *
-     * Both are the author's opt-out from the strict "absent name throws"
-     * contract that every other access follows.
+     * Security: the name only ever indexes `$__c_va` or selects among the
+     * compile-time known loop locals (the map literal).  It is never emitted as
+     * a PHP dynamic variable, so it can reach neither a superglobal nor an engine
+     * internal.  `__c_`-prefixed names are simply absent from the scope.
+     *
+     * Absent names are STRICT (a line-numbered ClarityException) unless a `??`
+     * follows the lookup, in which case the absent branch is `null` so the
+     * operator supplies the fallback â€” mirroring a literal `{{ name ?? 'x' }}`.
+     *
+     * @param bool $coalesces Whether the character after the lookup is `??`.
      */
-    private function buildExpandCall(string $args, string $phpValue, string $trailing): string
+    private function buildDynamicLookup(string $namePhp, bool $coalesces): string
     {
-        $argList = $args === '' ? [] : $this->splitRespectingStrings($args, ',');
-        [$positional, $named] = $this->compileFilterArguments($argList);
+        // When a `??` follows, the NAME expression is made null-safe too, so
+        // `${ref} ?? 'x'` behaves like a literal `{{ name ?? 'x' }}`: absence in
+        // either the name or the looked-up variable yields the fallback.  Without
+        // this, an absent `ref` would warn while the name is evaluated â€” and that
+        // happens INSIDE the guarding ternary, so the outer `??` would not
+        // suppress it.
+        $nameExpr = $coalesces
+            ? '(string) ((' . $namePhp . ') ?? \'\')'
+            : '(string) (' . $namePhp . ')';
 
-        foreach (\array_keys($named) as $name) {
-            if ($name !== 'fallback' && $name !== 'optional') {
-                throw new ClarityException(
-                    "Unknown named argument '{$name}' for filter 'expand'."
-                );
-            }
-        }
-        if (\count($positional) > 1) {
-            throw new ClarityException("Filter 'expand' received too many positional arguments.");
-        }
+        // The guard always assigns `$__c_tmp = (string)(name)` before testing, so
+        // the miss branch can reuse it rather than evaluating the expression twice.
+        $miss = $coalesces
+            ? 'null'
+            : 'throw new \\Clarity\\ClarityException("Undefined variable: " . $__c_tmp)';
 
-        $fallback = $named['fallback'] ?? $positional[0] ?? null;
-        $optional = $named['optional'] ?? null;
-
-        // The absent-branch value: an explicit fallback, else null when the
-        // author opted out of the strict contract, else the strict throw.
-        //
-        // The throw names the missing variable: `$__c_tmp` is the temporary the
-        // lookup assigns, so the message carries the actual name.
-        if ($fallback !== null) {
-            $missing = $fallback;
-        } else {
-            if ($optional) {
-                $missing = "$optional ? null : ";
-            } else {
-                $missing = "";
-            }
-            $missing .= 'throw new \\Clarity\\ClarityException("Undefined variable: $__c_tmp")';
-        }
-
-        // The lookup follows the SAME variable model as every other access.
-        // Sandbox reads the name out of `$__c_va`; open mode reads the local
-        // that `extract()` seeded, which is what makes `expand` agree with
-        // `{{ name }}` about where a variable lives.
-        //
-        // Both forms are safe: a dynamic dereference is an ordinary LOCAL
-        // lookup, so `${$__c_tmp}` cannot reach a superglobal the way a literal
-        // `$_SERVER` spelling can.
-
-        if ($this->localRoots && !$this->inLambda) {
-            // In local-roots mode, the variable is already in scope as a local.
-            $call = "\$\{{$phpValue}\}";
-        } elseif (!empty($this->localVars)) {
+        if (!empty($this->localVars)) {
             $entries = [];
             foreach ($this->localVars as $tplName => $phpVar) {
                 $entries[] = \var_export($tplName, true) . ' => 1';
             }
             $mapLiteral = '[' . \implode(', ', $entries) . ']';
-            $call       = "(\\array_key_exists(\$__c_tmp = (string) {$phpValue}, {$mapLiteral})"
-                . " ? \${\$__c_tmp}"
-                . " : (isset(\$__c_va[\$__c_tmp]) ? \$__c_va[\$__c_tmp]"
-                . " : ({$missing})))";
-        } else {
-            $call = "(isset(\$__c_va[\$__c_tmp = (string) {$phpValue}]) ? \$__c_va[\$__c_tmp]"
-                . " : ({$missing}))";
+
+            // The dynamic read `\${$__c_tmp}` is only reached when the name is
+            // one of the compile-time known loop locals (the map literal), so it
+            // can select only among variables the compiler bound itself.
+            // The whole ternary is parenthesised so a following `??` binds to the
+            // lookup RESULT, not into the else-branch.
+            return '((\array_key_exists($__c_tmp = ' . $nameExpr . ', ' . $mapLiteral . ')'
+                . ' ? ${$__c_tmp}'
+                . ' : (array_key_exists($__c_tmp, $__c_va) ? $__c_va[$__c_tmp] : (' . $miss . '))))';
         }
 
-        return $trailing !== '' ? $call . $this->convertVarsAndOps($trailing) : $call;
+        return '((array_key_exists($__c_tmp = ' . $nameExpr . ', $__c_va) ? $__c_va[$__c_tmp] : (' . $miss . ')))';
     }
 }
