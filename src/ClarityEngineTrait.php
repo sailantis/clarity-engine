@@ -750,10 +750,9 @@ trait ClarityEngineTrait
         try {
             $className = $this->loadCachedClass($templateName);
 
-            // Instantiate with filter and function registries
+            // Instantiate with the callable and service registries
             $template = new $className(
-                $this->registry->allFilters(),
-                $this->registry->allFunctions(),
+                $this->registry->allCallables(),
                 $this->registry->allServices()
             );
 

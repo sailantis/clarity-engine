@@ -9,7 +9,7 @@ abstract class BaseTestCase extends PHPUnitTestCase
     protected static function tpl(string $name, string $content): string
     {
         $path = TestEnvironment::viewDir() . DIRECTORY_SEPARATOR . $name . '.clarity.html';
-        $dir = dirname($path);
+        $dir  = dirname($path);
         if (!is_dir($dir)) {
             mkdir($dir, 0755, true);
         }
@@ -37,6 +37,22 @@ abstract class BaseTestCase extends PHPUnitTestCase
     protected static function normalizedSourcePath(string $view): string
     {
         return TestEnvironment::viewDir() . '/' . $view . '.clarity.html';
+    }
+
+    /**
+     * Return the compiled PHP source of a template that has already been
+     * rendered (compiled and loaded).  Useful for asserting on emitted code.
+     */
+    protected function compiledSource(string $view): string
+    {
+        $engine = TestEnvironment::engine();
+        $cache  = new \ReflectionProperty($engine, 'cache');
+        $cache->setAccessible(true);
+        $className = $cache->getValue($engine)->getLoadedClassName($view);
+
+        $this->assertIsString($className, 'the template must be compiled and loaded');
+
+        return (string) file_get_contents((new \ReflectionClass($className))->getFileName());
     }
 
     public static function removeDir(string $dir): void

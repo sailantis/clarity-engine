@@ -145,8 +145,8 @@ class ModulesTest extends BaseTestCase
 
     /**
      * A directive that gates a block on the engine's debug state must read that
-     * state through the compiled body's unpacked locals. Only `$__c_fl`, `$__c_fn`
-     * and `$__c_sv` exist inside `render()`; a literal `$__debug` local is never
+     * state through the compiled body's unpacked locals. Only `$__c_fn` and
+     * `$__c_sv` exist inside `render()`; a literal `$__debug` local is never
      * defined, so such a block would silently never render (and raise an
      * "Undefined variable" warning whenever the guard is truthy).
      */

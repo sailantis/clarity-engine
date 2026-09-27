@@ -80,11 +80,11 @@ class IntlFormatModule implements ModuleInterface
     private bool $intlAvailable;
 
     private static array $styleMap = [
-        'none' => \IntlDateFormatter::NONE,
-        'short' => \IntlDateFormatter::SHORT,
+        'none'   => \IntlDateFormatter::NONE,
+        'short'  => \IntlDateFormatter::SHORT,
         'medium' => \IntlDateFormatter::MEDIUM,
-        'long' => \IntlDateFormatter::LONG,
-        'full' => \IntlDateFormatter::FULL,
+        'long'   => \IntlDateFormatter::LONG,
+        'full'   => \IntlDateFormatter::FULL,
     ];
 
     /**
@@ -100,8 +100,8 @@ class IntlFormatModule implements ModuleInterface
     public function __construct(array $config = [])
     {
         $this->intlAvailable = \extension_loaded('intl');
-        $this->locale = $config['locale'] ?? LocaleService::detectLocale();
-        $this->timezone = $config['timezone'] ?? null;
+        $this->locale        = $config['locale'] ?? LocaleService::detectLocale();
+        $this->timezone      = $config['timezone'] ?? null;
     }
 
     /** @inheritDoc */
@@ -146,7 +146,7 @@ class IntlFormatModule implements ModuleInterface
                 static $cache = [];
                 $l = $locale ?? $localeService->current() ?? $this->locale;
                 if ($intl) {
-                    $fmt = $cache[$l] ??= new \NumberFormatter($l, \NumberFormatter::CURRENCY);
+                    $fmt    = $cache[$l] ??= new \NumberFormatter($l, \NumberFormatter::CURRENCY);
                     $result = $fmt->formatCurrency((float) $v, $currency);
                     return $result !== false ? $result : '';
                 }
@@ -159,7 +159,7 @@ class IntlFormatModule implements ModuleInterface
             'currency_name',
             function (string $code, ?string $locale = null) use ($localeService, $intl): string {
                 static $cache = [];
-                $dl = $locale ?? $localeService->current() ?? $this->locale;
+                $dl  = $locale ?? $localeService->current() ?? $this->locale;
                 $key = $dl . '|' . $code;
                 if ($intl && \class_exists(\ResourceBundle::class)) {
                     if (isset($cache[$key])) {
@@ -184,7 +184,7 @@ class IntlFormatModule implements ModuleInterface
             'currency_symbol',
             function (string $code, ?string $locale = null) use ($localeService, $intl): string {
                 static $cache = [];
-                $l = $locale ?? $localeService->current() ?? $this->locale;
+                $l   = $locale ?? $localeService->current() ?? $this->locale;
                 $key = $l . '|' . $code;
                 if ($intl && \class_exists(\ResourceBundle::class)) {
                     if (isset($cache[$key])) {
@@ -226,7 +226,7 @@ class IntlFormatModule implements ModuleInterface
                 static $cache = [];
                 $l = $locale ?? $localeService->current() ?? $this->locale;
                 if ($intl) {
-                    $fmt = $cache[$l] ??= new \NumberFormatter($l, \NumberFormatter::SCIENTIFIC);
+                    $fmt    = $cache[$l] ??= new \NumberFormatter($l, \NumberFormatter::SCIENTIFIC);
                     $result = $fmt->format((float) $v);
                     return $result !== false ? $result : '';
                 }
@@ -240,7 +240,7 @@ class IntlFormatModule implements ModuleInterface
                 static $cache = [];
                 $l = $locale ?? $localeService->current() ?? $this->locale;
                 if ($intl) {
-                    $fmt = $cache[$l] ??= new \NumberFormatter($l, \NumberFormatter::SPELLOUT);
+                    $fmt    = $cache[$l] ??= new \NumberFormatter($l, \NumberFormatter::SPELLOUT);
                     $result = $fmt->format((float) $v);
                     return $result !== false ? $result : '';
                 }
@@ -254,16 +254,21 @@ class IntlFormatModule implements ModuleInterface
                 static $cache = [];
                 $l = $locale ?? $localeService->current() ?? $this->locale;
                 if ($intl) {
-                    $fmt = $cache[$l] ??= new \NumberFormatter($l, \NumberFormatter::ORDINAL);
+                    $fmt    = $cache[$l] ??= new \NumberFormatter($l, \NumberFormatter::ORDINAL);
                     $result = $fmt->format((int) $v);
                     return $result !== false ? $result : '';
                 }
                 // English-only fallback
-                $n = (int) $v % 100;
-                $m = $n % 10;
-                $sfx = ($n >= 11 && $n <= 13) ? 'th' : match ($m) {
-                    1 => 'st', 2 => 'nd', 3 => 'rd', default => 'th',
-                };
+                $n   = (int) $v % 100;
+                $m   = $n % 10;
+                $sfx = ($n >= 11 && $n <= 13)
+                    ? 'th'
+                    : match ($m) {
+                        1       => 'st',
+                        2       => 'nd',
+                        3       => 'rd',
+                        default => 'th'
+                    };
                 return $v . $sfx;
             }
         );
@@ -275,7 +280,7 @@ class IntlFormatModule implements ModuleInterface
 
     private function registerDateFilters(ClarityEngine $engine, LocaleService $localeService): void
     {
-        $intl = $this->intlAvailable;
+        $intl  = $this->intlAvailable;
         $defTz = $this->timezone;
 
         $engine->addFilter(
@@ -317,10 +322,10 @@ class IntlFormatModule implements ModuleInterface
                 static $cache = [];
                 $l = $locale ?? $localeService->current() ?? $this->locale;
                 if ($intl && \class_exists(\RelativeDateTimeFormatter::class)) {
-                    $ts = $this->toTimestamp($v);
+                    $ts   = $this->toTimestamp($v);
                     $diff = \time() - $ts;
-                    $abs = \abs($diff);
-                    $fmt = $cache[$l] ??= new \RelativeDateTimeFormatter($l);
+                    $abs  = \abs($diff);
+                    $fmt  = $cache[$l] ??= new \RelativeDateTimeFormatter($l);
 
                     [$val, $unit] = match (true) {
                         $abs < 60 => [(float) $abs, \RelativeDateTimeFormatter::UNIT_SECOND],
@@ -329,7 +334,7 @@ class IntlFormatModule implements ModuleInterface
                         $abs < 604800 => [\round($abs / 86400), \RelativeDateTimeFormatter::UNIT_DAY],
                         $abs < 2592000 => [\round($abs / 604800), \RelativeDateTimeFormatter::UNIT_WEEK],
                         $abs < 31536000 => [\round($abs / 2592000), \RelativeDateTimeFormatter::UNIT_MONTH],
-                        default => [\round($abs / 31536000), \RelativeDateTimeFormatter::UNIT_YEAR],
+                        default => [\round($abs / 31536000), \RelativeDateTimeFormatter::UNIT_YEAR]
                     };
 
                     $direction = $diff >= 0
@@ -400,7 +405,7 @@ class IntlFormatModule implements ModuleInterface
                         \IntlDateFormatter::NONE,
                         $tz,
                         \IntlDateFormatter::GREGORIAN,
-                        'VVVV' // ICU pattern: long timezone name
+                        'VVVV'
                     );
 
                     return $formatter->format(0);
@@ -424,7 +429,7 @@ class IntlFormatModule implements ModuleInterface
                 static $cache = [];
                 $s = (string) $v;
                 if ($intl) {
-                    $t = $cache[$rules] ??= \Transliterator::create($rules);
+                    $t      = $cache[$rules] ??= \Transliterator::create($rules);
                     $result = $t?->transliterate($s);
                     return $result ?: $s;
                 }
@@ -463,8 +468,7 @@ class IntlFormatModule implements ModuleInterface
             // Try intl first (cached per locale+pattern)
             if ($intl) {
                 $cacheKey = $loc . '|' . $pattern;
-                $fmt = $cache[$cacheKey]
-                    ??= @new MessageFormatter($loc, $pattern);
+                $fmt      = $cache[$cacheKey] ??= @new MessageFormatter($loc, $pattern);
 
                 if ($fmt !== false) {
                     $res = $fmt->format($vars);
@@ -480,7 +484,7 @@ class IntlFormatModule implements ModuleInterface
             $result = \preg_replace_callback(
                 '/\{(\w+)\s*,\s*plural\s*,\s*((?:[^{}]|\{[^{}]*\})*)\}/s',
                 function (array $m) use ($vars, &$cache): string {
-                    $countVar = $m[1];
+                    $countVar   = $m[1];
                     $rulesBlock = $m[2];
 
                     $count = isset($vars[$countVar]) ? (int) $vars[$countVar] : 0;
@@ -528,7 +532,7 @@ class IntlFormatModule implements ModuleInterface
             return $result;
         };
 
-        $engine->addFilter('format', $formatMessage);
+        $engine->addFilter('format_message', $formatMessage);
     }
 
     // =========================================================================
@@ -548,7 +552,7 @@ class IntlFormatModule implements ModuleInterface
         $tz = $dt->getTimezone()->getName();
 
         $cacheKey = $locale . '|' . $dateType . '|' . $timeType . '|' . $tz;
-        $fmt = $cache[$cacheKey] ??= new \IntlDateFormatter(
+        $fmt      = $cache[$cacheKey] ??= new \IntlDateFormatter(
             $locale,
             $dateType,
             $timeType,
@@ -567,8 +571,8 @@ class IntlFormatModule implements ModuleInterface
 
         $fmt = match ($style) {
             'short' => $includeDate && $includeTime ? 'n/j/y H:i' : ($includeDate ? 'n/j/y' : 'H:i'),
-            'long' => $includeDate && $includeTime ? 'F j, Y H:i:s' : ($includeDate ? 'F j, Y' : 'g:i:s A'),
-            'full' => $includeDate && $includeTime ? 'l, F j, Y H:i:s T' : ($includeDate ? 'l, F j, Y' : 'g:i:s A T'),
+            'long'  => $includeDate && $includeTime ? 'F j, Y H:i:s' : ($includeDate ? 'F j, Y' : 'g:i:s A'),
+            'full'  => $includeDate && $includeTime ? 'l, F j, Y H:i:s T' : ($includeDate ? 'l, F j, Y' : 'g:i:s A T'),
             default => $includeDate && $includeTime ? 'M j, Y H:i' : ($includeDate ? 'M j, Y' : 'H:i')
         };
 
@@ -578,7 +582,7 @@ class IntlFormatModule implements ModuleInterface
     private function relativeTimeFallback(int $ts): string
     {
         $diff = \time() - $ts;
-        $abs = \abs($diff);
+        $abs  = \abs($diff);
         $past = $diff >= 0;
 
         [$val, $unit] = match (true) {
@@ -603,7 +607,7 @@ class IntlFormatModule implements ModuleInterface
         if (\is_int($v)) {
             return $v;
         }
-        return (int)\strtotime((string)$v);
+        return (int) \strtotime((string) $v);
     }
 
 }

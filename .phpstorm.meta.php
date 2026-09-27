@@ -79,12 +79,6 @@ namespace PHPSTORM_META
             'description' => 'Alias of escape.',
             'example'     => '{{ x |> esc }}',
         ],
-        'expand' => [
-            'return'      => 'mixed',
-            'params'      => [['fallback', 'null'], ['optional', 'false']],
-            'description' => 'Treat the piped value as a variable NAME and look it up in the render scope. Absent names throw unless optional: true or a fallback is given.',
-            'example'     => "{{ name |> expand(optional: true) ?? 'none' }}",
-        ],
         'first' => [
             'return'      => 'mixed',
             'description' => 'Get the first element of an array or first character of a string.',
@@ -98,8 +92,8 @@ namespace PHPSTORM_META
         'format' => [
             'return'      => 'string',
             'variadic'    => true,
-            'description' => 'sprintf-style string formatting.',
-            'example'     => "{{ 'Hello %s' |> format(name) }}",
+            'description' => 'Alias of sprintf, for Twig parity.',
+            'example'     => '{{ "%s: %d" |> format(name, n) }}',
         ],
         'format_datetime' => [
             'return'      => 'string',
@@ -132,6 +126,11 @@ namespace PHPSTORM_META
             'return'      => 'int',
             'description' => 'Count elements in an array or string length (mb_strlen).',
             'example'     => '{{ items |> length }}',
+        ],
+        'len' => [
+            'return'      => 'int',
+            'description' => 'Alias of `length`. Count elements in an array or string length.',
+            'example'     => '{{ items |> len }}',
         ],
         'lower' => [
             'return'      => 'string',
@@ -216,6 +215,12 @@ namespace PHPSTORM_META
             'params'      => [['delimiter'], ['limit', 'PHP_INT_MAX']],
             'description' => 'Split a string into an array.',
             'example'     => "{{ s |> split(',') }}",
+        ],
+        'sprintf' => [
+            'return'      => 'string',
+            'variadic'    => true,
+            'description' => 'sprintf-style string formatting.',
+            'example'     => '{{ "%s: %d" |> sprintf(name, n) }}',
         ],
         'striptags' => [
             'return'      => 'string',
@@ -304,8 +309,14 @@ namespace PHPSTORM_META
         'len' => [
             'return'      => 'int',
             'params'      => [['value']],
-            'description' => 'Count elements in an array or unicode string length.',
+            'description' => 'Alias of `length`. Count elements in an array or unicode string length.',
             'example'     => '{{ len(items) }}',
+        ],
+        'length' => [
+            'return'      => 'int',
+            'params'      => [['value']],
+            'description' => 'Count elements in an array or unicode string length.',
+            'example'     => '{{ length(items) }}',
         ],
     ]));
 
