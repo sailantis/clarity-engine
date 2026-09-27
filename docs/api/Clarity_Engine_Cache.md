@@ -198,15 +198,14 @@ registry so stale class names do not prevent recompilation.
 
 ---
 
-### classNameFor() · <small>[🗎](../../src/Engine/Cache.php#L255)</small>
+### classNameFor() · <small>[🗎](../../src/Engine/Cache.php#L254)</small>
 
 `public function classNameFor(string $templateName): string`
 
 Return the base class-name prefix for a template name.
 
-Note: the actual in-memory class name includes a unique compile-time
-suffix to prevent redeclaration collisions.  Use `getLoadedClassName()`
-to obtain the real class name after a template has been loaded.
+Note: the actual in-memory class name includes a unique compile-time suffix to prevent redeclaration collisions.
+Use `getLoadedClassName()` to obtain the real class name after a template has been loaded.
 
 **Parameters**
 
@@ -221,7 +220,7 @@ to obtain the real class name after a template has been loaded.
 
 ---
 
-### getLoadedClassName() · <small>[🗎](../../src/Engine/Cache.php#L264)</small>
+### getLoadedClassName() · <small>[🗎](../../src/Engine/Cache.php#L263)</small>
 
 `public function getLoadedClassName(string $templateName): string|null`
 
@@ -241,7 +240,7 @@ given template name, or null if the template has not been loaded yet.
 
 ---
 
-### cacheFilePath() · <small>[🗎](../../src/Engine/Cache.php#L279)</small>
+### cacheFilePath() · <small>[🗎](../../src/Engine/Cache.php#L278)</small>
 
 `public function cacheFilePath(string $templateName): string`
 

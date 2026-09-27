@@ -2,13 +2,24 @@
 
 **Full name:** [Clarity\Engine\Registry](../../src/Engine/Registry.php)
 
-Registry of filter and function callables for the Clarity template engine.
+Registry of named callables for the Clarity template engine.
 
-This class maintains the collection of built-in and user-defined filters and functions
-available to templates. Filters transform values through the pipe operator (|>), while
-functions are called directly in expressions.
+The registry answers THREE independent questions, each with its own table:
 
-User code may add additional filters via `addFilter()` and functions via `addFunction()`.
+  - `$inlineFilters` — HOW does the name compile? (a `php` codegen
+    template, or nothing)
+  - `$filters`       — IS the name pipeable? (`value |> name`)
+  - `$callables`     — what do we invoke at RUNTIME? (the `$__c_fn` table)
+
+A name is reachable through the pipe operator (`|>`) and/or through call
+syntax `name(...)`; a single name may be both, and the dispatch is chosen by
+SYNTAX, not by runtime type. Whether a name may be piped is a COMPILE-TIME
+decision, so it lives in data (`$filters` + the inline templates) and the
+runtime never re-checks it.
+
+User code registers filters via `addFilter()`, functions via
+`addFunction()`, and compiled filter templates via
+`addInlineFilter()`.
 
 Built-in Filters Catalog
 -------------------------
@@ -26,7 +37,7 @@ Built-in Filters Catalog
 - `slug [$separator='-']`     : Generate URL-friendly slug
 - `striptags [$allowed]`      : Strip HTML/PHP tags
 - `truncate($length [, $ellipsis='…'])`: Truncate string to length
-- `format(...$args)`          : sprintf-style string formatting
+- `sprintf(...$args)`         : sprintf-style string formatting (alias: `format`)
 - `escape` (alias: `esc`)     : HTML-escape (htmlspecialchars) — rarely needed, auto-escaping enabled
 - `raw`                       : Disable auto-escaping for this output (DANGEROUS with user input)
 
@@ -48,7 +59,7 @@ Built-in Filters Catalog
 - `last`                      : Get last element (works on arrays and strings)
 - `keys`                      : Get array keys
 - `values`                    : Get array values
-- `length`                    : Count elements (arrays) or string length (mb_strlen)
+- `length` (alias: `len`)     : Count elements (arrays) or string length (mb_strlen)
 - `slice($start [, $length])` : Extract portion (array_slice / mb_substr)
 - `merge($other)`             : Merge arrays (array_merge)
 - `sort`                      : Return sorted copy
@@ -59,8 +70,10 @@ Built-in Filters Catalog
 **Collection Operations (Lambda Support)**
 - `map(lambda|filterRef)`     : Transform each element
   Usage: `{{ users |> map(u => u.name) }}` or `{{ items |> map("upper") }}`
-- `filter [lambda|filterRef]` : Keep elements matching condition (returns re-indexed array)
+- `filter [lambda|filterRef]` : Keep elements matching condition (returns a new array)
   Usage: `{{ items |> filter(i => i.active) }}`
+  Note: `array_filter` PRESERVES keys — it does not reindex. Follow with
+  `|> values` if you need a list.
 - `reduce(lambda|filterRef [, $initial])`: Reduce to single value
   Usage: `{{ numbers |> reduce(sum, value => sum + value, 0) }}`
   Note: Lambda receives explicit accumulator and current-element parameters
@@ -68,13 +81,12 @@ Built-in Filters Catalog
 **Utility Filters**
 - `json`                      : JSON encode (use with |> raw)
 - `default($fallback)`        : Return fallback if value is empty/falsy
-- `expand [fallback: | optional:]` : Treat the value as a variable NAME and look it up
-  Usage: `{{ name |> expand }}`, `{{ name |> expand(optional: true) ?? 'none' }}`
-  Compiled specially (see Tokenizer::buildExpandCall) so it can see loop locals;
-  absent names throw unless `optional: true` or a fallback is supplied.
 - `url_encode`                : URL-encode value (rawurlencode)
 - `data_uri [$mimeType]`      : Generate base64-encoded data: URI
 - `unicode`                   : Wrap in UnicodeString for advanced operations
+
+Dynamic variable access is spelled `${expr}` / `$$name` in the template
+syntax (see docs); it is not a filter.
 
 Built-in Functions
 ------------------
@@ -110,7 +122,7 @@ Template usage:
 
 ## Public methods
 
-### setDumpHandler() · <small>[🗎](../../src/Engine/Registry.php#L354)</small>
+### setDumpHandler() · <small>[🗎](../../src/Engine/Registry.php#L273)</small>
 
 `public function setDumpHandler(Closure $fn): void`
 
@@ -131,7 +143,7 @@ Called internally — not part of the public engine API.
 
 ---
 
-### setDdHandler() · <small>[🗎](../../src/Engine/Registry.php#L359)</small>
+### setDdHandler() · <small>[🗎](../../src/Engine/Registry.php#L278)</small>
 
 `public function setDdHandler(Closure $fn): void`
 
@@ -148,7 +160,7 @@ Called internally — not part of the public engine API.
 
 ---
 
-### __construct() · <small>[🗎](../../src/Engine/Registry.php#L364)</small>
+### __construct() · <small>[🗎](../../src/Engine/Registry.php#L283)</small>
 
 `public function __construct(callable|null $includeRenderer = null): mixed`
 
@@ -165,11 +177,41 @@ Called internally — not part of the public engine API.
 
 ---
 
-### addFilter() · <small>[🗎](../../src/Engine/Registry.php#L378)</small>
+### hasFilter() · <small>[🗎](../../src/Engine/Registry.php#L650)</small>
+
+`public function hasFilter(string $name): bool`
+
+Check whether a named filter is registered — i.e. may be used with `|>`.
+
+True when the name has a runtime-backed filter declaration in
+`$filters`, or an inline template in `$inlineFilters` (which is
+pipeable by construction). A runtime callable alone is NOT enough:
+`context`, `include`, `dump` and `dd` are call-only builtins whose first
+argument is not a piped value, so they must not become filterable just by
+sharing the callable table.
+
+**Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$name` | string | - |  |
+
+**Return value**
+
+- Type: bool
+
+
+---
+
+### addFilter() · <small>[🗎](../../src/Engine/Registry.php#L666)</small>
 
 `public function addFilter(string $name, callable $fn): static`
 
-Register a user-defined filter.
+Register a callable as a user-defined filter.
+
+The callable receives ($value, ...$args). It is reachable in the filter
+form (`value |> name`); call syntax is not enabled unless the name is also
+registered as a function.
 
 **Parameters**
 
@@ -185,38 +227,23 @@ Register a user-defined filter.
 
 ---
 
-### hasFilter() · <small>[🗎](../../src/Engine/Registry.php#L387)</small>
-
-`public function hasFilter(string $name): bool`
-
-Check whether a named filter is registered.
-
-**Parameters**
-
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `$name` | string | - |  |
-
-**Return value**
-
-- Type: bool
-
-
----
-
-### addInlineFilter() · <small>[🗎](../../src/Engine/Registry.php#L406)</small>
+### addInlineFilter() · <small>[🗎](../../src/Engine/Registry.php#L691)</small>
 
 `public function addInlineFilter(string $name, array $definition): void`
 
 Register an additional inline filter that is compiled directly into the
 generated PHP (zero runtime call overhead).
 
-The definition must follow the same structure as the built-in entries:
-'php'      – PHP expression template with {1} for the piped value and
-             {2}, {3}, … for each additional parameter.
-'params'   – (optional) ordered list of parameter names.
-'defaults' – (optional) map of paramName → PHP default expression.
-'variadic' – (optional) true for variadic filters like 'format'.
+The definition must follow the same structure as the built-in records:
+  'php'        – PHP expression template with {1} for the piped value and
+                 {2}, {3}, … for each additional parameter.
+  'params'     – (optional) ordered list of parameter names.
+  'defaults'   – (optional) map of paramName → PHP default expression.
+  'variadic'   – (optional) true for variadic filters like 'sprintf'.
+  'valueParam' – (optional) parameter that receives the piped value.
+
+Registering an inline template makes the name BOTH pipeable and callable
+(the same template backs both forms), so nothing else has to be declared.
 
 **Parameters**
 
@@ -232,11 +259,11 @@ The definition must follow the same structure as the built-in entries:
 
 ---
 
-### hasInlineFilter() · <small>[🗎](../../src/Engine/Registry.php#L415)</small>
+### hasInlineFilter() · <small>[🗎](../../src/Engine/Registry.php#L699)</small>
 
 `public function hasInlineFilter(string $name): bool`
 
-Check whether a named inline filter is registered.
+Check whether a named inline (compile-time) filter is registered.
 
 **Parameters**
 
@@ -251,11 +278,14 @@ Check whether a named inline filter is registered.
 
 ---
 
-### getInlineFilter() · <small>[🗎](../../src/Engine/Registry.php#L423)</small>
+### getInlineFilter() · <small>[🗎](../../src/Engine/Registry.php#L710)</small>
 
 `public function getInlineFilter(string $name): array|null`
 
-Get the definition of a named inline filter.
+Get the compile-time definition of a named inline filter.
+
+Only `php`-templated names are returned; a purely callable filter has no
+codegen template and yields null.
 
 **Parameters**
 
@@ -270,14 +300,17 @@ Get the definition of a named inline filter.
 
 ---
 
-### registerInlineFilter() · <small>[🗎](../../src/Engine/Registry.php#L434)</small>
+### registerFilter() · <small>[🗎](../../src/Engine/Registry.php#L734)</small>
 
-`public function registerInlineFilter(string $name): void`
+`public function registerFilter(string $name): void`
 
-Mark a filter name as a known inline filter (compiled to a PHP expression;
-no callable is stored or invoked at runtime).  Modules that register
-inline filters via Tokenizer::addInlineFilter() call this so that
-hasFilter() returns true for the new name.
+Mark an existing name as pipeable (`value |> name`) without an inline
+template.
+
+For names that are dispatched at runtime — a module that registered a
+callable by some other seam, or an app that wants a function to be usable
+in the pipe. Call syntax is unaffected: it follows from
+`$callables`, not from this declaration.
 
 **Parameters**
 
@@ -292,7 +325,7 @@ hasFilter() returns true for the new name.
 
 ---
 
-### addService() · <small>[🗎](../../src/Engine/Registry.php#L449)</small>
+### addService() · <small>[🗎](../../src/Engine/Registry.php#L749)</small>
 
 `public function addService(string $name, mixed $service): static`
 
@@ -316,7 +349,7 @@ real filter names (e.g. `__locale`, `__translator`).
 
 ---
 
-### hasService() · <small>[🗎](../../src/Engine/Registry.php#L458)</small>
+### hasService() · <small>[🗎](../../src/Engine/Registry.php#L758)</small>
 
 `public function hasService(string $name): bool`
 
@@ -335,7 +368,7 @@ Check whether a named service is registered.
 
 ---
 
-### getService() · <small>[🗎](../../src/Engine/Registry.php#L468)</small>
+### getService() · <small>[🗎](../../src/Engine/Registry.php#L768)</small>
 
 `public function getService(string $name): mixed`
 
@@ -358,7 +391,7 @@ Retrieve a named service.
 
 ---
 
-### allServices() · <small>[🗎](../../src/Engine/Registry.php#L484)</small>
+### allServices() · <small>[🗎](../../src/Engine/Registry.php#L784)</small>
 
 `public function allServices(): array`
 
@@ -374,14 +407,28 @@ The returned array includes callable filters, inline-filter markers
 
 ---
 
-### allFilters() · <small>[🗎](../../src/Engine/Registry.php#L497)</small>
+### allCallables() · <small>[🗎](../../src/Engine/Registry.php#L811)</small>
 
-`public function allFilters(): array`
+`public function allCallables(): array`
 
-Get all registered filters as a name → callable/value map.
+Get every registered callable as a name → callable map.
 
-The returned array includes callable filters, inline-filter markers
-(value `true`), and services registered via `addService()`.
+This is the ONE runtime table: compiled templates receive it as
+`$__c_fn` and dispatch BOTH the pipe form and the call form through it
+(`$__c_fn['slug'](…)`). There is no runtime filter table, because whether
+a name may be piped is a *compile-time* decision (`$filters` +
+`$inlineFilters`) enforced by the compiler — the runtime does not
+need to re-check it.
+
+Every registration that must be dispatched at runtime is present
+regardless of filterability, so `context`, `include`, `dump` and `dd`
+(call-only) and `json` (both forms) are all included. There is no
+filtering or rebuilding step: `$callables` IS the table, so this
+returns it directly and costs nothing.
+
+The array is handed to templates as-is, so callers must treat it as
+read-only. A write would trigger copy-on-write and leave the registry
+untouched, so it cannot be corrupted from a template.
 
 **Return value**
 
@@ -390,11 +437,14 @@ The returned array includes callable filters, inline-filter markers
 
 ---
 
-### addFunction() · <small>[🗎](../../src/Engine/Registry.php#L509)</small>
+### addFunction() · <small>[🗎](../../src/Engine/Registry.php#L826)</small>
 
 `public function addFunction(string $name, callable $fn): static`
 
 Register a user-defined function.
+
+The callable receives any positional arguments. The name becomes callable
+in templates via `name(...)`.
 
 **Parameters**
 
@@ -410,11 +460,14 @@ Register a user-defined function.
 
 ---
 
-### hasFunction() · <small>[🗎](../../src/Engine/Registry.php#L518)</small>
+### hasFunction() · <small>[🗎](../../src/Engine/Registry.php#L838)</small>
 
 `public function hasFunction(string $name): bool`
 
-Check whether a named function is registered.
+Check whether a named function (call syntax) is registered.
+
+Any name with something to call — a runtime callable, or an inline `php`
+template (which compiles to the call itself) — is callable.
 
 **Parameters**
 
@@ -429,20 +482,46 @@ Check whether a named function is registered.
 
 ---
 
-### allFunctions() · <small>[🗎](../../src/Engine/Registry.php#L528)</small>
+### hasCallable() · <small>[🗎](../../src/Engine/Registry.php#L846)</small>
 
-`public function allFunctions(): array`
+`public function hasCallable(string $name): bool`
 
-Get all registered functions as a name → callable map.
+Check whether a name can be invoked under call syntax `name(...)`.
+
+**Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$name` | string | - |  |
 
 **Return value**
 
-- Type: array
+- Type: bool
 
 
 ---
 
-### addDirective() · <small>[🗎](../../src/Engine/Registry.php#L749)</small>
+### getCallable() · <small>[🗎](../../src/Engine/Registry.php#L855)</small>
+
+`public function getCallable(string $name): callable|null`
+
+Resolve the PHP callable for a name at call sites, or null when the name
+is inline-only (the caller then derives the call inline from `php`).
+
+**Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$name` | string | - |  |
+
+**Return value**
+
+- Type: callable|null
+
+
+---
+
+### addDirective() · <small>[🗎](../../src/Engine/Registry.php#L888)</small>
 
 `public function addDirective(string $keyword, callable $handler): static`
 
@@ -484,7 +563,7 @@ $engine->addDirective('endwith_locale', fn(...) => "\$__c_sv['locale']->pop();")
 
 ---
 
-### hasDirective() · <small>[🗎](../../src/Engine/Registry.php#L758)</small>
+### hasDirective() · <small>[🗎](../../src/Engine/Registry.php#L897)</small>
 
 `public function hasDirective(string $keyword): bool`
 
@@ -503,7 +582,7 @@ Check whether a handler is registered for the given keyword.
 
 ---
 
-### compileDirective() · <small>[🗎](../../src/Engine/Registry.php#L775)</small>
+### compileDirective() · <small>[🗎](../../src/Engine/Registry.php#L914)</small>
 
 `public function compileDirective(string $keyword, string $rest, string $sourcePath, int $tplLine, callable $processExpr, Clarity\Engine\Compiler $compiler): string`
 

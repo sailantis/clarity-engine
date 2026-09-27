@@ -44,8 +44,9 @@ Deep dives into specialized features:
 **For PHP Developers Integrating Clarity:**
 
 1. Getting Started (setup & configuration)
-2. Advanced Topics (caching, namespaces, error handling)
-3. API Documentation for method references
+2. PHP Integration (modes, registration, raw PHP, variables)
+3. Advanced Topics (caching, namespaces, error handling)
+4. API Documentation for method references
 
 ## Contributing
 

@@ -21,7 +21,7 @@ Each compiled template becomes exactly one PHP class:
   class __Clarity_<slug>_<hash> {
       public static array $dependencies = ['name' => revision, ...];
       public static string $sourceMap   = 'lineDelta,fileIdx,tplDelta;...';
-      public function __construct(private array $__c_fl, private array $__c_fn, private array $__c_sv) }
+      public function __construct(private array $__c_fn, private array $__c_sv) }
       public function render(array $__c_va): string { ... }
   }
 
@@ -64,12 +64,12 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ## Public Constants
 
-- **COMPILER_VERSION** = `11`
+- **COMPILER_VERSION** = `17`
 - **INTERNAL_PREFIX** = `'__c_'`
 
 ## Public methods
 
-### __construct() · <small>[🗎](../../src/Engine/Compiler.php#L230)</small>
+### __construct() · <small>[🗎](../../src/Engine/Compiler.php#L250)</small>
 
 `public function __construct(): mixed`
 
@@ -80,7 +80,7 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ---
 
-### setRegistry() · <small>[🗎](../../src/Engine/Compiler.php#L235)</small>
+### setRegistry() · <small>[🗎](../../src/Engine/Compiler.php#L255)</small>
 
 `public function setRegistry(Clarity\Engine\Registry $registry): static`
 
@@ -97,7 +97,7 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ---
 
-### setExtension() · <small>[🗎](../../src/Engine/Compiler.php#L246)</small>
+### setExtension() · <small>[🗎](../../src/Engine/Compiler.php#L266)</small>
 
 `public function setExtension(string $extension): static`
 
@@ -114,7 +114,7 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ---
 
-### setDebugMode() · <small>[🗎](../../src/Engine/Compiler.php#L252)</small>
+### setDebugMode() · <small>[🗎](../../src/Engine/Compiler.php#L272)</small>
 
 `public function setDebugMode(bool $debug): static`
 
@@ -131,7 +131,7 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ---
 
-### setSandboxMode() · <small>[🗎](../../src/Engine/Compiler.php#L274)</small>
+### setSandboxMode() · <small>[🗎](../../src/Engine/Compiler.php#L294)</small>
 
 `public function setSandboxMode(bool $sandboxed): static`
 
@@ -152,7 +152,7 @@ only to the application's own guardrails (empty by default).
 
 ---
 
-### isSandboxed() · <small>[🗎](../../src/Engine/Compiler.php#L280)</small>
+### isSandboxed() · <small>[🗎](../../src/Engine/Compiler.php#L300)</small>
 
 `public function isSandboxed(): bool`
 
@@ -163,7 +163,7 @@ only to the application's own guardrails (empty by default).
 
 ---
 
-### setDeniedFunctions() · <small>[🗎](../../src/Engine/Compiler.php#L291)</small>
+### setDeniedFunctions() · <small>[🗎](../../src/Engine/Compiler.php#L311)</small>
 
 `public function setDeniedFunctions(array $names): static`
 
@@ -183,7 +183,7 @@ mode is full PHP access; set names only for application-chosen limits.
 
 ---
 
-### compile() · <small>[🗎](../../src/Engine/Compiler.php#L309)</small>
+### compile() · <small>[🗎](../../src/Engine/Compiler.php#L329)</small>
 
 `public function compile(string $templateName, Clarity\Template\TemplateLoader $loader): Clarity\Engine\CompiledTemplate`
 
@@ -207,7 +207,7 @@ Compile a template and return a CompiledTemplate value object.
 
 ---
 
-### registerVar() · <small>[🗎](../../src/Engine/Compiler.php#L460)</small>
+### registerVar() · <small>[🗎](../../src/Engine/Compiler.php#L480)</small>
 
 `public function registerVar(string $name, int|null $tplLine = null): mixed`
 
@@ -227,7 +227,7 @@ Register a local variable in the compile-time context.
 
 ---
 
-### unregisterVar() · <small>[🗎](../../src/Engine/Compiler.php#L493)</small>
+### unregisterVar() · <small>[🗎](../../src/Engine/Compiler.php#L513)</small>
 
 `public function unregisterVar(string $name): mixed`
 
@@ -246,7 +246,7 @@ Unregister a local variable from the compile-time context.
 
 ---
 
-### getVars() · <small>[🗎](../../src/Engine/Compiler.php#L504)</small>
+### getVars() · <small>[🗎](../../src/Engine/Compiler.php#L524)</small>
 
 `public function getVars(): array`
 

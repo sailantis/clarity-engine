@@ -779,9 +779,11 @@ The following are **rejected at compile time** (template won't compile):
 
 ### Runtime Sandboxing
 
-**Objects are converted to arrays:**
+**Objects stay objects.**
 
-When you pass objects to `render()`, Clarity automatically converts them to arrays:
+The scope passed to `render()` is handed to the template **unchanged** — there
+is no eager object → array conversion. The access operator decides what is read,
+and PHP's own visibility rules apply:
 
 ```php
 class User {
@@ -800,76 +802,57 @@ $engine->render('page', ['user' => $user]);
 **In template:**
 
 ```twig
-{{ user:name }} {# Works: public properties exposed #}
-{{ user:password }} {# NULL: private properties hidden #}
-{{ user:getName() }} {# COMPILE ERROR: method calls not allowed #}
+{{ user.name }}       {# 'John' — real property read #}
+{{ user:name }}       {# ERROR: a key read on an object #}
+{{ user:getName() }}  {# COMPILE ERROR: method calls not allowed #}
 ```
 
-Object → array is the **general rule**: the array is the object's _public_
-properties, so visibility is enforced by PHP itself and is never widened by
-anything a class chooses to implement.
+`a.b` is an **object property read** (`->b`); `a:b` is an **array key read**
+(`['b']`). A public property is a property, not a container entry, so
+`{{ user:name }}` does **not** see it — use `{{ user.name }}`. Visibility is
+enforced by PHP itself, so private/protected state is never exposed.
 
-**Custom serialization:**
+**Containers read public properties — not `toArray()`.**
 
-Implement `toArray()` — or `JsonSerializable` if the class already needs it:
+The old object → array conversion is gone, and with it the `toArray()` /
+`JsonSerializable` access path. **Container** operations — `{% for %}`, `keys`,
+`values`, `length`, `first`, `last` — read an object's **public properties**:
 
 ```php
 class User {
-    private $name;
-    private $email;
-
-    public function toArray(): array {
-        return [
-            'name' => $this->name,
-            'email' => $this->email,
-        ];
-    }
+    public string $name = 'Jane';
+    private string $secret = 'hidden';
 }
 ```
 
-```php
-class User implements JsonSerializable {
-    private $name;
-    private $email;
-
-    public function jsonSerialize(): array {
-        return [
-            'name' => $this->name,
-            'email' => $this->email,
-        ];
-    }
-}
+```twig
+{% for key, value in user %}[{{ key }}={{ value }}]{% endfor %}
+{# [name=Jane] — private state never leaks #}
 ```
 
-`toArray()` is checked first, so a class implementing both uses `toArray()`.
-Prefer `toArray()`: its `: array` return type is enforced, whereas
-`jsonSerialize(): mixed` may return a scalar, in which case the template
-receives that scalar rather than an array.
+`Traversable` objects are iterated instead. `toArray()` and `JsonSerializable`
+are **not** consulted on the access path; a value object with no public
+properties that implements `Stringable` keeps its string form, which is why
+`length` of a `Money` object counts the characters of its `__toString()`.
 
-**Recognition order** for a value passed to `render()` (checked in this order,
-each recursing afterwards so nested objects are converted too):
+**Value handling** for a value passed to `render()`:
 
-| Value                                                         | Becomes                                               |
-| ------------------------------------------------------------- | ----------------------------------------------------- |
-| `DateTimeInterface`                                           | ISO-8601 string, e.g. `2026-09-21T12:00:00+02:00`     |
-| object with a public `toArray()`                              | the returned array                                    |
-| `JsonSerializable`                                            | the result of `jsonSerialize()`                       |
-| `Traversable`                                                 | array of its iterations                               |
-| any other object                                              | array of its **public** properties (the general rule) |
-| …an object with **no** public properties that is `Stringable` | its `__toString()` value                              |
-| scalar / `null`                                               | passed through                                        |
+| Value                                                     | Behaviour                                                     |
+| --------------------------------------------------------- | ------------------------------------------------------------- |
+| `DateTimeInterface`                                       | Kept as an object; the `date` filter accepts it directly      |
+| object with public properties                             | Read as properties (`a.b`); iterated by its public properties |
+| `Traversable`                                             | Iterated for container operations                             |
+| object with **no** public properties that is `Stringable` | Output via its `__toString()` value                           |
+| scalar / `null`                                           | passed through                                                |
 
 Two consequences worth knowing:
 
-- **`DateTime` works directly.** It becomes an ISO-8601 string, so
-  `{{ order:createdAt |> date("Y-m-d") }}` renders correctly. Previously a
-  `DateTime` object converted to `[]` and the filter printed `1970-01-01`.
-- **`__toString()` is a last resort.** It is only consulted when an object
-  exposes no public properties, so a value object such as `Money` (all state
-  private) renders as `12.34`, while an object that _does_ have public
-  properties keeps them instead of being replaced by its string form.
-
-````
+- **`DateTime` works directly.** It is kept as an object and accepted by the
+  `date` filter, so `{{ order.createdAt |> date("Y-m-d") }}` renders correctly.
+- **`__toString()` is a fallback.** It is only used when an object exposes no
+  public properties, so a value object such as `Money` (all state private)
+  renders as `12.34`, while an object that _does_ have public properties keeps
+  them instead of being replaced by its string form.
 
 ### Lambda Security
 
@@ -884,7 +867,7 @@ Lambdas in `map`, `filter`, `reduce` only accept:
 {# Cannot pass callable via variable #}
 {% set callback = someCallable %}
 {{ items |> map(callback) }} {# ERROR #}
-````
+```
 
 **Allowed:**
 
@@ -917,16 +900,16 @@ $engine->setSandboxMode(false);
 
 With the sandbox off:
 
-| Capability                     | Sandboxed | Open mode |
-| ------------------------------ | --------- | --------- |
-| Registered filters/functions   | ✅        | ✅        |
-| Arbitrary PHP function calls   | ❌        | ✅        |
-| Any PHP function as a filter   | ❌        | ✅        |
-| Method calls (`$obj->m()`)     | ❌        | ✅        |
-| `{% php %}` blocks             | ❌        | ✅        |
-| `{% php CODE %}` directives    | ❌        | ✅        |
-| Auto-escaping                  | ✅        | ✅        |
-| Strict variable access         | ✅        | ✅        |
+| Capability                   | Sandboxed | Open mode |
+| ---------------------------- | --------- | --------- |
+| Registered filters/functions | ✅        | ✅        |
+| Arbitrary PHP function calls | ❌        | ✅        |
+| Any PHP function as a filter | ❌        | ✅        |
+| Method calls (`$obj->m()`)   | ❌        | ✅        |
+| `{% php %}` blocks           | ❌        | ✅        |
+| `{% php CODE %}` directives  | ❌        | ✅        |
+| Auto-escaping                | ✅        | ✅        |
+| Strict variable access       | ✅        | ✅        |
 
 **This is equivalent to executing arbitrary PHP.** Open mode disables every
 compile-time restriction listed above; only the `$$name` ban remains. Use it
@@ -1322,7 +1305,7 @@ because a directive's close handler never runs when the block throws.
 ### The `__c_` prefix
 
 Every PHP variable the engine binds into the render frame carries the `__c_`
-prefix (`c` for Clarity): `$__c_fl`, `$__c_fn`, `$__c_sv`, `$__c_va`,
+prefix (`c` for Clarity): `$__c_fn`, `$__c_sv`, `$__c_va`,
 `$__c_ob_level`, `$__c_e`, and the `$__c_tmp` / `$__c_val` temporaries that
 inlined filters and callable-filter lambdas assign.
 
@@ -1333,9 +1316,9 @@ silently collide with a template variable.
 
 Template authors cannot bind a `__c_`-prefixed name (the compiler rejects it in
 both modes), because doing so would swap an internal for the rest of the render
-— binding `__c_fl` would break every filter after that line. Every other name
-starting with underscores — `__foo`, `_c_foo`, `___foo` — is an ordinary
-template variable.
+— binding `__c_fn` would break every filter and call after that line. Every
+other name starting with underscores — `__foo`, `_c_foo`, `___foo` — is an
+ordinary template variable.
 
 ## Services
 

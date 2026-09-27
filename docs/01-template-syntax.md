@@ -250,36 +250,31 @@ Inside a loop, `loop` is an object with the current iteration's metadata:
 {% endfor %}
 ```
 
-#### `expand`
+#### `${expr}` — dynamic variable access
 
-`|> expand` treats the arriving value as a variable NAME and looks it up in the
-render scope. Because the value is what is expanded, it composes anywhere in a
-pipeline:
+`${expr}` reads the variable whose **name** is produced by an expression — the
+dynamic spelling of an ordinary variable access. `$$name` is the same construct
+(shorthand for `${name}`).
 
 ```twig
-{{ name |> expand }}                           {# value of {{ name }} is a variable name #}
-{{ key |> rot13 |> expand }}                   {# expand the TRANSFORMED value #}
-{{ name |> expand(optional: true) ?? 'none' }} {# optional: absent name yields null #}
-{{ name |> expand(fallback: 'none') }}         {# eager fallback for an absent name #}
+{{ ${which} }}                {# the value of the variable named by {{ which }} #}
+{{ $$which }}                 {# identical shorthand #}
+{{ ${ 'a' ~ 'b' } }}          {# the name may be computed #}
+{{ ${ref} ?? 'none' }}        {# absent name: fall back, like {{ name ?? 'x' }} #}
+{{ ${which}.title }}          {# chained access applies to the looked-up value #}
 ```
 
-Absent names throw by default, consistent with every other access. Pass
-`optional: true` to make an absent name yield `null` instead, so a following
-`??` (or `|> default(...)`) supplies the value. `optional` must be a literal
-`true`/`false`, because which branch is emitted is decided at compile time.
+`${expr}` follows the same variable model as every other access, so it agrees
+with `{{ name }}` about where a variable lives: it reads the render scope (and
+loop locals) in both sandbox and open mode. Absent names throw by default; write
+`?? fallback` to supply a value instead, exactly as for a literal name.
 
-`fallback:` (or a single positional argument) is the eager alternative: it
-decides the value directly and needs no `??`. Both spellings are the author's
-opt-out from the strict contract.
+Because the name is an expression, the lookup can reach neither a superglobal
+nor an engine internal — a name such as `_SERVER` or `__c_fn` is simply not in
+the scope, so it behaves as an absent variable.
 
-`expand` follows the same variable model as every other access, which means it
-agrees with `{{ name }}` about where a variable lives: in sandbox mode it reads
-the variables array, and in open mode it reads the local the scope was seeded
-with.
-
-> `??` suppresses a `null` RETURN only — it cannot catch the strict throw, so
-> `{{ x |> expand ?? 'none' }}` still errors when the name is absent. Write
-> `expand(optional: true) ?? 'none'` or `expand('none')`.
+> Inside a string literal the `$` is literal text: `{{ "${which}" }}` renders
+> `${which}`, not a lookup.
 
 #### Iteration and container filters
 
@@ -299,7 +294,10 @@ including variable-variable expansion `$$name`). Open mode lifts all three — s
 Disabling the sandbox (`$engine->setSandboxMode(false)`) turns off the function
 allow-list and the method-call restriction, giving templates the full power of
 PHP. Everything below still resolves **registered** filters and functions first;
-open mode only changes what happens when a name is *not* registered.
+open mode only changes what happens when a name is _not_ registered.
+
+> See [PHP Integration](08-php-integration.md) for the PHP-developer view of the
+> two modes ("sandbox mode" vs. "PHP mode"), registration, and variable access.
 
 ### PHP functions as calls
 
@@ -338,7 +336,7 @@ mode), so they stay greppable in a trusted template:
 {{ $user->{$method}() }}         {# dynamic method name #}
 ```
 
-A call on the *root* value (`$fn()`) is still rejected: a variable-driven
+A call on the _root_ value (`$fn()`) is still rejected: a variable-driven
 callable is the function-level equivalent of variable-variable expansion.
 
 ### Raw PHP blocks
@@ -957,8 +955,12 @@ Direct PHP variables:
 Arbitrary PHP function calls:
 
 ```twig
-{{ strtoupper(name) }} {# ERROR #}
+{{ strtoupper(name) }} {# ERROR — strtoupper is not registered #}
 ```
+
+Calling a **registered** name is allowed in both modes: every filter can also be
+called (`{{ trim(name) }}`, `{{ round(n, 2) }}`). See
+[Filters and Functions → One call model](02-filters-and-functions.md#one-call-model-two-signatures).
 
 Method calls on objects:
 
@@ -978,14 +980,15 @@ PHP statements or semicolons:
 {{ $x = 5; }} {# ERROR #}
 ```
 
-Variable-variable expansion (`$$name`) is rejected while the sandbox is
-enabled. In **open mode** it is allowed, because a dynamic dereference is an
-ordinary local lookup — strictly weaker than the literal `$_SERVER` spelling
-open mode already permits:
+Dynamic variable access (`${expr}` / `$$name`) reads the variable whose NAME is
+an expression, in both sandbox and open mode. The lookup resolves against the
+render scope and loop locals, so it can reach neither a superglobal nor an engine
+internal:
 
 ```twig
-{{ $$name }}             {# ERROR while sandboxed; open mode reads the local $x #}
-{{ which |> expand }} {# CORRECT: look a name up indirectly, in both modes #}
+{{ $$name }}          {# reads the variable named by {{ name }}, in both modes #}
+{{ ${which} }}        {# the same construct, spelled with braces #}
+{{ ${ref} ?? 'none' }}{# absent name: fall back instead of throwing #}
 ```
 
 Instead, use `{% set %}`:

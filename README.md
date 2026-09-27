@@ -52,7 +52,7 @@ $engine = new ClarityEngine([
 // Render a template
 echo $engine->render('welcome', [
     'title' => 'Welcome to Clarity',
-    'user' => ['name' => 'Developer']
+    'user' => ['name' => 'Developer'],
 ]);
 ```
 
@@ -93,6 +93,7 @@ Start here if you're writing templates:
 Integration and advanced topics:
 
 - **[Advanced Topics](docs/04-advanced-topics.md)** – Namespaces, caching, auto-escaping, and Unicode
+- **[PHP Integration](docs/08-php-integration.md)** – Sandbox mode vs. PHP mode, registering filters/functions, raw PHP, and variable access
 - **[Best Practices](docs/05-best-practices.md)** – Organization, security, performance, and testing
 - **[Troubleshooting](docs/06-troubleshooting.md)** – Common errors and debugging techniques
 
@@ -110,9 +111,11 @@ Integration and advanced topics:
 {{ expression }}                 {# Output with auto-escaping #}
 {{ expression | raw }}           {# Output raw HTML (no escaping) #}
 {{ expression |> raw }}          {# Same — both | and |> are filter pipes #}
-{{ user:name }}                  {# Array key (static) #}
-{{ user.name }}                  {# Object property (static) #}
+{{ user:name }}                  {# Array key #}
+{{ user.name }}                  {# Object property #}
 {{ items[0] }}                   {# Array index #}
+{{ user[var] }}                  {# Dynamic array key #}
+{{ user{var} }}                  {# Dynamic property #}
 {{ firstName ~ ' ' ~ lastName }} {# String concatenation #}
 ```
 
@@ -258,12 +261,12 @@ Clarity is sandboxed by default:
 - **No arbitrary PHP execution** – Templates cannot call PHP functions or access global state
 - **Auto-escaping by default** – All output is HTML-escaped to prevent XSS attacks
 - **Compile-time validation** – Syntax errors caught during compilation, not at runtime
-- **Object safety** – Objects are converted to their public properties, preventing method calls from templates (`DateTimeInterface` becomes an ISO-8601 string; `toArray()` / `JsonSerializable` can supply a custom array)
+- **Object safety** – Objects stay objects: `a.b` reads a public property and `a:b` reads an array key, so method calls are unreachable from templates and PHP visibility rules apply. Container operations read an object's public properties, and the `date` filter accepts `DateTimeInterface` directly
 - **Controlled lambdas** – Lambda expressions can only use registered filters
 
-### Open Mode
+### PHP Mode
 
-The sandbox can be disabled deliberately, granting templates the full power of
+The sandbox can be disabled deliberately ("PHP mode"), granting templates the full power of
 PHP (any function call or filter, `$obj->method()`, and raw PHP through either
 `{% php %}…{% endphp %}` or the standalone `{% php CODE %}` form):
 
@@ -271,11 +274,10 @@ PHP (any function call or filter, `$obj->method()`, and raw PHP through either
 $engine->setSandboxMode(false);
 ```
 
-Open mode is intended for templates written by trusted authors. It is
+PHP mode is intended for templates written by trusted authors. It is
 **equivalent to executing arbitrary PHP** and disables every guarantee listed
 above. Templates record which mode compiled them and are recompiled
-automatically when the setting changes. Nothing is blocked by default — open
-mode is the security decision; if you want extra guardrails, add them with
+automatically when the setting changes. Nothing is blocked by default — PHP mode is the security decision; if you want extra guardrails, add them with
 `setDeniedFunctions([...])`.
 
 **[Security best practices →](docs/05-best-practices.md#security)**
