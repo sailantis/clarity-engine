@@ -2,6 +2,53 @@
 
 Filters transform values in templates, while functions perform operations and return results. This guide covers all built-in filters and functions, lambda expressions, and creating custom filters.
 
+## One call model, two signatures
+
+Filters and functions are **one namespace**: every registered name can be used
+as a **filter** (piped) _or_ as a **function** (called). Which signature applies
+is chosen by **syntax**, not by the name:
+
+```twig
+{{ items | join(', ') }}     {# filter form — the piped value is the subject #}
+{{ join(', ', items) }}      {# function form — arguments in call order        #}
+```
+
+For most names the two forms are identical in effect, because the piped value
+simply becomes the first argument:
+
+```twig
+{{ name | trim }}            ==  {{ trim(name) }}
+{{ price | number(2) }}      ==  {{ number(price, 2) }}
+{{ 3.14159 | round(2) }}     ==  {{ round(3.14159, 2) }}
+```
+
+Two names have a **different argument order** in the two forms, because their
+function form mirrors the underlying **PHP builtin** rather than the pipe:
+
+| Name   | Filter form (value piped) | Function form (call order) | Mirrors                |
+| ------ | ------------------------- | -------------------------- | ---------------------- |
+| `date` | `ts \|> date('Y-m-d')`    | `date('Y-m-d', ts)`        | `date($format, $ts)`   |
+| `join` | `items \|> join(', ')`    | `join(', ', items)`        | `implode($glue, $arr)` |
+
+For these two, the function form places the _value_ where PHP places its
+subject — the second argument. `join(items)` therefore fails loudly (there is no
+`array` to join), which is deliberate; write `join(', ', items)`.
+
+### Shadowing
+
+A registered name **wins over a same-named PHP builtin in both modes**. In open
+mode `{{ trim(x) }}` compiles to Clarity's `trim` filter, not to `\trim()`.
+Unregistered names still reach PHP directly in open mode (`{{ substr(s, 1, 3) }}`).
+
+The notable case is `sort`/`shuffle`: PHP's `\sort` sorts in place and returns a
+bool, neither of which is usable in a template. Clarity's `sort` returns the
+sorted **copy**, for both syntaxes:
+
+```twig
+{% set sorted = items | sort %}
+{{ sort(items) | join(', ') }}
+```
+
 ## Filter Pipeline
 
 Filters transform a value before output. Both `|` and `|>` work as the filter pipe — they are completely interchangeable:
@@ -35,6 +82,27 @@ Chain multiple filters together—each filter receives the output of the previou
 {{ value | filterName }}              {# No arguments #}
 {{ value | filterName(arg1) }}        {# One argument #}
 {{ value | filterName(arg1, arg2) }}  {# Multiple arguments #}
+```
+
+### Call Syntax
+
+Any filterable name may also be called with parentheses — the piped value
+becomes the first argument (or its declared `valueParam`, see above):
+
+```twig
+{{ trim(value) }}                       {# == value |> trim #}
+{{ number(value, 2) }}                  {# == value |> number(2) #}
+{{ replace(value, 'a', 'b') }}          {# == value |> replace('a', 'b') #}
+{{ map(items, x => x:name) }}           {# == items |> map(x => x:name) #}
+{{ date('Y-m-d', timestamp) }}          {# date form takes the format first #}
+{{ join(', ', items) }}                 {# join form takes the glue first #}
+```
+
+Named arguments work in both forms:
+
+```twig
+{{ value |> number(decimals: 1) }}
+{{ number(value, decimals: 1) }}
 ```
 
 ## Built-in Filters
@@ -147,6 +215,13 @@ Join array elements into string:
 {{ tags |> map(t => t:name) |> join(', ') }}
 ```
 
+As a function the glue comes first (mirroring PHP `implode`):
+
+```twig
+{{ join(', ', tags) }}        {# == tags |> join(', ') #}
+{{ join(', ', map(tags, t => t:name)) }}
+```
+
 #### truncate(length, ellipsis?)
 
 Truncate string to specified length:
@@ -158,11 +233,21 @@ Truncate string to specified length:
 
 #### sprintf(...args)
 
-`sprintf`-style string formatting:
+`sprintf`-style string formatting. The value being formatted leads the
+arguments (it is the format string):
 
 ```twig
 {{ "Hello, %s! You have %d messages." |> sprintf(userName, messageCount) }}
 {{ "Price: %.2f" |> sprintf(price) }}
+```
+
+**`format` is an alias.** Twig spells this filter `format` and also takes the
+value first, so the two names are interchangeable — use whichever your team
+prefers:
+
+```twig
+{{ "Hello, %s!" |> format(name) }}     {# Twig spelling #}
+{{ "Hello, %s!" |> sprintf(name) }}    {# PHP spelling  #}
 ```
 
 ### Number Filters
@@ -203,6 +288,13 @@ Format timestamps or date strings:
 {{ timestamp |> date('Y-m-d') }} {# Output: "2026-03-08" #}
 {{ timestamp |> date('d.m.Y H:i:s') }} {# Output: "08.03.2026 14:30:00" #}
 {{ "2026-01-15" |> date('F j, Y') }} {# Output: "January 15, 2026" #}
+```
+
+As a function the format comes first (mirroring PHP `date`):
+
+```twig
+{{ date('Y-m-d', timestamp) }}   {# == timestamp |> date('Y-m-d') #}
+{{ date('Y-m-d') }}              {# no value → defaults to now #}
 ```
 
 Common format patterns:
@@ -322,6 +414,13 @@ Transform each element (see [Lambda Expressions](#lambda-expressions)):
 {{ tags |> map("upper") |> join(', ') }} {# Using filter reference #}
 ```
 
+**Keys are preserved.** Mapping over an associative array keeps the original
+keys; it does not flatten the array into a list.
+
+```twig
+{{ {a: 'x', b: 'y'} |> map("upper") |> json }}   {# {"a":"X","b":"Y"} #}
+```
+
 #### filter(callable?)
 
 Filter elements (see [Lambda Expressions](#lambda-expressions)):
@@ -332,6 +431,19 @@ Filter elements (see [Lambda Expressions](#lambda-expressions)):
 {# Without callable: remove falsy values #}
 {{ [0, 1, false, 2, '', 3] |> filter |> join(', ') }} {# Output: "1, 2, 3" #}
 ```
+
+**Keys are preserved, and the array is NOT re-indexed.** Values that fail the
+predicate are removed; the surviving elements keep their original keys. Follow
+with `|> values` when you want a zero-based list:
+
+```twig
+{{ {a: 'x', b: '', c: 'yy'} |> filter("length") |> json }}          {# {"a":"x","c":"yy"} #}
+{{ {a: 'x', b: '', c: 'yy'} |> filter("length") |> values |> json }} {# ["x","yy"]         #}
+```
+
+The callable is a **predicate**: its return value is tested for truthiness and
+the ORIGINAL element passes through — the element is not replaced by the
+predicate's result. `|> map` is the transforming counterpart.
 
 #### reduce(callable, initial?)
 
@@ -351,8 +463,12 @@ Count array elements or string length:
 ```twig
 {{ items:length }} {# Property access also works #}
 {{ items |> length }} {# Filter form #}
+{{ length(items) }} {# Call form — same result #}
 {{ "hello" |> length }} {# Output: 5 #}
 ```
+
+`len` is an alias — all four spellings above work with it too, e.g.
+`{{ items |> len }}` and `{{ len(items) }}`.
 
 #### slice(start, length?)
 
@@ -511,9 +627,38 @@ Use registered filter names as callbacks:
 
 > **Security:** Only registered Clarity filters can be referenced. Arbitrary PHP function names are rejected at compile time.
 
+A reference is compiled according to what it names:
+
+| Referenced filter                  | Compiles to                      | Why                                                                                 |
+| ---------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------- |
+| Inline (`upper`, `trim`, `length`) | a closure (`static fn($v) => …`) | inline filters are codegen, so there is nothing in the runtime table to look up     |
+| Callable (`slug`, `currency`)      | `$__c_fn['slug']`                | the filter already _is_ a runtime callable; re-emitting it would duplicate the code |
+
+Both `map` and `filter` accept a reference, but each expects a different kind of
+callable — `map` a transformer, `filter` a **predicate**:
+
+```twig
+{# map: the return value REPLACES each element #}
+{{ tags |> map("upper") |> join(', ') }}          {# ['a','b'] -> 'A, B' #}
+
+{# filter: the return value is TESTED; the original element passes through #}
+{{ items |> filter("length") |> join(', ') }}     {# ['a','','bb'] -> 'a,bb' ('' is falsy) #}
+```
+
+`reduce` requires a **binary** callback (accumulator, then element), which a
+unary inline filter cannot express — so `reduce("upper", …)` is rejected at
+compile time rather than silently returning the initial value. Write the
+two-parameter lambda instead:
+
+```twig
+{{ numbers |> reduce(carry, item => carry + item, 0) }}
+```
+
 ## Built-in Functions
 
-Functions are called directly in expressions.
+Functions are called directly in expressions. Because filters and functions are
+[one namespace](#one-call-model-two-signatures), every filter can also be called
+this way; the names below are simply the ones whose _canonical_ use is a call.
 
 ### context()
 
@@ -588,10 +733,14 @@ Get array values (re-indexed):
 
 ### len(var)
 
-Get the length of an array or string similar to `length` filter:
+An alias of [`length`](#length) — identical behavior, provided because `len`
+reads naturally as a call. Both names work in **both** syntaxes:
 
 ```twig
-{{ len(data) }}
+{{ len(data) }}          {# function form              #}
+{{ data |> len }}        {# filter form (same result)   #}
+{{ length(data) }}       {# the canonical name…         #}
+{{ data |> length }}     {# …also in both forms         #}
 ```
 
 ## Custom Filters
@@ -740,6 +889,8 @@ add its own guardrails with `setDeniedFunctions([...])`.
 
 > See [Advanced Topics → Open Mode](04-advanced-topics.md#open-mode) for the
 > security consequences. Open mode is equivalent to executing arbitrary PHP.
+> [PHP Integration](08-php-integration.md) covers registering your own filters
+> and functions, both modes, and raw PHP.
 
 ## Filter Reference Quick Table
 
@@ -756,6 +907,7 @@ add its own guardrails with `setDeniedFunctions([...])`.
 | `slug`             | URL-friendly slug      | `{{ title \|> slug }}`                                   |
 | `truncate(len)`    | Truncate string        | `{{ text \|> truncate(100) }}`                           |
 | `sprintf(...args)` | sprintf formatting     | `{{ "%s: %d" \|> sprintf(name, n) }}`                    |
+| `format` (alias)   | Alias of `sprintf`     | `{{ "%s: %d" \|> format(name, n) }}`                     |
 | `number(dec)`      | Format number          | `{{ price \|> number(2) }}`                              |
 | `abs`              | Absolute value         | `{{ n \|> abs }}`                                        |
 | `round(prec)`      | Round number           | `{{ n \|> round(2) }}`                                   |
@@ -779,6 +931,7 @@ add its own guardrails with `setDeniedFunctions([...])`.
 | `filter(fn)`       | Filter elements        | `{{ items \|> filter(i => i:active) }}`                  |
 | `reduce(fn,init)`  | Reduce to single value | `{{ nums \|> reduce(s, v => s + v, 0) }}`                |
 | `length`           | Count/length           | `{{ items \|> length }}`                                 |
+| `len` (alias)      | Alias of `length`      | `{{ items \|> len }}`                                    |
 | `default(val)`     | Fallback for null      | `{{ name \|> default('Guest') }}`                        |
 | `empty(val)`       | Fallback for falsy     | `{{ name \|> empty('Anon') }}`                           |
 | `json`             | JSON encode            | `{{ data \|> json \|> raw }}`                            |
@@ -787,6 +940,15 @@ add its own guardrails with `setDeniedFunctions([...])`.
 | `unicode`          | Unicode string ops     | `{{ text \|> unicode \|> reverse }}`                     |
 | `escape` / `esc`   | HTML escape            | `{{ html \|> escape }}`                                  |
 | `raw`              | Disable auto-escaping  | `{{ html \|> raw }}`                                     |
+
+Every name above is also callable with parentheses. The value that would be
+piped becomes the first argument (`number(value, 2)`), except `date` and `join`,
+whose call form mirrors PHP: `date(fmt, value)` and `join(glue, array)`. `len`
+is an alias of `length` and behaves identically in both forms.
+
+The reverse is not true: a few names are **call-only** because their first
+argument is not a piped value — `context`, `include`, `dump` and `dd`. Writing
+`{{ x |> context }}` is a compile error; call them instead (`{{ context() }}`).
 
 ## Next Steps
 

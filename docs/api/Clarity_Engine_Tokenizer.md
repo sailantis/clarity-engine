@@ -7,9 +7,9 @@ DSL expressions into PHP-ready strings.
 
 Segment types (constants on this class)
 ----------------------------------------
-TEXT        – raw HTML/text passed through verbatim
-OUTPUT_TAG  – {{ expression }} – rendered (auto-escaped by default)
-BLOCK_TAG   – {% directive %}  – control structures / directives
+TEXT        â€“ raw HTML/text passed through verbatim
+OUTPUT_TAG  â€“ {{ expression }} â€“ rendered (auto-escaped by default)
+BLOCK_TAG   â€“ {% directive %}  â€“ control structures / directives
 
 Expression processing
 ---------------------
@@ -19,22 +19,22 @@ syntax when the compiled class file is first loaded, so we intentionally
 do not perform a full grammar check here.
 
 Conversions performed
-• var-chains (foo.bar[x].baz) → $__c_va['foo']['bar'][$__c_va['x']]['baz']
-• logical operators:  and → &&,  or → ||,  not → !
-• bitwise operators:  bor → |,  band → &,  bxor → ^,  bnot → ~,  blsh → <<,  brsh → >>
-• concat operator:    ~   → .
-• all other tokens pass through unchanged (PHP validates them)
+â€¢ var-chains (foo.bar[x].baz) â†’ $__c_va['foo']['bar'][$__c_va['x']]['baz']
+â€¢ logical operators:  and â†’ &&,  or â†’ ||,  not â†’ !
+â€¢ bitwise operators:  bor â†’ |,  band â†’ &,  bxor â†’ ^,  bnot â†’ ~,  blsh â†’ <<,  brsh â†’ >>
+â€¢ concat operator:    ~   â†’ .
+â€¢ all other tokens pass through unchanged (PHP validates them)
 
 Pipeline (| or |>)
-• Both | and |> act as the filter pipe operator (| is normalized to |> before processing)
-• Each step after the pipe is a filter: name  or  name(arg1, arg2)
-• Arguments are themselves processed as expressions
-• Result: nested $this->__c_fl['name']($this->__c_fl['name']($expr, arg), …)
+â€¢ Both | and |> act as the filter pipe operator (| is normalized to |> before processing)
+â€¢ Each step after the pipe is a filter: name  or  name(arg1, arg2)
+â€¢ Arguments are themselves processed as expressions
+â€¢ Result: nested $__c_fn['name']($__c_fn['name']($expr, arg), â€¦)
 
 Named arguments
-• Clarity uses `=` syntax: filter(precision=2) or fn(from="system")
-• These are emitted directly as PHP named arguments: `precision: 2`, `from: 'system'`
-• PHP itself validates parameter names and arity at runtime — no reflection needed
+â€¢ Clarity uses `=` syntax: filter(precision=2) or fn(from="system")
+â€¢ These are emitted directly as PHP named arguments: `precision: 2`, `from: 'system'`
+â€¢ PHP itself validates parameter names and arity at runtime â€” no reflection needed
 
 ## Public Constants
 
@@ -48,7 +48,7 @@ Named arguments
 
 ## Public methods
 
-### setPrunedFunctions() · <small>[🗎](../../src/Engine/Tokenizer.php#L190)</small>
+### setPrunedFunctions() · <small>[🗎](../../src/Engine/Tokenizer.php#L207)</small>
 
 `public function setPrunedFunctions(array $names): void`
 
@@ -65,7 +65,7 @@ Named arguments
 
 ---
 
-### setContextInjectedFunctions() · <small>[🗎](../../src/Engine/Tokenizer.php#L196)</small>
+### setContextInjectedFunctions() · <small>[🗎](../../src/Engine/Tokenizer.php#L213)</small>
 
 `public function setContextInjectedFunctions(array $names): void`
 
@@ -82,7 +82,7 @@ Named arguments
 
 ---
 
-### setSandboxMode() · <small>[🗎](../../src/Engine/Tokenizer.php#L205)</small>
+### setSandboxMode() · <small>[🗎](../../src/Engine/Tokenizer.php#L222)</small>
 
 `public function setSandboxMode(bool $sandboxed): void`
 
@@ -102,7 +102,7 @@ function and method calls; `false` allows them (see class docs).
 
 ---
 
-### setLocalRoots() · <small>[🗎](../../src/Engine/Tokenizer.php#L216)</small>
+### setLocalRoots() · <small>[🗎](../../src/Engine/Tokenizer.php#L233)</small>
 
 `public function setLocalRoots(bool $enabled): void`
 
@@ -124,7 +124,7 @@ compiler that seeds no locals never emits a local read.
 
 ---
 
-### isSandboxed() · <small>[🗎](../../src/Engine/Tokenizer.php#L222)</small>
+### isSandboxed() · <small>[🗎](../../src/Engine/Tokenizer.php#L239)</small>
 
 `public function isSandboxed(): bool`
 
@@ -135,7 +135,7 @@ compiler that seeds no locals never emits a local read.
 
 ---
 
-### setDeniedFunctions() · <small>[🗎](../../src/Engine/Tokenizer.php#L233)</small>
+### setDeniedFunctions() · <small>[🗎](../../src/Engine/Tokenizer.php#L250)</small>
 
 `public function setDeniedFunctions(array $names): void`
 
@@ -155,7 +155,7 @@ names; empty (the default) allows every PHP function.
 
 ---
 
-### setRegistry() · <small>[🗎](../../src/Engine/Tokenizer.php#L249)</small>
+### setRegistry() · <small>[🗎](../../src/Engine/Tokenizer.php#L266)</small>
 
 `public function setRegistry(Clarity\Engine\Registry $registry): void`
 
@@ -172,7 +172,7 @@ names; empty (the default) allows every PHP function.
 
 ---
 
-### setLocalVars() · <small>[🗎](../../src/Engine/Tokenizer.php#L263)</small>
+### setLocalVars() · <small>[🗎](../../src/Engine/Tokenizer.php#L280)</small>
 
 `public function setLocalVars(array $localVars): void`
 
@@ -186,7 +186,7 @@ variable resolution inside the loop uses direct PHP local variables
 
 | Name | Type | Default | Description |
 |---|---|---|---|
-| `$localVars` | array | - | templateVarName → PHP variable string |
+| `$localVars` | array | - | templateVarName â†’ PHP variable string |
 
 **Return value**
 
@@ -195,7 +195,7 @@ variable resolution inside the loop uses direct PHP local variables
 
 ---
 
-### tokenize() · <small>[🗎](../../src/Engine/Tokenizer.php#L292)</small>
+### tokenize() · <small>[🗎](../../src/Engine/Tokenizer.php#L309)</small>
 
 `public function tokenize(string $source): array`
 
@@ -228,7 +228,7 @@ it is reported rather than emitted as text.
 
 ---
 
-### setEscapeContext() · <small>[🗎](../../src/Engine/Tokenizer.php#L522)</small>
+### setEscapeContext() · <small>[🗎](../../src/Engine/Tokenizer.php#L539)</small>
 
 `public function setEscapeContext(string $context): void`
 
@@ -249,7 +249,7 @@ Called by the Compiler as it tracks the current position in the template.
 
 ---
 
-### processExpression() · <small>[🗎](../../src/Engine/Tokenizer.php#L527)</small>
+### processExpression() · <small>[🗎](../../src/Engine/Tokenizer.php#L544)</small>
 
 `public function processExpression(string $expression): string`
 
@@ -266,11 +266,11 @@ Called by the Compiler as it tracks the current position in the template.
 
 ---
 
-### processCondition() · <small>[🗎](../../src/Engine/Tokenizer.php#L557)</small>
+### processCondition() · <small>[🗎](../../src/Engine/Tokenizer.php#L574)</small>
 
 `public function processCondition(string $expression): string`
 
-Convert a Clarity expression without pipeline — used for control
+Convert a Clarity expression without pipeline â€” used for control
 structure conditions (if, for, set) where auto-escape is meaningless.
 
 **Parameters**
@@ -287,7 +287,7 @@ structure conditions (if, for, set) where auto-escape is meaningless.
 
 ---
 
-### processLvalue() · <small>[🗎](../../src/Engine/Tokenizer.php#L581)</small>
+### processLvalue() · <small>[🗎](../../src/Engine/Tokenizer.php#L598)</small>
 
 `public function processLvalue(string $var): string`
 
@@ -295,7 +295,7 @@ Convert a Clarity variable chain to its PHP lvalue equivalent, for the
 left-hand side of {% set var = ... %}.
 
 Scope-aware by construction: open mode seeds the render scope into locals,
-so `{% set a = … %}` compiles to a plain `$a = …` and both worlds read the
+so `{% set a = â€¦ %}` compiles to a plain `$a = â€¦` and both worlds read the
 SAME slot.  Sandbox mode targets `$__c_va['a']` exactly as before.  The
 choice lives in the chain emitter, so it cannot drift from the read path.
 
@@ -313,7 +313,7 @@ choice lives in the chain emitter, so it cannot drift from the read path.
 
 ---
 
-### convertVarsAndOps() · <small>[🗎](../../src/Engine/Tokenizer.php#L782)</small>
+### convertVarsAndOps() · <small>[🗎](../../src/Engine/Tokenizer.php#L799)</small>
 
 `public function convertVarsAndOps(string $expr): string`
 
@@ -321,7 +321,7 @@ Convert a Clarity expression (no pipeline) to PHP by:
 1. Replacing var-chains with $__c_va[...] accesses
 2. Replacing logical/string operators with PHP equivalents
 3. Rejecting function-call syntax: any identifier followed by '(' throws
-   a ClarityException at compile time — use the |> filter pipeline instead.
+   a ClarityException at compile time â€” use the |> filter pipeline instead.
 
 Strategy: tokenize the expression into atoms (quoted strings, numbers,
 identifiers/var-chains, operators, punctuation) and process each atom.
@@ -339,7 +339,7 @@ identifiers/var-chains, operators, punctuation) and process each atom.
 
 ---
 
-### isIdentifierStart() · <small>[🗎](../../src/Engine/Tokenizer.php#L2079)</small>
+### isIdentifierStart() · <small>[🗎](../../src/Engine/Tokenizer.php#L2160)</small>
 
 `public static function isIdentifierStart(string $ch): bool`
 
@@ -362,7 +362,7 @@ locale-dependent and would disagree with the runtime on a non-C locale.
 
 ---
 
-### isIdentifierChar() · <small>[🗎](../../src/Engine/Tokenizer.php#L2094)</small>
+### isIdentifierChar() · <small>[🗎](../../src/Engine/Tokenizer.php#L2175)</small>
 
 `public static function isIdentifierChar(string $ch): bool`
 
@@ -381,7 +381,7 @@ Whether the character (a single BYTE) can appear inside an identifier.
 
 ---
 
-### isIdentifier() · <small>[🗎](../../src/Engine/Tokenizer.php#L2111)</small>
+### isIdentifier() · <small>[🗎](../../src/Engine/Tokenizer.php#L2192)</small>
 
 `public static function isIdentifier(string $name): bool`
 
@@ -404,18 +404,18 @@ tokenize back out.
 
 ---
 
-### varChainToPhp() · <small>[🗎](../../src/Engine/Tokenizer.php#L2436)</small>
+### varChainToPhp() · <small>[🗎](../../src/Engine/Tokenizer.php#L2545)</small>
 
 `public function varChainToPhp(string $chain): string`
 
 Convert a Clarity var-chain string to a PHP $__c_va[...] expression.
 
 Supports:
-foo           → $__c_va['foo']
-foo.bar       → $__c_va['foo']['bar']
-items[0]      → $__c_va['items'][0]
-items[index]  → $__c_va['items'][$__c_va['index']]
-a.b[c.d].e    → $__c_va['a']['b'][$__c_va['c']['d']]['e']
+foo           â†’ $__c_va['foo']
+foo.bar       â†’ $__c_va['foo']['bar']
+items[0]      â†’ $__c_va['items'][0]
+items[index]  â†’ $__c_va['items'][$__c_va['index']]
+a.b[c.d].e    â†’ $__c_va['a']['b'][$__c_va['c']['d']]['e']
 
 **Parameters**
 
@@ -430,11 +430,11 @@ a.b[c.d].e    → $__c_va['a']['b'][$__c_va['c']['d']]['e']
 
 ---
 
-### buildFilterCall() · <small>[🗎](../../src/Engine/Tokenizer.php#L2628)</small>
+### buildFilterCall() · <small>[🗎](../../src/Engine/Tokenizer.php#L2774)</small>
 
 `public function buildFilterCall(string $filterSegment, string $phpValue): string`
 
-Build a PHP filter call:  $this->__c_fl['name']($value, arg1, name2: arg2)
+Build a PHP filter call:  $__c_fn['name']($value, arg1, name2: arg2)
 
 For map / filter / reduce the first argument must be either:
   - a lambda expression:  param => expression

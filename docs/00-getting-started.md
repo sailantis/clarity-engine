@@ -110,6 +110,9 @@ $engine->setDeniedFunctions([]);                   // block nothing (default)
 > what it disables and how to restrict it. The same options are accepted in the
 > constructor as `sandbox` and `deniedFunctions`.
 
+> For the full developer-facing picture — the config keys, both modes, and how to
+> register filters/functions — see [PHP Integration](08-php-integration.md).
+
 ### Registering Template Namespaces
 
 Namespaces let you reference templates from additional directories using the `namespace::path` syntax:
