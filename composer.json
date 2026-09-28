@@ -2,6 +2,7 @@
   "name": "sailantis/clarity-engine",
   "description": "A fast and powerful Template engine for PHP inspired by Twig.",
   "type": "library",
+  "version": "0.1.0",
   "keywords": ["template", "template-engine", "templating", "twig", "view", "compiler"],
   "homepage": "https://github.com/sailantis/clarity-engine",
   "support": {

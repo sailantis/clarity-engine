@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-28
+
 ### Added
 
 - **`{% for %} … {% else %}`** — a loop may declare a branch that renders when
@@ -34,3 +36,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Documentation: corrected the filter/function call model, object access, and
   removed the documented-but-unimplemented `loop` object.
 - Removed a stale docblock reference to a `castToArray()` that no longer exists.
+
+[Unreleased]: https://github.com/sailantis/clarity-engine/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/sailantis/clarity-engine/releases/tag/v0.1.0
