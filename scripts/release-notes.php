@@ -55,7 +55,9 @@ foreach ($lines as $line) {
 
 $start = null;
 foreach ($lines as $i => $line) {
-    if (preg_match('/^## \[' . preg_quote($version, '/') . '\]\s*$/', $line)) {
+    // Keep a Changelog allows an optional release date after the version, so
+    // both `## [0.1.1]` and `## [0.1.1] - 2026-09-28` select the section.
+    if (preg_match('/^## \[' . preg_quote($version, '/') . '\](?:\s+-\s+\S+)?\s*$/', $line)) {
         $start = $i + 1;
         break;
     }
