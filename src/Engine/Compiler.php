@@ -71,42 +71,6 @@ class Compiler
 {
     /**
      * Bump this whenever a change alters the PHP that a template compiles to.
-     *
-     * Version 8: sandbox mode.  Open-mode templates may emit raw PHP calls that
-     * sandboxed templates never do, so previously cached classes must be rebuilt.
-     * Version 9: raw PHP blocks.  The standalone `{% php <code> %}` spelling and
-     * per-line source mapping for every php block both change the emitted body
-     * and its map, so version-8 classes must be rebuilt.
-     * Version 10: open mode seeds the render scope into PHP locals.  Chain roots
-     * are emitted as locals and the body gains an `extract()`, so every
-     * open-mode class must be rebuilt.
-     * Version 11: engine internals renamed to the `__c_` prefix, and the open-mode
-     * `expand` filter reads the local scope instead of the variable array.  Both
-     * change the emitted body, so version-10 classes must be rebuilt.
-     * Version 12: `${expr}` / `$$name` replace the `expand` filter as a scope
-     * read, and filters gained a call form (`round(x, 2)`) derived from the
-     * same template as the pipe.  Affects every class.
-     * Version 13: `truncate`'s default ellipsis is emitted as the real ellipsis
-     * character instead of the literal `\u{2026}` sequence.  Changes the body of
-     * any template using `truncate` without an explicit ellipsis.
-     * Version 14: `len` aliases `length`, and piping a call-only name
-     * (`context`, `include`, `dump`, `dd`) is now a compile error.  Templates
-     * that used `|> len` only compiled by accident before; version-13 classes
-     * must be rebuilt so the new guard and alias take effect.
-     * Version 15: the two runtime registries `$__c_fl` and `$__c_fn` collapse
-     * into ONE `$__c_fn` callable table.  Every emitted registry call and the
-     * generated class constructor change, so version-14 classes must be rebuilt.
-     * Version 16: an inline filter reference (`filter(items, "upper")`) now
-     * compiles to a closure for `filter` as well as `map`, and a unary inline
-     * reference for `reduce` is rejected.  Changes the emitted body of any
-     * template using a callable reference.
-     * Version 17: `format` is an alias of `sprintf` again (Twig parity), so
-     * `|> format` compiles inline to `\sprintf(...)` instead of a runtime
-     * registry lookup.  Version-16 classes must be rebuilt.
-     * Version 18: a `{% for %}` may take an `{% else %}` branch (rendered when
-     * the sequence is empty).  The loop header of such a loop is patched to
-     * record iteration, so the body of any for-else template differs from
-     * before -- and version 17 rejected the `{% else %}` outright anyway.
      */
     public const COMPILER_VERSION = 18;
 
@@ -350,17 +314,17 @@ class Compiler
      */
     public function compile(string $templateName, TemplateLoader $loader): CompiledTemplate
     {
-        $this->loader          = $loader;
-        $this->dependencies    = [];
-        $this->sourceMap       = [];
-        $this->sourceFiles     = [];
-        $this->sourceFileIndex = [];
-        $this->phpLine         = 0;
-        $this->forStack        = [];
-        $this->ifDepth         = 0;
-        $this->forElseSeq      = 0;
+        $this->loader           = $loader;
+        $this->dependencies     = [];
+        $this->sourceMap        = [];
+        $this->sourceFiles      = [];
+        $this->sourceFileIndex  = [];
+        $this->phpLine          = 0;
+        $this->forStack         = [];
+        $this->ifDepth          = 0;
+        $this->forElseSeq       = 0;
         $this->forHeaderPending = false;
-        $this->localVars       = [];
+        $this->localVars        = [];
         $this->tokenizer->setLocalVars([]);
         $this->macros              = [];
         $this->macroExpansionStack = [];
@@ -1409,11 +1373,11 @@ class Compiler
             $this->registerVar($itemTplName, $tplLine);
 
             $this->forStack[] = [
-                'type'      => 'for',
-                'restore'   => $restore,
-                'ifDepth'   => $this->ifDepth,
+                'type'       => 'for',
+                'restore'    => $restore,
+                'ifDepth'    => $this->ifDepth,
                 'headerLine' => -1,
-                'hasElse'   => false,
+                'hasElse'    => false,
             ];
             $this->forHeaderPending = true;
 
@@ -1453,11 +1417,11 @@ class Compiler
         }
 
         $this->forStack[] = [
-            'type'      => 'foreach',
-            'restore'   => $restore,
-            'ifDepth'   => $this->ifDepth,
+            'type'       => 'foreach',
+            'restore'    => $restore,
+            'ifDepth'    => $this->ifDepth,
             'headerLine' => -1,
-            'hasElse'   => false,
+            'hasElse'    => false,
         ];
 
         // A later `{% else %}` appends the flag assignment to this loop's header
@@ -1610,8 +1574,8 @@ class Compiler
         $flag = self::INTERNAL_PREFIX . 'e' . $this->forElseSeq++;
         $lines[$entry['headerLine']] =
             '$' . $flag . ' = false; '
-            . $lines[$entry['headerLine']]
-            . ' $' . $flag . ' = true;';
+                . $lines[$entry['headerLine']]
+                . ' $' . $flag . ' = true;';
 
         $this->forStack[$index]['hasElse'] = true;
 
@@ -1838,22 +1802,6 @@ class Compiler
      * This changes the PHP that templates compile to, so COMPILER_VERSION is
      * bumped and Cache::isFresh() recompiles every existing template.
      */
-    /**
-     * Is a compiled range bound a literal number, and therefore safe to inline
-     * into the loop header?
-     *
-     * The bound has already been through the tokenizer, so a numeric template
-     * literal arrives as plain digits (`10`), a negative literal as `-10`, and a
-     * float as `2.5`. Anything containing an operator, a variable, a call or a
-     * string is rejected, because re-emitting such an expression in the loop
-     * header would evaluate it on every iteration instead of once.
-     *
-     * @param string $expr Compiled PHP expression for the bound.
-     */
-    private static function isNumericLiteral(string $expr): bool
-    {
-        return (bool) \preg_match('/^-?\d+(?:\.\d+)?$/', $expr);
-    }
 
     private static function stripOneLineBreakAfterTag(string $text): string
     {

@@ -727,8 +727,8 @@ class Registry
 
         $this->callables['same_as'] = static fn(mixed $a, mixed $b): bool => $a === $b;
 
-        $this->callables['is_even'] = static fn(mixed $n): bool => (int) $n % 2 === 0;
-        $this->callables['is_odd']  = static fn(mixed $n): bool => (int) $n % 2 !== 0;
+        $this->callables['is_even']  = static fn(mixed $n): bool => (int) $n % 2 === 0;
+        $this->callables['is_odd']   = static fn(mixed $n): bool => (int) $n % 2 !== 0;
         $this->callables['iterable'] = static fn(mixed $v): bool =>
             \is_array($v) || $v instanceof \Traversable;
 

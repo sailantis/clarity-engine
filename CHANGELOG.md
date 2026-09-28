@@ -34,7 +34,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Documentation: corrected the filter/function call model, object access, and
   removed the documented-but-unimplemented `loop` object.
 - Removed a stale docblock reference to a `castToArray()` that no longer exists.
-
-## [0.1.0]
-
-Initial development release.

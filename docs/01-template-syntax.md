@@ -533,8 +533,8 @@ Two rules follow from how Twig scopes loops:
 - A loop takes one `{% else %}`. A second one — or an `{% elseif %}` — is a
   compile error.
 
-> **Nesting:** `{% else %}` belongs to the innermost open construct *at the same
-> nesting level*. So in `{% for %}…{% if %}…{% else %}…{% endif %}…{% else %}…{% endfor %}`
+> **Nesting:** `{% else %}` belongs to the innermost open construct _at the same
+> nesting level_. So in `{% for %}…{% if %}…{% else %}…{% endif %}…{% else %}…{% endfor %}`
 > the first `{% else %}` is the `if`'s and the second is the loop's. Conversely,
 > in `{% if %}{% for %}…{% endfor %}{% else %}{% endif %}` the `{% else %}`
 > closes the `if`, not the loop.

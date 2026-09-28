@@ -410,7 +410,7 @@ class Tokenizer
             }
 
             // A `-` glued to the closer suppresses following whitespace.
-            $trimAfter  = ($source[$end - 3] ?? '') === '-';
+            $trimAfter    = ($source[$end - 3] ?? '') === '-';
             $trimNextText = $trimAfter;
 
             $contentEnd = $end - 2;
@@ -2346,21 +2346,21 @@ class Tokenizer
      */
     private const OPERATOR_TESTS = [
         // Infix: `value in container`.
-        'in'           => ['binary' => true,  'tolerates' => false, 'call' => 'in'],
+        'in' => ['binary' => true, 'tolerates' => false, 'call' => 'in'],
         // `value is <test>` with a right operand.
-        'matches'      => ['binary' => true,  'tolerates' => false, 'call' => 'matches'],
-        'starts_with'  => ['binary' => true,  'tolerates' => false, 'call' => 'starts_with'],
-        'ends_with'    => ['binary' => true,  'tolerates' => false, 'call' => 'ends_with'],
-        'divisible_by' => ['binary' => true,  'tolerates' => false, 'call' => 'divisible_by'],
-        'same_as'      => ['binary' => true,  'tolerates' => false, 'call' => 'same_as'],
+        'matches'      => ['binary' => true, 'tolerates' => false, 'call' => 'matches'],
+        'starts_with'  => ['binary' => true, 'tolerates' => false, 'call' => 'starts_with'],
+        'ends_with'    => ['binary' => true, 'tolerates' => false, 'call' => 'ends_with'],
+        'divisible_by' => ['binary' => true, 'tolerates' => false, 'call' => 'divisible_by'],
+        'same_as'      => ['binary' => true, 'tolerates' => false, 'call' => 'same_as'],
         // `value is <test>` — no right operand.
-        'defined'      => ['binary' => false, 'tolerates' => true,  'call' => 'defined'],
-        'null'         => ['binary' => false, 'tolerates' => true,  'call' => 'is_null'],
-        'none'         => ['binary' => false, 'tolerates' => true,  'call' => 'is_null'],
-        'empty'        => ['binary' => false, 'tolerates' => true,  'call' => 'is_empty'],
-        'iterable'     => ['binary' => false, 'tolerates' => false, 'call' => 'iterable'],
-        'even'         => ['binary' => false, 'tolerates' => false, 'call' => 'is_even'],
-        'odd'          => ['binary' => false, 'tolerates' => false, 'call' => 'is_odd'],
+        'defined'  => ['binary' => false, 'tolerates' => true, 'call' => 'defined'],
+        'null'     => ['binary' => false, 'tolerates' => true, 'call' => 'is_null'],
+        'none'     => ['binary' => false, 'tolerates' => true, 'call' => 'is_null'],
+        'empty'    => ['binary' => false, 'tolerates' => true, 'call' => 'is_empty'],
+        'iterable' => ['binary' => false, 'tolerates' => false, 'call' => 'iterable'],
+        'even'     => ['binary' => false, 'tolerates' => false, 'call' => 'is_even'],
+        'odd'      => ['binary' => false, 'tolerates' => false, 'call' => 'is_odd'],
     ];
 
     /**
@@ -2368,9 +2368,17 @@ class Tokenizer
      * the left operand of a test and to bound its (bare) right operand.
      */
     private const OPERATOR_WORDS = [
-        'and' => true, 'or' => true, 'not' => true, 'in' => true, 'is' => true,
-        'bor' => true, 'band' => true, 'bxor' => true, 'bnot' => true,
-        'blsh' => true, 'brsh' => true,
+        'and'  => true,
+        'or'   => true,
+        'not'  => true,
+        'in'   => true,
+        'is'   => true,
+        'bor'  => true,
+        'band' => true,
+        'bxor' => true,
+        'bnot' => true,
+        'blsh' => true,
+        'brsh' => true,
     ];
 
     /**
@@ -2475,8 +2483,10 @@ class Tokenizer
             while ($b > 0 && \ctype_space($expr[$b - 1])) {
                 $b--;
             }
-            if ($b >= 3 && \substr($expr, $b - 3, 3) === 'not'
-                && ($b - 3 === 0 || !self::isIdentifierChar($expr[$b - 4]))) {
+            if (
+                $b >= 3 && \substr($expr, $b - 3, 3) === 'not'
+                    && ($b - 3 === 0 || !self::isIdentifierChar($expr[$b - 4]))
+            ) {
                 $negated = true;
                 $opPos   = $b - 3;
             }
@@ -2589,7 +2599,7 @@ class Tokenizer
         if ($spec['tolerates']) {
             // Absence-tolerant: a presence probe answers instead of a read.
             $probe = $this->buildPresenceTest($lhsVal, $spec['call']);
-            $out  .= $negated ? '!(' . $probe . ')' : '(' . $probe . ')';
+            $out .= $negated ? '!(' . $probe . ')' : '(' . $probe . ')';
         } else {
             $call = $this->buildCall($spec['call'], $argsPhp === '' ? [$lhsVal] : [$lhsVal, $argsPhp]);
             $out .= ($negated ? '!(' : '(') . $call . ')';
