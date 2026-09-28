@@ -1,8 +1,13 @@
 .idea/
 .phpthunder/
+.vscode/
 temp/
 /vendor/
+/composer.lock
+.phpunit.result.cache
 /conversation.txt
 /cache/
 /logs/
 /temp/
+
+/bugs.txt

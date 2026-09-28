@@ -1,0 +1,16 @@
+# Normalize line endings in the repository, keep PHP files as LF.
+* text=auto
+*.php text eol=lf
+
+# Dev-only files are not shipped in the Composer archive.
+# `docs/` is intentionally KEPT: the README links into it.
+/tests/ export-ignore
+/scripts/ export-ignore
+/phpunit.xml export-ignore
+/.phpstorm.meta.php export-ignore
+/.gitattributes export-ignore
+/.gitignore export-ignore
+/.github/ export-ignore
+/CHANGELOG.md export-ignore
+/CONTRIBUTING.md export-ignore
+/temp/ export-ignore
