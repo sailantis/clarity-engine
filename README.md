@@ -12,6 +12,7 @@
 - **Expressive Syntax** – Clean, readable template syntax inspired by modern template engines
 - **Twig-Style Tests** – `in`, `is defined`, `starts with`, `matches`, `divisible by`, and more, with absence-tolerant `defined`/`null`/`empty`
 - **Whitespace Control** – `{%- … -%}` trims whitespace around a tag
+- **Loop Fallbacks** – `{% for %} … {% else %} … {% endfor %}` renders the `else` branch when the sequence is empty
 - **Template Inheritance** – Reusable layouts with `extends` and `blocks` for DRY template architecture
 - **Macros** – Define reusable template fragments with parameters and call them inline
 - **Extensible** — Custom filters, functions, inline filters, block directives, and loader plugins
