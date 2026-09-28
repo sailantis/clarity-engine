@@ -2,6 +2,12 @@
   "name": "sailantis/clarity-engine",
   "description": "A fast and powerful Template engine for PHP inspired by Twig.",
   "type": "library",
+  "keywords": ["template", "template-engine", "templating", "twig", "view", "compiler"],
+  "homepage": "https://github.com/sailantis/clarity-engine",
+  "support": {
+    "issues": "https://github.com/sailantis/clarity-engine/issues",
+    "source": "https://github.com/sailantis/clarity-engine"
+  },
   "require": {
     "php": ">=8.1",
     "ext-mbstring": "*"
@@ -10,7 +16,15 @@
     "phpunit/phpunit": "^9.6",
     "phpdocumentor/reflection-docblock": "^6.0"
   },
+  "suggest": {
+    "ext-intl": "Locale-aware formatting via IntlFormatModule (format_number, format_currency, format_date, ...)"
+  },
   "license": "MIT",
+  "authors": [
+    {
+      "name": "Sailantis"
+    }
+  ],
   "autoload": {
     "psr-4": {
       "Clarity\\": "src/"
@@ -23,5 +37,8 @@
   },
   "scripts": {
     "test": "phpunit"
+  },
+  "config": {
+    "sort-packages": true
   }
 }
