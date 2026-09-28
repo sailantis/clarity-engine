@@ -24,8 +24,7 @@
         onmouseover="this.style.opacity = '0.8'" onmouseout="this.style.opacity = '1'">
         {{ link:title }}
       </a>
-      {% if not loop.last %}<span style="color: #666">|</span>{% endif %} {%
-      endfor %}
+      {% endfor %}
     </div>
 
     {% if socialLinks %}

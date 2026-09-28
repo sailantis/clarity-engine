@@ -12,6 +12,29 @@ Clarity uses two primary delimiters:
 | `{% ... %}` | Directives (control flow, logic, inheritance) |
 | `{# ... #}` | Comments (not rendered in output)             |
 
+### Whitespace Control
+
+A `-` glued to a delimiter suppresses the whitespace on that side of the tag:
+`{%-` trims the whitespace before the tag, `-%}` trims the whitespace after it.
+Only whitespace (spaces, tabs, newlines) is removed — visible text is not.
+
+```twig
+{% for item in items %}
+  <li>{{ item }}</li>
+{% endfor %}
+```
+
+Without control, each directive line leaves a blank line behind. Adding the
+markers collapses the loop to the markup alone:
+
+```twig
+{% for item in items -%}
+  <li>{{ item }}</li>
+{%- endfor %}
+```
+
+The same markers work on output tags (`{{- x -}}`) and comments (`{#- c -#}`).
+
 ## Output Expressions
 
 ### Basic Output
@@ -239,17 +262,6 @@ An operator with no member after it (`.`, `->`) is a compile error. Optional
 access is the one operator that must stay glued, because a spaced `?` is a
 ternary: `user?:nick` reads a key, while `user ? x : y` is a condition.
 
-#### `loop`
-
-Inside a loop, `loop` is an object with the current iteration's metadata:
-`index`, `index0`, `first`, `last`, `revindex`, `revindex0`, `total`, `length`.
-
-```twig
-{% for item in items %}
-    <li class="{{ loop.first ? 'first' : '' }}">{{ loop.index }}/{{ loop.total }}</li>
-{% endfor %}
-```
-
 #### `${expr}` — dynamic variable access
 
 `${expr}` reads the variable whose **name** is produced by an expression — the
@@ -296,8 +308,10 @@ allow-list and the method-call restriction, giving templates the full power of
 PHP. Everything below still resolves **registered** filters and functions first;
 open mode only changes what happens when a name is _not_ registered.
 
-> See [PHP Integration](08-php-integration.md) for the PHP-developer view of the
-> two modes ("sandbox mode" vs. "PHP mode"), registration, and variable access.
+> See [Open Mode](04-advanced-topics.md#open-mode) for the PHP-developer view of
+> the two modes ("sandbox mode" vs. "PHP mode"), and
+> [Registering Custom Filters](00-getting-started.md#registering-custom-filters)
+> for registration.
 
 ### PHP functions as calls
 
@@ -652,7 +666,7 @@ Included templates are inlined at compile time.
 {% include "admin::sidebar" %} {% include "emails::header" %}
 ```
 
-See [Advanced Topics](04-advanced-topics.md#named-namespaces) for namespace configuration.
+See [Advanced Topics](04-advanced-topics.md#named-namespaces-addnamespace) for namespace configuration.
 
 ## Operators
 
@@ -691,6 +705,55 @@ See [Advanced Topics](04-advanced-topics.md#named-namespaces) for namespace conf
 | `not`    | Logical NOT |
 
 > **Note:** The symbols `&&`, `||`, and `!` are also accepted (they pass straight through to PHP).
+
+### Tests
+
+Twig-style tests read as words and compile to registered callables, so they work
+identically in sandbox and open mode. They can be used anywhere a boolean is
+expected.
+
+```twig
+{# membership — value in a list, substring in a string, key in a mapping #}
+{% if 2 in [1, 2, 3] %}…{% endif %}
+{% if 'ell' in word %}…{% endif %}
+{% if role in user:roles %}…{% endif %}
+{% if x not in items %}…{% endif %}
+
+{# string tests #}
+{% if name starts with 'Jo' %}…{% endif %}
+{% if name ends with 'hn' %}…{% endif %}
+{% if name matches '/^J.*n$/' %}…{% endif %}
+
+{# numeric / identity tests #}
+{% if n is even %}…{% endif %}
+{% if n is odd %}…{% endif %}
+{% if n divisible by 3 %}…{% endif %}
+{% if a is same as(b) %}…{% endif %}
+{% if value is iterable %}…{% endif %}
+```
+
+The **absence-tolerant** tests answer without reading their operand, so they are
+safe on a name that was never passed to the template:
+
+```twig
+{% if name is defined %}…{% endif %}
+{% if name is not defined %}…{% endif %}
+{% if nickname is null %}…{% endif %}
+{% if items is empty %}…{% endif %}
+{% if items is not empty %}…{% endif %}
+```
+
+A test is an ordinary expression, so it composes with `and`, `or`, `not`, the
+ternary, and filters:
+
+```twig
+{% if role in user:roles and user is not null %}…{% endif %}
+{{ 2 in [1, 2] ? 'yes' : 'no' }}
+{{ (name |> lower) is defined ? 'set' : 'unset' }}
+```
+
+> The tests `starts with`, `ends with`, `divisible by` and `same as` are two
+> words. An unrecognised word after `is` (`x is frobnicated`) is a compile error.
 
 ### Bitwise Operators
 
@@ -1001,7 +1064,7 @@ Instead, use `{% set %}`:
 
 - **[Filters and Functions](02-filters-and-functions.md)** — Learn how to transform data
 - **[Layout Inheritance](03-layout-inheritance.md)** — Master template reuse patterns
-- **[Examples](../examples/README.md)** — See complete working examples
+- **[Examples](examples/README.md)** — See complete working examples
 
 ## Quick Reference
 
@@ -1034,6 +1097,9 @@ Instead, use `{% set %}`:
 | ------------- | -------------------------------------------------------------- |
 | Comparison    | `==` `!=` `<` `>` `<=` `>=`                                    |
 | Logical       | `and` `or` `not`                                               |
+| Tests         | `in` `not in` `is defined` `is null` `is empty` `is iterable`  |
+|               | `is even` `is odd` `starts with` `ends with` `matches`         |
+|               | `divisible by` `same as`                                       |
 | Arithmetic    | `+` `-` `*` `/` `%`                                            |
 | Bitwise       | `band` `bor` `bxor` `bnot` `blsh` `brsh` `&` `^` `~` `<<` `>>` |
 | String        | `~` (concatenation)                                            |

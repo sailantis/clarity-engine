@@ -422,7 +422,8 @@ The 412 B of source the change also saves per template is the smaller half of
 the win: source size only matters at compile time, whereas the shared-memory
 saving is per cached template in every worker.
 
-See [User Memory: debugging.md](memory://debugging.md) for OPcache notes.
+See [Caching](04-advanced-topics.md#caching) for how the compiled cache and
+OPcache interact.
 
 ## Auto-Escaping
 

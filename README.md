@@ -10,6 +10,8 @@
 - **Secure Sandbox** – No arbitrary PHP execution by default; templates are strictly sandboxed with controlled access
 - **Opt-In Open Mode** – Disable the sandbox to give templates the full power of PHP (any function call or filter, method calls, `{% php %}` blocks) — Blade / Stempler / Plates parity, for trusted authors
 - **Expressive Syntax** – Clean, readable template syntax inspired by modern template engines
+- **Twig-Style Tests** – `in`, `is defined`, `starts with`, `matches`, `divisible by`, and more, with absence-tolerant `defined`/`null`/`empty`
+- **Whitespace Control** – `{%- … -%}` trims whitespace around a tag
 - **Template Inheritance** – Reusable layouts with `extends` and `blocks` for DRY template architecture
 - **Macros** – Define reusable template fragments with parameters and call them inline
 - **Extensible** — Custom filters, functions, inline filters, block directives, and loader plugins
@@ -93,7 +95,6 @@ Start here if you're writing templates:
 Integration and advanced topics:
 
 - **[Advanced Topics](docs/04-advanced-topics.md)** – Namespaces, caching, auto-escaping, and Unicode
-- **[PHP Integration](docs/08-php-integration.md)** – Sandbox mode vs. PHP mode, registering filters/functions, raw PHP, and variable access
 - **[Best Practices](docs/05-best-practices.md)** – Organization, security, performance, and testing
 - **[Troubleshooting](docs/06-troubleshooting.md)** – Common errors and debugging techniques
 
@@ -250,7 +251,7 @@ $engine->use(new \Clarity\Localization\TranslationModule([
 ]));
 ```
 
-**[Configuration guide →](docs/00-getting-started.md#configuration)**
+**[Configuration guide →](docs/00-getting-started.md#configuration-options)**
 
 ---
 
@@ -280,7 +281,7 @@ above. Templates record which mode compiled them and are recompiled
 automatically when the setting changes. Nothing is blocked by default — PHP mode is the security decision; if you want extra guardrails, add them with
 `setDeniedFunctions([...])`.
 
-**[Security best practices →](docs/05-best-practices.md#security)**
+**[Security best practices →](docs/05-best-practices.md#security-best-practices)**
 
 ---
 
@@ -296,40 +297,28 @@ Clarity is designed for speed. Templates compile to native PHP classes and lever
 ### Benchmark Results
 
 Clarity is measured against the other mainstream PHP template engines rendering
-one identical page. The chart and table below are generated from the benchmark
-run's own JSON — the figures are not transcribed, so they cannot drift from the
-data they came from.
+the same page, on the same machine and PHP build. The two charts below are
+generated from the benchmark.
 
-<!-- view-engine:begin -->
+![Per-render time](docs/images/benchmarks/mixed-render-time.svg)
 
-Clarity is measured against other PHP template engines rendering the same page, on the same machine and PHP build. The chart and the table below are generated from the run's own JSON.
+The dot is the median render and the caps bound the fastest observation and p95,
+so an engine that is usually fast but occasionally slow looks different from one
+that is uniformly slower.
 
-![Template engine benchmark](docs/images/benchmark-results.svg)
+![Memory retained per run](docs/images/benchmarks/mixed-memory.svg)
 
-Rows are ordered by median, fastest first. Two engines sitting next to each other at the top of the table are not thereby ranked: the harness rotates engine order between runs, and a difference well under one percent is narrower than the run-to-run drift of engines whose code did not change, so it is a tie rather than a win.
+Measured in a fresh process per engine, so no engine inherits another's
+footprint. The bar runs from the floor that engine costs to have loaded (left
+cap) to the peak it reached (right cap), and the dot is what it still holds once
+the run is done — the figure a serving process actually carries.
 
-| Engine   | First render (ms) | Mean (ms) | Median (ms) | Min (ms) | p95 (ms) | Trimmed mean (ms) | Peak memory (MB) |
-| -------- | ----------------: | --------: | ----------: | -------: | -------: | ----------------: | ---------------: |
-| Clarity  |             9.948 |     0.444 |       0.429 |    0.395 |    0.517 |             0.444 |              1.6 |
-| Stempler |            23.730 |     0.447 |       0.431 |    0.401 |    0.522 |             0.446 |              1.7 |
-| Native   |             0.662 |     0.466 |       0.450 |    0.422 |    0.541 |             0.466 |              1.5 |
-| Plates   |             2.500 |     0.557 |       0.535 |    0.506 |    0.657 |             0.557 |              1.5 |
-| Blade    |            34.432 |     0.765 |       0.739 |    0.692 |    0.901 |             0.765 |              2.0 |
-| Twig     |            38.315 |     1.301 |       1.259 |    1.194 |    1.527 |             1.301 |              1.8 |
+The full comparison — every shape, every chart, and the environment and engine
+versions this run recorded — is in the [benchmark
+report](docs/08-benchmark.md), with the public version of the same data at
+<https://sailantis.github.io/azera-competition/benchmarks/view-engine.html>.
 
-**Environment** — PHP 8.3.33 · Linux 6.8.0-139-generic · SAPI cli · OPcache (`opcache.enable_cli`): yes
-
-**Budget** — 10,000 renders × 30 runs, 200 items per render
-
-**Engines** — Clarity dev-main · NativeEngine (Azera) 0.1.0 · Plates 3.6.0 · Blade 12.69.2 · Twig 3.27.0 · Stempler 3.17.2
-
-_Measured 2026-09-22T17:44:57+00:00_
-
-Full report — every chart, including the first-render compile cost and per-render memory: <https://sailantis.github.io/azera-competition/benchmarks/view-engine.html>
-
-<!-- view-engine:end -->
-
-**[Performance optimization guide →](docs/05-best-practices.md#performance)**
+**[Performance optimization guide →](docs/05-best-practices.md#performance-best-practices)**
 
 ---
 
@@ -363,7 +352,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **[Documentation](docs/README.md)** – Complete guide index
 - **[Examples](docs/examples/)** – Runnable example templates
 - **[API Reference](docs/api/)** – Auto-generated API documentation
-- **[GitHub Issues](https://github.com/clarity/engine/issues)** – Report bugs or request features
+- **[GitHub Issues](https://github.com/sailantis/clarity-engine/issues)** – Report bugs or request features
 
 ---
 

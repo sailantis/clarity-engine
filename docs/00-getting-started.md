@@ -111,7 +111,10 @@ $engine->setDeniedFunctions([]);                   // block nothing (default)
 > constructor as `sandbox` and `deniedFunctions`.
 
 > For the full developer-facing picture — the config keys, both modes, and how to
-> register filters/functions — see [PHP Integration](08-php-integration.md).
+> register filters/functions — see
+> [Registering Custom Filters](00-getting-started.md#registering-custom-filters),
+> [Registering Custom Functions](00-getting-started.md#registering-custom-functions)
+> and [Open Mode](04-advanced-topics.md#open-mode).
 
 ### Registering Template Namespaces
 
@@ -401,7 +404,7 @@ Now that you have Clarity up and running, explore these topics:
 - **[Template Syntax](01-template-syntax.md)** — Learn all directives, operators, and expressions
 - **[Filters and Functions](02-filters-and-functions.md)** — Master data transformation
 - **[Layout Inheritance](03-layout-inheritance.md)** — Build reusable page structures
-- **[Examples](xamples/README.md)** — See complete working examples
+- **[Examples](examples/README.md)** — See complete working examples
 
 ## Common Questions
 
