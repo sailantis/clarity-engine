@@ -62,7 +62,7 @@ Set the view file extension for this instance.
 
 ---
 
-### getExtension() · <small>[🗎](../../src/Template/FileLoader.php#L78)</small>
+### getExtension() · <small>[🗎](../../src/Template/FileLoader.php#L75)</small>
 
 `public function getExtension(): string`
 
@@ -76,7 +76,7 @@ Get the effective file extension used when resolving templates.
 
 ---
 
-### setBasePath() · <small>[🗎](../../src/Template/FileLoader.php#L89)</small>
+### setBasePath() · <small>[🗎](../../src/Template/FileLoader.php#L86)</small>
 
 `public function setBasePath(string $path): static`
 
@@ -95,7 +95,7 @@ Set the base path for resolving relative template names.
 
 ---
 
-### getBasePath() · <small>[🗎](../../src/Template/FileLoader.php#L101)</small>
+### getBasePath() · <small>[🗎](../../src/Template/FileLoader.php#L98)</small>
 
 `public function getBasePath(): string`
 
@@ -109,7 +109,7 @@ Get the currently configured base path for template resolution.
 
 ---
 
-### load() · <small>[🗎](../../src/Template/FileLoader.php#L109)</small>
+### load() · <small>[🗎](../../src/Template/FileLoader.php#L106)</small>
 
 `public function load(string $name): Clarity\Template\TemplateSource|null`
 
@@ -134,7 +134,7 @@ The revision ({@see \TemplateSource::$revision}) must be available immediately w
 
 ---
 
-### resolveName() · <small>[🗎](../../src/Template/FileLoader.php#L136)</small>
+### resolveName() · <small>[🗎](../../src/Template/FileLoader.php#L133)</small>
 
 `public function resolveName(string $name): string`
 
@@ -155,7 +155,7 @@ Public so it can be used for diagnostic/debugging purposes.
 
 ---
 
-### getSubLoaders() · <small>[🗎](../../src/Template/FileLoader.php#L172)</small>
+### getSubLoaders() · <small>[🗎](../../src/Template/FileLoader.php#L169)</small>
 
 `public function getSubLoaders(): array`
 

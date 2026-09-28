@@ -858,7 +858,7 @@ Flush all cached compiled templates.
 
 ---
 
-### render() · <small>[🗎](../../src/ClarityEngine.php#L671)</small>
+### render() · <small>[🗎](../../src/ClarityEngine.php#L672)</small>
 
 `public function render(string $view, array $vars = []): string`
 
@@ -905,7 +905,7 @@ $html = $engine->render('admin::dashboard', $data);
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$view` | string | - | View name to render. Can include namespace prefix (e.g. 'admin::dashboard'). |
-| `$vars` | array | `[]` | Variables to pass to the template. Objects are automatically converted to arrays. |
+| `$vars` | array | `[]` | Variables to pass to the template. Objects stay objects: `a.b`<br>reads a public property while `a:b` reads an array key. |
 
 **Return value**
 
@@ -919,7 +919,7 @@ $html = $engine->render('admin::dashboard', $data);
 
 ---
 
-### renderPartial() · <small>[🗎](../../src/ClarityEngine.php#L693)</small>
+### renderPartial() · <small>[🗎](../../src/ClarityEngine.php#L694)</small>
 
 `public function renderPartial(string $view, array $vars = []): string`
 
@@ -940,7 +940,7 @@ Render a partial view (without applying a layout) and return the output.
 
 ---
 
-### renderLayout() · <small>[🗎](../../src/ClarityEngine.php#L719)</small>
+### renderLayout() · <small>[🗎](../../src/ClarityEngine.php#L720)</small>
 
 `public function renderLayout(string $layout, string $content, array $vars = []): string`
 
