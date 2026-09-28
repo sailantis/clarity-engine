@@ -1,0 +1,74 @@
+name: release
+
+# Publishing a release is driven by pushing a tag, so the notes can only ever
+# describe a revision that already exists.  `workflow_dispatch` re-runs the
+# publish for an existing tag (idempotent: `gh release edit` when it exists).
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)publish, e.g. v0.1.1"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Publish GitHub release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # needs history so the tag is present, and a full fetch in case the
+          # release already exists and is being edited
+          fetch-depth: 0
+
+      - name: Resolve tag
+        id: tag
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            TAG="$INPUT_TAG"
+          else
+            TAG="$REF_NAME"
+          fi
+          case "$TAG" in
+            v*) ;;
+            *) echo "::error::tag '$TAG' must start with 'v'"; exit 1 ;;
+          esac
+          git rev-parse --verify "refs/tags/$TAG^{commit}" >/dev/null 2>&1 \
+            || { echo "::error::tag '$TAG' does not exist in this repository"; exit 1; }
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Publishing release for $TAG"
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          # the script only reads the changelog, so any supported runtime works
+          php-version: "8.3"
+          coverage: none
+
+      - name: Extract release notes from CHANGELOG.md
+        run: |
+          php scripts/release-notes.php "${{ steps.tag.outputs.tag }}" /tmp/notes.md
+          echo "--- notes preview ---"
+          head -n 20 /tmp/notes.md
+
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "$TAG" --notes-file /tmp/notes.md
+          else
+            gh release create "$TAG" --title "$TAG" --notes-file /tmp/notes.md --verify-tag
+          fi
