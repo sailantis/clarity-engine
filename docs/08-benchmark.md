@@ -37,12 +37,12 @@ Generated from the same rows the charts above are drawn from. Rows are ordered b
 
 | Engine | First render (ms) | Mean (ms) | Median (ms) | Min (ms) | p95 (ms) | Retained (MB) | Peak (MB) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Clarity | 6.919 | 0.319 | 0.311 | 0.293 | 0.363 | 4.33 | 4.82 |
-| Stempler | 18.440 | 0.338 | 0.327 | 0.308 | 0.392 | 4.80 | 5.33 |
-| Native | 0.565 | 0.350 | 0.340 | 0.320 | 0.401 | 3.28 | 3.59 |
-| Plates | 1.419 | 0.404 | 0.393 | 0.369 | 0.463 | 3.37 | 3.69 |
-| Blade | 14.209 | 0.631 | 0.617 | 0.577 | 0.722 | 5.70 | 6.00 |
-| Twig | 18.938 | 0.851 | 0.827 | 0.783 | 0.984 | 5.66 | 6.08 |
+| Clarity | 6.441 | 0.322 | 0.313 | 0.294 | 0.370 | 4.42 | 5.00 |
+| Stempler | 19.464 | 0.339 | 0.328 | 0.305 | 0.392 | 4.80 | 5.33 |
+| Native | 0.662 | 0.351 | 0.341 | 0.314 | 0.404 | 3.28 | 3.59 |
+| Plates | 1.436 | 0.408 | 0.395 | 0.368 | 0.471 | 3.37 | 3.69 |
+| Blade | 13.892 | 0.635 | 0.620 | 0.579 | 0.725 | 5.70 | 6.00 |
+| Twig | 18.442 | 0.855 | 0.831 | 0.787 | 0.989 | 5.66 | 6.08 |
 
 ## Objects
 
@@ -72,12 +72,12 @@ Generated from the same rows the charts above are drawn from. Rows are ordered b
 
 | Engine | First render (ms) | Mean (ms) | Median (ms) | Min (ms) | p95 (ms) | Retained (MB) | Peak (MB) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Clarity | 5.179 | 0.110 | 0.105 | 0.092 | 0.132 | 4.21 | 4.73 |
-| Native | 0.247 | 0.117 | 0.111 | 0.097 | 0.141 | 3.18 | 3.57 |
-| Stempler | 12.140 | 0.122 | 0.116 | 0.106 | 0.148 | 4.67 | 4.81 |
-| Plates | 0.933 | 0.146 | 0.138 | 0.125 | 0.176 | 3.27 | 3.57 |
-| Blade | 13.795 | 0.327 | 0.317 | 0.291 | 0.385 | 5.60 | 5.72 |
-| Twig | 16.622 | 0.623 | 0.603 | 0.568 | 0.725 | 5.58 | 5.71 |
+| Clarity | 5.983 | 0.113 | 0.106 | 0.093 | 0.140 | 4.31 | 4.90 |
+| Native | 0.242 | 0.119 | 0.112 | 0.102 | 0.146 | 3.18 | 3.57 |
+| Stempler | 12.657 | 0.123 | 0.117 | 0.105 | 0.152 | 4.67 | 4.81 |
+| Plates | 1.198 | 0.147 | 0.139 | 0.125 | 0.179 | 3.27 | 3.57 |
+| Blade | 13.372 | 0.328 | 0.318 | 0.294 | 0.387 | 5.60 | 5.72 |
+| Twig | 17.635 | 0.629 | 0.610 | 0.569 | 0.724 | 5.58 | 5.71 |
 
 ## What the columns are
 
@@ -94,9 +94,9 @@ Two engines sitting next to each other at the top of a table are not thereby ran
 
 **Method** — Steady-state timings: the render loop for each (engine, page) cell runs in its own fresh process against a warm cache: one untimed warm-up render, then runs x iterations-per-run timed renders. No order: each (engine, page) cell is measured in its own process, so measurement order cannot affect a cell. The first render was measured as one render in a fresh process with a cold cache: engine class loading, template compile, cache write and one render.
 
-**Engines** — Clarity dev-main (7c7c9ac) · NativeEngine (Azera) 0.1.0 (daeb5a6) · Plates 3.6.0 · Blade 12.69.2 · Twig 3.27.0 · Stempler 3.17.2
+**Engines** — Clarity dev-main (716c59c) · NativeEngine (Azera) 0.1.0 (46df5ef) · Plates 3.6.0 · Blade 12.69.2 · Twig 3.27.0 · Stempler 3.17.2
 
-_Measured 2026-09-28T12:16:43+00:00_
+_Measured 2026-09-28T18:00:45+00:00_
 
 Every chart on this page is a plain SVG generated from the run's own JSON, so a number and a diagram cannot disagree. The full published report, including the headline page and each shape's live page: <https://sailantis.github.io/azera-competition/benchmarks/view-engine.html>
 <!-- view-engine:end -->
