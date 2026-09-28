@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`{% for %} … {% else %}`** — a loop may declare a branch that renders when
+  the sequence is empty, matching Twig. Works for arrays, mappings and ranges.
+  The compiler adds the "did it iterate" flag only when the branch is present,
+  so loops without it compile exactly as before.
 - **Twig-style operator tests** — `in` / `not in`, `is defined`, `is null`,
   `is empty`, `is iterable`, `is even`, `is odd`, `starts with`, `ends with`,
   `matches`, `divisible by` and `same as`. The `defined`, `null` and `empty`

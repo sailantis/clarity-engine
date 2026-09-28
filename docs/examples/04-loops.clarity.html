@@ -241,15 +241,19 @@
   <div class="section">
     <h2>Empty Loop Handling</h2>
 
-    {% if emptyArray : length > 0 %}
-      <ul>
-        {% for item in emptyArray %}
-          <li>{{ item }}</li>
-        {% endfor %}
-      </ul>
-    {% else %}
-      <p><em>No items to display</em></p>
-    {% endif %}
+    <p>
+      The loop's <code>&#123;% else %&#125;</code> branch renders only when the
+      sequence is empty, so the fallback lives with the loop instead of a
+      surrounding condition.
+    </p>
+
+    <ul>
+      {% for item in emptyArray %}
+        <li>{{ item }}</li>
+      {% else %}
+        <li><em>No items to display</em></li>
+      {% endfor %}
+    </ul>
   </div>
 </body>
 

@@ -500,6 +500,54 @@ This compiles directly to PHP's `foreach ($items as $idx => $item)`.
 {% endfor %}
 ```
 
+#### Empty Sequences: `{% else %}`
+
+A loop body may be followed by an `{% else %}` branch, rendered when the
+sequence is empty. This mirrors Twig and removes the need to count the items
+before the loop:
+
+```twig
+<ul>
+  {% for user in users %}
+  <li>{{ user.name }}</li>
+  {% else %}
+  <li class="empty">No users yet.</li>
+  {% endfor %}
+</ul>
+```
+
+It works for every loop form — over arrays, over mappings with `for k, v`, and
+over ranges:
+
+```twig
+{% for k, v in settings %}{{ k }}={{ v }}{% else %}no settings{% endfor %}
+
+{% for i in 1..0 %}never{% else %}empty range{% endfor %}
+```
+
+Two rules follow from how Twig scopes loops:
+
+- The loop variable does **not** exist in the else branch. `{{ user }}` there
+  resolves to a template variable of that name, if one exists, rather than to
+  the loop's last value.
+- A loop takes one `{% else %}`. A second one — or an `{% elseif %}` — is a
+  compile error.
+
+> **Nesting:** `{% else %}` belongs to the innermost open construct *at the same
+> nesting level*. So in `{% for %}…{% if %}…{% else %}…{% endif %}…{% else %}…{% endfor %}`
+> the first `{% else %}` is the `if`'s and the second is the loop's. Conversely,
+> in `{% if %}{% for %}…{% endfor %}{% else %}{% endif %}` the `{% else %}`
+> closes the `if`, not the loop.
+
+#### Plain `{% else %}` for Emptiness
+
+Because the else branch runs only when nothing iterated, it is also the
+direct way to say "render the fallback":
+
+```twig
+{% for item in items %}{{ item }}{% else %}Nothing to show.{% endfor %}
+```
+
 ### Macros
 
 Macros are reusable template fragments defined once and called multiple times within a template.
@@ -1080,6 +1128,7 @@ Instead, use `{% set %}`:
 | `{% for key, value in array %}`              | Loop with key variable      |
 | `{% for i in start..end %}`                  | Range loop (inclusive end)  |
 | `{% for i in start...end %}`                 | Range loop (exclusive end)  |
+| `{% else %}` (inside a loop)                 | Runs when the loop is empty |
 | `{% endfor %}`                               | End loop                    |
 | `{% set variable = value %}`                 | Variable assignment         |
 | `{% extends "template" %}`                   | Inherit from layout         |

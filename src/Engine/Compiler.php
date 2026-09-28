@@ -103,8 +103,12 @@ class Compiler
      * Version 17: `format` is an alias of `sprintf` again (Twig parity), so
      * `|> format` compiles inline to `\sprintf(...)` instead of a runtime
      * registry lookup.  Version-16 classes must be rebuilt.
+     * Version 18: a `{% for %}` may take an `{% else %}` branch (rendered when
+     * the sequence is empty).  The loop header of such a loop is patched to
+     * record iteration, so the body of any for-else template differs from
+     * before -- and version 17 rejected the `{% else %}` outright anyway.
      */
-    public const COMPILER_VERSION = 17;
+    public const COMPILER_VERSION = 18;
 
     /**
      * Prefix owned by the engine for every PHP variable it binds into the render
@@ -164,10 +168,28 @@ class Compiler
     private ?TemplateLoader $loader = null;
 
     /**
-     * Stack tracking loop types and compiler-scope variable bindings to restore on endfor.
-     * @var list<array{type:string, restore:array<string,string|null>}>
+     * Stack tracking loop types, the if-depth a loop opened at, the generated
+     * line holding its header (patched on `{% else %}`), and the compiler-scope
+     * variable bindings to restore on endfor.
+     * @var list<array{type:string, restore:array<string,string|null>, ifDepth:int, headerLine:int, hasElse:bool}>
      */
     private array $forStack = [];
+
+    /**
+     * Nesting depth of the `{% if %}` blocks currently open, so a branch tag can
+     * tell whether it belongs to the innermost if or to an open `{% for %}`.
+     * @see innermostLoopAtCurrentDepth()
+     */
+    private int $ifDepth = 0;
+
+    /** Monotonic counter naming the "did the loop iterate" flags of for-else loops. */
+    private int $forElseSeq = 0;
+
+    /**
+     * Set by compileFor() when a loop header line was just emitted, so the
+     * caller can record its index for a possible later `{% else %}` patch.
+     */
+    private bool $forHeaderPending = false;
 
     /** Whether to emit debug-only assertions (range checks) in generated code */
     private bool $debugMode = false;
@@ -335,6 +357,9 @@ class Compiler
         $this->sourceFileIndex = [];
         $this->phpLine         = 0;
         $this->forStack        = [];
+        $this->ifDepth         = 0;
+        $this->forElseSeq      = 0;
+        $this->forHeaderPending = false;
         $this->localVars       = [];
         $this->tokenizer->setLocalVars([]);
         $this->macros              = [];
@@ -960,6 +985,16 @@ class Compiler
                                 $mappedSourcePath
                             );
                         }
+                        // A `{% for %}` header is the last line just emitted.  Its index
+                        // is kept so that a later `{% else %}` can patch in the flag name
+                        // that marks iteration; see compileElse().
+                        if ($this->forHeaderPending) {
+                            $this->forHeaderPending = false;
+                            $top = \count($this->forStack) - 1;
+                            if ($top >= 0 && $this->forStack[$top]['headerLine'] === -1) {
+                                $this->forStack[$top]['headerLine'] = $this->currentLineIndex($lines);
+                            }
+                        }
                         break;
                 }
 
@@ -1039,10 +1074,10 @@ class Compiler
         $rest    = $parts[1] ?? '';
 
         return match ($keyword) {
-            'if'     => 'if (' . $this->tokenizer->processCondition($rest) . '):',
-            'elseif' => 'elseif (' . $this->tokenizer->processCondition($rest) . '):',
-            'else'   => 'else:',
-            'endif'  => 'endif;',
+            'if'     => $this->compileIf($rest, $sourcePath, $tplLine),
+            'elseif' => $this->compileElseIf($rest, $sourcePath, $tplLine),
+            'else'   => $this->compileElse($sourcePath, $tplLine, $lines),
+            'endif'  => $this->compileEndIf(),
             'endfor' => $this->compileEndFor($sourcePath, $tplLine),
             'for'    => $this->compileFor($rest, $sourcePath, $tplLine),
             'set'    => $this->compileSet($rest, $sourcePath, $tplLine),
@@ -1373,7 +1408,14 @@ class Compiler
             $restore     = [$itemTplName => $this->localVars[$itemTplName] ?? null];
             $this->registerVar($itemTplName, $tplLine);
 
-            $this->forStack[] = ['type' => 'for', 'restore' => $restore];
+            $this->forStack[] = [
+                'type'      => 'for',
+                'restore'   => $restore,
+                'ifDepth'   => $this->ifDepth,
+                'headerLine' => -1,
+                'hasElse'   => false,
+            ];
+            $this->forHeaderPending = true;
 
             $rangeLines = [];
 
@@ -1400,6 +1442,7 @@ class Compiler
         $keyTplName  = $hasSecond ? $firstName : null;
         $itemTplName = $hasSecond ? trim($m[2]) : $firstName;
 
+        /** @var array<string, string|null> $restore */
         $restore = [];
         foreach ([$keyTplName, $itemTplName] as $tplName) {
             if ($tplName === null || isset($restore[$tplName])) {
@@ -1409,7 +1452,18 @@ class Compiler
             $this->registerVar($tplName);
         }
 
-        $this->forStack[] = ['type' => 'foreach', 'restore' => $restore];
+        $this->forStack[] = [
+            'type'      => 'foreach',
+            'restore'   => $restore,
+            'ifDepth'   => $this->ifDepth,
+            'headerLine' => -1,
+            'hasElse'   => false,
+        ];
+
+        // A later `{% else %}` appends the flag assignment to this loop's header
+        // line; see compileElse().  Until then the header is exactly what it
+        // would have been without for-else support.
+        $this->forHeaderPending = true;
 
         if ($keyTplName !== null) {
             // PHP's foreach binding is (key => value), so the key variable goes on the left. The template wrote (key, value), matching that order.
@@ -1417,6 +1471,26 @@ class Compiler
         }
 
         return "foreach ({$listExpr} as \${$itemTplName}):";
+    }
+
+    /**
+     * The innermost open `{% for %}` that a branch tag at the CURRENT if-depth
+     * belongs to, or null when the branch belongs to an `{% if %}`.
+     *
+     * Depth is what disambiguates the two meanings of `{% else %}`: a loop
+     * opened inside an if has a HIGHER if-depth than that if, so an `{% else %}`
+     * at the if's own depth still closes the if and leaves a `{% for %} …
+     * {% else %}` pair intact.  Returns the stack index, not the entry, so the
+     * caller can patch the entry in place.
+     */
+    private function innermostLoopAtCurrentDepth(): ?int
+    {
+        $index = \count($this->forStack) - 1;
+        if ($index < 0) {
+            return null;
+        }
+
+        return $this->forStack[$index]['ifDepth'] === $this->ifDepth ? $index : null;
     }
 
     /**
@@ -1462,14 +1536,142 @@ class Compiler
         }
     }
 
+    /**
+     * Compile `{% if expr %}` and remember the new nesting depth.
+     */
+    private function compileIf(string $rest, string $sourcePath, int $tplLine): string
+    {
+        $this->ifDepth++;
+        return 'if (' . $this->tokenizer->processCondition($rest) . '):';
+    }
+
+    /**
+     * Compile `{% elseif expr %}`.
+     *
+     * An `{% elseif %}` inside a loop is always the author's if-chain; a loop
+     * cannot have a second branch.  The guard turns the resulting PHP parse
+     * error into a compile-time message that names the template line.
+     */
+    private function compileElseIf(string $rest, string $sourcePath, int $tplLine): string
+    {
+        if ($this->innermostLoopAtCurrentDepth() !== null) {
+            throw new ClarityException(
+                "'{% elseif %}' is not valid in a '{% for %}' loop; use '{% else %}' followed by '{% if %}'.",
+                $sourcePath,
+                $tplLine
+            );
+        }
+
+        return 'elseif (' . $this->tokenizer->processCondition($rest) . '):';
+    }
+
+    /**
+     * Compile `{% else %}`.
+     *
+     * Twig gives `{% else %}` two meanings inside a loop: a branch tag whose
+     * innermost open construct is the loop means "the sequence was empty",
+     * while a branch tag belonging to an `{% if %}` inside the loop means the
+     * ordinary conditional fallback.  {@see innermostLoopAtCurrentDepth()}
+     * separates the two.
+     *
+     * A for-else is compiled by making the loop header record whether it
+     * iterated, closing the loop, and opening an `if` on the negation.  PHP has
+     * no `for … else`, so this is the only way to express it; and because the
+     * `endforeach`/`endfor` keyword depends on the loop type, that choice is
+     * deferred to `{% endfor %}` via the entry's `hasElse` marker.
+     *
+     * @param array $lines Accumulator, needed to patch the loop's header line.
+     */
+    private function compileElse(string $sourcePath, int $tplLine, array &$lines): string
+    {
+        $index = $this->innermostLoopAtCurrentDepth();
+        if ($index === null) {
+            return 'else:';
+        }
+
+        $entry = $this->forStack[$index];
+        if ($entry['hasElse']) {
+            throw new ClarityException(
+                "'{% for %}' may only take one '{% else %}' branch.",
+                $sourcePath,
+                $tplLine
+            );
+        }
+
+        // Decide the flag name now and rewrite the loop header, which is the only
+        // emitted line this touches.  This is the whole point of the lazy
+        // strategy: a loop WITHOUT an else is left byte-for-byte as it was, and
+        // no line is inserted, so the source map needs no renumbering.
+        //
+        // The flag is initialised immediately BEFORE the loop, not just set
+        // inside it, so that a loop which runs more than once -- a nested loop
+        // re-entered by an outer iteration -- starts each pass with a clean flag
+        // instead of inheriting `true` from the previous pass.
+        $flag = self::INTERNAL_PREFIX . 'e' . $this->forElseSeq++;
+        $lines[$entry['headerLine']] =
+            '$' . $flag . ' = false; '
+            . $lines[$entry['headerLine']]
+            . ' $' . $flag . ' = true;';
+
+        $this->forStack[$index]['hasElse'] = true;
+
+        // Twig hides the loop variable in the else branch, so restore the
+        // bindings the loop introduced before it, not at `{% endfor %}`.
+        $this->restoreLoopVars($entry['restore']);
+
+        // The loop is closed HERE rather than at `{% endfor %}`: the else body
+        // follows immediately, so the `if` on the flag has to open now.  The
+        // matching `endif;` is emitted by `{% endfor %}`.
+        $close = $entry['type'] === 'for' ? 'endfor;' : 'endforeach;';
+
+        return $close . ' if (!$' . $flag . '):';
+    }
+
+    /**
+     * Compile `{% endif %}` and forget the matching if.
+     */
+    private function compileEndIf(): string
+    {
+        if ($this->ifDepth > 0) {
+            $this->ifDepth--;
+        }
+
+        return 'endif;';
+    }
+
+    /**
+     * Compile `{% endfor %}` into the closing keyword(s) of the matching loop.
+     */
     private function compileEndFor(string $sourcePath, int $tplLine): string
     {
         $entry = array_pop($this->forStack);
         if ($entry === null) {
             throw new ClarityException("Unexpected 'endfor' without matching 'for'", $sourcePath, $tplLine);
         }
-        // Restore compile-time local var bindings to what they were before this loop
-        foreach ($entry['restore'] as $name => $oldValue) {
+
+        // A for-else already restored the bindings when it opened its else branch.
+        if (!$entry['hasElse']) {
+            $this->restoreLoopVars($entry['restore']);
+        }
+
+        $close = $entry['type'] === 'for' ? 'endfor;' : 'endforeach;';
+
+        // A for-else closed its loop at `{% else %}` and has an `if (!$flag):`
+        // open around the else body, so only the `endif;` is left.  A plain loop
+        // closes here and needs no `endif;` -- which also means a loop nested in
+        // an if cannot leak an extra `endif;` into that if.
+        return $entry['hasElse'] ? 'endif;' : $close;
+    }
+
+    /**
+     * Undo the compile-scope bindings a loop introduced, so code after the loop
+     * resolves those names through the render scope again.
+     *
+     * @param array<string, string|null> $restore name → previous PHP variable string, or null if unbound
+     */
+    private function restoreLoopVars(array $restore): void
+    {
+        foreach ($restore as $name => $oldValue) {
             if ($oldValue === null) {
                 unset($this->localVars[$name]);
             } else {
@@ -1478,12 +1680,18 @@ class Compiler
         }
 
         $this->tokenizer->setLocalVars($this->localVars);
+    }
 
-        if ($entry['type'] === 'for') {
-            return 'endfor;';
-        }
-
-        return 'endforeach;';
+    /**
+     * Index in $lines of the most recently appended line.
+     *
+     * The accumulator holds every statement emitted so far, so an earlier line
+     * is patched in place by index; a branch token has always seen at least the
+     * line that produced it.
+     */
+    private function currentLineIndex(array &$lines): int
+    {
+        return \count($lines) > 0 ? \array_key_last($lines) : 0;
     }
 
     private const RE_SET = '/^(.+?)\s*=\s*(.+)$/s';
