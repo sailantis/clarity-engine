@@ -664,7 +664,8 @@ trait ClarityEngineTrait
      * ```
      *
      * @param string $view View name to render. Can include namespace prefix (e.g. 'admin::dashboard').
-     * @param array $vars Variables to pass to the template. Objects are automatically converted to arrays.
+     * @param array $vars Variables to pass to the template. Objects stay objects: `a.b`
+     *                    reads a public property while `a:b` reads an array key.
      * @return string Rendered HTML/output.
      * @throws ClarityException If template not found or compilation fails.
      */
