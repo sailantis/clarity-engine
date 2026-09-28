@@ -228,7 +228,7 @@ it is reported rather than emitted as text.
 
 ---
 
-### setEscapeContext() · <small>[🗎](../../src/Engine/Tokenizer.php#L539)</small>
+### setEscapeContext() · <small>[🗎](../../src/Engine/Tokenizer.php#L584)</small>
 
 `public function setEscapeContext(string $context): void`
 
@@ -249,7 +249,7 @@ Called by the Compiler as it tracks the current position in the template.
 
 ---
 
-### processExpression() · <small>[🗎](../../src/Engine/Tokenizer.php#L544)</small>
+### processExpression() · <small>[🗎](../../src/Engine/Tokenizer.php#L589)</small>
 
 `public function processExpression(string $expression): string`
 
@@ -266,7 +266,7 @@ Called by the Compiler as it tracks the current position in the template.
 
 ---
 
-### processCondition() · <small>[🗎](../../src/Engine/Tokenizer.php#L574)</small>
+### processCondition() · <small>[🗎](../../src/Engine/Tokenizer.php#L619)</small>
 
 `public function processCondition(string $expression): string`
 
@@ -287,7 +287,7 @@ structure conditions (if, for, set) where auto-escape is meaningless.
 
 ---
 
-### processLvalue() · <small>[🗎](../../src/Engine/Tokenizer.php#L598)</small>
+### processLvalue() · <small>[🗎](../../src/Engine/Tokenizer.php#L643)</small>
 
 `public function processLvalue(string $var): string`
 
@@ -313,7 +313,7 @@ choice lives in the chain emitter, so it cannot drift from the read path.
 
 ---
 
-### convertVarsAndOps() · <small>[🗎](../../src/Engine/Tokenizer.php#L799)</small>
+### convertVarsAndOps() · <small>[🗎](../../src/Engine/Tokenizer.php#L844)</small>
 
 `public function convertVarsAndOps(string $expr): string`
 
@@ -339,7 +339,7 @@ identifiers/var-chains, operators, punctuation) and process each atom.
 
 ---
 
-### isIdentifierStart() · <small>[🗎](../../src/Engine/Tokenizer.php#L2160)</small>
+### isIdentifierStart() · <small>[🗎](../../src/Engine/Tokenizer.php#L2218)</small>
 
 `public static function isIdentifierStart(string $ch): bool`
 
@@ -362,7 +362,7 @@ locale-dependent and would disagree with the runtime on a non-C locale.
 
 ---
 
-### isIdentifierChar() · <small>[🗎](../../src/Engine/Tokenizer.php#L2175)</small>
+### isIdentifierChar() · <small>[🗎](../../src/Engine/Tokenizer.php#L2233)</small>
 
 `public static function isIdentifierChar(string $ch): bool`
 
@@ -381,7 +381,7 @@ Whether the character (a single BYTE) can appear inside an identifier.
 
 ---
 
-### isIdentifier() · <small>[🗎](../../src/Engine/Tokenizer.php#L2192)</small>
+### isIdentifier() · <small>[🗎](../../src/Engine/Tokenizer.php#L2250)</small>
 
 `public static function isIdentifier(string $name): bool`
 
@@ -404,7 +404,7 @@ tokenize back out.
 
 ---
 
-### varChainToPhp() · <small>[🗎](../../src/Engine/Tokenizer.php#L2545)</small>
+### varChainToPhp() · <small>[🗎](../../src/Engine/Tokenizer.php#L3112)</small>
 
 `public function varChainToPhp(string $chain): string`
 
@@ -430,7 +430,7 @@ a.b[c.d].e    â†’ $__c_va['a']['b'][$__c_va['c']['d']]['e']
 
 ---
 
-### buildFilterCall() · <small>[🗎](../../src/Engine/Tokenizer.php#L2774)</small>
+### buildFilterCall() · <small>[🗎](../../src/Engine/Tokenizer.php#L3341)</small>
 
 `public function buildFilterCall(string $filterSegment, string $phpValue): string`
 

@@ -54,8 +54,8 @@ use Stringable;
  *
  * **Dates & Times**
  * - `date [$format='Y-m-d']`    : Format timestamp/DateTimeInterface/date string
- *   (DateTimeInterface values reach this filter as ISO-8601 strings, because
- *   castToArray() converts them on the way in)
+ *   (DateTimeInterface values reach this filter directly; the filter reads
+ *   their timestamp without converting them)
  * - `date_modify($modifier)`    : Apply date modifier (e.g. '+1 day'), return Unix timestamp
  *
  * **Arrays & Collections**
@@ -635,6 +635,108 @@ class Registry
         // because it is listed in $filters, exactly like `length`.
         $this->filters['len']   = true;
         $this->callables['len'] = $this->callables['length'];
+
+        // ── Collection functions (call syntax) ──
+        //
+        // These have no piped-value form: their argument IS the subject
+        // (`range(1, 5)`, `cycle(['a','b'], 1)`), so they are callable but not
+        // filterable — the same shape as `context()`.
+        $this->callables['range'] = static function (mixed $low, mixed $high, mixed $step = 1): array {
+            $step = (int) $step;
+            if ($step === 0) {
+                return [];
+            }
+            return \range((int) $low, (int) $high, $step);
+        };
+
+        $this->callables['cycle'] = static function (mixed $values, mixed $position): mixed {
+            $arr = \is_array($values) ? $values : [$values];
+            $n   = \count($arr);
+            if ($n === 0) {
+                return null;
+            }
+            $pos = (int) $position % $n;
+            if ($pos < 0) {
+                $pos += $n;
+            }
+            return \array_values($arr)[$pos];
+        };
+
+        // `attribute(obj, name)`: a dynamic read that respects the same access
+        // model as `a.b` / `a:b` — array key for arrays, public property for
+        // objects. An optional third argument supplies a fallback.
+        $this->callables['attribute'] = static function (mixed $subject, mixed $name, mixed $default = null): mixed {
+            $name = (string) $name;
+            if (\is_array($subject)) {
+                return $subject[$name] ?? $default;
+            }
+            if (\is_object($subject)) {
+                $vars = \get_object_vars($subject);
+                return $vars[$name] ?? $default;
+            }
+            return $default;
+        };
+
+        // ── Twig-style operator tests (call syntax) ──
+        //
+        // These back the infix/prefix tests the tokenizer rewrites into calls:
+        //   x in y            -> in(x, y)
+        //   x starts with y   -> starts_with(x, y)
+        //   x is same as(y)   -> same_as(x, y)
+        //   x is even         -> is_even(x)
+        //
+        // They are ordinary runtime callables (value in, bool out).  The three
+        // tests that must TOLERATE an absent left operand — `defined`, `is null`
+        // and `is empty` — are intercepted by the compiler instead, because a
+        // value-passing callable cannot tell "absent" from "null"; their entries
+        // below exist so `hasFunction()` answers true and the call reaches the
+        // interception point.
+        $this->callables['in'] = static function (mixed $needle, mixed $haystack): bool {
+            if (\is_string($haystack)) {
+                return \is_scalar($needle) && $needle !== '' && \str_contains($haystack, (string) $needle);
+            }
+            if ($haystack instanceof \Traversable) {
+                $haystack = \iterator_to_array($haystack, false);
+            }
+            if (\is_array($haystack)) {
+                // Twig's `in`: a LIST matches by value, a MAPPING by key. Both
+                // are checked so `2 in [1,2]` (a value) and `'a' in ['a'=>1]`
+                // (a key) each work; loose comparison keeps the string/number
+                // mix a template routinely meets from failing outright.
+                return \in_array($needle, $haystack, false) || \array_key_exists($needle, $haystack);
+            }
+            return false;
+        };
+
+        $this->callables['starts_with'] = static fn(mixed $s, mixed $prefix): bool =>
+            \str_starts_with((string) $s, (string) $prefix);
+
+        $this->callables['ends_with'] = static fn(mixed $s, mixed $suffix): bool =>
+            \str_ends_with((string) $s, (string) $suffix);
+
+        $this->callables['matches'] = static function (mixed $s, mixed $pattern): bool {
+            $pattern = (string) $pattern;
+            if ($pattern === '' || @\preg_match($pattern, '') === false) {
+                return false;
+            }
+            return \preg_match($pattern, (string) $s) === 1;
+        };
+
+        $this->callables['divisible_by'] = static fn(mixed $n, mixed $d): bool =>
+            (int) $d !== 0 && (int) $n % (int) $d === 0;
+
+        $this->callables['same_as'] = static fn(mixed $a, mixed $b): bool => $a === $b;
+
+        $this->callables['is_even'] = static fn(mixed $n): bool => (int) $n % 2 === 0;
+        $this->callables['is_odd']  = static fn(mixed $n): bool => (int) $n % 2 !== 0;
+        $this->callables['iterable'] = static fn(mixed $v): bool =>
+            \is_array($v) || $v instanceof \Traversable;
+
+        // Intercepted in the compiler (see Tokenizer::buildDefinedTest()); the
+        // bodies are a last-resort fallback for direct call syntax.
+        $this->callables['defined']  = static fn(mixed $v): bool => $v !== null;
+        $this->callables['is_null']  = static fn(mixed $v): bool => $v === null;
+        $this->callables['is_empty'] = static fn(mixed $v): bool => empty($v);
     }
 
     /**

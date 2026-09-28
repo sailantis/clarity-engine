@@ -169,9 +169,12 @@ class TagScannerTest extends BaseTestCase
         );
     }
 
-    public function testWhitespaceControlIsPreservedInContent(): void
+    public function testWhitespaceControlDashesAreStrippedFromContent(): void
     {
-        $this->assertSegments([[self::BLOCK, '- if x -']], '{%- if x -%}');
+        // The `-` markers are whitespace control; they are not part of the tag
+        // content. See testWhitespaceControlSuppressesSurroundingText for the
+        // effect on the neighbouring text segments.
+        $this->assertSegments([[self::BLOCK, 'if x']], '{%- if x -%}');
     }
 
     public function testCommentTagContentIsPreserved(): void

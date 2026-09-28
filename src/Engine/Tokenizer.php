@@ -322,10 +322,11 @@ class Tokenizer
             ];
         }
 
-        $segments  = [];
-        $sourceLen = \strlen($source);
-        $line      = 1;
-        $pos       = 0;
+        $segments     = [];
+        $sourceLen    = \strlen($source);
+        $line         = 1;
+        $pos          = 0;
+        $trimNextText = false;
 
         foreach ($matches[0] as [$opener, $tagPos]) {
             if ($tagPos < $pos) {
@@ -344,8 +345,29 @@ class Tokenizer
                     break;
             }
 
-            if ($tagPos > $pos) {
-                $text = \substr($source, $pos, $tagPos - $pos);
+            // Whitespace control: `{%-` (and `{{-`, `{#-`) suppress the
+            // whitespace immediately BEFORE the tag; a `-` before the closer
+            // suppresses the whitespace immediately AFTER it.
+            $trimBefore = ($source[$tagPos + 2] ?? '') === '-';
+            $beforePos  = $tagPos;
+
+            if ($trimBefore) {
+                // `{%-` consumes the whitespace up to $beforePos. Extend it
+                // leftwards over spaces, tabs and newlines, but never over the
+                // previous tag's closing delimiter — which is what keeps
+                // `{% set a = 1 -%}{%- if x %}` from swallowing the assignment.
+                $b = $beforePos;
+                while ($b > $pos && \str_contains(" \t\r\n", $source[$b - 1])) {
+                    $b--;
+                }
+                $beforePos = $b;
+            }
+
+            if ($beforePos > $pos) {
+                $text = \substr($source, $pos, $beforePos - $pos);
+                if ($trimNextText) {
+                    $text = self::trimLeftWhitespace($text);
+                }
                 if (self::hasVisibleText($text)) {
                     $segments[] = [
                         self::KEY_TYPE    => self::TEXT,
@@ -357,6 +379,9 @@ class Tokenizer
             }
 
             $innerStart = $tagPos + 2;
+            if ($trimBefore) {
+                $innerStart++;
+            }
 
             if ($type === self::COMMENT) {
                 $close = \strpos($source, '#}', $innerStart);
@@ -384,9 +409,18 @@ class Tokenizer
                 $end = $close + 2;
             }
 
+            // A `-` glued to the closer suppresses following whitespace.
+            $trimAfter  = ($source[$end - 3] ?? '') === '-';
+            $trimNextText = $trimAfter;
+
+            $contentEnd = $end - 2;
+            if ($trimAfter) {
+                $contentEnd--;
+            }
+
             $segments[] = [
                 self::KEY_TYPE    => $type,
-                self::KEY_CONTENT => \trim(\substr($source, $innerStart, $end - 2 - $innerStart)),
+                self::KEY_CONTENT => \trim(\substr($source, $innerStart, $contentEnd - $innerStart)),
                 self::KEY_LINE    => $line,
             ];
 
@@ -396,6 +430,9 @@ class Tokenizer
 
         if ($pos < $sourceLen) {
             $rest = \substr($source, $pos);
+            if ($trimNextText) {
+                $rest = self::trimLeftWhitespace($rest);
+            }
             if (self::hasVisibleText($rest)) {
                 $segments[] = [
                     self::KEY_TYPE    => self::TEXT,
@@ -406,6 +443,14 @@ class Tokenizer
         }
 
         return $segments;
+    }
+
+    /**
+     * Strip leading whitespace (spaces, tabs, newlines) from a text segment.
+     */
+    private static function trimLeftWhitespace(string $text): string
+    {
+        return \ltrim($text, " \t\r\n");
     }
 
     /**
@@ -1160,6 +1205,19 @@ class Tokenizer
                 }
                 $contChar = $expr[$contPos] ?? '';
                 $contTwo  = \substr($expr, $contPos, 2);
+
+                // Twig-style infix/prefix TESTS: `x in y`, `x is defined`,
+                // `x is not empty`, `x starts with y`, `x matches p`, …
+                // Dispatched on a word boundary so an ordinary variable named
+                // `in`/`is` (used as `{{ in }}`) is untouched. This runs BEFORE
+                // the chain-continuation branch below, because a right operand
+                // that starts with `[`/`(` would otherwise read as an index read
+                // (`x in [1,2,3]` mis-compiling to `$__c_va['in'][…]`).
+                if (!($start > 0 && self::isIdentifierChar($expr[$start - 1]))) {
+                    if ($this->tryCompileOperatorTest($expr, $start, $idEnd, $ternarySeen, $out, $i)) {
+                        continue;
+                    }
+                }
 
                 // Open-mode filter placeholder: a lone `_` stands for the piped
                 // value while compiling a PHP function's argument list.  It is
@@ -2259,6 +2317,515 @@ class Tokenizer
 
         // Whitespace on the RIGHT: it separates a ternary.
         return !\ctype_space($subject[$pos + 1] ?? '');
+    }
+
+    // -------------------------------------------------------------------------
+    // Twig-style operator tests
+    // -------------------------------------------------------------------------
+    // Twig-style operator tests
+    // -------------------------------------------------------------------------
+
+    /**
+     * Operator tests, keyed by the (underscored) test name as written after
+     * `is`, or by the operator word itself for the one infix test (`in`).
+     *
+     * Record schema
+     * -------------
+     *   binary    true  -> the test takes a right operand/argument (`x in y`,
+     *                      `x matches p`, `x starts with p`).
+     *   tolerates true  -> the left operand may be ABSENT; the test is compiled
+     *                      as a presence probe instead of a read, so it answers
+     *                      instead of throwing (`defined`, `null`, `empty`).
+     *   call            -> the runtime callable that backs the test.
+     *
+     * Every test is VALUE-FIRST: the left operand becomes the first argument,
+     * so `x in y` compiles to `in(x, y)` and `x starts with p` to
+     * `starts_with(x, p)`.
+     *
+     * @var array<string, array{binary: bool, tolerates: bool, call: string}>
+     */
+    private const OPERATOR_TESTS = [
+        // Infix: `value in container`.
+        'in'           => ['binary' => true,  'tolerates' => false, 'call' => 'in'],
+        // `value is <test>` with a right operand.
+        'matches'      => ['binary' => true,  'tolerates' => false, 'call' => 'matches'],
+        'starts_with'  => ['binary' => true,  'tolerates' => false, 'call' => 'starts_with'],
+        'ends_with'    => ['binary' => true,  'tolerates' => false, 'call' => 'ends_with'],
+        'divisible_by' => ['binary' => true,  'tolerates' => false, 'call' => 'divisible_by'],
+        'same_as'      => ['binary' => true,  'tolerates' => false, 'call' => 'same_as'],
+        // `value is <test>` — no right operand.
+        'defined'      => ['binary' => false, 'tolerates' => true,  'call' => 'defined'],
+        'null'         => ['binary' => false, 'tolerates' => true,  'call' => 'is_null'],
+        'none'         => ['binary' => false, 'tolerates' => true,  'call' => 'is_null'],
+        'empty'        => ['binary' => false, 'tolerates' => true,  'call' => 'is_empty'],
+        'iterable'     => ['binary' => false, 'tolerates' => false, 'call' => 'iterable'],
+        'even'         => ['binary' => false, 'tolerates' => false, 'call' => 'is_even'],
+        'odd'          => ['binary' => false, 'tolerates' => false, 'call' => 'is_odd'],
+    ];
+
+    /**
+     * Binary-operator keywords that end a top-level operand. Used both to find
+     * the left operand of a test and to bound its (bare) right operand.
+     */
+    private const OPERATOR_WORDS = [
+        'and' => true, 'or' => true, 'not' => true, 'in' => true, 'is' => true,
+        'bor' => true, 'band' => true, 'bxor' => true, 'bnot' => true,
+        'blsh' => true, 'brsh' => true,
+    ];
+
+    /**
+     * Words that begin a standalone test (`<value> starts with <x>`) rather than
+     * requiring the `is` marker. `is` itself is handled separately.
+     */
+    private const STANDALONE_TEST_WORDS = [
+        'starts'    => true,
+        'ends'      => true,
+        'matches'   => true,
+        'divisible' => true,
+        'same'      => true,
+    ];
+
+    /**
+     * Read a test name (one or two words) at $p, returning [underscoredName, endPos].
+     * Returns ['', $p] when no identifier starts at $p.
+     */
+    private function readOperatorTestName(string $expr, int $p, int $len): array
+    {
+        if (!self::isIdentifierStart($expr[$p] ?? '')) {
+            return ['', $p];
+        }
+
+        $start = $p;
+        while ($p < $len && self::isIdentifierChar($expr[$p])) {
+            $p++;
+        }
+        $name = \strtolower(\substr($expr, $start, $p - $start));
+
+        // Multi-word names: `starts with`, `ends with`, `divisible by`,
+        // `same as`. A single space only — `starts  with` is not a test.
+        if (($expr[$p] ?? '') === ' ' && ($expr[$p + 1] ?? '') !== '' && !\ctype_space($expr[$p + 1])) {
+            $q = $p + 1;
+            while ($q < $len && self::isIdentifierChar($expr[$q])) {
+                $q++;
+            }
+            $twoWord = $name . '_' . \strtolower(\substr($expr, $p + 1, $q - $p - 1));
+            if (\array_key_exists($twoWord, self::OPERATOR_TESTS)) {
+                return [$twoWord, $q];
+            }
+        }
+
+        return [$name, $p];
+    }
+
+    /**
+     * Try to compile a Twig-style test beginning at the identifier
+     * [$start, $idEnd).  On success appends PHP to $out, sets $i past the test
+     * and returns true; otherwise leaves both untouched and returns false.
+     *
+     * Grammar
+     * -------
+     *   <value> in <container>             -> in(<value>, <container>)
+     *   <value> not in <container>         -> !in(<value>, <container>)
+     *   <value> is <test>                  -> <test>(<value>)
+     *   <value> is <test>(<args>)          -> <test>(<value>, <args>)
+     *   <value> is not <test>[(<args>)]    -> !<test>(<value>, <args>)
+     *
+     * The binary tests also accept a bare right operand, which is what makes
+     * `x in y` the natural spelling:
+     *   <value> in <expr>                  -> in(<value>, <expr>)
+     *   <value> matches <expr>             -> matches(<value>, <expr>)
+     *
+     * The left operand is the last top-level operand before the operator, so a
+     * test composes with the operators around it (`a + b in c` keeps `b`).
+     *
+     * @param string $expr        Full expression being compiled.
+     * @param int    $start       Index of the operator word's first character.
+     * @param int    $idEnd       Index just past the operator word.
+     * @param bool   $ternaryOpen Whether a ternary is currently awaiting its `:`.
+     * @param string $out         PHP emitted so far (mutated on success).
+     * @param int    $i           Current scan position (mutated on success).
+     */
+    private function tryCompileOperatorTest(
+        string $expr,
+        int $start,
+        int $idEnd,
+        bool $ternaryOpen,
+        string &$out,
+        int &$i
+    ): bool {
+        $len   = \strlen($expr);
+        $lower = \strtolower(\substr($expr, $start, $idEnd - $start));
+
+        // Trigger words:
+        //   in                       -> `<value> in <container>`
+        //   is                       -> `<value> is [not] <test>…`
+        //   starts/ends/matches/…    -> standalone `<value> starts with <x>`
+        $negated = false;
+        $opPos   = $start;
+
+        if ($lower === 'in') {
+            $name = 'in';
+            $p    = $idEnd;
+            while ($p < $len && \ctype_space($expr[$p])) {
+                $p++;
+            }
+            // `x not in y`: the `not` sits BEFORE `in`, so look backwards. It has
+            // already been emitted as `!`, which is stripped with the operand.
+            $b = $start;
+            while ($b > 0 && \ctype_space($expr[$b - 1])) {
+                $b--;
+            }
+            if ($b >= 3 && \substr($expr, $b - 3, 3) === 'not'
+                && ($b - 3 === 0 || !self::isIdentifierChar($expr[$b - 4]))) {
+                $negated = true;
+                $opPos   = $b - 3;
+            }
+        } elseif ($lower === 'is') {
+            $p = $idEnd;
+            while ($p < $len && \ctype_space($expr[$p])) {
+                $p++;
+            }
+            if (\substr($expr, $p, 3) === 'not' && !self::isIdentifierChar($expr[$p + 3] ?? '')) {
+                $negated = true;
+                $p += 3;
+                while ($p < $len && \ctype_space($expr[$p])) {
+                    $p++;
+                }
+            }
+            [$name, $p] = $this->readOperatorTestName($expr, $p, $len);
+            if ($name === '') {
+                return false;
+            }
+        } elseif (isset(self::STANDALONE_TEST_WORDS[$lower])) {
+            [$name, $p] = $this->readOperatorTestName($expr, $start, $len);
+            if ($name === '') {
+                return false;
+            }
+        } else {
+            return false;
+        }
+
+        if (!\array_key_exists($name, self::OPERATOR_TESTS)) {
+            // An unrecognised word after `is` is a mistake worth reporting; the
+            // other triggers only fire on a known test word, so they cannot get
+            // here with an unknown name.
+            if ($lower === 'is') {
+                throw new ClarityException(
+                    "Unknown test '{$name}' after 'is'. Supported tests: "
+                        . \implode(', ', \array_keys(self::OPERATOR_TESTS)) . '.'
+                );
+            }
+            return false;
+        }
+
+        // The argument list / bare operand follows the test name.
+        while ($p < $len && \ctype_space($expr[$p])) {
+            $p++;
+        }
+        $after = $expr[$p] ?? '';
+
+        $spec = self::OPERATOR_TESTS[$name];
+
+        // Left operand first: everything before the operator, back to the last
+        // top-level boundary. It is required. For `not in` the operator begins
+        // at the `not`, so $opPos (not $start) bounds the operand.
+        $lhsStart = $this->operatorTestLhsStart($expr, $opPos);
+        if ($lhsStart === null) {
+            return false;
+        }
+        $lhsRaw = \rtrim(\substr($expr, $lhsStart, $opPos - $lhsStart));
+        if ($lhsRaw === '') {
+            return false;
+        }
+
+        // Right operand: an explicit `(…)` group, or (for the binary tests) a
+        // bare operand out to the next top-level boundary.
+        $end = $p;
+        if ($after === '(') {
+            [$inner, $end] = $this->extractBalancedSegment($expr, $p);
+            $argsPhp = $inner === '' ? '' : $this->processCondition($inner);
+        } elseif ($spec['binary']) {
+            $opEnd  = $this->scanOperandEnd($expr, $p);
+            $rhsRaw = \trim(\substr($expr, $p, $opEnd - $p));
+            if ($rhsRaw === '') {
+                return false;
+            }
+            try {
+                $argsPhp = $this->processCondition($rhsRaw);
+            } catch (ClarityException) {
+                return false;
+            }
+            $end = $opEnd;
+        } else {
+            $argsPhp = '';
+        }
+
+        // A failure to compile either operand means this was never a test.
+        try {
+            $lhsVal = $this->processCondition($lhsRaw);
+        } catch (ClarityException) {
+            return false;
+        }
+
+        // Replace the PHP already emitted for the left operand: it is either
+        // reused as the call's first argument or replaced by a presence probe.
+        // Trailing whitespace before the operator word is dropped first; PHP
+        // output never ends in whitespace, so the suffix test is exact.
+        $stripped = \rtrim($out);
+
+        // `x not in y`: the `not` was already emitted as `!` (its keyword-map
+        // expansion) while the scanner was before the `in`. It is part of the
+        // test, so drop it along with the operand.
+        if ($lower === 'in' && $negated && \str_ends_with($stripped, '!')) {
+            $stripped = \rtrim(\substr($stripped, 0, -1));
+        }
+
+        if ($lhsVal !== '' && \str_ends_with($stripped, $lhsVal)) {
+            $out = \substr($stripped, 0, \strlen($stripped) - \strlen($lhsVal));
+        } else {
+            $out = $stripped;
+        }
+
+        if ($spec['tolerates']) {
+            // Absence-tolerant: a presence probe answers instead of a read.
+            $probe = $this->buildPresenceTest($lhsVal, $spec['call']);
+            $out  .= $negated ? '!(' . $probe . ')' : '(' . $probe . ')';
+        } else {
+            $call = $this->buildCall($spec['call'], $argsPhp === '' ? [$lhsVal] : [$lhsVal, $argsPhp]);
+            $out .= ($negated ? '!(' : '(') . $call . ')';
+        }
+
+        $i = $end;
+
+        return true;
+    }
+
+    /**
+     * Find the start of the last top-level operand within $expr[0..$opPos).
+     *
+     * Returns null when nothing operand-like precedes the operator. The scan
+     * respects quoted strings and bracket nesting; at depth 0 an operand ends
+     * after a binary-operator character or a binary-operator keyword. A chain
+     * colon (`user:name`) and a property dot are NOT boundaries.
+     */
+    private function operatorTestLhsStart(string $expr, int $opPos): ?int
+    {
+        $boundary = 0;
+        $i        = 0;
+        $inSingle = false;
+        $inDouble = false;
+        $depth    = 0;
+
+        while ($i < $opPos) {
+            $ch = $expr[$i];
+
+            if (($inSingle || $inDouble) && $ch === '\\' && ($i + 1) < $opPos) {
+                $i += 2;
+                continue;
+            }
+            if ($ch === "'" && !$inDouble) {
+                $inSingle = !$inSingle;
+                $i++;
+                continue;
+            }
+            if ($ch === '"' && !$inSingle) {
+                $inDouble = !$inDouble;
+                $i++;
+                continue;
+            }
+            if ($inSingle || $inDouble) {
+                $i++;
+                continue;
+            }
+
+            if ($ch === '(' || $ch === '[' || $ch === '{') {
+                $depth++;
+                $i++;
+                continue;
+            }
+            if ($ch === ')' || $ch === ']' || $ch === '}') {
+                if ($depth > 0) {
+                    $depth--;
+                }
+                $i++;
+                continue;
+            }
+
+            if ($depth === 0) {
+                // A binary-operator keyword (surrounded by word boundaries) ends
+                // the operand before it; the next operand starts after it.
+                if (self::isIdentifierStart($ch) && ($i === 0 || !$this->isIdentChar($expr[$i - 1]))) {
+                    $w = $i;
+                    while ($w < $opPos && self::isIdentifierChar($expr[$w])) {
+                        $w++;
+                    }
+                    if (isset(self::OPERATOR_WORDS[\strtolower(\substr($expr, $i, $w - $i))])) {
+                        $boundary = $w;
+                        $i        = $w;
+                        continue;
+                    }
+                    $i = $w;
+                    continue;
+                }
+
+                if (\str_contains('+-*/%~!<>=&|^?,', $ch)) {
+                    $boundary = $i + 1;
+                    $i++;
+                    continue;
+                }
+            }
+
+            $i++;
+        }
+
+        $s = $boundary;
+        while ($s < $opPos && \ctype_space($expr[$s])) {
+            $s++;
+        }
+
+        return $s < $opPos ? $s : null;
+    }
+
+    /**
+     * Scan forward from $start to the end of one bare operand: the first
+     * top-level whitespace-delimited operator boundary, or the enclosing closer.
+     */
+    private function scanOperandEnd(string $expr, int $start): int
+    {
+        $len      = \strlen($expr);
+        $i        = $start;
+        $inSingle = false;
+        $inDouble = false;
+        $depth    = 0;
+
+        while ($i < $len) {
+            $ch = $expr[$i];
+
+            if (($inSingle || $inDouble) && $ch === '\\' && ($i + 1) < $len) {
+                $i += 2;
+                continue;
+            }
+            if ($ch === "'" && !$inDouble) {
+                $inSingle = !$inSingle;
+                $i++;
+                continue;
+            }
+            if ($ch === '"' && !$inSingle) {
+                $inDouble = !$inDouble;
+                $i++;
+                continue;
+            }
+            if ($inSingle || $inDouble) {
+                $i++;
+                continue;
+            }
+
+            if ($ch === '(' || $ch === '[' || $ch === '{') {
+                $depth++;
+                $i++;
+                continue;
+            }
+            if ($ch === ')' || $ch === ']' || $ch === '}') {
+                if ($depth === 0) {
+                    return $i;
+                }
+                $depth--;
+                $i++;
+                continue;
+            }
+
+            if ($depth === 0 && \ctype_space($ch)) {
+                $k = $i;
+                while ($k < $len && \ctype_space($expr[$k])) {
+                    $k++;
+                }
+                if ($k >= $len) {
+                    return $len;
+                }
+
+                // A following operator word or operator character ends the
+                // operand; otherwise the whitespace is a chain continuation.
+                if (self::isIdentifierStart($expr[$k])) {
+                    $w = $k;
+                    while ($w < $len && self::isIdentifierChar($expr[$w])) {
+                        $w++;
+                    }
+                    if (isset(self::OPERATOR_WORDS[\strtolower(\substr($expr, $k, $w - $k))])) {
+                        return $i;
+                    }
+                    $i = $w;
+                    continue;
+                }
+                if (\str_contains('+-*/%~!<>=&|^?,', $expr[$k])) {
+                    return $i;
+                }
+            }
+
+            $i++;
+        }
+
+        return $len;
+    }
+
+    /**
+     * Compile an absence-tolerant test (`defined`, `null`, `empty`) over the RAW
+     * source of the left operand.
+     *
+     * A value-passing callable cannot tell an absent name from a null one, and a
+     * strict read throws before the test could answer, so these are compiled
+     * from the text:
+     *
+     *   defined  ->  isset(<access>)            (presence)
+     *   null     ->  !isset(<access>) || <value> === null
+     *   empty    ->  !isset(<access>) || empty(<value>)
+     *
+     * The probe is a presence test that never warns, and the value read sits
+     * behind a short-circuit `||`, so an absent name is never read.
+     */
+    private function buildPresenceTest(string $value, string $call): string
+    {
+        $probe = $this->presenceProbeFor($value);
+
+        return match ($call) {
+            'defined'  => $probe,
+            // An absent name is null, so `is null` is true when the name is
+            // missing OR present-and-null. `!probe` short-circuits the read.
+            'is_null'  => '(!' . $probe . ' || (' . $value . ') === null)',
+            'is_empty' => '(!' . $probe . ' || empty(' . $value . '))',
+            default    => $probe,
+        };
+    }
+
+    /**
+     * An `isset()` probe for a compiled access expression, or a `true` fallback
+     * for anything that is not a plain variable/property/key chain (which cannot
+     * appear inside isset()).
+     */
+    private function presenceProbeFor(string $php): string
+    {
+        // A bare scope variable is PRESENT when the key exists, even if its
+        // value is null — `array_key_exists` rather than `isset` is what makes
+        // `x is defined` true for an explicitly-null scope entry.
+        if (\preg_match('/^\$__c_va\[\'([^\']*)\'\]$/', $php, $m) === 1) {
+            return 'array_key_exists(\'' . \addslashes($m[1]) . '\', $__c_va)';
+        }
+
+        // A longer chain: any intermediate absence makes it undefined, and a
+        // null leaf is indistinguishable from an absent one, so isset() is the
+        // right probe. Restricted to forms valid inside isset().
+        $chain = '/^\$[A-Za-z_][A-Za-z0-9_]*(?:(?:\[(?:\'[^\']*\'|-?\d+)\]|->[A-Za-z_][A-Za-z0-9_]*))*$/';
+        if (\preg_match($chain, $php) === 1) {
+            return 'isset(' . $php . ')';
+        }
+
+        $chainScope = '/^\$__c_va\[(?:\'[^\']*\'|-?\d+)\](?:(?:\[(?:\'[^\']*\'|-?\d+)\]|->[A-Za-z_][A-Za-z0-9_]*))*$/';
+        if (\preg_match($chainScope, $php) === 1) {
+            return 'isset(' . $php . ')';
+        }
+
+        // Anything else is an expression; it has a value, so it is defined
+        // unless that value is null.
+        return '(' . $php . ') !== null';
     }
 
     /**

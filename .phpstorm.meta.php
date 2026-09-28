@@ -318,6 +318,24 @@ namespace PHPSTORM_META
             'description' => 'Count elements in an array or unicode string length.',
             'example'     => '{{ length(items) }}',
         ],
+        'range' => [
+            'return'      => 'array',
+            'params'      => [['low'], ['high'], ['step', '1']],
+            'description' => 'An inclusive list of integers from low to high.',
+            'example'     => '{{ range(1, 5) |> join(",") }}',
+        ],
+        'cycle' => [
+            'return'      => 'mixed',
+            'params'      => [['values'], ['position']],
+            'description' => 'The value at position modulo the list length.',
+            'example'     => '{{ cycle(["odd", "even"], loop.index0) }}',
+        ],
+        'attribute' => [
+            'return'      => 'mixed',
+            'params'      => [['subject'], ['name'], ['default', 'null']],
+            'description' => 'Dynamic read: array key or public object property.',
+            'example'     => "{{ attribute(user, 'name') }}",
+        ],
     ]));
 
     // ── Module-registered filters (IntlFormatModule, TranslationModule) ─
