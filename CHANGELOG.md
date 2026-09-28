@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-28
+
+### Fixed
+
+- The Composer package archive no longer excludes `.phpstorm.meta.php`, so
+  editor completion, hover and signature help for Clarity filters, functions and
+  directives now reach projects that install the engine from Packagist. The file
+  was previously stripped from the distribution by an over-broad `export-ignore`.
+
 ## [0.1.0] - 2026-09-28
 
 ### Added
@@ -37,5 +46,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   removed the documented-but-unimplemented `loop` object.
 - Removed a stale docblock reference to a `castToArray()` that no longer exists.
 
-[Unreleased]: https://github.com/sailantis/clarity-engine/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/sailantis/clarity-engine/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/sailantis/clarity-engine/releases/tag/v0.1.1
 [0.1.0]: https://github.com/sailantis/clarity-engine/releases/tag/v0.1.0
