@@ -78,7 +78,7 @@ semantics.
 
 ## Submitting changes
 
-- Keep commits focused and describe the *why* in the message.
+- Keep commits focused and describe the _why_ in the message.
 - Make sure `composer test` is green.
 - Open a Pull Request against `main`.
 

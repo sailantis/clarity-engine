@@ -80,7 +80,9 @@ class OperatorTest extends BaseTestCase
     {
         self::tpl('op_in_and', '{% if x in items and y in items %}Y{% else %}N{% endif %}');
         $this->assertSame('Y', self::render('op_in_and', [
-            'x' => 'a', 'y' => 'b', 'items' => ['a', 'b'],
+            'x'     => 'a',
+            'y'     => 'b',
+            'items' => ['a', 'b'],
         ]));
     }
 
@@ -294,7 +296,8 @@ class OperatorTest extends BaseTestCase
 
     public function testAttributeReadsObjectProperty(): void
     {
-        $obj = new class {
+        $obj = new class
+        {
             public string $name = 'Grace';
         };
 

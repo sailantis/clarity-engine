@@ -37,8 +37,7 @@ final class FileLoader implements TemplateLoader
     public function __construct(
         string $basePath,
         ?string $extension = null,
-    )
-    {
+    ) {
         $this->basePath = rtrim($basePath, '/\\');
         if ($extension === null) {
             $extension = self::DEFAULT_EXTENSION;
@@ -85,7 +84,7 @@ final class FileLoader implements TemplateLoader
      */
     public function setBasePath(string $path): static
     {
-        $this->basePath = rtrim($path, '/\\');
+        $this->basePath          = rtrim($path, '/\\');
         $this->resolvedNameCache = [];
         return $this;
     }
@@ -105,7 +104,7 @@ final class FileLoader implements TemplateLoader
      */
     public function load(string $name): ?TemplateSource
     {
-        $path = $this->resolveName($name);
+        $path  = $this->resolveName($name);
         $mtime = @filemtime($path);
 
         if ($mtime === false) {
@@ -114,7 +113,7 @@ final class FileLoader implements TemplateLoader
 
         return new TemplateSource(
             revision: $mtime,
-            codeLoader: static function() use ($path, $name): string {
+            codeLoader: static function () use ($path, $name): string {
                 $code = @file_get_contents($path);
                 if ($code === false) {
                     throw new \RuntimeException("Failed to read template: {$name} ({$path})");
@@ -141,9 +140,9 @@ final class FileLoader implements TemplateLoader
             $path = $name;
         } elseif (
             strlen($name) >= 3
-            && ctype_alpha($name[0])
-            && $name[1] === ':'
-            && ($name[2] === '/' || $name[2] === '\\')
+                && ctype_alpha($name[0])
+                && $name[1] === ':'
+                && ($name[2] === '/' || $name[2] === '\\')
         ) {
             // Absolute Windows path: C:/foo or C:\foo
             $path = $name;

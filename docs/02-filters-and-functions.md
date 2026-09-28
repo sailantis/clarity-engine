@@ -776,7 +776,6 @@ variable.
 {{ attribute(user, field, 'n/a') }}     {# fallback when missing #}
 ```
 
-
 ## Custom Filters
 
 Register custom filters in your PHP code:
