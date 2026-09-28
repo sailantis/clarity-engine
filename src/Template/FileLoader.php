@@ -56,16 +56,13 @@ final class FileLoader implements TemplateLoader
      */
     public function setExtension(string $extension): static
     {
-        // commentary: We normalize the extension to always include a leading dot for consistency, but we allow empty string to disable extensions entirely.
-        // Fixme Deprecate the empty string behavior in favor of an explicit "no extension" mode if it causes confusion.
-        // Todo: Clear the resolved name cache since the extension change affects all paths.
-        // Note: We allow empty string as a special case to disable extensions entirely.
-        // Deprecated this behavior in favor of an explicit "no extension" mode if it causes confusion.
-        // optimize some edge cases where the extension is empty or already has a leading dot to avoid unnecessary string concatenation.
+        // The extension is normalized to always include a leading dot. An empty
+        // string disables extension appending entirely.
         if ($extension !== '' && $extension[0] !== '.') {
             $extension = '.' . $extension;
         }
         $this->extension = $extension;
+        // A changed extension changes every resolved path, so drop the cache.
         $this->resolvedNameCache = [];
         return $this;
     }
