@@ -743,6 +743,40 @@ reads naturally as a call. Both names work in **both** syntaxes:
 {{ data |> length }}     {# …also in both forms         #}
 ```
 
+### range(low, high, step?)
+
+An inclusive list of integers:
+
+```twig
+{{ range(1, 5) |> join(', ') }}        {# 1, 2, 3, 4, 5 #}
+{{ range(0, 10, 5) |> join(', ') }}    {# 0, 5, 10       #}
+```
+
+A call-only function: the arguments are the subject, so there is no piped form.
+
+### cycle(values, position)
+
+The value at `position` modulo the list length — the usual way to alternate a
+value inside a loop:
+
+```twig
+{{ cycle(['odd', 'even'], 1) }}         {# even #}
+{{ cycle(['a', 'b', 'c'], 4) }}         {# b (wraps)    #}
+{{ cycle(['a', 'b', 'c'], -1) }}        {# c (negative counts from the end) #}
+```
+
+### attribute(subject, name, default?)
+
+A dynamic read that follows the same access model as `a.b` / `a:b`: an array key
+for an array, a public property for an object. Useful when the name is itself a
+variable.
+
+```twig
+{{ attribute(user, 'name') }}
+{{ attribute(user, field, 'n/a') }}     {# fallback when missing #}
+```
+
+
 ## Custom Filters
 
 Register custom filters in your PHP code:
@@ -889,8 +923,9 @@ add its own guardrails with `setDeniedFunctions([...])`.
 
 > See [Advanced Topics → Open Mode](04-advanced-topics.md#open-mode) for the
 > security consequences. Open mode is equivalent to executing arbitrary PHP.
-> [PHP Integration](08-php-integration.md) covers registering your own filters
-> and functions, both modes, and raw PHP.
+> [Registering Custom Filters](00-getting-started.md#registering-custom-filters)
+> and [Registering Custom Functions](00-getting-started.md#registering-custom-functions)
+> cover adding your own, in both modes.
 
 ## Filter Reference Quick Table
 

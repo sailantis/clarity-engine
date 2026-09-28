@@ -26,12 +26,16 @@ Deep dives into specialized features:
 6. **[Modules](07-modules.md)** — Module system, LocaleService, TranslationModule, IntlFormatModule
 7. **[Best Practices](05-best-practices.md)** — Organization, naming, security, testing, and debugging
 8. **[Troubleshooting](06-troubleshooting.md)** — Common errors and how to fix them
+9. **[Benchmark](08-benchmark.md)** — How Clarity compares with other template engines, across rendering shapes
 
 ## Additional Resources
 
 - **[Main README](../README.md)** — Quick reference and overview
-- **[API Documentation](../api/README.md)** — Auto-generated API reference
+- **[API Documentation](api/README.md)** — Auto-generated API reference
 - **[Examples](examples/README.md)** — Runnable template examples
+- **[Changelog](../CHANGELOG.md)** — Release history
+- **[Contributing](../CONTRIBUTING.md)** — Development workflow
+- **[Security Policy](../SECURITY.md)** — Reporting vulnerabilities
 
 ## Suggested Reading Order
 
