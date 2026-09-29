@@ -744,7 +744,7 @@ If this works, the issue is in your application setup, not Clarity.
 
 ### Check System Requirements
 
-- PHP >= 8.1
+- PHP >= 8.2
 - mbstring extension enabled
 - Cache directory writable
 - Composer dependencies installed

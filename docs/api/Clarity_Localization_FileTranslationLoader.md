@@ -30,7 +30,7 @@ the parsed translations for faster subsequent loading. The cache is automaticall
 
 **Return value**
 
-- Type: mixed
+- Type: `mixed`
 
 
 ---
@@ -48,7 +48,7 @@ the parsed translations for faster subsequent loading. The cache is automaticall
 
 **Return value**
 
-- Type: array
+- Type: `array`
 
 
 

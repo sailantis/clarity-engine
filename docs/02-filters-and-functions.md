@@ -36,9 +36,9 @@ subject — the second argument. `join(items)` therefore fails loudly (there is 
 
 ### Shadowing
 
-A registered name **wins over a same-named PHP builtin in both modes**. In open
+A registered name **wins over a same-named PHP builtin in both modes**. In PHP
 mode `{{ trim(x) }}` compiles to Clarity's `trim` filter, not to `\trim()`.
-Unregistered names still reach PHP directly in open mode (`{{ substr(s, 1, 3) }}`).
+Unregistered names still reach PHP directly in PHP mode (`{{ substr(s, 1, 3) }}`).
 
 The notable case is `sort`/`shuffle`: PHP's `\sort` sorts in place and returns a
 bool, neither of which is usable in a template. Clarity's `sort` returns the
@@ -886,7 +886,7 @@ Named arguments can be combined with positional ones:
 
 > **Note:** Named arguments use `:` in Clarity syntax and are emitted as PHP 8 named arguments. PHP validates parameter names and arity at runtime. Positional arguments must come before named ones.
 
-## PHP Functions as Filters (Open Mode)
+## PHP Functions as Filters (PHP Mode)
 
 When the sandbox is disabled (`$engine->setSandboxMode(false)`), any PHP function
 can be used directly as a filter or a function call, so no PHP API needs to be
@@ -917,11 +917,11 @@ As a call, arguments are passed as written:
 {{ implode(',', items) }}
 ```
 
-Nothing is blocked by default: open mode is full PHP access. An application can
+Nothing is blocked by default: PHP mode is full PHP access. An application can
 add its own guardrails with `setDeniedFunctions([...])`.
 
-> See [Advanced Topics → Open Mode](04-advanced-topics.md#open-mode) for the
-> security consequences. Open mode is equivalent to executing arbitrary PHP.
+> See [Advanced Topics → PHP Mode](04-advanced-topics.md#php-mode) for the
+> security consequences. PHP mode is equivalent to executing arbitrary PHP.
 > [Registering Custom Filters](00-getting-started.md#registering-custom-filters)
 > and [Registering Custom Functions](00-getting-started.md#registering-custom-functions)
 > cover adding your own, in both modes.

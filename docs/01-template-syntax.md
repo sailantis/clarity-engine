@@ -278,7 +278,7 @@ dynamic spelling of an ordinary variable access. `$$name` is the same construct
 
 `${expr}` follows the same variable model as every other access, so it agrees
 with `{{ name }}` about where a variable lives: it reads the render scope (and
-loop locals) in both sandbox and open mode. Absent names throw by default; write
+loop locals) in both sandbox and PHP mode. Absent names throw by default; write
 `?? fallback` to supply a value instead, exactly as for a literal name.
 
 Because the name is an expression, the lookup can reach neither a superglobal
@@ -298,18 +298,19 @@ object exposing a public `toArray()`). A value object with no public state and a
 
 **Not allowed (in sandbox mode):** bare `->` without a sigil, method calls
 (`a.b()`, `$a->b()`), and direct PHP variable access (`$name` on its own,
-including variable-variable expansion `$$name`). Open mode lifts all three — see
-[Open Mode](#open-mode).
+including variable-variable expansion `$$name`). PHP mode lifts all three — see
+[PHP Mode](#php-mode).
 
-## Open Mode
+## PHP Mode
 
 Disabling the sandbox (`$engine->setSandboxMode(false)`) turns off the function
 allow-list and the method-call restriction, giving templates the full power of
-PHP. Everything below still resolves **registered** filters and functions first;
-open mode only changes what happens when a name is _not_ registered.
+PHP — **PHP mode**, also called _open mode_. Everything below still resolves
+**registered** filters and functions first; PHP mode only changes what happens
+when a name is _not_ registered.
 
-> See [Open Mode](04-advanced-topics.md#open-mode) for the PHP-developer view of
-> the two modes ("sandbox mode" vs. "PHP mode"), and
+> See [Advanced Topics → PHP Mode](04-advanced-topics.md#php-mode) for the
+> PHP-developer view of the two modes ("sandbox mode" vs. "PHP mode"), and
 > [Registering Custom Filters](00-getting-started.md#registering-custom-filters)
 > for registration.
 
@@ -387,7 +388,7 @@ a runtime error inside a block points at the offending line. Inside a `{% php %}
 tag a loop local is a genuine PHP variable (`echo $n;`), and it reaches `{{ }}`
 only through the variables array (`$__c_va['n'] = $n;`).
 
-In **open mode** template variables are also PHP locals: the render scope is
+In **PHP mode** template variables are also PHP locals: the render scope is
 seeded with `extract($__c_va, EXTR_SKIP)`, so `{{ title }}` and
 `{% php echo $title; %}` are the same variable. The backing array is always
 reachable as `$__c_va` when a dynamic name is needed.
@@ -397,7 +398,7 @@ reachable as `$__c_va` when a dynamic name is needed.
 
 ### Function guardrails
 
-**Nothing is blocked by default.** Open mode means the full power of PHP, so the
+**Nothing is blocked by default.** PHP mode means the full power of PHP, so the
 engine does not add a second, weaker sandbox on top of it. If an application
 wants its own guardrails it can add them:
 
@@ -757,7 +758,7 @@ See [Advanced Topics](04-advanced-topics.md#named-namespaces-addnamespace) for n
 ### Tests
 
 Twig-style tests read as words and compile to registered callables, so they work
-identically in sandbox and open mode. They can be used anywhere a boolean is
+identically in sandbox and PHP mode. They can be used anywhere a boolean is
 expected.
 
 ```twig
@@ -1055,7 +1056,7 @@ title: widget.title, data: widget.data, config: widget.config }) }} {% endfor %}
 ## What's Not Allowed
 
 Clarity is sandboxed by default. In that mode the following are **not
-permitted** (each becomes available in [open mode](#open-mode)):
+permitted** (each becomes available in [PHP mode](#php-mode)):
 
 Direct PHP variables:
 
@@ -1092,7 +1093,7 @@ PHP statements or semicolons:
 ```
 
 Dynamic variable access (`${expr}` / `$$name`) reads the variable whose NAME is
-an expression, in both sandbox and open mode. The lookup resolves against the
+an expression, in both sandbox and PHP mode. The lookup resolves against the
 render scope and loop locals, so it can reach neither a superglobal nor an engine
 internal:
 

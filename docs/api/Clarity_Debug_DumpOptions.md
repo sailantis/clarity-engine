@@ -40,7 +40,7 @@ $engine->enableDebug(new DumpOptions(
 
 **Return value**
 
-- Type: mixed
+- Type: `mixed`
 
 
 

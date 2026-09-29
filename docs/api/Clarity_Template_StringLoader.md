@@ -28,7 +28,7 @@ echo $engine->render('dynamic', ['message' => 'Hello!']);
 
 **Return value**
 
-- Type: mixed
+- Type: `mixed`
 
 
 ---
@@ -49,7 +49,7 @@ The revision ({@see \TemplateSource::$revision}) must be available immediately w
 
 **Return value**
 
-- Type: [TemplateSource](Clarity_Template_TemplateSource.md)|null
+- Type: [TemplateSource](Clarity_Template_TemplateSource.md)|`null`
 
 **Throws**
 
@@ -68,7 +68,7 @@ Used by the engine to traverse loader hierarchies (e.g. DomainRouterLoader → F
 
 **Return value**
 
-- Type: array
+- Type: `array`
 - Description: List of loaders wrapped by this loader, or an empty array if this loader is not a wrapper.
 
 
@@ -90,7 +90,7 @@ The revision changes automatically so the next render triggers recompilation.
 
 **Return value**
 
-- Type: static
+- Type: `static`
 
 
 

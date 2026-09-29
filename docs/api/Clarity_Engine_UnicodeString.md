@@ -31,7 +31,7 @@ Note: This class is immutable, so offsetSet and offsetUnset will throw exception
 
 **Return value**
 
-- Type: mixed
+- Type: `mixed`
 
 
 ---
@@ -49,7 +49,7 @@ Note: This class is immutable, so offsetSet and offsetUnset will throw exception
 
 **Return value**
 
-- Type: static
+- Type: `static`
 
 
 ---
@@ -60,7 +60,7 @@ Note: This class is immutable, so offsetSet and offsetUnset will throw exception
 
 **Return value**
 
-- Type: static
+- Type: `static`
 
 
 ---
@@ -71,7 +71,7 @@ Note: This class is immutable, so offsetSet and offsetUnset will throw exception
 
 **Return value**
 
-- Type: static
+- Type: `static`
 
 
 ---
@@ -88,7 +88,7 @@ Note: This class is immutable, so offsetSet and offsetUnset will throw exception
 
 **Return value**
 
-- Type: bool
+- Type: `bool`
 
 
 ---
@@ -105,7 +105,7 @@ Note: This class is immutable, so offsetSet and offsetUnset will throw exception
 
 **Return value**
 
-- Type: string
+- Type: `string`
 
 
 ---
@@ -123,7 +123,7 @@ Note: This class is immutable, so offsetSet and offsetUnset will throw exception
 
 **Return value**
 
-- Type: void
+- Type: `void`
 
 
 ---
@@ -140,7 +140,7 @@ Note: This class is immutable, so offsetSet and offsetUnset will throw exception
 
 **Return value**
 
-- Type: void
+- Type: `void`
 
 
 ---
@@ -151,7 +151,7 @@ Note: This class is immutable, so offsetSet and offsetUnset will throw exception
 
 **Return value**
 
-- Type: string
+- Type: `string`
 
 
 ---
@@ -162,7 +162,7 @@ Note: This class is immutable, so offsetSet and offsetUnset will throw exception
 
 **Return value**
 
-- Type: int
+- Type: `int`
 
 
 ---
@@ -173,7 +173,7 @@ Note: This class is immutable, so offsetSet and offsetUnset will throw exception
 
 **Return value**
 
-- Type: mixed
+- Type: `mixed`
 
 
 

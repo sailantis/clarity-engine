@@ -32,7 +32,7 @@ $engine->setLoader($loader);
 
 **Return value**
 
-- Type: mixed
+- Type: `mixed`
 
 
 ---
@@ -53,7 +53,7 @@ The revision ({@see \TemplateSource::$revision}) must be available immediately w
 
 **Return value**
 
-- Type: [TemplateSource](Clarity_Template_TemplateSource.md)|null
+- Type: [TemplateSource](Clarity_Template_TemplateSource.md)|`null`
 
 **Throws**
 
@@ -72,7 +72,7 @@ Used by the engine to traverse loader hierarchies (e.g. DomainRouterLoader → F
 
 **Return value**
 
-- Type: array
+- Type: `array`
 - Description: List of loaders wrapped by this loader, or an empty array if this loader is not a wrapper.
 
 
@@ -96,7 +96,7 @@ the fnv1a64 revision of the new code will differ from the stored revision.
 
 **Return value**
 
-- Type: static
+- Type: `static`
 
 
 

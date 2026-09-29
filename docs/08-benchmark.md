@@ -37,12 +37,12 @@ Generated from the same rows the charts above are drawn from. Rows are ordered b
 
 | Engine | First render (ms) | Mean (ms) | Median (ms) | Min (ms) | p95 (ms) | Retained (MB) | Peak (MB) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Clarity | 6.441 | 0.322 | 0.313 | 0.294 | 0.370 | 4.42 | 5.00 |
-| Stempler | 19.464 | 0.339 | 0.328 | 0.305 | 0.392 | 4.80 | 5.33 |
-| Native | 0.662 | 0.351 | 0.341 | 0.314 | 0.404 | 3.28 | 3.59 |
-| Plates | 1.436 | 0.408 | 0.395 | 0.368 | 0.471 | 3.37 | 3.69 |
-| Blade | 13.892 | 0.635 | 0.620 | 0.579 | 0.725 | 5.70 | 6.00 |
-| Twig | 18.442 | 0.855 | 0.831 | 0.787 | 0.989 | 5.66 | 6.08 |
+| Clarity | 14.558 | 0.322 | 0.313 | 0.291 | 0.369 | 1.10 | 2.64 |
+| Stempler | 28.456 | 0.336 | 0.326 | 0.307 | 0.387 | 1.45 | 2.00 |
+| Native | 0.623 | 0.353 | 0.343 | 0.320 | 0.405 | 0.91 | 1.52 |
+| Plates | 2.412 | 0.408 | 0.395 | 0.371 | 0.472 | 0.98 | 1.52 |
+| Blade | 30.775 | 0.628 | 0.612 | 0.567 | 0.722 | 1.69 | 2.12 |
+| Twig | 35.285 | 0.852 | 0.828 | 0.784 | 0.983 | 1.65 | 2.15 |
 
 ## Objects
 
@@ -72,31 +72,31 @@ Generated from the same rows the charts above are drawn from. Rows are ordered b
 
 | Engine | First render (ms) | Mean (ms) | Median (ms) | Min (ms) | p95 (ms) | Retained (MB) | Peak (MB) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Clarity | 5.983 | 0.113 | 0.106 | 0.093 | 0.140 | 4.31 | 4.90 |
-| Native | 0.242 | 0.119 | 0.112 | 0.102 | 0.146 | 3.18 | 3.57 |
-| Stempler | 12.657 | 0.123 | 0.117 | 0.105 | 0.152 | 4.67 | 4.81 |
-| Plates | 1.198 | 0.147 | 0.139 | 0.125 | 0.179 | 3.27 | 3.57 |
-| Blade | 13.372 | 0.328 | 0.318 | 0.294 | 0.387 | 5.60 | 5.72 |
-| Twig | 17.635 | 0.629 | 0.610 | 0.569 | 0.724 | 5.58 | 5.71 |
+| Clarity | 13.574 | 0.112 | 0.106 | 0.091 | 0.137 | 0.98 | 2.54 |
+| Native | 0.334 | 0.118 | 0.111 | 0.099 | 0.144 | 0.81 | 1.52 |
+| Stempler | 23.562 | 0.123 | 0.116 | 0.105 | 0.148 | 1.32 | 1.52 |
+| Plates | 1.914 | 0.147 | 0.139 | 0.123 | 0.181 | 0.88 | 1.52 |
+| Blade | 31.156 | 0.328 | 0.316 | 0.293 | 0.391 | 1.59 | 2.01 |
+| Twig | 35.474 | 0.621 | 0.600 | 0.563 | 0.722 | 1.54 | 1.76 |
 
 ## What the columns are
 
-- **First render** — the first request after a deploy, measured in a fresh process per engine: engine boot, template compile, cache write and one render. Comparable across engines because no engine inherits another's warm cache or loaded classes.
+- **First render** — the first request after a deploy, measured in a fresh process per engine: engine boot, template compile, cache write and one render. The TEMPLATE cache is cold; the opcode cache is on and primed, as on a real deployment. Comparable across engines because no engine inherits another's warm template cache or loaded classes.
 - **Mean / Median / Min / p95** — computed over every individual render across all runs.
 - **Retained** — PHP heap still held after a whole run of renders, with `gc_collect_cycles()` called before the reading, in a fresh process. This is what a process carries while serving.
 - **Peak** — the same run's PHP heap high-water mark, which is where the transient allocation of the first compile lives. It sits above Retained and is not a second measurement of it.
 
 Two engines sitting next to each other at the top of a table are not thereby ranked: a difference of a few percent is still within the spread of a single engine's own runs, and a gap that small is a tie, not a win.
 
-**Environment** — PHP 8.3.33 · Linux 6.8.0-139-generic · SAPI cli · OPcache (`opcache.enable_cli`): yes · Memory probe: `opcache.enable_cli=0 (probe children run opcache-cold)`
+**Environment** — PHP 8.3.33 · Linux 6.8.0-139-generic · SAPI cli · OPcache (`opcache.enable_cli`): yes · Memory probe: `opcache.enable_cli=1 with a primed shared segment (probe children run opcache-warm)`
 
 **Budget** — 10,000 renders × 30 runs, 200 items per render
 
-**Method** — Steady-state timings: the render loop for each (engine, page) cell runs in its own fresh process against a warm cache: one untimed warm-up render, then runs x iterations-per-run timed renders. No order: each (engine, page) cell is measured in its own process, so measurement order cannot affect a cell. The first render was measured as one render in a fresh process with a cold cache: engine class loading, template compile, cache write and one render.
+**Method** — Steady-state timings: the render loop for each (engine, page) cell runs in its own fresh process against a warm cache: one untimed warm-up render, then runs x iterations-per-run timed renders. No order: each (engine, page) cell is measured in its own process, so measurement order cannot affect a cell. The first render was measured as one render in a fresh process with a cold template cache: engine class loading, template compile, cache write and one render.
 
-**Engines** — Clarity dev-main (716c59c) · NativeEngine (Azera) 0.1.0 (46df5ef) · Plates 3.6.0 · Blade 12.69.2 · Twig 3.27.0 · Stempler 3.17.2
+**Engines** — Clarity dev-main (0b818ad+dirty) · NativeEngine (Azera) dev-main (v0.1.0+dirty) · Plates 3.6.0 · Blade 12.69.2 · Twig 3.27.0 · Stempler 3.17.2
 
-_Measured 2026-09-28T18:00:45+00:00_
+_Measured 2026-09-29T16:02:40+00:00_
 
 Every chart on this page is a plain SVG generated from the run's own JSON, so a number and a diagram cannot disagree. The full published report, including the headline page and each shape's live page: <https://sailantis.github.io/azera-competition/benchmarks/view-engine.html>
 <!-- view-engine:end -->

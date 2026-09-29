@@ -64,7 +64,7 @@ Template usage
 
 **Return value**
 
-- Type: mixed
+- Type: `mixed`
 
 
 ---
@@ -81,7 +81,7 @@ Template usage
 
 **Return value**
 
-- Type: void
+- Type: `void`
 
 
 ---
@@ -102,7 +102,7 @@ Look up a translation key with optional placeholder substitution.
 
 **Return value**
 
-- Type: string
+- Type: `string`
 
 
 ---
@@ -138,7 +138,7 @@ In this example, the first `t` filter looks up `welcome_subject` in the
 
 **Return value**
 
-- Type: void
+- Type: `void`
 
 
 ---
@@ -151,7 +151,7 @@ Pop the most recently pushed domain off the stack.
 
 **Return value**
 
-- Type: void
+- Type: `void`
 
 
 

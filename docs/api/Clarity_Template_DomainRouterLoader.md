@@ -41,7 +41,7 @@ echo $engine->render('other');
 
 **Return value**
 
-- Type: mixed
+- Type: `mixed`
 
 
 ---
@@ -61,7 +61,7 @@ Add or replace a domain loader at runtime.
 
 **Return value**
 
-- Type: void
+- Type: `void`
 
 
 ---
@@ -80,7 +80,7 @@ Set or replace the fallback loader for templates without a domain prefix.
 
 **Return value**
 
-- Type: void
+- Type: `void`
 
 
 ---
@@ -93,7 +93,7 @@ Get the currently configured domain loaders.
 
 **Return value**
 
-- Type: array
+- Type: `array`
 - Description: Associative array of domain => loader mappings.
 
 
@@ -107,7 +107,7 @@ Get the currently configured fallback loader.
 
 **Return value**
 
-- Type: [TemplateLoader](Clarity_Template_TemplateLoader.md)|null
+- Type: [TemplateLoader](Clarity_Template_TemplateLoader.md)|`null`
 - Description: The fallback loader, or null if none is set.
 
 
@@ -129,7 +129,7 @@ The revision ({@see \TemplateSource::$revision}) must be available immediately w
 
 **Return value**
 
-- Type: [TemplateSource](Clarity_Template_TemplateSource.md)|null
+- Type: [TemplateSource](Clarity_Template_TemplateSource.md)|`null`
 
 **Throws**
 
@@ -148,7 +148,7 @@ Used by the engine to traverse loader hierarchies (e.g. DomainRouterLoader → F
 
 **Return value**
 
-- Type: array
+- Type: `array`
 - Description: List of loaders wrapped by this loader, or an empty array if this loader is not a wrapper.
 
 

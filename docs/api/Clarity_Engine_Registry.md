@@ -138,7 +138,7 @@ Called internally — not part of the public engine API.
 
 **Return value**
 
-- Type: void
+- Type: `void`
 
 
 ---
@@ -155,7 +155,7 @@ Called internally — not part of the public engine API.
 
 **Return value**
 
-- Type: void
+- Type: `void`
 
 
 ---
@@ -172,7 +172,7 @@ Called internally — not part of the public engine API.
 
 **Return value**
 
-- Type: mixed
+- Type: `mixed`
 
 
 ---
@@ -198,7 +198,7 @@ sharing the callable table.
 
 **Return value**
 
-- Type: bool
+- Type: `bool`
 
 
 ---
@@ -222,7 +222,7 @@ registered as a function.
 
 **Return value**
 
-- Type: static
+- Type: `static`
 
 
 ---
@@ -254,7 +254,7 @@ Registering an inline template makes the name BOTH pipeable and callable
 
 **Return value**
 
-- Type: void
+- Type: `void`
 
 
 ---
@@ -273,7 +273,7 @@ Check whether a named inline (compile-time) filter is registered.
 
 **Return value**
 
-- Type: bool
+- Type: `bool`
 
 
 ---
@@ -295,7 +295,7 @@ codegen template and yields null.
 
 **Return value**
 
-- Type: array|null
+- Type: `array`|`null`
 
 
 ---
@@ -319,7 +319,7 @@ real filter names (e.g. `__locale`, `__translator`).
 
 **Return value**
 
-- Type: static
+- Type: `static`
 
 
 ---
@@ -338,7 +338,7 @@ Check whether a named service is registered.
 
 **Return value**
 
-- Type: bool
+- Type: `bool`
 
 
 ---
@@ -357,7 +357,7 @@ Retrieve a named service.
 
 **Return value**
 
-- Type: mixed
+- Type: `mixed`
 
 **Throws**
 
@@ -377,7 +377,7 @@ The returned array includes callable filters, inline-filter markers
 
 **Return value**
 
-- Type: array
+- Type: `array`
 
 
 ---
@@ -403,7 +403,7 @@ returns it directly and costs nothing.
 
 **Return value**
 
-- Type: array
+- Type: `array`
 
 
 ---
@@ -426,7 +426,7 @@ in templates via `name(...)`.
 
 **Return value**
 
-- Type: static
+- Type: `static`
 
 
 ---
@@ -448,7 +448,7 @@ template (which compiles to the call itself) — is callable.
 
 **Return value**
 
-- Type: bool
+- Type: `bool`
 
 
 ---
@@ -467,7 +467,7 @@ Check whether a name can be invoked under call syntax `name(...)`.
 
 **Return value**
 
-- Type: bool
+- Type: `bool`
 
 
 ---
@@ -487,7 +487,7 @@ is inline-only (the caller then derives the call inline from `php`).
 
 **Return value**
 
-- Type: callable|null
+- Type: `callable`|`null`
 
 
 ---
@@ -498,7 +498,7 @@ is inline-only (the caller then derives the call inline from `php`).
 
 Registry of custom directive handlers for the Clarity compiler.
 
-Modules register directive keywords (e.g. `with_locale`) whose compilation is delegated to user-supplied callables instead of being handled by the built-in match table in [`Compiler::compileDirective()`](Clarity_Engine_Compiler.md#compiledirective).
+Modules register directive keywords (e.g. `with_locale`) whose compilation is delegated to user-supplied callables instead of being handled by the built-in match table in [`Compiler::compileBlock()`](Clarity_Engine_Compiler.md#compileblock).
 
 Handler signature
 -----------------
@@ -529,7 +529,7 @@ $engine->addDirective('endwith_locale', fn(...) => "\$__c_sv['locale']->pop();")
 
 **Return value**
 
-- Type: static
+- Type: `static`
 
 
 ---
@@ -548,7 +548,7 @@ Check whether a handler is registered for the given keyword.
 
 **Return value**
 
-- Type: bool
+- Type: `bool`
 
 
 ---
@@ -572,7 +572,7 @@ Invoke the registered handler for $keyword and return compiled PHP.
 
 **Return value**
 
-- Type: string
+- Type: `string`
 - Description: Compiled PHP statement(s).
 
 **Throws**

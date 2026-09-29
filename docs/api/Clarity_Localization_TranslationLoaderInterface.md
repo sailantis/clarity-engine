@@ -29,7 +29,7 @@ Load flat key => message pairs for a domain+locale.
 
 **Return value**
 
-- Type: array
+- Type: `array`
 
 
 

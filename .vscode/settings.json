@@ -6,7 +6,7 @@
       "runIn": "backend"
     }
   ],
-  "phpThunder.phpVersion": "8.1",
+  "phpThunder.phpVersion": "8.2",
   "phpThunder.trace.server": "verbose",
   "editor.inlayHints.enabled": "on",
   "editor.codeLens": true,

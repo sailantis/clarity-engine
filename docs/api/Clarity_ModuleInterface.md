@@ -48,7 +48,7 @@ setup time, before any templates are compiled or rendered.
 
 **Return value**
 
-- Type: void
+- Type: `void`
 
 
 

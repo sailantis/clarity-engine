@@ -740,7 +740,7 @@ Clarity enforces strict security through compilation-time checks and runtime san
 
 > **Sandbox is on by default.** Every restriction in this section applies while
 > the sandbox is enabled. Calling `setSandboxMode(false)` switches to
-> [open mode](#open-mode), which relaxes all of them. See that section for the
+> [PHP mode](#php-mode), which relaxes all of them. See that section for the
 > full consequences before disabling the sandbox.
 
 ### Compile-Time Restrictions
@@ -890,10 +890,10 @@ $engine->addFilter('customFilter', $callable);
 {{ value |> notRegistered }} {# ERROR: not registered #}
 ```
 
-### Open Mode
+### PHP Mode
 
-Disabling the sandbox grants templates the full power of PHP, for parity with
-Blade / Stempler / Plates:
+Disabling the sandbox grants templates the full power of PHP — **PHP mode**,
+also called _open mode_ — for parity with Blade / Stempler / Plates:
 
 ```php
 $engine->setSandboxMode(false);
@@ -901,24 +901,24 @@ $engine->setSandboxMode(false);
 
 With the sandbox off:
 
-| Capability                   | Sandboxed | Open mode |
-| ---------------------------- | --------- | --------- |
-| Registered filters/functions | ✅        | ✅        |
-| Arbitrary PHP function calls | ❌        | ✅        |
-| Any PHP function as a filter | ❌        | ✅        |
-| Method calls (`$obj->m()`)   | ❌        | ✅        |
-| `{% php %}` blocks           | ❌        | ✅        |
-| `{% php CODE %}` directives  | ❌        | ✅        |
-| Auto-escaping                | ✅        | ✅        |
-| Strict variable access       | ✅        | ✅        |
+| Capability                   | Sandboxed | PHP mode |
+| ---------------------------- | --------- | -------- |
+| Registered filters/functions | ✅        | ✅       |
+| Arbitrary PHP function calls | ❌        | ✅       |
+| Any PHP function as a filter | ❌        | ✅       |
+| Method calls (`$obj->m()`)   | ❌        | ✅       |
+| `{% php %}` blocks           | ❌        | ✅       |
+| `{% php CODE %}` directives  | ❌        | ✅       |
+| Auto-escaping                | ✅        | ✅       |
+| Strict variable access       | ✅        | ✅       |
 
-**This is equivalent to executing arbitrary PHP.** Open mode disables every
+**This is equivalent to executing arbitrary PHP.** PHP mode disables every
 compile-time restriction listed above; only the `$$name` ban remains. Use it
 only for templates written and reviewed by trusted authors.
 
 #### Function guardrails
 
-**Empty by default.** Open mode is full PHP access, so the engine does not
+**Empty by default.** PHP mode is full PHP access, so the engine does not
 smuggle a second, weaker sandbox into it: a fixed subset of "sinks" could never
 be a security boundary (hundreds of ordinary functions read the environment,
 write files or spawn processes), and blocking `exec` while allowing `proc_open`

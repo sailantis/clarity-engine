@@ -30,7 +30,7 @@ entries or complex queries).
 
 **Return value**
 
-- Type: mixed
+- Type: `mixed`
 
 
 ---
@@ -48,7 +48,7 @@ entries or complex queries).
 
 **Return value**
 
-- Type: array
+- Type: `array`
 
 
 ---
@@ -66,7 +66,7 @@ entries or complex queries).
 
 **Return value**
 
-- Type: void
+- Type: `void`
 
 
 

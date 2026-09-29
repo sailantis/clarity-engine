@@ -38,12 +38,12 @@ file_get_contents() until getCode() is called — zero I/O on warm cache paths.
 
 **Return value**
 
-- Type: mixed
+- Type: `mixed`
 
 
 ---
 
-### setExtension() · <small>[🗎](../../src/Template/FileLoader.php#L57)</small>
+### setExtension() · <small>[🗎](../../src/Template/FileLoader.php#L56)</small>
 
 `public function setExtension(string $extension): static`
 
@@ -57,12 +57,12 @@ Set the view file extension for this instance.
 
 **Return value**
 
-- Type: static
+- Type: `static`
 
 
 ---
 
-### getExtension() · <small>[🗎](../../src/Template/FileLoader.php#L75)</small>
+### getExtension() · <small>[🗎](../../src/Template/FileLoader.php#L74)</small>
 
 `public function getExtension(): string`
 
@@ -70,13 +70,13 @@ Get the effective file extension used when resolving templates.
 
 **Return value**
 
-- Type: string
+- Type: `string`
 - Description: Extension including leading dot or empty string.
 
 
 ---
 
-### setBasePath() · <small>[🗎](../../src/Template/FileLoader.php#L86)</small>
+### setBasePath() · <small>[🗎](../../src/Template/FileLoader.php#L85)</small>
 
 `public function setBasePath(string $path): static`
 
@@ -90,12 +90,12 @@ Set the base path for resolving relative template names.
 
 **Return value**
 
-- Type: static
+- Type: `static`
 
 
 ---
 
-### getBasePath() · <small>[🗎](../../src/Template/FileLoader.php#L98)</small>
+### getBasePath() · <small>[🗎](../../src/Template/FileLoader.php#L97)</small>
 
 `public function getBasePath(): string`
 
@@ -103,13 +103,13 @@ Get the currently configured base path for template resolution.
 
 **Return value**
 
-- Type: string
+- Type: `string`
 - Description: Base directory for templates.
 
 
 ---
 
-### load() · <small>[🗎](../../src/Template/FileLoader.php#L106)</small>
+### load() · <small>[🗎](../../src/Template/FileLoader.php#L105)</small>
 
 `public function load(string $name): Clarity\Template\TemplateSource|null`
 
@@ -125,7 +125,7 @@ The revision ({@see \TemplateSource::$revision}) must be available immediately w
 
 **Return value**
 
-- Type: [TemplateSource](Clarity_Template_TemplateSource.md)|null
+- Type: [TemplateSource](Clarity_Template_TemplateSource.md)|`null`
 
 **Throws**
 
@@ -134,7 +134,7 @@ The revision ({@see \TemplateSource::$revision}) must be available immediately w
 
 ---
 
-### resolveName() · <small>[🗎](../../src/Template/FileLoader.php#L133)</small>
+### resolveName() · <small>[🗎](../../src/Template/FileLoader.php#L132)</small>
 
 `public function resolveName(string $name): string`
 
@@ -150,12 +150,12 @@ Public so it can be used for diagnostic/debugging purposes.
 
 **Return value**
 
-- Type: string
+- Type: `string`
 
 
 ---
 
-### getSubLoaders() · <small>[🗎](../../src/Template/FileLoader.php#L169)</small>
+### getSubLoaders() · <small>[🗎](../../src/Template/FileLoader.php#L168)</small>
 
 `public function getSubLoaders(): array`
 
@@ -165,7 +165,7 @@ Used by the engine to traverse loader hierarchies (e.g. DomainRouterLoader → F
 
 **Return value**
 
-- Type: array
+- Type: `array`
 - Description: List of loaders wrapped by this loader, or an empty array if this loader is not a wrapper.
 
 
