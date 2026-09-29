@@ -68,27 +68,27 @@ facade only declares what the traits share.
 
 Tokenizer (`src/Engine/Tokenizer/`):
 
-| Trait                    | Responsibility                                                                  |
-| ------------------------ | ------------------------------------------------------------------------------- |
-| `SegmentScannerTrait`    | source text → typed segments                                                    |
-| `ExpressionCoreTrait`    | expression loop: token dispatch, ternary + keyword map, function calls, dynamic `${expr}` lookups |
+| Trait                    | Responsibility                                                                                            |
+| ------------------------ | --------------------------------------------------------------------------------------------------------- |
+| `SegmentScannerTrait`    | source text → typed segments                                                                              |
+| `ExpressionCoreTrait`    | expression loop: token dispatch, ternary + keyword map, function calls, dynamic `${expr}` lookups         |
 | `ExpressionSupportTrait` | identifier grammar, `?`-gluing / `:`-ternary disambiguation, pipeline splitting, stateless string helpers |
-| `VarChainTrait`          | var chains → segments and → PHP (read + write halves, optional-access guards)  |
-| `FilterCompilerTrait`    | filter pipelines, argument lists and the one call emitter                       |
-| `CallableTrait`          | lambdas + filter references (`map`/`filter`/`reduce`)                           |
-| `OperatorTestTrait`      | `in` / `is …` operator tests                                                    |
-| `CollectionLiteralTrait` | array/object literals + postfix property/index access                           |
+| `VarChainTrait`          | var chains → segments and → PHP (read + write halves, optional-access guards)                             |
+| `FilterCompilerTrait`    | filter pipelines, argument lists and the one call emitter                                                 |
+| `CallableTrait`          | lambdas + filter references (`map`/`filter`/`reduce`)                                                     |
+| `OperatorTestTrait`      | `in` / `is …` operator tests                                                                              |
+| `CollectionLiteralTrait` | array/object literals + postfix property/index access                                                     |
 
 Compiler (`src/Engine/Compiler/`):
 
-| Trait                   | Responsibility                                                          |
-| ----------------------- | ---------------------------------------------------------------------- |
-| `CompilerCoreTrait`     | `compile()` entry point, template loading, source map + error mapping  |
-| `DirectiveSupportTrait` | variable scope, macros and `{% php %}` regions                          |
-| `InheritanceTrait`      | static `{% extends %}` / `{% block %}` merge                            |
-| `BodyCompilerTrait`     | segment loop + directive dispatch (re-entry point)                      |
-| `ControlFlowTrait`      | for / if / else / set / include                                         |
-| `CodeBuilderTrait`      | final class wrapper + text/context helpers                             |
+| Trait                   | Responsibility                                                        |
+| ----------------------- | --------------------------------------------------------------------- |
+| `CompilerCoreTrait`     | `compile()` entry point, template loading, source map + error mapping |
+| `DirectiveSupportTrait` | variable scope, macros and `{% php %}` regions                        |
+| `InheritanceTrait`      | static `{% extends %}` / `{% block %}` merge                          |
+| `BodyCompilerTrait`     | segment loop + directive dispatch (re-entry point)                    |
+| `ControlFlowTrait`      | for / if / else / set / include                                       |
+| `CodeBuilderTrait`      | final class wrapper + text/context helpers                            |
 
 Each trait is a plain `trait`; the facade, the traits and the shared state all
 run against the same `$this`, so the split is transparent. The public constants
