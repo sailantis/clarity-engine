@@ -28,7 +28,7 @@ It contains a type, an optional payload, and a timestamp of when it was emitted.
 
 **Return value**
 
-- Type: mixed
+- Type: `mixed`
 
 
 

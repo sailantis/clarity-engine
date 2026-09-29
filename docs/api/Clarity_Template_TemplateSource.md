@@ -31,7 +31,7 @@ Carries two pieces of information:
 
 **Return value**
 
-- Type: mixed
+- Type: `mixed`
 
 
 ---
@@ -47,7 +47,7 @@ getCode() at most once per compilation cycle (cold-path only).
 
 **Return value**
 
-- Type: string
+- Type: `string`
 
 
 

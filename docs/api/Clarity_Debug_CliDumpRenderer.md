@@ -25,7 +25,7 @@ Sensitive keys are replaced with ***.
 
 **Return value**
 
-- Type: string
+- Type: `string`
 
 
 ---
@@ -43,7 +43,7 @@ Sensitive keys are replaced with ***.
 
 **Return value**
 
-- Type: string
+- Type: `string`
 
 
 

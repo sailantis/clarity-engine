@@ -128,8 +128,8 @@ class ClarityEngine
      * - `sandbox`: bool — true (default) keeps templates sandboxed; false grants
      *   templates full PHP access (arbitrary calls, PHP functions as filters,
      *   method calls, raw PHP blocks)
-     * - `deniedFunctions`: list<string> — extra functions to block in open mode;
-     *   empty by default, since open mode is full PHP access
+     * - `deniedFunctions`: list<string> — extra functions to block in PHP mode;
+     *   empty by default, since PHP mode is full PHP access
      *
      * @param array $config Configuration options for the engine.
      */
@@ -159,7 +159,7 @@ class ClarityEngine
             $this->setLayout($config['layout']);
         }
 
-        // Open mode: `sandbox => false` grants templates full PHP access.
+        // PHP mode: `sandbox => false` grants templates full PHP access.
         if (\array_key_exists('sandbox', $config)) {
             $this->setSandboxMode((bool) $config['sandbox']);
         }

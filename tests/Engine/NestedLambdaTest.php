@@ -190,6 +190,8 @@ class NestedLambdaTest extends BaseTestCase
             $this->fail('expected a compile error for the two-parameter inner lambda');
         } catch (ClarityException) {}
 
+        // The lambda-frame stack lives on the tokenizer facade itself, as the
+        // private `lambdaFrames` property (shared by the behaviour traits).
         $frames = new \ReflectionProperty($tokenizer, 'lambdaFrames');
         $frames->setAccessible(true);
 

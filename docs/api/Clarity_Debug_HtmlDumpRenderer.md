@@ -24,7 +24,7 @@ A minimal inline <style> block is injected once per page.
 
 **Return value**
 
-- Type: string
+- Type: `string`
 
 
 

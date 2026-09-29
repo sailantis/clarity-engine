@@ -40,7 +40,7 @@ Template usage
 
 **Return value**
 
-- Type: string
+- Type: `string`
 
 
 ---
@@ -62,7 +62,7 @@ that may be null do not corrupt the stack.
 
 **Return value**
 
-- Type: void
+- Type: `void`
 
 
 ---
@@ -77,7 +77,7 @@ Calling this when the stack is empty is a no-op.
 
 **Return value**
 
-- Type: void
+- Type: `void`
 
 
 ---
@@ -91,7 +91,7 @@ locale when the stack is empty.
 
 **Return value**
 
-- Type: string|null
+- Type: `string`|`null`
 
 
 ---
@@ -113,7 +113,7 @@ and `IntlFormatModule` when they need to self-bootstrap the service.
 
 **Return value**
 
-- Type: void
+- Type: `void`
 
 
 ---
@@ -135,7 +135,7 @@ self-bootstrap when `LocaleService` was not explicitly registered.
 
 **Return value**
 
-- Type: static
+- Type: `static`
 - Description: The shared locale stack instance.
 
 

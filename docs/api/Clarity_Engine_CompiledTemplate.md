@@ -32,7 +32,7 @@ Value object produced by the Clarity Compiler for a single template.
 
 **Return value**
 
-- Type: mixed
+- Type: `mixed`
 
 
 

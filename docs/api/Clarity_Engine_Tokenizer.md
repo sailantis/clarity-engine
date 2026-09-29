@@ -5,6 +5,13 @@
 Splits a Clarity template source into typed segments and processes
 DSL expressions into PHP-ready strings.
 
+Architecture
+------------
+This class holds the public API, the constants and the per-compilation state;
+the behaviour is composed from the traits in `Clarity\Engine\Tokenizer\`
+(scanner, expression loop, var-chain parser/emitter, filter & callable
+compiler, operator tests, …).  See CONTRIBUTING.md for the trait map.
+
 Segment types (constants on this class)
 ----------------------------------------
 TEXT        â€“ raw HTML/text passed through verbatim
@@ -48,7 +55,7 @@ Named arguments
 
 ## Public methods
 
-### setPrunedFunctions() · <small>[🗎](../../src/Engine/Tokenizer.php#L207)</small>
+### setPrunedFunctions() · <small>[🗎](../../src/Engine/Tokenizer.php#L232)</small>
 
 `public function setPrunedFunctions(array $names): void`
 
@@ -60,12 +67,12 @@ Named arguments
 
 **Return value**
 
-- Type: void
+- Type: `void`
 
 
 ---
 
-### setContextInjectedFunctions() · <small>[🗎](../../src/Engine/Tokenizer.php#L213)</small>
+### setContextInjectedFunctions() · <small>[🗎](../../src/Engine/Tokenizer.php#L238)</small>
 
 `public function setContextInjectedFunctions(array $names): void`
 
@@ -77,12 +84,12 @@ Named arguments
 
 **Return value**
 
-- Type: void
+- Type: `void`
 
 
 ---
 
-### setSandboxMode() · <small>[🗎](../../src/Engine/Tokenizer.php#L222)</small>
+### setSandboxMode() · <small>[🗎](../../src/Engine/Tokenizer.php#L247)</small>
 
 `public function setSandboxMode(bool $sandboxed): void`
 
@@ -97,12 +104,12 @@ function and method calls; `false` allows them (see class docs).
 
 **Return value**
 
-- Type: void
+- Type: `void`
 
 
 ---
 
-### setLocalRoots() · <small>[🗎](../../src/Engine/Tokenizer.php#L233)</small>
+### setLocalRoots() · <small>[🗎](../../src/Engine/Tokenizer.php#L258)</small>
 
 `public function setLocalRoots(bool $enabled): void`
 
@@ -119,23 +126,23 @@ compiler that seeds no locals never emits a local read.
 
 **Return value**
 
-- Type: void
+- Type: `void`
 
 
 ---
 
-### isSandboxed() · <small>[🗎](../../src/Engine/Tokenizer.php#L239)</small>
+### isSandboxed() · <small>[🗎](../../src/Engine/Tokenizer.php#L264)</small>
 
 `public function isSandboxed(): bool`
 
 **Return value**
 
-- Type: bool
+- Type: `bool`
 
 
 ---
 
-### setDeniedFunctions() · <small>[🗎](../../src/Engine/Tokenizer.php#L250)</small>
+### setDeniedFunctions() · <small>[🗎](../../src/Engine/Tokenizer.php#L275)</small>
 
 `public function setDeniedFunctions(array $names): void`
 
@@ -150,12 +157,12 @@ names; empty (the default) allows every PHP function.
 
 **Return value**
 
-- Type: void
+- Type: `void`
 
 
 ---
 
-### setRegistry() · <small>[🗎](../../src/Engine/Tokenizer.php#L266)</small>
+### setRegistry() · <small>[🗎](../../src/Engine/Tokenizer.php#L291)</small>
 
 `public function setRegistry(Clarity\Engine\Registry $registry): void`
 
@@ -167,12 +174,12 @@ names; empty (the default) allows every PHP function.
 
 **Return value**
 
-- Type: void
+- Type: `void`
 
 
 ---
 
-### setLocalVars() · <small>[🗎](../../src/Engine/Tokenizer.php#L280)</small>
+### setLocalVars() · <small>[🗎](../../src/Engine/Tokenizer.php#L305)</small>
 
 `public function setLocalVars(array $localVars): void`
 
@@ -190,12 +197,12 @@ variable resolution inside the loop uses direct PHP local variables
 
 **Return value**
 
-- Type: void
+- Type: `void`
 
 
 ---
 
-### tokenize() · <small>[🗎](../../src/Engine/Tokenizer.php#L309)</small>
+### tokenize() · <small>[🗎](../../src/Engine/Tokenizer/SegmentScannerTrait.php#L37)</small>
 
 `public function tokenize(string $source): array`
 
@@ -217,7 +224,7 @@ Each element is:  ['type' => TEXT|OUTPUT|BLOCK, 'content' => string, 'line' => i
 
 **Return value**
 
-- Type: array
+- Type: `array`
 
 **Throws**
 
@@ -228,7 +235,7 @@ it is reported rather than emitted as text.
 
 ---
 
-### setEscapeContext() · <small>[🗎](../../src/Engine/Tokenizer.php#L584)</small>
+### setEscapeContext() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L38)</small>
 
 `public function setEscapeContext(string $context): void`
 
@@ -244,12 +251,12 @@ Called by the Compiler as it tracks the current position in the template.
 
 **Return value**
 
-- Type: void
+- Type: `void`
 
 
 ---
 
-### processExpression() · <small>[🗎](../../src/Engine/Tokenizer.php#L589)</small>
+### processExpression() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L43)</small>
 
 `public function processExpression(string $expression): string`
 
@@ -261,12 +268,12 @@ Called by the Compiler as it tracks the current position in the template.
 
 **Return value**
 
-- Type: string
+- Type: `string`
 
 
 ---
 
-### processCondition() · <small>[🗎](../../src/Engine/Tokenizer.php#L619)</small>
+### processCondition() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L73)</small>
 
 `public function processCondition(string $expression): string`
 
@@ -281,13 +288,13 @@ structure conditions (if, for, set) where auto-escape is meaningless.
 
 **Return value**
 
-- Type: string
+- Type: `string`
 - Description: PHP expression.
 
 
 ---
 
-### processLvalue() · <small>[🗎](../../src/Engine/Tokenizer.php#L643)</small>
+### processLvalue() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L97)</small>
 
 `public function processLvalue(string $var): string`
 
@@ -307,13 +314,13 @@ choice lives in the chain emitter, so it cannot drift from the read path.
 
 **Return value**
 
-- Type: string
+- Type: `string`
 - Description: PHP lvalue (e.g. '$user', or '$__c_va[\'user\'][\'name\']').
 
 
 ---
 
-### convertVarsAndOps() · <small>[🗎](../../src/Engine/Tokenizer.php#L844)</small>
+### convertVarsAndOps() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L112)</small>
 
 `public function convertVarsAndOps(string $expr): string`
 
@@ -334,12 +341,12 @@ identifiers/var-chains, operators, punctuation) and process each atom.
 
 **Return value**
 
-- Type: string
+- Type: `string`
 
 
 ---
 
-### isIdentifierStart() · <small>[🗎](../../src/Engine/Tokenizer.php#L2218)</small>
+### isIdentifierStart() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionSupportTrait.php#L321)</small>
 
 `public static function isIdentifierStart(string $ch): bool`
 
@@ -357,12 +364,12 @@ locale-dependent and would disagree with the runtime on a non-C locale.
 
 **Return value**
 
-- Type: bool
+- Type: `bool`
 
 
 ---
 
-### isIdentifierChar() · <small>[🗎](../../src/Engine/Tokenizer.php#L2233)</small>
+### isIdentifierChar() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionSupportTrait.php#L336)</small>
 
 `public static function isIdentifierChar(string $ch): bool`
 
@@ -376,12 +383,12 @@ Whether the character (a single BYTE) can appear inside an identifier.
 
 **Return value**
 
-- Type: bool
+- Type: `bool`
 
 
 ---
 
-### isIdentifier() · <small>[🗎](../../src/Engine/Tokenizer.php#L2250)</small>
+### isIdentifier() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionSupportTrait.php#L353)</small>
 
 `public static function isIdentifier(string $name): bool`
 
@@ -399,38 +406,12 @@ tokenize back out.
 
 **Return value**
 
-- Type: bool
+- Type: `bool`
 
 
 ---
 
-### varChainToPhp() · <small>[🗎](../../src/Engine/Tokenizer.php#L3112)</small>
-
-`public function varChainToPhp(string $chain): string`
-
-Convert a Clarity var-chain string to a PHP $__c_va[...] expression.
-
-Supports:
-foo           â†’ $__c_va['foo']
-foo.bar       â†’ $__c_va['foo']['bar']
-items[0]      â†’ $__c_va['items'][0]
-items[index]  â†’ $__c_va['items'][$__c_va['index']]
-a.b[c.d].e    â†’ $__c_va['a']['b'][$__c_va['c']['d']]['e']
-
-**Parameters**
-
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `$chain` | string | - |  |
-
-**Return value**
-
-- Type: string
-
-
----
-
-### buildFilterCall() · <small>[🗎](../../src/Engine/Tokenizer.php#L3341)</small>
+### buildFilterCall() · <small>[🗎](../../src/Engine/Tokenizer/FilterCompilerTrait.php#L215)</small>
 
 `public function buildFilterCall(string $filterSegment, string $phpValue): string`
 
@@ -453,8 +434,34 @@ arguments (`identifier: phpExpr`). PHP validates names and arity at runtime.
 
 **Return value**
 
-- Type: string
+- Type: `string`
 - Description: PHP call expression.
+
+
+---
+
+### varChainToPhp() · <small>[🗎](../../src/Engine/Tokenizer/VarChainTrait.php#L659)</small>
+
+`public function varChainToPhp(string $chain): string`
+
+Convert a Clarity var-chain string to a PHP $__c_va[...] expression.
+
+Supports:
+foo           â†’ $__c_va['foo']
+foo.bar       â†’ $__c_va['foo']['bar']
+items[0]      â†’ $__c_va['items'][0]
+items[index]  â†’ $__c_va['items'][$__c_va['index']]
+a.b[c.d].e    â†’ $__c_va['a']['b'][$__c_va['c']['d']]['e']
+
+**Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$chain` | string | - |  |
+
+**Return value**
+
+- Type: `string`
 
 
 

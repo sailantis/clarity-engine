@@ -20,7 +20,7 @@ Implement the onEvent method to handle incoming DebugEvent instances.
 
 **Return value**
 
-- Type: void
+- Type: `void`
 
 
 

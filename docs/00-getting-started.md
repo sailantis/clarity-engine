@@ -17,14 +17,14 @@ Clarity is a fast, secure PHP template engine that compiles `.clarity.html` temp
 Install Clarity via Composer:
 
 ```bash
-composer require clarity/engine
+composer require sailantis/clarity-engine
 ```
 
 > **Note:** If using Clarity as part of a framework, it may already be included.
 
 ## Minimum Requirements
 
-- PHP >= 8.1
+- PHP >= 8.2
 - mbstring extension (for Unicode support)
 
 ## Basic Usage
@@ -98,13 +98,13 @@ $engine->setExtension('.tpl.html');
 // Sandbox (default: true). Pass false to grant templates full PHP access.
 $engine->setSandboxMode(false);
 
-// Optional guardrails. Nothing is blocked by default, because open mode is
+// Optional guardrails. Nothing is blocked by default, because PHP mode is
 // full PHP access; add names here only if you want to restrict it again.
 $engine->setDeniedFunctions(['exec', 'system']);   // add guardrails
 $engine->setDeniedFunctions([]);                   // block nothing (default)
 ```
 
-> **Open mode.** `setSandboxMode(false)` is equivalent to executing arbitrary
+> **PHP mode.** `setSandboxMode(false)` is equivalent to executing arbitrary
 > PHP from templates. See
 > [Advanced Topics → Security Model](04-advanced-topics.md#security-model) for
 > what it disables and how to restrict it. The same options are accepted in the
@@ -114,7 +114,7 @@ $engine->setDeniedFunctions([]);                   // block nothing (default)
 > register filters/functions — see
 > [Registering Custom Filters](00-getting-started.md#registering-custom-filters),
 > [Registering Custom Functions](00-getting-started.md#registering-custom-functions)
-> and [Open Mode](04-advanced-topics.md#open-mode).
+> and [Advanced Topics → PHP Mode](04-advanced-topics.md#php-mode).
 
 ### Registering Template Namespaces
 

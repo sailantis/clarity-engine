@@ -16,7 +16,7 @@ it manually to a DebugEventBus and call getHtml() after rendering.
 
 **Return value**
 
-- Type: mixed
+- Type: `mixed`
 
 
 ---
@@ -33,7 +33,7 @@ it manually to a DebugEventBus and call getHtml() after rendering.
 
 **Return value**
 
-- Type: void
+- Type: `void`
 
 
 ---
@@ -44,7 +44,7 @@ it manually to a DebugEventBus and call getHtml() after rendering.
 
 **Return value**
 
-- Type: string
+- Type: `string`
 
 
 

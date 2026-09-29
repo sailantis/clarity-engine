@@ -44,7 +44,7 @@ $compilerVersion – int  Compiler::COMPILER_VERSION that produced the class
 
 **Return value**
 
-- Type: mixed
+- Type: `mixed`
 
 
 ---
@@ -63,7 +63,7 @@ Change the cache directory at runtime.
 
 **Return value**
 
-- Type: static
+- Type: `static`
 
 
 ---
@@ -74,7 +74,7 @@ Change the cache directory at runtime.
 
 **Return value**
 
-- Type: string
+- Type: `string`
 
 
 ---
@@ -109,7 +109,7 @@ read directly — zero file I/O from this method.
 
 **Return value**
 
-- Type: bool
+- Type: `bool`
 
 
 ---
@@ -132,7 +132,7 @@ is OPcache-eligible) and registers the returned class name.
 
 **Return value**
 
-- Type: string|null
+- Type: `string`|`null`
 - Description: Null if no cache file exists.
 
 
@@ -158,7 +158,7 @@ loaded in this process.
 
 **Return value**
 
-- Type: string
+- Type: `string`
 - Description: The class name that is now live in memory.
 
 
@@ -179,7 +179,7 @@ remove it from the in-process registry.
 
 **Return value**
 
-- Type: void
+- Type: `void`
 
 
 ---
@@ -193,7 +193,7 @@ registry so stale class names do not prevent recompilation.
 
 **Return value**
 
-- Type: void
+- Type: `void`
 
 
 ---
@@ -215,7 +215,7 @@ Use `getLoadedClassName()` to obtain the real class name after a template has be
 
 **Return value**
 
-- Type: string
+- Type: `string`
 
 
 ---
@@ -235,7 +235,7 @@ given template name, or null if the template has not been loaded yet.
 
 **Return value**
 
-- Type: string|null
+- Type: `string`|`null`
 
 
 ---
@@ -261,7 +261,7 @@ Example:  md5('home') = 'b026...'  →  {cachePath}/b0/b026....php
 
 **Return value**
 
-- Type: string
+- Type: `string`
 
 
 

@@ -29,15 +29,15 @@ trait ClarityEngineTrait
     protected ?HtmlDebugPanel $debugPanel = null;
 
     /**
-     * When true (default) templates are sandboxed.  When false ("open mode") the
+     * When true (default) templates are sandboxed.  When false ("PHP mode") the
      * engine grants templates the full power of PHP: arbitrary function calls,
      * PHP functions as filters, and method calls.
      */
     protected bool $sandboxMode = true;
 
     /**
-     * Functions blocked in open mode (lowercase name => true).  Empty by
-     * default: open mode is full PHP access, so any restriction here is an
+     * Functions blocked in PHP mode (lowercase name => true).  Empty by
+     * default: PHP mode is full PHP access, so any restriction here is an
      * application-chosen guardrail rather than part of the switch.
      *
      * @var array<string, true>
@@ -82,12 +82,12 @@ trait ClarityEngineTrait
      *
      * Sandboxed (the default) is the safe mode the engine has always had:
      * templates cannot call arbitrary PHP functions or methods.  Passing `false`
-     * switches to "open mode", where templates have the full power of PHP —
+     * switches to "PHP mode", where templates have the full power of PHP —
      * any function call, any PHP function used as a filter, and `$obj->method()`
      * method calls.  This is intended for templates written by trusted authors
      * (Blade / Stempler / Plates parity).
      *
-     * SECURITY: open mode is equivalent to executing arbitrary PHP.  Templates
+     * SECURITY: PHP mode is equivalent to executing arbitrary PHP.  Templates
      * compiled in either mode record which mode built them and are automatically
      * recompiled when the setting changes.
      *
@@ -95,7 +95,7 @@ trait ClarityEngineTrait
      * $engine->setSandboxMode(false);   // grant full PHP access
      * ```
      *
-     * @param bool $sandboxed True to keep templates sandboxed, false for open mode.
+     * @param bool $sandboxed True to keep templates sandboxed, false for PHP mode.
      * @return $this
      */
     public function setSandboxMode(bool $sandboxed): static
@@ -113,7 +113,7 @@ trait ClarityEngineTrait
     }
 
     /**
-     * Replace the list of functions blocked in open mode.
+     * Replace the list of functions blocked in PHP mode.
      *
      * Accepts a list of function names (case-insensitive, leading `\` allowed).
      * Nothing is blocked by default, because
@@ -129,7 +129,7 @@ trait ClarityEngineTrait
      * $engine->setDeniedFunctions([]);                  // block nothing
      * ```
      *
-     * @param list<string> $names Function names to block in open mode.
+     * @param list<string> $names Function names to block in PHP mode.
      * @return $this
      */
     public function setDeniedFunctions(array $names): static
@@ -145,7 +145,7 @@ trait ClarityEngineTrait
     }
 
     /**
-     * Return the function names currently blocked in open mode.
+     * Return the function names currently blocked in PHP mode.
      *
      * @return list<string>
      */

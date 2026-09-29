@@ -23,7 +23,7 @@ when the output was sent directly to STDERR.
 
 **Return value**
 
-- Type: string
+- Type: `string`
 
 
 

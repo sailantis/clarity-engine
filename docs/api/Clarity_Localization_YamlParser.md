@@ -37,7 +37,7 @@ Nested mappings are flattened using dot notation.
 
 **Return value**
 
-- Type: array
+- Type: `array`
 
 
 

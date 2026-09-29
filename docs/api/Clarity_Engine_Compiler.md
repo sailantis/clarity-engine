@@ -4,6 +4,13 @@
 
 Compiles a single Clarity template source file into a PHP class.
 
+Architecture
+------------
+This class holds the public API, the constants and the per-compilation state;
+the behaviour is composed from the traits in `Clarity\Engine\Compiler\`
+(inheritance, control flow, macros, raw-PHP blocks, source map, code builder,
+…).  See CONTRIBUTING.md for the trait map.
+
 The compilation pipeline
 ------------------------
 1. Dependency resolution ({% extends %}, {% include %})
@@ -64,23 +71,23 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ## Public Constants
 
-- **COMPILER_VERSION** = `17`
+- **COMPILER_VERSION** = `18`
 - **INTERNAL_PREFIX** = `'__c_'`
 
 ## Public methods
 
-### __construct() · <small>[🗎](../../src/Engine/Compiler.php#L250)</small>
+### __construct() · <small>[🗎](../../src/Engine/Compiler.php#L257)</small>
 
 `public function __construct(): mixed`
 
 **Return value**
 
-- Type: mixed
+- Type: `mixed`
 
 
 ---
 
-### setRegistry() · <small>[🗎](../../src/Engine/Compiler.php#L255)</small>
+### setRegistry() · <small>[🗎](../../src/Engine/Compiler.php#L262)</small>
 
 `public function setRegistry(Clarity\Engine\Registry $registry): static`
 
@@ -92,12 +99,12 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 **Return value**
 
-- Type: static
+- Type: `static`
 
 
 ---
 
-### setExtension() · <small>[🗎](../../src/Engine/Compiler.php#L266)</small>
+### setExtension() · <small>[🗎](../../src/Engine/Compiler.php#L273)</small>
 
 `public function setExtension(string $extension): static`
 
@@ -109,12 +116,12 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 **Return value**
 
-- Type: static
+- Type: `static`
 
 
 ---
 
-### setDebugMode() · <small>[🗎](../../src/Engine/Compiler.php#L272)</small>
+### setDebugMode() · <small>[🗎](../../src/Engine/Compiler.php#L279)</small>
 
 `public function setDebugMode(bool $debug): static`
 
@@ -126,12 +133,12 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 **Return value**
 
-- Type: static
+- Type: `static`
 
 
 ---
 
-### setSandboxMode() · <small>[🗎](../../src/Engine/Compiler.php#L294)</small>
+### setSandboxMode() · <small>[🗎](../../src/Engine/Compiler.php#L301)</small>
 
 `public function setSandboxMode(bool $sandboxed): static`
 
@@ -147,23 +154,23 @@ only to the application's own guardrails (empty by default).
 
 **Return value**
 
-- Type: static
+- Type: `static`
 
 
 ---
 
-### isSandboxed() · <small>[🗎](../../src/Engine/Compiler.php#L300)</small>
+### isSandboxed() · <small>[🗎](../../src/Engine/Compiler.php#L307)</small>
 
 `public function isSandboxed(): bool`
 
 **Return value**
 
-- Type: bool
+- Type: `bool`
 
 
 ---
 
-### setDeniedFunctions() · <small>[🗎](../../src/Engine/Compiler.php#L311)</small>
+### setDeniedFunctions() · <small>[🗎](../../src/Engine/Compiler.php#L318)</small>
 
 `public function setDeniedFunctions(array $names): static`
 
@@ -178,12 +185,12 @@ mode is full PHP access; set names only for application-chosen limits.
 
 **Return value**
 
-- Type: static
+- Type: `static`
 
 
 ---
 
-### compile() · <small>[🗎](../../src/Engine/Compiler.php#L329)</small>
+### compile() · <small>[🗎](../../src/Engine/Compiler/CompilerCoreTrait.php#L33)</small>
 
 `public function compile(string $templateName, Clarity\Template\TemplateLoader $loader): Clarity\Engine\CompiledTemplate`
 
@@ -207,7 +214,7 @@ Compile a template and return a CompiledTemplate value object.
 
 ---
 
-### registerVar() · <small>[🗎](../../src/Engine/Compiler.php#L480)</small>
+### registerVar() · <small>[🗎](../../src/Engine/Compiler/DirectiveSupportTrait.php#L84)</small>
 
 `public function registerVar(string $name, int|null $tplLine = null): mixed`
 
@@ -222,12 +229,12 @@ Register a local variable in the compile-time context.
 
 **Return value**
 
-- Type: mixed
+- Type: `mixed`
 
 
 ---
 
-### unregisterVar() · <small>[🗎](../../src/Engine/Compiler.php#L513)</small>
+### unregisterVar() · <small>[🗎](../../src/Engine/Compiler/DirectiveSupportTrait.php#L117)</small>
 
 `public function unregisterVar(string $name): mixed`
 
@@ -241,12 +248,12 @@ Unregister a local variable from the compile-time context.
 
 **Return value**
 
-- Type: mixed
+- Type: `mixed`
 
 
 ---
 
-### getVars() · <small>[🗎](../../src/Engine/Compiler.php#L524)</small>
+### getVars() · <small>[🗎](../../src/Engine/Compiler/DirectiveSupportTrait.php#L128)</small>
 
 `public function getVars(): array`
 
@@ -254,7 +261,7 @@ Get the currently registered local variables.
 
 **Return value**
 
-- Type: array
+- Type: `array`
 - Description: Map of local variable names to their PHP representations.
 
 

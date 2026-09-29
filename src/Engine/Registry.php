@@ -123,10 +123,10 @@ use Stringable;
 class Registry
 {
     /**
-     * Functions blocked by default when the engine runs in open mode (sandbox
+     * Functions blocked by default when the engine runs in PHP mode (sandbox
      * disabled).
      *
-     * EMPTY on purpose: open mode means "the full power of PHP", so the engine
+     * EMPTY on purpose: PHP mode means "the full power of PHP", so the engine
      * does not smuggle a second, weaker sandbox into it.  A fixed subset of
      * "sinks" could never be a security boundary anyway -- hundreds of ordinary
      * functions read the environment, write files or spawn processes -- and a
@@ -140,9 +140,9 @@ class Registry
      * What remains out of reach in both modes is the engine's own render-frame
      * namespace: a template may not BIND a `__c_`-prefixed name (it would swap an
      * internal for the rest of the render), and `$$name` variable-variable
-     * expansion is compile-time rejected while the sandbox is enabled.  Open mode
+     * expansion is compile-time rejected while the sandbox is enabled.  PHP mode
      * lifts the latter — a dynamic dereference there is an ordinary local lookup,
-     * which is strictly weaker than the literal `$_SERVER` spelling open mode
+     * which is strictly weaker than the literal `$_SERVER` spelling PHP mode
      * already permits.
      *
      * @var array<string, true>
@@ -934,7 +934,7 @@ class Registry
     /**
      * Registry of custom directive handlers for the Clarity compiler.
      *
-     * Modules register directive keywords (e.g. `with_locale`) whose compilation is delegated to user-supplied callables instead of being handled by the built-in match table in {@see Compiler::compileDirective()}.
+     * Modules register directive keywords (e.g. `with_locale`) whose compilation is delegated to user-supplied callables instead of being handled by the built-in match table in {@see \Clarity\Engine\Compiler::compileBlock()}.
      *
      * Handler signature
      * -----------------

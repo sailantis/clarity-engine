@@ -5,7 +5,7 @@ workflow.
 
 ## Requirements
 
-- PHP 8.1 or newer with `ext-mbstring`
+- PHP 8.2 or newer with `ext-mbstring`
 - Composer
 
 ## Setup
@@ -56,6 +56,46 @@ semantics.
 - Follow the surrounding code; match its naming and comment density.
 - Keep engine internals prefixed with `__c_` (`Compiler::INTERNAL_PREFIX`).
 - Add a test for every behaviour change. Tests live in `tests/Engine/`.
+
+## Where the code lives
+
+`Clarity\Engine\Tokenizer` and `Clarity\Engine\Compiler` are the public entry
+points, but the bulk of their behaviour lives in **traits** under
+`Clarity\Engine\Tokenizer\` and `Clarity\Engine\Compiler\`. The facades keep the
+constants, the mutable state and the configuration setters, and compose the
+traits with `use`. When changing behaviour, edit the trait that owns it; the
+facade only declares what the traits share.
+
+Tokenizer (`src/Engine/Tokenizer/`):
+
+| Trait                    | Responsibility                                                                  |
+| ------------------------ | ------------------------------------------------------------------------------- |
+| `SegmentScannerTrait`    | source text → typed segments                                                    |
+| `ExpressionCoreTrait`    | expression loop: token dispatch, ternary + keyword map, function calls, dynamic `${expr}` lookups |
+| `ExpressionSupportTrait` | identifier grammar, `?`-gluing / `:`-ternary disambiguation, pipeline splitting, stateless string helpers |
+| `VarChainTrait`          | var chains → segments and → PHP (read + write halves, optional-access guards)  |
+| `FilterCompilerTrait`    | filter pipelines, argument lists and the one call emitter                       |
+| `CallableTrait`          | lambdas + filter references (`map`/`filter`/`reduce`)                           |
+| `OperatorTestTrait`      | `in` / `is …` operator tests                                                    |
+| `CollectionLiteralTrait` | array/object literals + postfix property/index access                           |
+
+Compiler (`src/Engine/Compiler/`):
+
+| Trait                   | Responsibility                                                          |
+| ----------------------- | ---------------------------------------------------------------------- |
+| `CompilerCoreTrait`     | `compile()` entry point, template loading, source map + error mapping  |
+| `DirectiveSupportTrait` | variable scope, macros and `{% php %}` regions                          |
+| `InheritanceTrait`      | static `{% extends %}` / `{% block %}` merge                            |
+| `BodyCompilerTrait`     | segment loop + directive dispatch (re-entry point)                      |
+| `ControlFlowTrait`      | for / if / else / set / include                                         |
+| `CodeBuilderTrait`      | final class wrapper + text/context helpers                             |
+
+Each trait is a plain `trait`; the facade, the traits and the shared state all
+run against the same `$this`, so the split is transparent. The public constants
+(`Tokenizer::TEXT`, `Compiler::COMPILER_VERSION`, …) stay on the facade and are
+read from the traits as `self::CONST`; trait-local constants are declared in the
+trait that uses them (a trait constant requires **PHP 8.2**, which is why the
+engine's minimum is 8.2 rather than 8.1).
 
 ## Adding a filter or function
 

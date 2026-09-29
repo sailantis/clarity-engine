@@ -20,7 +20,7 @@ It allows listeners to receive events with a type, payload, and timestamp.
 
 **Return value**
 
-- Type: void
+- Type: `void`
 
 
 ---
@@ -38,7 +38,7 @@ It allows listeners to receive events with a type, payload, and timestamp.
 
 **Return value**
 
-- Type: void
+- Type: `void`
 
 
 ---
@@ -49,7 +49,7 @@ It allows listeners to receive events with a type, payload, and timestamp.
 
 **Return value**
 
-- Type: array
+- Type: `array`
 
 
 

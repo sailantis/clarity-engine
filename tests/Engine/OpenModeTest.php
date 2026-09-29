@@ -147,7 +147,7 @@ class OpenModeTest extends BaseTestCase
         self::tpl('om_deny_filter', "{{ 'abc' |> strrev }}");
 
         $this->expectException(ClarityException::class);
-        $this->expectExceptionMessageMatches('/blocked in open mode/');
+        $this->expectExceptionMessageMatches('/blocked in PHP mode/');
         self::openEngine(['deniedFunctions' => ['strrev']])->renderPartial('om_deny_filter');
     }
 
@@ -162,7 +162,7 @@ class OpenModeTest extends BaseTestCase
         self::tpl('om_deny_case', "{{ 'abc' |> STRREV }}");
 
         $this->expectException(ClarityException::class);
-        $this->expectExceptionMessageMatches('/blocked in open mode/');
+        $this->expectExceptionMessageMatches('/blocked in PHP mode/');
         self::openEngine(['deniedFunctions' => ['strrev']])->renderPartial('om_deny_case');
     }
 
@@ -265,7 +265,7 @@ class OpenModeTest extends BaseTestCase
                 $engine->renderPartial('om_sink_' . $fn, ['x' => []]);
                 $this->fail("{$fn}() should be blocked by the explicit guardrail");
             } catch (ClarityException $e) {
-                $this->assertMatchesRegularExpression('/blocked in open mode/', $e->getMessage());
+                $this->assertMatchesRegularExpression('/blocked in PHP mode/', $e->getMessage());
             }
         }
     }

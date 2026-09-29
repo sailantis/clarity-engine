@@ -27,7 +27,7 @@ for programmatically defined translations.
 
 **Return value**
 
-- Type: mixed
+- Type: `mixed`
 
 
 ---
@@ -45,7 +45,7 @@ for programmatically defined translations.
 
 **Return value**
 
-- Type: array
+- Type: `array`
 
 
 

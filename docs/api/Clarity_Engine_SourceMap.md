@@ -45,7 +45,7 @@ Encode a source map as the compact string form.
 
 **Return value**
 
-- Type: string
+- Type: `string`
 - Description: Empty string for an empty map.
 
 
@@ -65,7 +65,7 @@ Decode the compact string form back into the list-of-ranges shape.
 
 **Return value**
 
-- Type: array
+- Type: `array`
 - Description: list of [phpLineStart, fileIndex, templateLine]
 
 
@@ -93,7 +93,7 @@ the safe answer (an absent line number beats a wrong one).
 
 **Return value**
 
-- Type: array
+- Type: `array`
 - Description: list of [phpLineStart, fileIndex, templateLine]
 
 
@@ -120,7 +120,7 @@ which keeps compiled files readable and avoids pathological line counts.
 
 **Return value**
 
-- Type: string
+- Type: `string`
 - Description: PHP expression, e.g. "'1,0,1;3,0,3'"
 
 

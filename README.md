@@ -8,7 +8,7 @@
 
 - **Compiled & Cached** – Templates compile to PHP classes and leverage OPcache for blazing-fast rendering
 - **Secure Sandbox** – No arbitrary PHP execution by default; templates are strictly sandboxed with controlled access
-- **Opt-In Open Mode** – Disable the sandbox to give templates the full power of PHP (any function call or filter, method calls, `{% php %}` blocks) — Blade / Stempler / Plates parity, for trusted authors
+- **Opt-In PHP Mode** – Disable the sandbox to give templates the full power of PHP (any function call or filter, method calls, `{% php %}` blocks) — Blade / Stempler / Plates parity, for trusted authors
 - **Expressive Syntax** – Clean, readable template syntax inspired by modern template engines
 - **Twig-Style Tests** – `in`, `is defined`, `starts with`, `matches`, `divisible by`, and more, with absence-tolerant `defined`/`null`/`empty`
 - **Whitespace Control** – `{%- … -%}` trims whitespace around a tag
@@ -19,7 +19,7 @@
 - **Modules** – Bundle filters, functions, and directives into self-registering plug-ins
 - **Auto-escaping** – Built-in XSS protection with context-aware automatic HTML/JS/CSS escaping
 - **Unicode Support** – Full multibyte string handling with transparent normalization
-- **Zero Dependencies** – Standalone engine with no external dependencies beyond PHP 8.1+
+- **Zero Dependencies** – Standalone engine with no external dependencies beyond PHP 8.2+
 
 ---
 
@@ -29,7 +29,7 @@
 composer require sailantis/clarity-engine
 ```
 
-**Requirements:** PHP 8.1 or higher
+**Requirements:** PHP 8.2 or higher
 
 ---
 
@@ -45,23 +45,20 @@ use Clarity\ClarityEngine;
 
 // Initialize the engine
 $engine = new ClarityEngine([
-    'viewPath'   => __DIR__ . '/templates',
-    'namespaces' => [
-        'admin'  => __DIR__ . '/templates/admin',
-        'emails' => __DIR__ . '/templates/emails',
-    ],
+    'viewPath'   => __DIR__ . '/views',
 ]);
 
-// Render a template
+// Render a template. The second argument is the template's scope.
 echo $engine->render('welcome', [
     'title' => 'Welcome to Clarity',
-    'user' => ['name' => 'Developer'],
+    'user'  => (object) ['name' => 'Developer'],   // object -> {{ user.name }}
+    // 'user' => ['name' => 'Developer'],          // array  -> {{ user:name }}
 ]);
 ```
 
 ### Your First Template
 
-**templates/welcome.clarity.html:**
+**views/welcome.clarity.html:**
 
 ```twig
 <!DOCTYPE html>
@@ -70,13 +67,50 @@ echo $engine->render('welcome', [
     <title>{{ title }}</title>
   </head>
   <body>
-    <h1>Hello, {{ user:name }}!</h1>
+    <h1>Hello, {{ user.name }}!</h1>
     <p>The current time is {{ "now" |> date("H:i:s") }}</p>
   </body>
 </html>
 ```
 
 That's it! Clarity automatically compiles and caches your template.
+
+### Two Modes
+
+Clarity runs in one of two modes, selected by the `sandbox` option:
+
+| Mode             | Default | What templates may do                          |
+| ---------------- | ------- | ---------------------------------------------- |
+| **Sandbox mode** | ✓       | registered filters and functions only          |
+| **PHP mode**     |         | any function, method calls, `{% php %}` blocks |
+
+The same scope is written differently in each mode. Sandbox mode uses Clarity's
+own access syntax; PHP mode uses PHP's:
+
+```twig
+{# ---- Sandbox mode: `:` for array keys, `.` for properties, registered filters ---- #}
+<h1>Hello, {{ user.name }}!</h1>
+<p>{{ settings:tagline }}</p>
+{{ "now" |> date("H:i:s") }}
+
+{# ---- PHP mode: any PHP function, real method calls, the scope as PHP variables ---- #}
+<h1>Hello, {{ $user->name }}!</h1>
+<p>{{ $settings['tagline'] }}</p>
+{{ date('H:i:s') }}
+```
+
+Switch modes with the `sandbox` config key or `setSandboxMode()`:
+
+```php
+$engine = new ClarityEngine(['sandbox' => false]); // PHP mode at construction
+$engine->setSandboxMode(false);                    // ...or at any time
+```
+
+> **PHP mode is equivalent to executing arbitrary PHP.** Enable it only for
+> templates you control. Compiled templates record the mode they were built in
+> and are recompiled automatically when you change it. See
+> [PHP Mode](#php-mode) and
+> [Advanced Topics → Security Model](docs/04-advanced-topics.md#security-model).
 
 ---
 
@@ -211,31 +245,31 @@ Configure the engine with these methods:
 ```php
 // Initialize with config array
 $engine = new ClarityEngine([
-    'viewPath' => __DIR__ . '/templates',
+    'viewPath' => __DIR__ . '/views',
     'cachePath' => __DIR__ . '/cache',
 ]);
 
 // Or configure via setters
 $engine = ClarityEngine::create()
-    ->setViewPath(__DIR__ . '/templates')
+    ->setViewPath(__DIR__ . '/views')
     ->setCachePath(__DIR__ . '/cache'); // Default: sys temp + /clarity_cache
 
 // Additional configuration
 $engine->setExtension('.tpl.html');           // Default: .clarity.html
 
 // Register named namespaces (convenience method)
-$engine->addNamespace('admin',  __DIR__ . '/templates/admin');
-$engine->addNamespace('emails', __DIR__ . '/templates/emails');
+$engine->addNamespace('admin',  __DIR__ . '/views/admin');
+$engine->addNamespace('emails', __DIR__ . '/views/emails');
 // Templates with a namespace prefix: {% include "admin::sidebar" %}
 // Unprefixed templates still resolve via the base viewPath.
 
 // Namespaces can also be passed in the constructor:
-// new ClarityEngine(['namespaces' => ['admin' => __DIR__ . '/templates/admin']]);
+// new ClarityEngine(['namespaces' => ['admin' => __DIR__ . '/views/admin']]);
 
 // For advanced multi-source setups, set a loader directly:
 $engine->setLoader(new \Clarity\Template\DomainRouterLoader(
-    ['admin' => new \Clarity\Template\FileLoader('/path/to/admin/templates')],
-    fallback: new \Clarity\Template\FileLoader('/path/to/templates'),
+    ['admin' => new \Clarity\Template\FileLoader('/path/to/admin/views')],
+    fallback: new \Clarity\Template\FileLoader('/path/to/views'),
 ));
 $engine->setDebugMode(true);                  // Runtime safety checks (dev only)
 
@@ -268,7 +302,8 @@ Clarity is sandboxed by default:
 
 ### PHP Mode
 
-The sandbox can be disabled deliberately ("PHP mode"), granting templates the full power of
+The sandbox can be disabled deliberately — **PHP mode**, also called _open mode_
+— granting templates the full power of
 PHP (any function call or filter, `$obj->method()`, and raw PHP through either
 `{% php %}…{% endphp %}` or the standalone `{% php CODE %}` form):
 

@@ -24,7 +24,7 @@ prevent comment injection.
 
 **Return value**
 
-- Type: string
+- Type: `string`
 
 
 

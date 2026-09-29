@@ -30,7 +30,7 @@ source rather than the compiled PHP cache file.
 
 **Return value**
 
-- Type: mixed
+- Type: `mixed`
 
 
 
