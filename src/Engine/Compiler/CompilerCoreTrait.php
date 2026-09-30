@@ -52,11 +52,12 @@ trait CompilerCoreTrait
         $this->phpBlockBodies = [];
         $this->phpBlockSeq    = 0;
 
-        // Open mode seeds the render scope into PHP locals (see $seedsScope).
-        // Decided from the MODE, not per template, so an inlined include can
-        // never read locals its host body did not seed.  Applied before any
-        // expression is compiled, because it changes every chain root.
-        $this->seedsScope = !$this->sandboxMode;
+        // The `phpVariables` capability seeds the render scope into PHP locals
+        // (see $seedsScope).  Decided from the POLICY, not per template, so an
+        // inlined include can never read locals its host body did not seed.
+        // Applied before any expression is compiled, because it changes every
+        // chain root.
+        $this->seedsScope = $this->policy->allows('phpVariables');
         $this->tokenizer->setLocalRoots($this->seedsScope);
 
         try {

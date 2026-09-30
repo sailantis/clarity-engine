@@ -9,6 +9,7 @@ use Clarity\Debug\HtmlDumpRenderer;
 use Clarity\Debug\JsDumpRenderer;
 use Clarity\Engine\Cache;
 use Clarity\Engine\Compiler;
+use Clarity\Engine\Policy;
 use Clarity\Engine\Registry;
 use Clarity\Engine\SourceMap;
 use Clarity\Template\DomainRouterLoader;
@@ -29,23 +30,17 @@ trait ClarityEngineTrait
     protected ?HtmlDebugPanel $debugPanel = null;
 
     /**
-     * When true (default) templates are sandboxed.  When false ("PHP mode") the
-     * engine grants templates the full power of PHP: arbitrary function calls,
-     * PHP functions as filters, and method calls.
-     */
-    protected bool $sandboxMode = true;
-
-    /**
-     * Functions blocked in PHP mode (lowercase name => true).  Empty by
-     * default: PHP mode is full PHP access, so any restriction here is an
-     * application-chosen guardrail rather than part of the switch.
+     * What compiled templates are allowed to reach.  Sandboxed by default.
      *
-     * @var array<string, true>
+     * One object answers every capability question, so a grant cannot be made in
+     * one half of the engine and missed in another.  A compiled template records
+     * a digest of this policy and is recompiled whenever the digest changes.
      */
-    protected array $deniedFunctions = Registry::DEFAULT_DENIED_FUNCTIONS;
+    protected Policy $policy;
 
     protected function initializeClarityEngine(): void
     {
+        $this->policy   = Policy::sandboxed();
         $this->registry = new Registry(
             fn(string $view, array $vars = []): string => $this->renderPartial($view, $vars)
         );
@@ -78,80 +73,56 @@ trait ClarityEngineTrait
     }
 
     /**
-     * Enable or disable the template sandbox.
+     * Set what compiled templates are allowed to reach.
      *
-     * Sandboxed (the default) is the safe mode the engine has always had:
-     * templates cannot call arbitrary PHP functions or methods.  Passing `false`
-     * switches to "PHP mode", where templates have the full power of PHP —
-     * any function call, any PHP function used as a filter, and `$obj->method()`
-     * method calls.  This is intended for templates written by trusted authors
-     * (Blade / Stempler / Plates parity).
-     *
-     * SECURITY: PHP mode is equivalent to executing arbitrary PHP.  Templates
-     * compiled in either mode record which mode built them and are automatically
-     * recompiled when the setting changes.
+     * A policy is a set of capabilities plus two allowlists; see
+     * {@see \Clarity\Engine\Policy}.  Start from a preset and change what you
+     * mean to change:
      *
      * ```php
-     * $engine->setSandboxMode(false);   // grant full PHP access
+     * $engine->setPolicy(Policy::open());                 // the old PHP mode
+     * $engine->setPolicy(Policy::custom()
+     *     ->allowCapability('methodCalls')
+     *     ->allowFunctions('strtoupper', 'count'));
      * ```
      *
-     * @param bool $sandboxed True to keep templates sandboxed, false for PHP mode.
+     * SECURITY: a policy that grants `rawPhp`, `phpVariables` or
+     * `methodCalls` is equivalent to executing arbitrary PHP and is intended for
+     * templates written by trusted authors only.  Templates compiled under one
+     * policy are automatically recompiled under another.
+     *
+     * @param Policy|array<string, mixed> $policy A policy, or the array form it
+     *                                           accepts ({@see Policy::fromArray()}).
      * @return $this
      */
-    public function setSandboxMode(bool $sandboxed): static
+    public function setPolicy(Policy|array $policy): static
     {
-        $this->sandboxMode = $sandboxed;
+        $this->policy = Policy::fromUserValue($policy);
         return $this;
     }
 
     /**
-     * Whether the sandbox is currently enabled (true = safe mode).
+     * The policy templates are currently compiled under.
+     *
+     * Always a real object: a freshly built engine answers with
+     * {@see Policy::sandboxed()}.  Use it for coarse questions rather than
+     * keeping a second flag that could disagree with it — `getPolicy()->isOpen()`
+     * answers what the old `isSandboxed()` answered.
+     */
+    public function getPolicy(): Policy
+    {
+        return $this->policy;
+    }
+
+    /**
+     * Whether the current policy lets templates reach PHP at all.
+     *
+     * Kept because it reads better than `getPolicy()->allowsPhp()` at a call site
+     * that only wants the coarse answer.
      */
     public function isSandboxed(): bool
     {
-        return $this->sandboxMode;
-    }
-
-    /**
-     * Replace the list of functions blocked in PHP mode.
-     *
-     * Accepts a list of function names (case-insensitive, leading `\` allowed).
-     * Nothing is blocked by default, because
-     * {@see Registry::DEFAULT_DENIED_FUNCTIONS} is empty; set names here only if
-     * the application wants its own guardrails, or pass `[]` to clear them.
-     *
-     * NOTE: the compiled cache embeds the function names it calls, so changing
-     * this list does not invalidate already-compiled templates.  Clear the
-     * compiled-template cache after changing it.
-     *
-     * ```php
-     * $engine->setDeniedFunctions(['exec', 'system']);  // add guardrails
-     * $engine->setDeniedFunctions([]);                  // block nothing
-     * ```
-     *
-     * @param list<string> $names Function names to block in PHP mode.
-     * @return $this
-     */
-    public function setDeniedFunctions(array $names): static
-    {
-        $map = [];
-        foreach ($names as $name) {
-            if (\is_string($name) && $name !== '') {
-                $map[\strtolower(\ltrim($name, '\\'))] = true;
-            }
-        }
-        $this->deniedFunctions = $map;
-        return $this;
-    }
-
-    /**
-     * Return the function names currently blocked in PHP mode.
-     *
-     * @return list<string>
-     */
-    public function getDeniedFunctions(): array
-    {
-        return \array_keys($this->deniedFunctions);
+        return $this->policy->isSandboxed();
     }
 
     /**
@@ -829,14 +800,20 @@ trait ClarityEngineTrait
                 $className = null;
             }
             if ($className !== null) {
-                // Recompile if debug mode or sandbox mode changed since the
+                // Recompile if debug mode or the policy changed since the
                 // template was last compiled.  The compiled body is
-                // mode-specific (pruning, escape context, permitted calls), so
-                // a template built under one mode must never be served under
-                // the other.
-                $compiledDebug   = $className::$debugCompiled ?? false;
-                $compiledSandbox = $className::$sandboxCompiled ?? true;
-                if ($compiledDebug !== $this->debugMode || $compiledSandbox !== $this->sandboxMode) {
+                // policy-specific (scope seeding, pruning, escape context,
+                // permitted calls), so a template built under one policy must
+                // never be served under another.
+                //
+                // The policy is compared by DIGEST rather than by identity
+                // because a policy is rebuilt on every boot: identity would
+                // report a change on every request.  The digest is what makes it
+                // safe to change an allowlist without bumping
+                // COMPILER_VERSION.
+                $compiledDebug  = $className::$debugCompiled ?? false;
+                $compiledDigest = $className::$policyDigest ?? '';
+                if ($compiledDebug !== $this->debugMode || $compiledDigest !== $this->policy->digest()) {
                     $this->cache->invalidate($templateName);
                 } else {
                     if ($this->debugMode) {
@@ -854,8 +831,7 @@ trait ClarityEngineTrait
             ->setExtension($this->extension ?? FileLoader::DEFAULT_EXTENSION)
             ->setRegistry($this->registry)
             ->setDebugMode($this->debugMode)
-            ->setSandboxMode($this->sandboxMode)
-            ->setDeniedFunctions($this->deniedFunctions);
+            ->setPolicy($this->policy);
         $compileStart = $this->debugMode ? \microtime(true) : 0.0;
         $compiled     = $this->compiler->compile($templateName, $loader);
         if ($this->debugMode) {

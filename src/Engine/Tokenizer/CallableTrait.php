@@ -67,12 +67,14 @@ trait CallableTrait
                     return "\$__c_fn['" . \addslashes($refName) . "']";
                 }
 
-                // Open mode: a quoted name that is not a registered filter may
-                // name a PHP function (Blade parity).
-                if (!$this->sandboxMode && $this->registry !== null) {
+                // A quoted name that is not a registered filter may name a PHP
+                // function, but only where the policy lets a template reach PHP
+                // (Blade parity).
+                if ($this->policy->allowsPhp() && $this->registry !== null) {
                     if (!$this->isFunctionCallAllowed($refName)) {
                         throw new ClarityException(
-                            "Function '{$refName}' is blocked in PHP mode. Allow it by removing it from the deny-list."
+                            "Function '{$refName}' is not allowed by this policy: it is not in the "
+                                . 'function allowlist, or it is denied. Add it with allowFunctions().'
                         );
                     }
                     if (!\function_exists(\ltrim($refName, '\\'))) {

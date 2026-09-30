@@ -9,6 +9,7 @@ use Clarity\Engine\Tokenizer\CallableTrait;
 use Clarity\Engine\Tokenizer\OperatorTestTrait;
 use Clarity\Engine\Tokenizer\VarChainTrait;
 use Clarity\Engine\Tokenizer\CollectionLiteralTrait;
+use Clarity\Engine\Tokenizer\PhpConstructTrait;
 
 use Clarity\ClarityException;
 
@@ -64,6 +65,7 @@ class Tokenizer
     use OperatorTestTrait;
     use VarChainTrait;
     use CollectionLiteralTrait;
+    use PhpConstructTrait;
 
     public const TEXT = 1;
     public const OUTPUT = 2;
@@ -162,14 +164,12 @@ class Tokenizer
     private array $contextInjectedFunctions = [];
 
     /**
-     * When true (default) templates are sandboxed: PHP function calls and
-     * method calls are rejected unless the callee is registered.  When false
-     * ("open mode") templates may call arbitrary PHP functions and methods,
-     * for parity with Blade / Stempler / Plates.
+     * What this template is allowed to reach.  Every decision it makes is made
+     * while compiling; nothing about it is consulted at render time.
      *
-     * Set by the Compiler from the engine's `sandbox` configuration.
+     * Set by the Compiler from the engine's policy.
      */
-    private bool $sandboxMode = true;
+    private Policy $policy;
 
     /**
      * Open mode only: the render scope is seeded into PHP LOCALS (the Compiler
@@ -207,11 +207,11 @@ class Tokenizer
     /**
      * Function names that stay blocked in PHP mode.  Empty by default (PHP
      * mode is full PHP access); an application may add its own guardrails via
-     * the engine's setDeniedFunctions().  Keys are lowercase names.
+     * the policy's denyFunctions().  Keys are lowercase names.
      *
      * @var array<string, true>
      */
-    private array $deniedFunctions = Registry::DEFAULT_DENIED_FUNCTIONS;
+    private array $deniedFunctions = [];
 
     /**
      * True while compiling the argument list of a filter routed to a PHP
@@ -241,12 +241,66 @@ class Tokenizer
     }
 
     /**
-     * Enable or disable sandbox mode.  `true` (default) rejects arbitrary PHP
-     * function and method calls; `false` allows them (see class docs).
+     * PHP's own superglobals, as chain roots.  A read of one of these names emits
+     * the PHP variable directly when the `superglobals` capability is granted, so
+     * `$_SERVER` means PHP's `$_SERVER` rather than a scope entry that happens to
+     * be named that.
+     *
+     * @var array<string, true>
      */
-    public function setSandboxMode(bool $sandboxed): void
+    private const SUPERGLOBALS = [
+        'GLOBALS'  => true,
+        '_SERVER'  => true,
+        '_GET'     => true,
+        '_POST'    => true,
+        '_FILES'   => true,
+        '_COOKIE'  => true,
+        '_SESSION' => true,
+        '_REQUEST' => true,
+        '_ENV'     => true,
+    ];
+
+    /**
+     * Built from the engine's policy before any compilation.  A Tokenizer that
+     * was handed no policy compiles as {@see Policy::sandboxed()}, so the default
+     * is safe even for a hand-built tokenizer.
+     */
+    public function __construct()
     {
-        $this->sandboxMode = $sandboxed;
+        $this->policy = Policy::sandboxed();
+    }
+
+    /**
+     * Set the policy every capability question is answered from.
+     *
+     * Also mirrors the deny-list into the flat map the call sites read, so the
+     * policy stays the single source of truth while the hot paths keep a plain
+     * array lookup.
+     */
+    public function setPolicy(Policy $policy): void
+    {
+        $this->policy = $policy;
+
+        $denied = [];
+        foreach ($policy->deniedFunctions() as $name) {
+            $denied[$name] = true;
+        }
+        $this->deniedFunctions = $denied;
+    }
+
+    public function getPolicy(): Policy
+    {
+        return $this->policy;
+    }
+
+    /**
+     * Whether a capability is granted.  The one question every compile-time
+     * check in the tokenizer asks, so a check can name what it guards instead of
+     * inferring it from a single flag.
+     */
+    private function allows(string $capability): bool
+    {
+        return $this->policy->allows($capability);
     }
 
     /**
@@ -261,11 +315,6 @@ class Tokenizer
         $this->varChainCache = [];
     }
 
-    public function isSandboxed(): bool
-    {
-        return $this->sandboxMode;
-    }
-
     /**
      * Replace the open-mode function guardrails.  Keys are lowercase function
      * names; empty (the default) allows every PHP function.
@@ -278,14 +327,17 @@ class Tokenizer
     }
 
     /**
-     * Whether a PHP function may be called in open mode.
+     * Whether a PHP function may be called under the effective policy.
      *
-     * PHP function names are case-insensitive and may be written with a leading
-     * namespace separator, so both are normalised before the deny-list lookup.
+     * The policy is asked, so the allowlist and the deny-list are decided in one
+     * place rather than at each call site.  PHP function names are
+     * case-insensitive and may be written with a leading namespace separator, so
+     * both are normalised before the lookup.
      */
     private function isFunctionCallAllowed(string $name): bool
     {
-        return !isset($this->deniedFunctions[\strtolower(\ltrim($name, '\\'))]);
+        return $this->policy->allowsFunction($name)
+            && !isset($this->deniedFunctions[\strtolower(\ltrim($name, '\\'))]);
     }
 
     public function setRegistry(Registry $registry): void

@@ -597,11 +597,37 @@ trait VarChainTrait
             return '$' . $name;
         }
 
+        // A superglobal name is a special case in BOTH directions, and the two
+        // must be stated together or the capability is a lie:
+        //
+        //   granted     -> PHP's own `$_SERVER`, whatever the scope holds
+        //   not granted -> an ordinary scope read, which is absent and therefore
+        //                  throws
+        //
+        // The second half is the load-bearing one.  Without it a template could
+        // reach every superglobal through the seeded-local form the moment
+        // `phpVariables` was granted, and the two capabilities would be one.
+        if (self::isSuperglobalName($name)) {
+            return $this->allows('superglobals')
+                ? '$' . $name
+                : '$__c_va[\'' . $name . '\']';
+        }
+
         if (!$this->localRoots || $this->lambdaFrames !== []) {
             return '$__c_va[\'' . $name . '\']';
         }
 
         return '$' . $name;
+    }
+
+    /**
+     * Whether a chain root names one of PHP's superglobals.  Exact match on
+     * purpose: `_SERVERX` is an ordinary name, and `GLOBALS` is a superglobal
+     * only as the whole name.
+     */
+    private static function isSuperglobalName(string $name): bool
+    {
+        return isset(self::SUPERGLOBALS[$name]);
     }
 
     /**
@@ -629,6 +655,15 @@ trait VarChainTrait
         // A lambda parameter is already a real local, so it is a valid
         // isset()/`?->` subject as emitted.
         if (\preg_match(self::BARE_PARAM_RE, $php) && $this->isLambdaParam(\substr($php, 1))) {
+            return $php;
+        }
+
+        // A granted superglobal is emitted as a bare local by rootPhp(), so it is
+        // already the subject every guard helper wants to see.
+        if (
+            $this->allows('superglobals') && \preg_match(self::BARE_PARAM_RE, $php)
+                && self::isSuperglobalName(\substr($php, 1))
+        ) {
             return $php;
         }
 

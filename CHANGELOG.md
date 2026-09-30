@@ -5,9 +5,104 @@ All notable changes to `sailantis/clarity-engine` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.0] - 2026-09-30
+## [Unreleased]
 
-### Fixed
+### Added
+
+- **The policy API: a template's reach is now a set of capabilities, not one
+  boolean.** A `Clarity\Engine\Policy` is a set of capabilities plus two
+  allowlists, and every decision it makes is made **at compile time** — there is
+  no policy object on the render path, so none of this costs anything to
+  enforce.
+
+  | Capability          | Default | What it grants                                                                                    |
+  | ------------------- | ------- | ------------------------------------------------------------------------------------------------- |
+  | `rawPhp`            | `false` | `{% php CODE %}` and `{% php %}…{% endphp %}`                                                     |
+  | `methodCalls`       | `false` | `$obj->method(args)`                                                                              |
+  | `superglobals`      | `false` | `$_SERVER`, `$_GET`, `$_ENV`, … as chain roots                                                    |
+  | `phpVariables`      | `false` | the render scope seeded as PHP locals — what makes `$title` and `{% php echo $title; %}` one name |
+  | `variableVariables` | `true`  | `$$name` / `${expr}`                                                                              |
+  | `newExpressions`    | `false` | `new Foo(args)`                                                                                   |
+  | `staticCalls`       | `false` | `Foo::method(args)`, `Foo::CONST`, `Foo::class`, `Foo::$prop`                                     |
+
+  | Allowlist   | Default | What it governs                                            |
+  | ----------- | ------- | ---------------------------------------------------------- |
+  | `functions` | `[]`    | bare calls and filter steps that resolve to a PHP function |
+  | `filters`   | `[]`    | names accepted after `\|>`, which need not be functions    |
+
+  **An empty allowlist is no restriction; a non-empty one is the complete set** —
+  only the listed names resolve, and anything else is a compile-time error. That
+  is what makes `Policy::open()` the engine's former PHP mode exactly, rather
+  than a mode that happens to deny everything.
+
+  ```php
+  $engine->setPolicy(Policy::sandboxed());   // the default
+  $engine->setPolicy(Policy::open());        // every capability on
+  $engine->setPolicy(Policy::trusted());     // trusted, but no `new`/`::`
+  $engine->setPolicy(Policy::custom()        // the useful one
+      ->allowCapability('methodCalls')
+      ->allowFunctions('strtoupper', 'count'));
+  $engine->setPolicy(['capabilities' => ['rawPhp' => true]]);   // config form
+  ```
+
+  The gain over the boolean is that a grant is **independent**: an application
+  that needs `strtoupper` in a template no longer has to give up every
+  compile-time guarantee to get it, and granting `methodCalls` does not
+  incidentally grant `rawPhp`. `Policy::fromArray()`/`toArray()` round-trip, so a
+  policy can live in a config file, and `denyFunctions()` applies last and wins,
+  which is the one thing an allowlist cannot express ("everything except
+  `exec`").
+
+- **`new Foo(...)` and `Foo::bar()` now compile instead of producing invalid
+  PHP.** Neither was a capability that could be relaxed — the tokenizer emitted
+  the leading `\` of a fully qualified name as a stray character, so
+  `new DateTime()` and `DateTime::createFromFormat(...)` produced
+  `syntax error, unexpected fully qualified name`, and a bare `Foo\Bar` was
+  silently treated as a chain. Class names are now read by a dedicated handler
+  that compiles them to a real **fully qualified** form, which is what makes the
+  emitted code independent of where the engine happens to live. Gated on
+  `newExpressions` and `staticCalls` respectively.
+- **`x instanceof Foo`** is supported and, unlike the two above, needs no
+  capability: it takes a class name because that is what the operator means, and
+  it reaches nothing the scope did not already hold.
+
+### Changed
+
+- **`setSandboxMode()` and `isSandboxed()` are replaced by
+  `setPolicy()`/`getPolicy()`.** This is the **breaking** part: the boolean was
+  one way to say what a policy now says precisely, and keeping it as an alias
+  would be a second way to say one thing — which is a way for the two to
+  disagree. `isSandboxed()` survives on the engine as a coarse convenience
+  reading the policy, and `getPolicy()` is always a real object.
+  `['sandbox' => false]` in the constructor is replaced by `['policy' => …]`.
+  Migration: `setSandboxMode(false)` → `setPolicy(Policy::open())`.
+  `setDeniedFunctions([...])` → `setPolicy(Policy::open()->denyFunctions(...))` —
+  the deny-list is now part of the policy, so changing it recompiles correctly.
+- **A policy change invalidates the compiled cache.** A compiled template records
+  a **digest** of the effective policy, and the loader recompiles on a mismatch.
+  This is strictly better than what it replaced: the old `$sandboxCompiled` flag
+  covered only the boolean, so changing the deny-list did **not** invalidate
+  cached templates and left stale ones calling now-denied functions. A digest
+  rather than the policy itself, because the compiled file ships to a server and
+  should not carry a readable inventory of what a template may call.
+- **A non-empty allowlist counts as reaching PHP.** Otherwise
+  `Policy::sandboxed()->allowFunctions('count')` would be a grant that grants
+  nothing, since the allowlist is applied on the PHP-function path. Unlisted
+  names are still refused, by name.
+- **`superglobals` is a genuinely independent capability.** Without it, a
+  superglobal name is an ordinary scope read, so `{{ _SERVER }}` throws **even
+  when `phpVariables` is granted** — previously the two were inseparable, and
+  PHP mode reached every superglobal as a side effect of scope seeding. With it,
+  the name means PHP's own variable and never resolves to a scope entry.
+- **Every rejection message names the grant that would fix it.** `Function 'x' is
+blocked in PHP mode. Allow it by removing it from the deny-list.` becomes
+  `Function 'x' is not allowed by this policy: it is not in the function
+allowlist, or it is denied. Add it with allowFunctions().` — and
+  `'{% php %}' … Call setSandboxMode(false) to allow raw PHP.` becomes
+  `'{% php %}' is not allowed by this policy. Grant the 'rawPhp' capability to
+allow it.` A separate message names an unlisted _filter_, because the remedy
+  differs (a filter allowlist, or a registration).
+- `COMPILER_VERSION` 18 → 19, for the new grammar (`new`/`::`/`instanceof`).
 
 - **`is defined` now answers the same in both modes.** A name holding an
   explicit `null` used to count as **defined** in sandbox mode (the probe used
@@ -134,7 +229,6 @@ setSandboxMode(false) to let a PHP function of the same name be used.` The
   removed the documented-but-unimplemented `loop` object.
 - Removed a stale docblock reference to a `castToArray()` that no longer exists.
 
-[Unreleased]: https://github.com/sailantis/clarity-engine/compare/v0.2.0...HEAD
-[0.2.0]: https://github.com/sailantis/clarity-engine/releases/tag/v0.2.0
+[Unreleased]: https://github.com/sailantis/clarity-engine/compare/v0.1.1...HEAD
 [0.1.1]: https://github.com/sailantis/clarity-engine/releases/tag/v0.1.1
 [0.1.0]: https://github.com/sailantis/clarity-engine/releases/tag/v0.1.0

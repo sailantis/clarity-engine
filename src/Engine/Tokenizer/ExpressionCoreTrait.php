@@ -323,6 +323,36 @@ trait ExpressionCoreTrait
                 }
             }
 
+            // A leading `\` opens a fully qualified class name. `\Foo::bar()` and
+            // `new \Foo()` are read by the construct handlers, which tolerate the
+            // separator; anything else is a class name in a place that cannot use
+            // one, so it is reported rather than emitted as a stray backslash.
+            if ($ch === '\\') {
+                $static = $this->tryCompileStaticCall($expr, $i, $len);
+                if ($static !== null) {
+                    if (!$this->allows('staticCalls')) {
+                        throw new ClarityException(
+                            "Static calls ('::') are not allowed by this policy. "
+                                . "Grant the 'staticCalls' capability to allow them."
+                        );
+                    }
+                    $out .= $static['php'];
+                    $i = $static['end'];
+                    continue;
+                }
+
+                $qualified = $this->readQualifiedName($expr, $i, $len);
+                if ($qualified !== null) {
+                    [$rawName] = $qualified;
+                    throw new ClarityException(
+                        "A PHP class name ('{$rawName}') is not allowed here in "
+                            . "'{$expr}'. Use 'new {$rawName}(…)' to build it, "
+                            . "'{$rawName}::…' to reach a static member, or "
+                            . "'x instanceof {$rawName}' to test it."
+                    );
+                }
+            }
+
             // The `$` sigil introduces a PHP-style chain: $user->name, $a.b,
             // $a?.b. It is the ONLY way to spell `->`; a bare `a->b` is rejected
             // by parseVarChainAt() so raw PHP property syntax can never be
@@ -390,7 +420,7 @@ trait ExpressionCoreTrait
                     );
                 }
 
-                $parsed = $this->parseVarChainAt($expr, $sigilStart, true, $ternarySeen, !$this->sandboxMode);
+                $parsed = $this->parseVarChainAt($expr, $sigilStart, true, $ternarySeen, $this->allows('methodCalls'));
                 if ($parsed === null) {
                     $out .= $ch;
                     $i++;
@@ -434,6 +464,41 @@ trait ExpressionCoreTrait
             if ($ch === '[' || $ch === '{') {
                 [$literalPhp, $i] = $this->parseCollectionLiteralAt($expr, $i);
                 $out .= $literalPhp;
+                continue;
+            }
+
+            // `new Foo(...)` names a class rather than a scope value, so it is
+            // recognised explicitly: it is an accepted Clarity keyword whose
+            // operand must not resolve through the scope.  The capability check
+            // lives here, where the keyword is unambiguous.
+            if (
+                $ch === 'n' && \substr($expr, $i, 3) === 'new'
+                    && !self::isIdentifierChar($expr[$i + 3] ?? '')
+                    && !($i > 0 && self::isIdentifierChar($expr[$i - 1]))
+            ) {
+                if (!$this->allows('newExpressions')) {
+                    throw new ClarityException(
+                        "'new' is not allowed by this policy: it would let a template build any object it names. "
+                            . "Grant the 'newExpressions' capability to allow it."
+                    );
+                }
+                $end = null;
+                $out .= $this->compileNewExpression($expr, $i + 3, $len, $end);
+                $i = $end ?? $i + 3;
+                continue;
+            }
+
+            // `instanceof` takes a CLASS name on the right, so the operand is
+            // compiled as a name rather than as an expression.  This is grammar,
+            // not a capability: it is how the operator has to work.
+            if (
+                $ch === 'i' && \substr($expr, $i, 10) === 'instanceof'
+                    && !self::isIdentifierChar($expr[$i + 10] ?? '')
+                    && !($i > 0 && self::isIdentifierChar($expr[$i - 1]))
+            ) {
+                $end = null;
+                $out .= 'instanceof ' . $this->compileInstanceofOperand($expr, $i + 10, $len, $end);
+                $i = $end ?? $i + 10;
                 continue;
             }
 
@@ -484,6 +549,43 @@ trait ExpressionCoreTrait
                     }
                 }
 
+                // Static access on a bare class name: `DateTime::createFromFormat(…)`.
+                // This MUST run before the chain branch below, which sees the
+                // first `:` of `::` as a chain colon and would read
+                // `:createFromFormat` as an (empty) array key.
+                if (($expr[$idEnd] ?? '') === ':' && ($expr[$idEnd + 1] ?? '') === ':') {
+                    $static = $this->tryCompileStaticCall($expr, $start, $len);
+                    if ($static !== null) {
+                        if (!$this->allows('staticCalls')) {
+                            throw new ClarityException(
+                                "Static calls ('::') are not allowed by this policy. "
+                                    . "Grant the 'staticCalls' capability to allow them."
+                            );
+                        }
+                        $out .= $static['php'];
+                        $i = $static['end'];
+                        continue;
+                    }
+                }
+
+                // A `\` inside an identifier position is a NAMESPACE separator,
+                // not an operator. `\DateTime` and `Foo\Bar` are single names, so
+                // they are read by the construct handlers rather than left for the
+                // operator loop (which would emit a stray backslash and an invalid
+                // PHP expression).
+                if (($expr[$idEnd] ?? '') === '\\') {
+                    $qualified = $this->readQualifiedName($expr, $start, $len);
+                    if ($qualified !== null) {
+                        [$rawName] = $qualified;
+                        throw new ClarityException(
+                            "A PHP class name ('{$rawName}') is not allowed here in "
+                                . "'{$expr}'. Use 'new {$rawName}(…)' to build it, "
+                                . "'{$rawName}::…' to reach a static member, or "
+                                . "'x instanceof {$rawName}' to test it."
+                        );
+                    }
+                }
+
                 // Open-mode filter placeholder: a lone `_` stands for the piped
                 // value while compiling a PHP function's argument list.  It is
                 // recognised ONLY there (and only when not a chain root), so a
@@ -517,6 +619,10 @@ trait ExpressionCoreTrait
                     $nextIsId = $nextChar !== null && self::isIdentifierChar($nextChar);
                     $lower    = \strtolower($token);
 
+                    // The `::` and namespace forms were already handled above,
+                    // where the identifier's tail was visible: both either emit
+                    // and `continue`, or throw. Reaching here means neither tail
+                    // applied, so this is an ordinary name or a keyword.
                     if (!$prevIsId && !$nextIsId && isset($keywordMap[$lower])) {
                         $out .= $keywordMap[$lower];
                         continue;
@@ -533,12 +639,14 @@ trait ExpressionCoreTrait
                             $out .= $call;
                             continue;
                         }
-                        // Open mode: an unregistered name is emitted as a direct
-                        // PHP function call, minus the deny-list.
-                        if (!$this->sandboxMode) {
+                        // A bare call resolves to PHP only when the policy lets a
+                        // template reach PHP at all.  Registered names bypass
+                        // this entirely — they are the engine's own vocabulary.
+                        if ($this->policy->allowsPhp()) {
                             if (!$this->isFunctionCallAllowed($token)) {
                                 throw new ClarityException(
-                                    "Function '{$token}()' is blocked in PHP mode. Allow it by removing it from the deny-list."
+                                    "Function '{$token}()' is not allowed by this policy: it is not in the "
+                                        . 'function allowlist, or it is denied. Add it with allowFunctions().'
                                 );
                             }
                             [$call, $i] = $this->buildFunctionCallInExpr($token, $expr, $j, $len);

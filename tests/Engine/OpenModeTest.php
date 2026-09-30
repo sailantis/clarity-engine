@@ -2,6 +2,7 @@
 namespace Clarity\Tests\Engine;
 
 use Clarity\ClarityException;
+use Clarity\Engine\Policy;
 use Clarity\Tests\BaseTestCase;
 use Clarity\Tests\TestClarityEngine;
 use Clarity\Tests\TestEnvironment;
@@ -20,14 +21,14 @@ use Clarity\Tests\TestEnvironment;
  */
 class OpenModeTest extends BaseTestCase
 {
-    /** A fresh engine with the sandbox disabled. */
+    /** A fresh engine whose policy lets templates reach PHP. */
     private static function openEngine(array $config = []): TestClarityEngine
     {
         return new TestClarityEngine(\array_merge([
             'viewPath'  => TestEnvironment::viewDir(),
             'cachePath' => TestEnvironment::cacheDir(),
             'extension' => 'clarity.html',
-            'sandbox'   => false,
+            'policy'    => Policy::open(),
         ], $config));
     }
 
@@ -137,9 +138,9 @@ class OpenModeTest extends BaseTestCase
         $this->assertSame('0', $engine->renderPartial('om_default_extract', ['x' => []]));
     }
 
-    public function testDefaultDenyListIsEmpty(): void
+    public function testAnOpenPolicyDeniesNothing(): void
     {
-        $this->assertSame([], self::openEngine()->getDeniedFunctions());
+        $this->assertSame([], self::openEngine()->getPolicy()->deniedFunctions());
     }
 
     public function testDenyListBlocksFunctionUsedAsFilter(): void
@@ -147,14 +148,15 @@ class OpenModeTest extends BaseTestCase
         self::tpl('om_deny_filter', "{{ 'abc' |> strrev }}");
 
         $this->expectException(ClarityException::class);
-        $this->expectExceptionMessageMatches('/blocked in PHP mode/');
-        self::openEngine(['deniedFunctions' => ['strrev']])->renderPartial('om_deny_filter');
+        $this->expectExceptionMessageMatches('/not allowed by this policy/');
+        self::openEngine(['policy' => Policy::open()->denyFunctions('strrev')])
+            ->renderPartial('om_deny_filter');
     }
 
-    public function testClearingDenyListAllowsFunction(): void
+    public function testAnEmptyDenyListAllowsTheFunction(): void
     {
         self::tpl('om_allow', "{{ 'abc' |> strrev }}");
-        $this->assertSame('cba', self::openEngine(['deniedFunctions' => []])->renderPartial('om_allow'));
+        $this->assertSame('cba', self::openEngine()->renderPartial('om_allow'));
     }
 
     public function testDenyListIsCaseInsensitive(): void
@@ -162,8 +164,9 @@ class OpenModeTest extends BaseTestCase
         self::tpl('om_deny_case', "{{ 'abc' |> STRREV }}");
 
         $this->expectException(ClarityException::class);
-        $this->expectExceptionMessageMatches('/blocked in PHP mode/');
-        self::openEngine(['deniedFunctions' => ['strrev']])->renderPartial('om_deny_case');
+        $this->expectExceptionMessageMatches('/not allowed by this policy/');
+        self::openEngine(['policy' => Policy::open()->denyFunctions('strrev')])
+            ->renderPartial('om_deny_case');
     }
 
     // =========================================================================
@@ -256,7 +259,9 @@ class OpenModeTest extends BaseTestCase
     {
         // The engine grants full PHP; an application may still add its own
         // guardrails on top of that decision.
-        $engine = self::openEngine(['deniedFunctions' => ['extract', 'get_defined_vars', 'compact', 'call_user_func']]);
+        $engine = self::openEngine([
+            'policy' => Policy::open()->denyFunctions('extract', 'get_defined_vars', 'compact', 'call_user_func'),
+        ]);
 
         foreach (['extract', 'get_defined_vars', 'compact', 'call_user_func'] as $fn) {
             self::tpl('om_sink_' . $fn, "{{ {$fn}(x) }}");
@@ -265,7 +270,7 @@ class OpenModeTest extends BaseTestCase
                 $engine->renderPartial('om_sink_' . $fn, ['x' => []]);
                 $this->fail("{$fn}() should be blocked by the explicit guardrail");
             } catch (ClarityException $e) {
-                $this->assertMatchesRegularExpression('/blocked in PHP mode/', $e->getMessage());
+                $this->assertMatchesRegularExpression('/not allowed by this policy/', $e->getMessage());
             }
         }
     }
@@ -371,7 +376,7 @@ class OpenModeTest extends BaseTestCase
         self::tpl('om_php_sandbox', "{% php %}echo 'x';{% endphp %}");
 
         $this->expectException(ClarityException::class);
-        $this->expectExceptionMessageMatches('/not allowed in sandbox mode/');
+        $this->expectExceptionMessageMatches('/not allowed by this policy/');
         self::render('om_php_sandbox');
     }
 
@@ -572,7 +577,7 @@ class OpenModeTest extends BaseTestCase
         self::tpl('om_php_sa_deny', '{% php echo "x"; %}');
 
         $this->expectException(ClarityException::class);
-        $this->expectExceptionMessageMatches('/not allowed in sandbox mode/');
+        $this->expectExceptionMessageMatches('/not allowed by this policy/');
         self::render('om_php_sa_deny');
     }
 

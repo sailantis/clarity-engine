@@ -92,8 +92,11 @@ class Compiler
 
     /**
      * Bump this whenever a change alters the PHP that a template compiles to.
+     *
+     * A POLICY change needs no bump: the compiled class carries a digest of the
+     * effective policy and the loader recompiles on a mismatch.
      */
-    public const COMPILER_VERSION = 18;
+    public const COMPILER_VERSION = 19;
 
     /**
      * Prefix owned by the engine for every PHP variable it binds into the render
@@ -180,10 +183,10 @@ class Compiler
     private bool $debugMode = false;
 
     /**
-     * When true (default) templates are sandboxed; when false ("open mode") the
-     * tokenizer permits arbitrary PHP function and method calls.
+     * What a compiled template is allowed to reach.  Every capability question
+     * the compiler and tokenizer ask is answered from here.
      */
-    private bool $sandboxMode = true;
+    private Policy $policy;
 
     /**
      * @var array<string, string>  templateVarName → PHP variable string for locally-bound loop vars.
@@ -240,12 +243,12 @@ class Compiler
     /**
      * Whether the render body must seed the scope into PHP locals.
      *
-     * Always ON in open mode and always OFF while sandboxed, decided from the
-     * sandbox flag rather than per template: includes are inlined into the SAME
-     * render body, so a partial containing raw PHP would otherwise be emitted
-     * into a body that never seeded the locals it reads.  Tying it to the mode
-     * removes that failure entirely, and open mode already means "full PHP", so
-     * the seeding is part of the same bargain.
+     * Decided from the `phpVariables` capability, not per template: includes are
+     * inlined into the SAME render body, so a partial containing raw PHP would
+     * otherwise be emitted into a body that never seeded the locals it reads.
+     * Tying it to the policy removes that failure entirely, and a policy that
+     * grants raw PHP normally grants this too, so the seeding is part of the
+     * same bargain.
      */
     private bool $seedsScope = false;
 
@@ -256,7 +259,9 @@ class Compiler
 
     public function __construct()
     {
+        $this->policy    = Policy::sandboxed();
         $this->tokenizer = new Tokenizer();
+        $this->tokenizer->setPolicy($this->policy);
     }
 
     public function setRegistry(Registry $registry): static
@@ -294,30 +299,21 @@ class Compiler
     }
 
     /**
-     * Enable or disable sandbox mode.  When disabled ("open mode") templates may
-     * call arbitrary PHP functions and methods and may embed raw PHP, subject
-     * only to the application's own guardrails (empty by default).
+     * Set what compiled templates are allowed to reach.
+     *
+     * The tokenizer is given the same object rather than a copy of the flag it
+     * used to receive, so a capability can never be granted in one half of the
+     * compiler and denied in the other.
      */
-    public function setSandboxMode(bool $sandboxed): static
+    public function setPolicy(Policy $policy): static
     {
-        $this->sandboxMode = $sandboxed;
-        $this->tokenizer->setSandboxMode($sandboxed);
+        $this->policy = $policy;
+        $this->tokenizer->setPolicy($policy);
         return $this;
-    }
-    public function isSandboxed(): bool
-    {
-        return $this->sandboxMode;
     }
 
-    /**
-     * Replace the open-mode function guardrails.  Empty by default, because open
-     * mode is full PHP access; set names only for application-chosen limits.
-     *
-     * @param array<string, true> $names Lowercase function names.
-     */
-    public function setDeniedFunctions(array $names): static
+    public function getPolicy(): Policy
     {
-        $this->tokenizer->setDeniedFunctions($names);
-        return $this;
+        return $this->policy;
     }
 }
