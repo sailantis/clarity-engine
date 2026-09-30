@@ -297,9 +297,9 @@ object exposing a public `toArray()`). A value object with no public state and a
 `__toString()` keeps STRING semantics, so `|> length` counts its characters.
 
 **Not allowed (in sandbox mode):** bare `->` without a sigil, method calls
-(`a.b()`, `$a->b()`), and direct PHP variable access (`$name` on its own,
-including variable-variable expansion `$$name`). PHP mode lifts all three — see
-[PHP Mode](#php-mode).
+(`a.b()`, `$a->b()`), and any name that is not in the render scope — PHP
+functions, superglobals and engine internals included, so `strtoupper(x)` and
+`$_SERVER` both fail. PHP mode lifts all of these — see [PHP Mode](#php-mode).
 
 ## PHP Mode
 

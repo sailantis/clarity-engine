@@ -4,15 +4,16 @@
 
 Clarity Template Engine
 
-A fast, secure, and expressive PHP template engine that compiles `.clarity.html`
-templates into cached PHP classes. Templates execute in a sandboxed environment
-with NO access to arbitrary PHP — they can only use variables passed to render()
-and registered filters/functions.
+A fast, secure, and expressive PHP template engine for `.clarity.html` templates.
+Templates are sandboxed by default — they can only use variables passed to
+render() and registered filters/functions — or run in PHP mode (sandbox disabled)
+with the full power of PHP. Both modes deliver maximum performance.
 
 Key Features
 ------------
 - **Compiled & Cached**: Templates compile to PHP classes, leveraging OPcache for performance
 - **Secure Sandbox**: No arbitrary PHP execution, strict variable access control
+- **Opt-In PHP Mode**: Disable the sandbox to unleash the full power of PHP (any function, method calls, raw `{% php %}` blocks)
 - **Auto-escaping**: Built-in XSS protection with automatic HTML escaping
 - **Template Inheritance**: Reusable layouts via extends/blocks
 - **Filter Pipeline**: Transform data with chainable filters (|>)
@@ -103,7 +104,7 @@ authors only; see ClarityEngineTrait::setSandboxMode().
 
 ## Public methods
 
-### __construct() · <small>[🗎](../../src/ClarityEngine.php#L136)</small>
+### __construct() · <small>[🗎](../../src/ClarityEngine.php#L137)</small>
 
 `public function __construct(array $config = []): mixed`
 
@@ -136,7 +137,7 @@ This constructor accepts a single configuration array. Common keys:
 
 ---
 
-### create() · <small>[🗎](../../src/ClarityEngine.php#L181)</small>
+### create() · <small>[🗎](../../src/ClarityEngine.php#L182)</small>
 
 `public static function create(array $config = []): self`
 
@@ -153,7 +154,7 @@ This constructor accepts a single configuration array. Common keys:
 
 ---
 
-### setLayout() · <small>[🗎](../../src/ClarityEngine.php#L195)</small>
+### setLayout() · <small>[🗎](../../src/ClarityEngine.php#L196)</small>
 
 `public function setLayout(string|null $layout): static`
 
@@ -175,7 +176,7 @@ rendered view output.
 
 ---
 
-### getLayout() · <small>[🗎](../../src/ClarityEngine.php#L206)</small>
+### getLayout() · <small>[🗎](../../src/ClarityEngine.php#L207)</small>
 
 `public function getLayout(): string|null`
 
@@ -189,7 +190,7 @@ Get the currently configured layout view name.
 
 ---
 
-### setVar() · <small>[🗎](../../src/ClarityEngine.php#L218)</small>
+### setVar() · <small>[🗎](../../src/ClarityEngine.php#L219)</small>
 
 `public function setVar(string $name, mixed $value): static`
 
@@ -209,7 +210,7 @@ Set a single view variable.
 
 ---
 
-### setVars() · <small>[🗎](../../src/ClarityEngine.php#L232)</small>
+### setVars() · <small>[🗎](../../src/ClarityEngine.php#L233)</small>
 
 `public function setVars(array $vars): static`
 

@@ -1,6 +1,6 @@
 ![Clarity Logo](docs/images/clarity-engine-logo.svg)
 
-> **A fast, secure, and expressive PHP template engine** – Clarity compiles `.clarity.html` templates into cached PHP classes for maximum performance while maintaining a sandboxed, secure execution environment.
+> **A fast, secure, and expressive PHP template engine** – Maximum performance, whether sandboxed and secure or in **PHP mode** with the full power of PHP.
 
 ---
 
@@ -8,7 +8,7 @@
 
 - **Compiled & Cached** – Templates compile to PHP classes and leverage OPcache for blazing-fast rendering
 - **Secure Sandbox** – No arbitrary PHP execution by default; templates are strictly sandboxed with controlled access
-- **Opt-In PHP Mode** – Disable the sandbox to give templates the full power of PHP (any function call or filter, method calls, `{% php %}` blocks) — Blade / Stempler / Plates parity, for trusted authors
+- **Opt-In PHP Mode** – Disable the sandbox to give templates the full power of PHP (any function call or filter, method calls, `{% php %}` blocks)
 - **Expressive Syntax** – Clean, readable template syntax inspired by modern template engines
 - **Twig-Style Tests** – `in`, `is defined`, `starts with`, `matches`, `divisible by`, and more, with absence-tolerant `defined`/`null`/`empty`
 - **Whitespace Control** – `{%- … -%}` trims whitespace around a tag
@@ -79,24 +79,28 @@ That's it! Clarity automatically compiles and caches your template.
 
 Clarity runs in one of two modes, selected by the `sandbox` option:
 
-| Mode             | Default | What templates may do                          |
-| ---------------- | ------- | ---------------------------------------------- |
-| **Sandbox mode** | ✓       | registered filters and functions only          |
-| **PHP mode**     |         | any function, method calls, `{% php %}` blocks |
+| Mode             | Default | What templates may do                                                                           |
+| ---------------- | ------- | ----------------------------------------------------------------------------------------------- |
+| **Sandbox mode** | ✓       | registered filters and functions only; no method calls, no raw PHP                              |
+| **PHP mode**     |         | everything sandbox mode allows, **plus** any PHP function, method calls, and `{% php %}` blocks |
 
-The same scope is written differently in each mode. Sandbox mode uses Clarity's
-own access syntax; PHP mode uses PHP's:
+Both modes use the same template syntax. A template that renders in sandbox mode renders the same way in PHP mode — only what the template may reach differs:
 
 ```twig
-{# ---- Sandbox mode: `:` for array keys, `.` for properties, registered filters ---- #}
-<h1>Hello, {{ user.name }}!</h1>
-<p>{{ settings:tagline }}</p>
-{{ "now" |> date("H:i:s") }}
+{# Available in both modes #}
+<h1>Hello, {{ user.name }}!</h1>       {# object property #}
+<p>{{ settings:tagline }}</p>          {# array key; {{ settings['tagline'] }} also works #}
+{{ items[0] }}                         {# index #}
+{{ $user->name }}                      {# property via the `$` sigil #}
+{{ "now" |> date("H:i:s") }}           {# registered filters and functions #}
 
-{# ---- PHP mode: any PHP function, real method calls, the scope as PHP variables ---- #}
-<h1>Hello, {{ $user->name }}!</h1>
-<p>{{ $settings['tagline'] }}</p>
-{{ date('H:i:s') }}
+{# PHP mode only #}
+{{ strtoupper(name) }}                 {# any PHP function #}
+{{ 'ab' |> strtoupper }}               {# any function as a filter step #}
+{{ $user->greet() }}                   {# method calls #}
+{% php echo "Hi" %}                    {# {% php CODE %} tags #}
+{% php %}…{% endphp %}                 {# raw PHP blocks #}
+{{ $_SERVER['HTTP_HOST'] }}            {# superglobals #}
 ```
 
 Switch modes with the `sandbox` config key or `setSandboxMode()`:
@@ -106,9 +110,7 @@ $engine = new ClarityEngine(['sandbox' => false]); // PHP mode at construction
 $engine->setSandboxMode(false);                    // ...or at any time
 ```
 
-> **PHP mode is equivalent to executing arbitrary PHP.** Enable it only for
-> templates you control. Compiled templates record the mode they were built in
-> and are recompiled automatically when you change it. See
+> See
 > [PHP Mode](#php-mode) and
 > [Advanced Topics → Security Model](docs/04-advanced-topics.md#security-model).
 

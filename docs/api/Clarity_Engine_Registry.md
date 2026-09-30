@@ -122,7 +122,7 @@ Template usage:
 
 ## Public methods
 
-### setDumpHandler() · <small>[🗎](../../src/Engine/Registry.php#L273)</small>
+### setDumpHandler() · <small>[🗎](../../src/Engine/Registry.php#L274)</small>
 
 `public function setDumpHandler(Closure $fn): void`
 
@@ -143,7 +143,7 @@ Called internally — not part of the public engine API.
 
 ---
 
-### setDdHandler() · <small>[🗎](../../src/Engine/Registry.php#L278)</small>
+### setDdHandler() · <small>[🗎](../../src/Engine/Registry.php#L279)</small>
 
 `public function setDdHandler(Closure $fn): void`
 
@@ -160,7 +160,7 @@ Called internally — not part of the public engine API.
 
 ---
 
-### __construct() · <small>[🗎](../../src/Engine/Registry.php#L283)</small>
+### __construct() · <small>[🗎](../../src/Engine/Registry.php#L284)</small>
 
 `public function __construct(callable|null $includeRenderer = null): mixed`
 
@@ -177,7 +177,7 @@ Called internally — not part of the public engine API.
 
 ---
 
-### hasFilter() · <small>[🗎](../../src/Engine/Registry.php#L752)</small>
+### hasFilter() · <small>[🗎](../../src/Engine/Registry.php#L753)</small>
 
 `public function hasFilter(string $name): bool`
 
@@ -203,7 +203,7 @@ sharing the callable table.
 
 ---
 
-### addFilter() · <small>[🗎](../../src/Engine/Registry.php#L768)</small>
+### addFilter() · <small>[🗎](../../src/Engine/Registry.php#L769)</small>
 
 `public function addFilter(string $name, callable $fn): static`
 
@@ -227,7 +227,7 @@ registered as a function.
 
 ---
 
-### addInlineFilter() · <small>[🗎](../../src/Engine/Registry.php#L793)</small>
+### addInlineFilter() · <small>[🗎](../../src/Engine/Registry.php#L794)</small>
 
 `public function addInlineFilter(string $name, array $definition): void`
 
@@ -259,7 +259,7 @@ Registering an inline template makes the name BOTH pipeable and callable
 
 ---
 
-### hasInlineFilter() · <small>[🗎](../../src/Engine/Registry.php#L801)</small>
+### hasInlineFilter() · <small>[🗎](../../src/Engine/Registry.php#L802)</small>
 
 `public function hasInlineFilter(string $name): bool`
 
@@ -278,7 +278,7 @@ Check whether a named inline (compile-time) filter is registered.
 
 ---
 
-### getInlineFilter() · <small>[🗎](../../src/Engine/Registry.php#L812)</small>
+### getInlineFilter() · <small>[🗎](../../src/Engine/Registry.php#L813)</small>
 
 `public function getInlineFilter(string $name): array|null`
 
@@ -300,7 +300,7 @@ codegen template and yields null.
 
 ---
 
-### addService() · <small>[🗎](../../src/Engine/Registry.php#L827)</small>
+### addService() · <small>[🗎](../../src/Engine/Registry.php#L828)</small>
 
 `public function addService(string $name, mixed $service): static`
 
@@ -324,7 +324,7 @@ real filter names (e.g. `__locale`, `__translator`).
 
 ---
 
-### hasService() · <small>[🗎](../../src/Engine/Registry.php#L836)</small>
+### hasService() · <small>[🗎](../../src/Engine/Registry.php#L837)</small>
 
 `public function hasService(string $name): bool`
 
@@ -343,7 +343,7 @@ Check whether a named service is registered.
 
 ---
 
-### getService() · <small>[🗎](../../src/Engine/Registry.php#L846)</small>
+### getService() · <small>[🗎](../../src/Engine/Registry.php#L847)</small>
 
 `public function getService(string $name): mixed`
 
@@ -366,7 +366,7 @@ Retrieve a named service.
 
 ---
 
-### allServices() · <small>[🗎](../../src/Engine/Registry.php#L862)</small>
+### allServices() · <small>[🗎](../../src/Engine/Registry.php#L863)</small>
 
 `public function allServices(): array`
 
@@ -382,7 +382,7 @@ The returned array includes callable filters, inline-filter markers
 
 ---
 
-### allCallables() · <small>[🗎](../../src/Engine/Registry.php#L885)</small>
+### allCallables() · <small>[🗎](../../src/Engine/Registry.php#L886)</small>
 
 `public function allCallables(): array`
 
@@ -408,7 +408,7 @@ returns it directly and costs nothing.
 
 ---
 
-### addFunction() · <small>[🗎](../../src/Engine/Registry.php#L900)</small>
+### addFunction() · <small>[🗎](../../src/Engine/Registry.php#L901)</small>
 
 `public function addFunction(string $name, callable $fn): static`
 
@@ -431,7 +431,7 @@ in templates via `name(...)`.
 
 ---
 
-### hasFunction() · <small>[🗎](../../src/Engine/Registry.php#L912)</small>
+### hasFunction() · <small>[🗎](../../src/Engine/Registry.php#L913)</small>
 
 `public function hasFunction(string $name): bool`
 
@@ -453,7 +453,7 @@ template (which compiles to the call itself) — is callable.
 
 ---
 
-### hasCallable() · <small>[🗎](../../src/Engine/Registry.php#L920)</small>
+### hasCallable() · <small>[🗎](../../src/Engine/Registry.php#L921)</small>
 
 `public function hasCallable(string $name): bool`
 
@@ -472,7 +472,7 @@ Check whether a name can be invoked under call syntax `name(...)`.
 
 ---
 
-### getCallable() · <small>[🗎](../../src/Engine/Registry.php#L929)</small>
+### getCallable() · <small>[🗎](../../src/Engine/Registry.php#L930)</small>
 
 `public function getCallable(string $name): callable|null`
 
@@ -492,7 +492,7 @@ is inline-only (the caller then derives the call inline from `php`).
 
 ---
 
-### addDirective() · <small>[🗎](../../src/Engine/Registry.php#L962)</small>
+### addDirective() · <small>[🗎](../../src/Engine/Registry.php#L963)</small>
 
 `public function addDirective(string $keyword, callable $handler): static`
 
@@ -534,7 +534,7 @@ $engine->addDirective('endwith_locale', fn(...) => "\$__c_sv['locale']->pop();")
 
 ---
 
-### hasDirective() · <small>[🗎](../../src/Engine/Registry.php#L971)</small>
+### hasDirective() · <small>[🗎](../../src/Engine/Registry.php#L972)</small>
 
 `public function hasDirective(string $keyword): bool`
 
@@ -553,7 +553,7 @@ Check whether a handler is registered for the given keyword.
 
 ---
 
-### compileDirective() · <small>[🗎](../../src/Engine/Registry.php#L988)</small>
+### compileDirective() · <small>[🗎](../../src/Engine/Registry.php#L989)</small>
 
 `public function compileDirective(string $keyword, string $rest, string $sourcePath, int $tplLine, callable $processExpr, Clarity\Engine\Compiler $compiler): string`
 
