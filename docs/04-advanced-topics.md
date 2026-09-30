@@ -260,7 +260,7 @@ $engine->setCachePath('/var/cache/clarity');
 
 **Warm path (subsequent renders):**
 
-- Cache file is loaded directly (1 `require` statement)
+- Cache file is loaded directly (one `require` statement)
 - PHP OPcache accelerates the cached file
 - Near-native PHP performance
 
