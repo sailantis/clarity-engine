@@ -173,45 +173,86 @@ neither stays a compile-time error.
 
 ---
 
-## A security finding, included in this review
+## A security finding, found in this review and FIXED
 
 Reading the engine back for this proposal surfaced a defect that is not part of
-the policy design and cannot be fixed by it. It is recorded here because it was
-found here, and because it is more urgent than the policy work.
+the policy design and could not be fixed by it. It is recorded here because it
+was found here.
 
-**A sandboxed template can read any file the PHP process can read.**
+**A sandboxed template could read any file the PHP process could read.**
 
 ```twig
 {% include "../../../../etc/passwd.clarity.html" %}
 {% extends "C:/secrets/config.clarity.html" %}
 ```
 
-Both are **compiled**, so the file's contents are read at compile time and
-compiled into the cached class, ready to be printed. Sandbox mode is on (the
-default) throughout.
+Both **compiled**, so the file's contents were read at compile time and compiled
+into the cached class, ready to be printed. Sandbox mode was on (the default)
+throughout.
 
-The cause is two permissive checks in series, neither of which contains paths:
+The cause was two permissive checks in series, neither of which constrained the
+path:
 
-- `CompilerCoreTrait::resolveLogicalName()` validates only **characters**:
-  `/^[\w.\-\/:]+$/u`. `.` and `/` are both in the class, so `../` passes by
+- `CompilerCoreTrait::resolveLogicalName()` validated only **characters**:
+  `/^[\w.\-\/:]+$/u`. `.` and `/` are both in the class, so `../` passed by
   construction — the check was written to stop shell metacharacters, not
   traversal.
-- `Template/FileLoader::resolveName()` then accepts an absolute path (leading
-  `/`, a Windows drive, a UNC share) or a `./`-relative path **verbatim** and
-  otherwise maps `.` to `/`. Nothing compares the result against the view path.
+- `Template/FileLoader::resolveName()` then accepted an absolute path (leading
+  `/`, a Windows drive, a UNC share) or a `./`-relative path **verbatim**, and
+  otherwise mapped `.` to `/`. Nothing compared the result against the view path.
 
-One caveat that matters when reproducing it: the loader appends the configured
-extension, so a traversal only finds a file whose name already ends in it
+One caveat that mattered when reproducing it: the loader appends the configured
+extension, so a traversal only found a file whose name already ended in it
 (`.clarity.html`). A test against `/etc/passwd` "passes" for the wrong reason;
-the vector is real for any file that matches the extension, including one an
-attacker can name.
+the vector was real for any file that matched the extension.
+
+### The fix
+
+The loader no longer decides *what to strip*; it decides *what to accept*. A
+name is split on `/` (with `.` and `\` read as the same separator, so
+`admin.user`, `admin/users` and `admin\users` are one name) and every segment
+must be a plain name:
+
+| Rejected                | Because                                              |
+| ----------------------- | ---------------------------------------------------- |
+| `/etc/passwd`           | absolute                                             |
+| `C:/x`, `\\server\share`| absolute                                             |
+| `../secret`             | a `..` segment                                       |
+| `admin/../../secret`    | a `..` segment, anywhere in the name                 |
+| `admin//user`, `''`     | an empty segment — it would collapse in the filesystem while remaining a distinct cache key |
+
+Because no surviving segment can be `.` or `..`, the path **cannot** climb out,
+whatever the spelling. That is the property worth having: it is a check on the
+outcome, not a list of dangerous spellings somebody has to remember to extend.
+
+`resolveName()` throws a `ClarityException` naming the name, and the two
+character checks stayed in the compiler as a second layer.
+
+**Absolute template names are gone entirely.** They were documented, and they
+were the whole of the risk: a template name can be derived from a request, and a
+template can be stored in a database, so accepting one meant accepting an
+arbitrary file reader. A host that genuinely wants a loader rooted elsewhere
+says so in configuration — `new FileLoader('/their/root')` — where the base path
+is the root and the rules above apply to it unchanged.
+
+### What this means for reaching another tree
+
+Nothing, if it was being done correctly: `addNamespace()` is the supported way,
+and an explicit namespace is visible in the configuration rather than encoded in
+a template name. What is no longer possible is a template *naming its way* into
+an arbitrary directory.
 
 **Latte is not vulnerable in the same way, by construction**: it has no path
 syntax in templates at all — `{include}` was removed from the language, and its
 safe policy excludes `include`, `extends`, `layout` and `import`. Clarity's
 `{% include %}` deliberately takes only a string literal (`RE_INCLUDE`), so no
-expression can *build* a path — but the literal itself is unconstrained, which
-is the whole of the problem.
+expression could *build* a path — but the literal itself was unconstrained, which
+was the whole of the problem. It is now constrained.
+
+Tests: `tests/Engine/LoadPathSecurityTest.php` (19 cases) pins every escape form
+above, checks the refusal through the engine rather than only through the loader,
+and asserts that `admin.user` and `admin/user` still resolve to the same file.
+
 
 This is orthogonal to the flags: no capability setting changes it, and turning
 PHP mode off does not turn it off. It needs its own fix in the loader
@@ -437,12 +478,11 @@ rejection, and calling `setSandboxMode()` stops existing.
    setting? It is the only entry that changes emitted code rather than reach.
    It is also the only one whose *removal* would change already-compiled output,
    which makes it a candidate for the separate "compilation" group.
-4. **Does the include confinement need an escape hatch?** Confining resolved
-   paths to the view base is the fix for the finding above, but `FileLoader`
-   currently accepts absolute paths, which a host may be relying on for a loader
-   pointed at a system directory. Either the confinement is unconditional (and
-   that use case gets its own loader), or it is an explicit opt-out — and an
-   opt-out is a capability by another name.
+4. **Should the path rules live in `FileLoader`, or in the compiler?** They are
+   in the loader (with the character checks still in the compiler as a second
+   layer), because the loader is what touches the filesystem. A custom loader
+   therefore has to apply the same rules itself — worth documenting in
+   `TemplateLoader`'s contract rather than leaving to be discovered.
 5. **Should `superglobals` be presented as an advantage at all?** Latte's
    sandbox permits them, so this is a difference rather than a win. The honest
    framing is "Clarity's strict-access contract covers a template's scope and

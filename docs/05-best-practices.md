@@ -146,16 +146,20 @@ $engine->render('profile', ['userBio' => $sanitized]);
 
 ### Validate File Paths
 
-If allowing dynamic includes, validate paths:
-
-**Dangerous:**
+The engine resolves every template name **inside the view path** and refuses one
+that would leave it, so a name cannot read an arbitrary file:
 
 ```php
-$template = $_GET['template'];  // User input
-$engine->render($template, $data);  // DANGER: Path traversal
+$template = $engine->render($_GET['template'] ?? 'home', $data);
+// '../app/config' and '/etc/passwd.clarity.html' are both refused
 ```
 
-**Safe:**
+That guard is not a substitute for validating input, for two reasons: a name that
+is refused is a failed request rather than a sensible page, and a name that
+resolves *inside* the view path can still be one the visitor was never meant to
+reach. Allowlist it as well:
+
+**Recommended:**
 
 ```php
 $allowedTemplates = ['home', 'about', 'contact'];
@@ -167,6 +171,11 @@ if (!in_array($template, $allowedTemplates, true)) {
 
 $engine->render($template, $data);
 ```
+
+> **Custom loaders must apply the same rule.** If you implement
+> `TemplateLoader` yourself, the base-path containment described in
+> [`FileLoader`](../src/Template/FileLoader.php) is yours to enforce — the
+> compiler's character checks are a second layer, not the guarantee.
 
 ### Never Trust User Data
 
