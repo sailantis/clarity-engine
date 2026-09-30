@@ -139,11 +139,12 @@ class Registry
      *
      * What remains out of reach in both modes is the engine's own render-frame
      * namespace: a template may not BIND a `__c_`-prefixed name (it would swap an
-     * internal for the rest of the render), and `$$name` variable-variable
-     * expansion is compile-time rejected while the sandbox is enabled.  PHP mode
-     * lifts the latter — a dynamic dereference there is an ordinary local lookup,
-     * which is strictly weaker than the literal `$_SERVER` spelling PHP mode
-     * already permits.
+     * internal for the rest of the render).  `$$name` / `${expr}` variable-variable
+     * expansion is an ordinary scope lookup in BOTH modes (it resolves against the
+     * render scope and loop locals, so it can reach neither a superglobal nor an
+     * engine internal), and PHP mode's dynamic dereference is likewise a plain local
+     * lookup — strictly weaker than the literal `$_SERVER` spelling PHP mode already
+     * permits.
      *
      * @var array<string, true>
      */

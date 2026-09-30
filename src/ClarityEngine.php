@@ -4,15 +4,16 @@ namespace Clarity;
 /**
  * Clarity Template Engine
  *
- * A fast, secure, and expressive PHP template engine that compiles `.clarity.html`
- * templates into cached PHP classes. Templates execute in a sandboxed environment
- * with NO access to arbitrary PHP — they can only use variables passed to render()
- * and registered filters/functions.
+ * A fast, secure, and expressive PHP template engine for `.clarity.html` templates.
+ * Templates are sandboxed by default — they can only use variables passed to
+ * render() and registered filters/functions — or run in PHP mode (sandbox disabled)
+ * with the full power of PHP. Both modes deliver maximum performance.
  *
  * Key Features
  * ------------
  * - **Compiled & Cached**: Templates compile to PHP classes, leveraging OPcache for performance
  * - **Secure Sandbox**: No arbitrary PHP execution, strict variable access control
+ * - **Opt-In PHP Mode**: Disable the sandbox to unleash the full power of PHP (any function, method calls, raw `{% php %}` blocks)
  * - **Auto-escaping**: Built-in XSS protection with automatic HTML escaping
  * - **Template Inheritance**: Reusable layouts via extends/blocks
  * - **Filter Pipeline**: Transform data with chainable filters (|>)
