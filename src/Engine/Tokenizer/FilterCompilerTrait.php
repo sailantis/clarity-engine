@@ -268,8 +268,8 @@ trait FilterCompilerTrait
         if (!$isRegistered && $this->sandboxMode) {
             throw new ClarityException(
                 "Filter '{$name}' is not registered, and the sandbox is enabled, so there is "
-                . 'nothing for it to resolve to. Register it with addFilter(), or call '
-                . "setSandboxMode(false) to let a PHP function of the same name be used."
+                    . 'nothing for it to resolve to. Register it with addFilter(), or call '
+                    . "setSandboxMode(false) to let a PHP function of the same name be used."
             );
         }
 

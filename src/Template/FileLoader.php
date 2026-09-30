@@ -198,8 +198,8 @@ final class FileLoader implements TemplateLoader
         if ($isAbsolute) {
             throw new ClarityException(\sprintf(
                 "Template name '%s' is not valid: an absolute name %s. "
-                . 'A template is addressed from the view path downward; to read another tree, '
-                . 'register it as a namespace with addNamespace().',
+                    . 'A template is addressed from the view path downward; to read another tree, '
+                    . 'register it as a namespace with addNamespace().',
                 $name,
                 self::OUTSIDE_BASE_MESSAGE
             ));
@@ -213,14 +213,14 @@ final class FileLoader implements TemplateLoader
                 throw new ClarityException($hasParent
                     ? \sprintf(
                         "Template name '%s' is not valid: a '..' segment %s by addressing "
-                        . 'a parent directory. To read another tree, register it as a namespace '
-                        . 'with addNamespace().',
+                            . 'a parent directory. To read another tree, register it as a namespace '
+                            . 'with addNamespace().',
                         $name,
                         self::OUTSIDE_BASE_MESSAGE
                     )
                     : \sprintf(
                         "Template name '%s' is not valid: it has an empty path segment "
-                        . '(check for a leading or doubled separator).',
+                            . '(check for a leading or doubled separator).',
                         $name
                     ));
             }

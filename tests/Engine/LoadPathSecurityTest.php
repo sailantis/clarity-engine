@@ -87,14 +87,14 @@ class LoadPathSecurityTest extends TestCase
             'unc share'              => ['\\\\server\\share\\template'],
 
             // --- parent references ----------------------------------------------
-            'dotdot prefix'          => ['../secret'],
-            'dotdot deep'            => ['../../../../etc/passwd'],
-            'dotdot mid-path'        => ['admin/../../secret'],
-            'dotdot dot-form'        => ['admin...secret'],
-            'single dot prefix'      => ['./partials/header'],
-            'bare dot'               => ['.'],
-            'bare dotdot'            => ['..'],
-            'leading slash only'     => ['/'],
+            'dotdot prefix'      => ['../secret'],
+            'dotdot deep'        => ['../../../../etc/passwd'],
+            'dotdot mid-path'    => ['admin/../../secret'],
+            'dotdot dot-form'    => ['admin...secret'],
+            'single dot prefix'  => ['./partials/header'],
+            'bare dot'           => ['.'],
+            'bare dotdot'        => ['..'],
+            'leading slash only' => ['/'],
         ];
     }
 
