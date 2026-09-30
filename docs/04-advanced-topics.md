@@ -227,13 +227,7 @@ Clear all cached templates:
 $engine->flushCache();
 ```
 
-Use cases for manual flushing:
-
-- Development when auto-invalidation doesn't work (rare)
-- Troubleshooting cache issues
-
-> **Note:** Flushing is _not_ required after upgrading Clarity — the compiler
-> version stamp handles that. See [Compiler Version](#compiler-version) above.
+> **Note:** Flushing is _not_ required after upgrading Clarity Engine — the compiler version stamp handles that. See [Compiler Version](#compiler-version) above.
 
 #### Development vs. Production
 
@@ -282,148 +276,6 @@ cache/clarity/
 ```
 
 File names are deterministic hashes of the template path.
-
-### OPcache Considerations
-
-When using PHP's OPcache, be aware:
-
-- **Cached PHP files are stored in OPcache memory** for maximum speed
-- **Problem:** If you manually write/overwrite cache files and immediately require them, OPcache might serve stale bytecode
-- **Solution:** Clarity handles this internally by calling `opcache_invalidate()` and `clearstatcache()` when regenerating files
-
-**For custom cache manipulation:**
-
-```php
-$cachePath = $engine->getCachePath() . '/template_hash.php';
-
-// Write new cache file
-file_put_contents($cachePath, $compiledCode);
-
-// Invalidate OPcache
-clearstatcache(true, $cachePath);
-if (function_exists('opcache_invalidate')) {
-    opcache_invalidate($cachePath, true);
-}
-
-// Now safe to require
-require $cachePath;
-```
-
-#### `opcache.enable` does NOT cover RoadRunner
-
-There are two switches and they govern different SAPIs:
-
-| Setting              | Default | Governs                                                    |
-| -------------------- | ------- | ---------------------------------------------------------- |
-| `opcache.enable`     | `1`     | `fpm-fcgi`, `apache`, `cgi` — i.e. classic nginx → php-fpm |
-| `opcache.enable_cli` | **`0`** | the `cli` SAPI only                                        |
-
-A RoadRunner worker (and any Swoole/ReactPHP worker) is spawned as `cli`, so
-**`opcache.enable_cli` is the switch that matters**, and its default is off.
-With `opcache.enable = 1` alone, CLI scripts are never cached — every worker
-recompiles and re-allocates its own copy of every file it loads.
-
-This matters more for compiled templates than for ordinary code, because a
-compiled class carries its metadata as _static property literals_. A static
-array initialised from a literal is materialised per process when OPcache is
-off, but served as an immutable shared-memory value when it is on. Measured on
-a compiled class carrying a 1000-range source map
-(`php -d opcache.enable_cli=0` vs `=1`, same file, per process):
-
-| Configuration                      | Heap growth on load | File in OPcache script table |
-| ---------------------------------- | ------------------- | ---------------------------- |
-| OPcache off                        | 237,568 B           | no                           |
-| `opcache.enable_cli=1`             | **144 B**           | yes                          |
-| `opcache.enable=1`, `enable_cli=0` | 237,568 B           | no                           |
-
-So for a resident worker:
-
-```ini
-; required for RoadRunner / Swoole workers — opcache.enable is not enough
-opcache.enable_cli = 1
-```
-
-Verify rather than assume — the engine's own resident-memory measurements
-exclude shared memory, so a worker with `enable_cli` off looks the same as one
-with it on until you measure heap growth per worker.
-
-#### The source map is stored packed
-
-Each compiled class declares the source map used to map a runtime error back to
-a template file and line (`$sourceMap`, plus the parallel `$sourceFiles` and the
-body offset `$renderBodyLine`). These are read **only on the error path** —
-PHP does not materialise a static property until it is read, so on the happy
-path they cost nothing.
-
-The map is stored as one packed string rather than the more natural
-`list<[phpLine, fileIndex, templateLine]>` literal:
-
-```php
-public static string $sourceMap = '1,0,1;1,0,3;2,1,-3;2,1,1;...';
-```
-
-Line numbers are delta-encoded (the map is appended in ascending line order, so
-the deltas stay in single digits however large the template is). For 1000
-ranges the two encodings compare as:
-
-| Encoding                     | Source in the class file | Retained heap (OPcache off) |
-| ---------------------------- | ------------------------ | --------------------------- |
-| nested `var_export()` arrays | 65,348 B                 | 236,536 B                   |
-| packed string                | **10,450 B**             | **12,288 B**                |
-
-That is ~95% less memory and ~91% less emitted source, on a real template
-turning metadata from ~2.3× the size of the render body into a small fraction
-of it. `var_export()` writes three small integers as a nested array costing ~65
-bytes of PHP each — the encoding, not the location, was the cost.
-
-The decode cost (~0.1 ms per 500 ranges) is paid once, on a path that is already
-formatting an exception. A malformed literal decodes to an _empty_ map, so the
-engine degrades to "no line mapping" rather than reporting a shifted, wrong
-line. See `Clarity\Engine\SourceMap` for the format and
-`tests/Engine/SourceMapTest.php` for the pinned round-trip guarantees.
-
-#### Emitted annotations are line comments, not doc comments
-
-The compiled class annotates each metadata property with a `//` line comment:
-
-```php
-// sourceMap: packed "lineDelta,fileIndex,tplLineDelta;" ranges
-public static string $sourceMap = '1,0,1;...';
-```
-
-This looks like a style choice and is not. **OPcache retains doc comments but
-discards line comments.** `opcache.save_comments` (on by default) keeps
-`/** … */` in the compiled script so `ReflectionClass::getDocComment()` can work;
-`//` comments are thrown away. Anything retained is then charged to the script's
-shared-memory slot — for every cached template, for the life of the worker.
-
-Measured on one compiled page (`opcache.enable_cli=1`,
-`memory_consumption` from `opcache_get_status(true)`), the same file emitted both
-ways:
-
-| Emission                               | Source  | OPcache script memory |
-| -------------------------------------- | ------- | --------------------- |
-| `/** @var … */` doc comments           | 2,413 B | 6,672 B               |
-| `// …` line comments                   | 2,001 B | **5,880 B**           |
-| either, with `opcache.save_comments=0` | —       | 5,880 B               |
-
-That is **792 B per compiled template**, and the last row is what proves the
-whole difference is the retained annotation. A project with 1,000 templates
-therefore holds ~750 KB less shared memory. Nothing reflects the emitted
-comments (the metadata is read as a static property), so the annotation form is
-free to choose.
-
-Two caveats when measuring this yourself: an _isolated_ static-array literal is
-inlined at compile time and can show no difference at all, so it must be
-measured on a real compiled class; and `opcache_get_status(false)` returns an
-empty `scripts` array — pass `true`.
-
-The 412 B of source the change also saves per template is the smaller half of
-the win: source size only matters at compile time, whereas the shared-memory
-saving is per cached template in every worker.
-
-See [Caching](04-advanced-topics.md#caching) for how the compiled cache and
-OPcache interact.
 
 ## Auto-Escaping
 
@@ -913,8 +765,8 @@ With the sandbox off:
 | Strict variable access       | ✅        | ✅       |
 
 **This is equivalent to executing arbitrary PHP.** PHP mode disables every
-compile-time restriction listed above; only the `$$name` ban remains. Use it
-only for templates written and reviewed by trusted authors.
+compile-time restriction listed above. Use it only for templates written and
+reviewed by trusted authors.
 
 #### Function guardrails
 
@@ -924,8 +776,10 @@ be a security boundary (hundreds of ordinary functions read the environment,
 write files or spawn processes), and blocking `exec` while allowing `proc_open`
 reads as protection the switch has already declined to give.
 
-What still matters, in both modes, is that `$$name` variable-variable expansion
-is rejected — that hazard comes from the expression syntax itself.
+What still holds in both modes is that the engine's own render-frame namespace
+stays out of reach: a template cannot bind a `__c_`-prefixed name, and
+`$$name` / `${expr}` variable-variable expansion resolves against the render
+scope, so it can reach neither a superglobal nor an engine internal.
 
 An application may still add its own guardrails on top of the switch:
 
