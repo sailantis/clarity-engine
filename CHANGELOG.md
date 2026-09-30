@@ -23,6 +23,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`Tokenizer::TEXT`, `Compiler::COMPILER_VERSION`, …) and the emitted PHP are
   unchanged, so this is transparent to consumers and does not bump
   `COMPILER_VERSION`.
+- **Cold-deploy memory drops by ~40%.** The process high-water mark of the
+  first request after a deploy is set by the largest single source file PHP
+  compiles, so splitting the two monolithic files lowers it: measured with the
+  view-engine harness on the bench VM (fresh process, OPcache on, cold template
+  cache), Clarity's peak fell from 2.64 MB to 1.59 MB on the sample page —
+  now the joint-lowest of the engines compared, level with the non-compiling
+  baseline — while steady-state render time is unchanged. The one-off first
+  render rises by about a millisecond (the extra wiring is ~2.5% more source).
 - **Minimum PHP is now 8.2 (was 8.1).** Traits can only declare constants as of
   PHP 8.2, and the tokenizer/compiler traits carry their own private constants
   (`OPERATOR_TESTS`, `RE_FOR_IN`, `RESERVED_NAMES`, …). `composer.json`, the
