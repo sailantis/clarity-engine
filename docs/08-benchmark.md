@@ -81,7 +81,7 @@ Generated from the same rows the charts above are drawn from. Rows are ordered b
 
 ## What the columns are
 
-- **First render** — the first request after a deploy, measured in a fresh process per engine: engine boot, template compile, cache write and one render. The TEMPLATE cache is cold; the opcode cache is on and primed, as on a real deployment. Comparable across engines because no engine inherits another's warm template cache or loaded classes.
+- **First render** — the first request after a deploy, measured in a fresh process per engine: engine boot, template compile, cache write and one render. The TEMPLATE cache is cold; OPcache is on but its CLI segment is per-process, so the engine source is compiled in that process. Comparable across engines because no engine inherits another's warm template cache or loaded classes.
 - **Mean / Median / Min / p95** — computed over every individual render across all runs.
 - **Retained** — PHP heap still held after a whole run of renders, with `gc_collect_cycles()` called before the reading, in a fresh process. This is what a process carries while serving.
 - **Peak** — the same run's PHP heap high-water mark, which is where the transient allocation of the first compile lives. It sits above Retained and is not a second measurement of it.
