@@ -71,12 +71,12 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ## Public Constants
 
-- **COMPILER_VERSION** = `18`
+- **COMPILER_VERSION** = `19`
 - **INTERNAL_PREFIX** = `'__c_'`
 
 ## Public methods
 
-### __construct() · <small>[🗎](../../src/Engine/Compiler.php#L257)</small>
+### __construct() · <small>[🗎](../../src/Engine/Compiler.php#L260)</small>
 
 `public function __construct(): mixed`
 
@@ -87,7 +87,7 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ---
 
-### setRegistry() · <small>[🗎](../../src/Engine/Compiler.php#L262)</small>
+### setRegistry() · <small>[🗎](../../src/Engine/Compiler.php#L267)</small>
 
 `public function setRegistry(Clarity\Engine\Registry $registry): static`
 
@@ -104,7 +104,7 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ---
 
-### setExtension() · <small>[🗎](../../src/Engine/Compiler.php#L273)</small>
+### setExtension() · <small>[🗎](../../src/Engine/Compiler.php#L278)</small>
 
 `public function setExtension(string $extension): static`
 
@@ -121,7 +121,7 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ---
 
-### setDebugMode() · <small>[🗎](../../src/Engine/Compiler.php#L279)</small>
+### setDebugMode() · <small>[🗎](../../src/Engine/Compiler.php#L284)</small>
 
 `public function setDebugMode(bool $debug): static`
 
@@ -138,19 +138,21 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ---
 
-### setSandboxMode() · <small>[🗎](../../src/Engine/Compiler.php#L301)</small>
+### setPolicy() · <small>[🗎](../../src/Engine/Compiler.php#L308)</small>
 
-`public function setSandboxMode(bool $sandboxed): static`
+`public function setPolicy(Clarity\Engine\Policy $policy): static`
 
-Enable or disable sandbox mode.  When disabled ("open mode") templates may
-call arbitrary PHP functions and methods and may embed raw PHP, subject
-only to the application's own guardrails (empty by default).
+Set what compiled templates are allowed to reach.
+
+The tokenizer is given the same object rather than a copy of the flag it
+used to receive, so a capability can never be granted in one half of the
+compiler and denied in the other.
 
 **Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
-| `$sandboxed` | bool | - |  |
+| `$policy` | [Policy](Clarity_Engine_Policy.md) | - |  |
 
 **Return value**
 
@@ -159,33 +161,13 @@ only to the application's own guardrails (empty by default).
 
 ---
 
-### isSandboxed() · <small>[🗎](../../src/Engine/Compiler.php#L307)</small>
+### getPolicy() · <small>[🗎](../../src/Engine/Compiler.php#L315)</small>
 
-`public function isSandboxed(): bool`
-
-**Return value**
-
-- Type: `bool`
-
-
----
-
-### setDeniedFunctions() · <small>[🗎](../../src/Engine/Compiler.php#L318)</small>
-
-`public function setDeniedFunctions(array $names): static`
-
-Replace the open-mode function guardrails.  Empty by default, because open
-mode is full PHP access; set names only for application-chosen limits.
-
-**Parameters**
-
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `$names` | array | - | Lowercase function names. |
+`public function getPolicy(): Clarity\Engine\Policy`
 
 **Return value**
 
-- Type: `static`
+- Type: [Policy](Clarity_Engine_Policy.md)
 
 
 ---

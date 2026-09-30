@@ -26,6 +26,7 @@
 - [Cache](Clarity_Engine_Cache.md) `Clarity\Engine\Cache`
 - [CompiledTemplate](Clarity_Engine_CompiledTemplate.md) `Clarity\Engine\CompiledTemplate`
 - [Compiler](Clarity_Engine_Compiler.md) `Clarity\Engine\Compiler`
+- [Policy](Clarity_Engine_Policy.md) `Clarity\Engine\Policy`
 - [Registry](Clarity_Engine_Registry.md) `Clarity\Engine\Registry`
 - [SourceMap](Clarity_Engine_SourceMap.md) `Clarity\Engine\SourceMap`
 - [Tokenizer](Clarity_Engine_Tokenizer.md) `Clarity\Engine\Tokenizer`
@@ -48,6 +49,7 @@
 - [ExpressionSupportTrait](Clarity_Engine_Tokenizer_ExpressionSupportTrait.md) `Clarity\Engine\Tokenizer\ExpressionSupportTrait`
 - [FilterCompilerTrait](Clarity_Engine_Tokenizer_FilterCompilerTrait.md) `Clarity\Engine\Tokenizer\FilterCompilerTrait`
 - [OperatorTestTrait](Clarity_Engine_Tokenizer_OperatorTestTrait.md) `Clarity\Engine\Tokenizer\OperatorTestTrait`
+- [PhpConstructTrait](Clarity_Engine_Tokenizer_PhpConstructTrait.md) `Clarity\Engine\Tokenizer\PhpConstructTrait`
 - [SegmentScannerTrait](Clarity_Engine_Tokenizer_SegmentScannerTrait.md) `Clarity\Engine\Tokenizer\SegmentScannerTrait`
 - [VarChainTrait](Clarity_Engine_Tokenizer_VarChainTrait.md) `Clarity\Engine\Tokenizer\VarChainTrait`
 

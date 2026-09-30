@@ -75,44 +75,45 @@ echo $engine->render('welcome', [
 
 That's it! Clarity automatically compiles and caches your template.
 
-### Two Modes
+### What a Template May Reach
 
-Clarity runs in one of two modes, selected by the `sandbox` option:
-
-| Mode             | Default | What templates may do                                                                           |
-| ---------------- | ------- | ----------------------------------------------------------------------------------------------- |
-| **Sandbox mode** | ✓       | registered filters and functions only; no method calls, no raw PHP                              |
-| **PHP mode**     |         | everything sandbox mode allows, **plus** any PHP function, method calls, and `{% php %}` blocks |
-
-Both modes use the same template syntax. A template that renders in sandbox mode renders the same way in PHP mode — only what the template may reach differs:
+Every template compiles under a **policy**: a set of capabilities plus two
+allowlists. The default is the most restrictive one, and the syntax is the same
+in all of them — only what a template may _reach_ changes:
 
 ```twig
-{# Available in both modes #}
+{# Always available #}
 <h1>Hello, {{ user.name }}!</h1>       {# object property #}
 <p>{{ settings:tagline }}</p>          {# array key; {{ settings['tagline'] }} also works #}
 {{ items[0] }}                         {# index #}
 {{ $user->name }}                      {# property via the `$` sigil #}
 {{ "now" |> date("H:i:s") }}           {# registered filters and functions #}
+{{ $missing is defined }}              {# operator tests #}
 
-{# PHP mode only #}
+{# Granted by a capability #}
 {{ strtoupper(name) }}                 {# any PHP function #}
 {{ 'ab' |> strtoupper }}               {# any function as a filter step #}
-{{ $user->greet() }}                   {# method calls #}
-{% php echo "Hi" %}                    {# {% php CODE %} tags #}
-{% php %}…{% endphp %}                 {# raw PHP blocks #}
+{{ $user->greet() }}                   {# methodCalls #}
+{% php echo "Hi" %}                    {# rawPhp #}
 {{ $_SERVER['HTTP_HOST'] }}            {# superglobals #}
+{{ new DateTime("now") }}              {# newExpressions #}
+{{ DateTime::ATOM }}                   {# staticCalls #}
 ```
-
-Switch modes with the `sandbox` config key or `setSandboxMode()`:
 
 ```php
-$engine = new ClarityEngine(['sandbox' => false]); // PHP mode at construction
-$engine->setSandboxMode(false);                    // ...or at any time
+use Clarity\Engine\Policy;
+
+$engine->setPolicy(Policy::sandboxed());   // the default
+$engine->setPolicy(Policy::open());        // everything on
+$engine->setPolicy(Policy::custom()        // grant one thing, not all
+    ->allowCapability('methodCalls')
+    ->allowFunctions('strtoupper', 'count'));
 ```
 
-> See
-> [PHP Mode](#php-mode) and
-> [Advanced Topics → Security Model](docs/04-advanced-topics.md#security-model).
+`Policy::open()` is the full-power **PHP mode** and is equivalent to executing
+arbitrary PHP. A `Policy::custom()` grant is a real grant too — see
+[the security model](docs/04-advanced-topics.md#security-model) and
+[the policy reference](docs/09-policy-api.md).
 
 ---
 
@@ -302,23 +303,31 @@ Clarity is sandboxed by default:
 - **Object safety** – Objects stay objects: `a.b` reads a public property and `a:b` reads an array key, so method calls are unreachable from templates and PHP visibility rules apply. Container operations read an object's public properties, and the `date` filter accepts `DateTimeInterface` directly
 - **Controlled lambdas** – Lambda expressions can only use registered filters
 
-### PHP Mode
+### Policies
 
-The sandbox can be disabled deliberately — **PHP mode**, also called _open mode_
-— granting templates the full power of
-PHP (any function call or filter, `$obj->method()`, and raw PHP through either
-`{% php %}…{% endphp %}` or the standalone `{% php CODE %}` form):
+What a template may reach is decided by a policy — a set of capabilities plus two
+allowlists, all resolved at **compile time**. The default is sandboxed and
+unreachable from PHP:
 
 ```php
-$engine->setSandboxMode(false);
+use Clarity\Engine\Policy;
+
+$engine->setPolicy(Policy::open());        // full PHP: any function, methods, raw PHP
+$engine->setPolicy(Policy::custom()
+    ->allowCapability('methodCalls')
+    ->allowFunctions('strtoupper', 'count'));
 ```
 
-PHP mode is intended for templates written by trusted authors. It is
+A policy that grants `rawPhp`, `phpVariables` or `methodCalls` is
 **equivalent to executing arbitrary PHP** and disables every guarantee listed
-above. Templates record which mode compiled them and are recompiled
-automatically when the setting changes. Nothing is blocked by default — PHP mode is the security decision; if you want extra guardrails, add them with
-`setDeniedFunctions([...])`.
+above. Use it only for templates written and reviewed by trusted authors.
 
+Templates record a digest of the policy that compiled them and are recompiled
+automatically when it changes — including when a single allowlist entry is added
+or removed. `denyFunctions()` adds guardrails on top of an open policy; nothing
+is denied by default, because an open policy is already the security decision.
+
+**[The policy reference →](docs/09-policy-api.md)**
 **[Security best practices →](docs/05-best-practices.md#security-best-practices)**
 
 ---
