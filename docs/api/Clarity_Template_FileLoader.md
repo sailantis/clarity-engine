@@ -4,28 +4,43 @@
 
 Filesystem-backed template loader.
 
-Converts logical template names to absolute file paths using the same
-resolution rules as the classic ClarityEngine::resolveView() method:
+Converts logical template names to file paths UNDER the configured base path.
+Dots and slashes are interchangeable as directory separators, and the result
+can never leave the base path:
 
-  'home'              → {basePath}/home{ext}
-  'layouts/base'      → {basePath}/layouts/base{ext}
-  'layouts.base'      → {basePath}/layouts/base{ext}   (dots → slashes)
-  'admin::dashboard'  → {namespaces[admin]}/dashboard{ext}
-  '/abs/path'         → /abs/path (Unix absolute, used as-is)
-  'C:/abs/path'       → C:/abs/path (Windows absolute, used as-is)
-  '\\server\share'    → \\server\share (UNC, used as-is)
-  './partial'         → {basePath}/./partial{ext}
+  'home'               → {basePath}/home{ext}
+  'layouts/base'       → {basePath}/layouts/base{ext}
+  'layouts.base'       → {basePath}/layouts/base{ext}   (same thing)
+  'admin.user.profile' → {basePath}/admin/user/profile{ext}
+  'admin::dashboard'   → {namespaces[admin]}/dashboard{ext}
 
-load() calls filemtime() eagerly (cheap metadata syscall) and defers
+Names are validated rather than merely sanitized, because a template name can
+originate OUTSIDE the application: `render()` is often handed a name derived
+from a request, and a template may be stored in a database. Two classes of
+name are therefore rejected outright, with a ClarityException:
+
+  - **Absolute paths** (leading `/`, a Windows drive, or a UNC share). A
+    template name locates a template; it is not a general-purpose file read.
+    This was previously accepted for convenience, which made a template
+    name — and a host that forwards user input into one — an arbitrary file
+    reader.
+  - **Parent references** (any `.` or `..` segment, e.g. `../secret` or
+    `a/../../b`). A template is addressed from the base path downward.
+    Reaching a sibling tree is what namespaces (`addNamespace()`) are for,
+    and an explicit namespace is visible in the configuration rather than
+    buried in a template.
+
+`load()` calls filemtime() eagerly (cheap metadata syscall) and defers
 file_get_contents() until getCode() is called — zero I/O on warm cache paths.
 
 ## Public Constants
 
 - **DEFAULT_EXTENSION** = `'.clarity.html'`
+- **OUTSIDE_BASE_MESSAGE** = `'resolves outside the view path'`
 
 ## Public methods
 
-### __construct() · <small>[🗎](../../src/Template/FileLoader.php#L37)</small>
+### __construct() · <small>[🗎](../../src/Template/FileLoader.php#L62)</small>
 
 `public function __construct(string $basePath, string|null $extension = null): mixed`
 
@@ -43,7 +58,7 @@ file_get_contents() until getCode() is called — zero I/O on warm cache paths.
 
 ---
 
-### setExtension() · <small>[🗎](../../src/Template/FileLoader.php#L56)</small>
+### setExtension() · <small>[🗎](../../src/Template/FileLoader.php#L81)</small>
 
 `public function setExtension(string $extension): static`
 
@@ -62,7 +77,7 @@ Set the view file extension for this instance.
 
 ---
 
-### getExtension() · <small>[🗎](../../src/Template/FileLoader.php#L74)</small>
+### getExtension() · <small>[🗎](../../src/Template/FileLoader.php#L99)</small>
 
 `public function getExtension(): string`
 
@@ -76,7 +91,7 @@ Get the effective file extension used when resolving templates.
 
 ---
 
-### setBasePath() · <small>[🗎](../../src/Template/FileLoader.php#L85)</small>
+### setBasePath() · <small>[🗎](../../src/Template/FileLoader.php#L110)</small>
 
 `public function setBasePath(string $path): static`
 
@@ -95,7 +110,7 @@ Set the base path for resolving relative template names.
 
 ---
 
-### getBasePath() · <small>[🗎](../../src/Template/FileLoader.php#L97)</small>
+### getBasePath() · <small>[🗎](../../src/Template/FileLoader.php#L122)</small>
 
 `public function getBasePath(): string`
 
@@ -109,7 +124,7 @@ Get the currently configured base path for template resolution.
 
 ---
 
-### load() · <small>[🗎](../../src/Template/FileLoader.php#L105)</small>
+### load() · <small>[🗎](../../src/Template/FileLoader.php#L130)</small>
 
 `public function load(string $name): Clarity\Template\TemplateSource|null`
 
@@ -134,11 +149,11 @@ The revision ({@see \TemplateSource::$revision}) must be available immediately w
 
 ---
 
-### resolveName() · <small>[🗎](../../src/Template/FileLoader.php#L132)</small>
+### resolveName() · <small>[🗎](../../src/Template/FileLoader.php#L160)</small>
 
 `public function resolveName(string $name): string`
 
-Resolve a logical template name to an absolute filesystem path.
+Resolve a logical template name to a path under the base path.
 
 Public so it can be used for diagnostic/debugging purposes.
 
@@ -152,10 +167,16 @@ Public so it can be used for diagnostic/debugging purposes.
 
 - Type: `string`
 
+**Throws**
+
+- [ClarityException](Clarity_ClarityException.md)  When the name is absolute or contains a `.`/`..`
+segment, i.e. when it would resolve outside the
+base path.
+
 
 ---
 
-### getSubLoaders() · <small>[🗎](../../src/Template/FileLoader.php#L168)</small>
+### getSubLoaders() · <small>[🗎](../../src/Template/FileLoader.php#L249)</small>
 
 `public function getSubLoaders(): array`
 

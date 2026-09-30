@@ -3,15 +3,12 @@
 namespace Clarity\Engine\Tokenizer;
 
 use Clarity\ClarityException;
-use Clarity\Engine\Registry;
-use Clarity\Engine\Tokenizer;
 
 /**
  * Extracted from Clarity\Engine\Tokenizer to keep each file small. See that class for docs.
  */
 trait FilterCompilerTrait
 {
-
 
     /**
      * If $arg is a named argument of the form  identifier:expression  (where

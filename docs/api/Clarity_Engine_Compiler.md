@@ -190,7 +190,7 @@ mode is full PHP access; set names only for application-chosen limits.
 
 ---
 
-### compile() · <small>[🗎](../../src/Engine/Compiler/CompilerCoreTrait.php#L33)</small>
+### compile() · <small>[🗎](../../src/Engine/Compiler/CompilerCoreTrait.php#L27)</small>
 
 `public function compile(string $templateName, Clarity\Template\TemplateLoader $loader): Clarity\Engine\CompiledTemplate`
 
@@ -214,7 +214,7 @@ Compile a template and return a CompiledTemplate value object.
 
 ---
 
-### registerVar() · <small>[🗎](../../src/Engine/Compiler/DirectiveSupportTrait.php#L84)</small>
+### registerVar() · <small>[🗎](../../src/Engine/Compiler/DirectiveSupportTrait.php#L77)</small>
 
 `public function registerVar(string $name, int|null $tplLine = null): mixed`
 
@@ -234,7 +234,7 @@ Register a local variable in the compile-time context.
 
 ---
 
-### unregisterVar() · <small>[🗎](../../src/Engine/Compiler/DirectiveSupportTrait.php#L117)</small>
+### unregisterVar() · <small>[🗎](../../src/Engine/Compiler/DirectiveSupportTrait.php#L110)</small>
 
 `public function unregisterVar(string $name): mixed`
 
@@ -253,7 +253,7 @@ Unregister a local variable from the compile-time context.
 
 ---
 
-### getVars() · <small>[🗎](../../src/Engine/Compiler/DirectiveSupportTrait.php#L128)</small>
+### getVars() · <small>[🗎](../../src/Engine/Compiler/DirectiveSupportTrait.php#L121)</small>
 
 `public function getVars(): array`
 
