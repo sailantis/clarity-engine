@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`is defined` now answers the same in both modes.** A name holding an
+  explicit `null` used to count as **defined** in sandbox mode (the probe used
+  `array_key_exists`) but as **not defined** in PHP mode (the same name compiles
+  to a PHP local, and a local cannot be tested for existence without losing
+  `null`). A template cannot see the mode, so the answer it got depended on a
+  setting it could not read. The probe is now `isset()` everywhere, which makes
+  the contract one sentence: **a name is defined when it holds a value other than
+  `null`**. `is null` still reports a present-but-null name, so the two together
+  separate absent, null, and present. **Behaviour change:** `user is defined` is
+  now `false` when `user` was passed as `null`. See `docs/01-template-syntax.md`
+  and `tests/Engine/OperatorTest.php`.
+
 - **An unregistered filter is now a compile-time error with an actionable
   message.** In sandbox mode `{{ name |> strtoupper }}` compiled to a lookup in
   the runtime callable table and failed on the first render, reporting
@@ -16,8 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   template never wrote and surfacing on a request rather than at the deploy. It
   is now rejected while compiling, with a message that names both remedies:
   `Filter 'strtoupper' is not registered, and the sandbox is enabled, so there is
-  nothing for it to resolve to. Register it with addFilter(), or call
-  setSandboxMode(false) to let a PHP function of the same name be used.` The
+nothing for it to resolve to. Register it with addFilter(), or call
+setSandboxMode(false) to let a PHP function of the same name be used.` The
   rejection is possible at compile time because sandbox mode leaves nothing for
   an unregistered name to fall back to — the open-mode branch is the only other
   resolution path, and it is unreachable while the sandbox is on.
