@@ -4,11 +4,6 @@ namespace Clarity\Engine\Compiler;
 
 use Clarity\ClarityException;
 use Clarity\Engine\CompiledTemplate;
-use Clarity\Engine\Compiler;
-use Clarity\Engine\Registry;
-use Clarity\Engine\SourceMap;
-use Clarity\Engine\Tokenizer;
-use Clarity\Template\FileLoader;
 use Clarity\Template\TemplateLoader;
 
 /**
@@ -16,7 +11,6 @@ use Clarity\Template\TemplateLoader;
  */
 trait CompilerCoreTrait
 {
-
 
     // -------------------------------------------------------------------------
     // Public API

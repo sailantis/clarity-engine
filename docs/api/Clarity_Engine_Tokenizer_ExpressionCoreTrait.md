@@ -6,7 +6,7 @@ Extracted from Clarity\Engine\Tokenizer to keep each file small. See that class 
 
 ## Public methods
 
-### setEscapeContext() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L38)</small>
+### setEscapeContext() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L35)</small>
 
 `public function setEscapeContext(string $context): void`
 
@@ -27,7 +27,7 @@ Called by the Compiler as it tracks the current position in the template.
 
 ---
 
-### processExpression() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L43)</small>
+### processExpression() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L40)</small>
 
 `public function processExpression(string $expression): string`
 
@@ -44,7 +44,7 @@ Called by the Compiler as it tracks the current position in the template.
 
 ---
 
-### processCondition() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L73)</small>
+### processCondition() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L70)</small>
 
 `public function processCondition(string $expression): string`
 
@@ -65,7 +65,7 @@ structure conditions (if, for, set) where auto-escape is meaningless.
 
 ---
 
-### processLvalue() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L97)</small>
+### processLvalue() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L94)</small>
 
 `public function processLvalue(string $var): string`
 
@@ -91,7 +91,7 @@ choice lives in the chain emitter, so it cannot drift from the read path.
 
 ---
 
-### convertVarsAndOps() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L112)</small>
+### convertVarsAndOps() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L109)</small>
 
 `public function convertVarsAndOps(string $expr): string`
 

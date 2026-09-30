@@ -6,7 +6,7 @@ Extracted from Clarity\Engine\Tokenizer to keep each file small. See that class 
 
 ## Public methods
 
-### isIdentifierStart() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionSupportTrait.php#L321)</small>
+### isIdentifierStart() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionSupportTrait.php#L318)</small>
 
 `public static function isIdentifierStart(string $ch): bool`
 
@@ -29,7 +29,7 @@ locale-dependent and would disagree with the runtime on a non-C locale.
 
 ---
 
-### isIdentifierChar() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionSupportTrait.php#L336)</small>
+### isIdentifierChar() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionSupportTrait.php#L333)</small>
 
 `public static function isIdentifierChar(string $ch): bool`
 
@@ -48,7 +48,7 @@ Whether the character (a single BYTE) can appear inside an identifier.
 
 ---
 
-### isIdentifier() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionSupportTrait.php#L353)</small>
+### isIdentifier() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionSupportTrait.php#L350)</small>
 
 `public static function isIdentifier(string $name): bool`
 

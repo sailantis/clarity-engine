@@ -202,7 +202,7 @@ variable resolution inside the loop uses direct PHP local variables
 
 ---
 
-### tokenize() · <small>[🗎](../../src/Engine/Tokenizer/SegmentScannerTrait.php#L37)</small>
+### tokenize() · <small>[🗎](../../src/Engine/Tokenizer/SegmentScannerTrait.php#L34)</small>
 
 `public function tokenize(string $source): array`
 
@@ -235,7 +235,7 @@ it is reported rather than emitted as text.
 
 ---
 
-### setEscapeContext() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L38)</small>
+### setEscapeContext() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L35)</small>
 
 `public function setEscapeContext(string $context): void`
 
@@ -256,7 +256,7 @@ Called by the Compiler as it tracks the current position in the template.
 
 ---
 
-### processExpression() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L43)</small>
+### processExpression() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L40)</small>
 
 `public function processExpression(string $expression): string`
 
@@ -273,7 +273,7 @@ Called by the Compiler as it tracks the current position in the template.
 
 ---
 
-### processCondition() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L73)</small>
+### processCondition() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L70)</small>
 
 `public function processCondition(string $expression): string`
 
@@ -294,7 +294,7 @@ structure conditions (if, for, set) where auto-escape is meaningless.
 
 ---
 
-### processLvalue() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L97)</small>
+### processLvalue() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L94)</small>
 
 `public function processLvalue(string $var): string`
 
@@ -320,7 +320,7 @@ choice lives in the chain emitter, so it cannot drift from the read path.
 
 ---
 
-### convertVarsAndOps() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L112)</small>
+### convertVarsAndOps() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L109)</small>
 
 `public function convertVarsAndOps(string $expr): string`
 
@@ -346,7 +346,7 @@ identifiers/var-chains, operators, punctuation) and process each atom.
 
 ---
 
-### isIdentifierStart() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionSupportTrait.php#L321)</small>
+### isIdentifierStart() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionSupportTrait.php#L318)</small>
 
 `public static function isIdentifierStart(string $ch): bool`
 
@@ -369,7 +369,7 @@ locale-dependent and would disagree with the runtime on a non-C locale.
 
 ---
 
-### isIdentifierChar() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionSupportTrait.php#L336)</small>
+### isIdentifierChar() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionSupportTrait.php#L333)</small>
 
 `public static function isIdentifierChar(string $ch): bool`
 
@@ -388,7 +388,7 @@ Whether the character (a single BYTE) can appear inside an identifier.
 
 ---
 
-### isIdentifier() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionSupportTrait.php#L353)</small>
+### isIdentifier() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionSupportTrait.php#L350)</small>
 
 `public static function isIdentifier(string $name): bool`
 
@@ -411,7 +411,7 @@ tokenize back out.
 
 ---
 
-### buildFilterCall() · <small>[🗎](../../src/Engine/Tokenizer/FilterCompilerTrait.php#L215)</small>
+### buildFilterCall() · <small>[🗎](../../src/Engine/Tokenizer/FilterCompilerTrait.php#L212)</small>
 
 `public function buildFilterCall(string $filterSegment, string $phpValue): string`
 
@@ -440,7 +440,7 @@ arguments (`identifier: phpExpr`). PHP validates names and arity at runtime.
 
 ---
 
-### varChainToPhp() · <small>[🗎](../../src/Engine/Tokenizer/VarChainTrait.php#L659)</small>
+### varChainToPhp() · <small>[🗎](../../src/Engine/Tokenizer/VarChainTrait.php#L656)</small>
 
 `public function varChainToPhp(string $chain): string`
 

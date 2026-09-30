@@ -2,21 +2,13 @@
 
 namespace Clarity\Engine\Compiler;
 
-use Clarity\ClarityException;
-use Clarity\Engine\CompiledTemplate;
-use Clarity\Engine\Compiler;
-use Clarity\Engine\Registry;
 use Clarity\Engine\SourceMap;
-use Clarity\Engine\Tokenizer;
-use Clarity\Template\FileLoader;
-use Clarity\Template\TemplateLoader;
 
 /**
  * Extracted from Clarity\Engine\Compiler to keep each file small. See that class for docs.
  */
 trait CodeBuilderTrait
 {
-
 
     /**
      * Compile {% endfor %} → the correct PHP closing keyword based on the

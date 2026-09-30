@@ -6,7 +6,7 @@ Extracted from Clarity\Engine\Tokenizer to keep each file small. See that class 
 
 ## Public methods
 
-### tokenize() · <small>[🗎](../../src/Engine/Tokenizer/SegmentScannerTrait.php#L37)</small>
+### tokenize() · <small>[🗎](../../src/Engine/Tokenizer/SegmentScannerTrait.php#L34)</small>
 
 `public function tokenize(string $source): array`
 

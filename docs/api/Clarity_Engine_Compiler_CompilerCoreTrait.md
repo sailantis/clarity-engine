@@ -6,7 +6,7 @@ Extracted from Clarity\Engine\Compiler to keep each file small. See that class f
 
 ## Public methods
 
-### compile() · <small>[🗎](../../src/Engine/Compiler/CompilerCoreTrait.php#L33)</small>
+### compile() · <small>[🗎](../../src/Engine/Compiler/CompilerCoreTrait.php#L27)</small>
 
 `public function compile(string $templateName, Clarity\Template\TemplateLoader $loader): Clarity\Engine\CompiledTemplate`
 
