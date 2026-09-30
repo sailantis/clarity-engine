@@ -53,10 +53,15 @@ $engine->render('page', [
 **Error:**
 
 ```
-Filter 'filterName' is not registered
+Filter 'filterName' is not registered, and the sandbox is enabled, so there is
+nothing for it to resolve to. Register it with addFilter(), or call
+setSandboxMode(false) to let a PHP function of the same name be used.
 ```
 
-**Cause:** Typo in filter name or filter not registered.
+**Cause:** Typo in filter name, or the filter was never registered.
+
+Raised **while compiling**, so it surfaces at the deploy that introduced the
+filter rather than on the first request that renders it.
 
 **Solutions:**
 

@@ -125,7 +125,13 @@ class SecurityErrorMappingTest extends BaseTestCase
     {
         $this->expectException(ClarityException::class);
         $this->expectExceptionMessageMatches('/unregistered function/');
-        self::tpl('sec_filter_arg', "{{ name |> substr(system('id'), 1) }}");
+
+        // The filter itself must be REGISTERED, so the guard under test is the
+        // one that compiles its ARGUMENTS. An unregistered filter is now
+        // rejected before its arguments are looked at — a separate guard, and
+        // one that would otherwise let this test pass without exercising
+        // argument validation at all.
+        self::tpl('sec_filter_arg', "{{ name |> replace(system('id'), 'x') }}");
         self::render('sec_filter_arg');
     }
 

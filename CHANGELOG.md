@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **An unregistered filter is now a compile-time error with an actionable
+  message.** In sandbox mode `{{ name |> strtoupper }}` compiled to a lookup in
+  the runtime callable table and failed on the first render, reporting
+  `Variable "strtoupper" is not defined in this context` — naming a variable the
+  template never wrote and surfacing on a request rather than at the deploy. It
+  is now rejected while compiling, with a message that names both remedies:
+  `Filter 'strtoupper' is not registered, and the sandbox is enabled, so there is
+  nothing for it to resolve to. Register it with addFilter(), or call
+  setSandboxMode(false) to let a PHP function of the same name be used.` The
+  rejection is possible at compile time because sandbox mode leaves nothing for
+  an unregistered name to fall back to — the open-mode branch is the only other
+  resolution path, and it is unreachable while the sandbox is on.
+
 ### Security
 
 - **A template name can no longer address a file outside the view path.**

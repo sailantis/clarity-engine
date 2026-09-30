@@ -253,10 +253,28 @@ trait FilterCompilerTrait
             );
         }
 
-        // Registered filters win over PHP functions of the same name.  In
-        // sandbox mode an unregistered name ALSO takes this path, exactly as
-        // before: it compiles to a $__c_fn lookup and fails at runtime.
-        if ($isRegistered || $this->sandboxMode) {
+        // An unregistered filter name in SANDBOX mode is rejected HERE, not at
+        // runtime. It used to compile to a `$__c_fn[...]` lookup and fail on the
+        // first render, which reported `Variable "strtoupper" is not defined in
+        // this context` — naming a variable the template never wrote, and
+        // surfacing on a request rather than at the deploy that introduced it.
+        //
+        // The check can be made here because sandbox mode leaves NOTHING for an
+        // unregistered name to fall back to: the open-mode branch below is the
+        // only other resolution path, and it is not reachable while the sandbox
+        // is on. So "not registered" and "cannot ever resolve" are the same
+        // statement, and the message can say what to do about it instead of
+        // describing the runtime table it would have consulted.
+        if (!$isRegistered && $this->sandboxMode) {
+            throw new ClarityException(
+                "Filter '{$name}' is not registered, and the sandbox is enabled, so there is "
+                . 'nothing for it to resolve to. Register it with addFilter(), or call '
+                . "setSandboxMode(false) to let a PHP function of the same name be used."
+            );
+        }
+
+        // Registered filters win over PHP functions of the same name.
+        if ($isRegistered) {
             $inlineCall = $this->buildInlineFilterCall($name, $phpValue, $argList);
             if ($inlineCall !== null) {
                 return $trailing !== '' ? $inlineCall . $this->convertVarsAndOps($trailing) : $inlineCall;
