@@ -854,11 +854,11 @@ construct may reach.
 The whole of PHP mode is expressible as a policy, and three presets cover how
 much rope a template gets:
 
-| Preset                          | Grants                                                                      |
-| ------------------------------- | --------------------------------------------------------------------------- |
-| `Policy::sandboxed()` (default) | nothing that reaches PHP — the safe mode the engine has always had          |
+| Preset                          | Grants                                                                       |
+| ------------------------------- | ---------------------------------------------------------------------------- |
+| `Policy::sandboxed()` (default) | nothing that reaches PHP — the safe mode the engine has always had           |
 | `Policy::trusted()`             | `rawPhp`, `methodCalls`, `superglobals`, `phpVariables` — but not `new`/`::` |
-| `Policy::open()`                | every capability — equivalent to executing arbitrary PHP                    |
+| `Policy::open()`                | every capability — equivalent to executing arbitrary PHP                     |
 
 ```php
 use Clarity\Engine\Policy;
@@ -886,8 +886,8 @@ See [Template Syntax → PHP Mode](01-template-syntax.md#php-mode) for the
 template author's view of what each capability adds.
 
 > **`Policy::open()` is equivalent to executing arbitrary PHP.** Use it only for
-templates written and reviewed by trusted authors, never for a template a
-request can choose.
+> templates written and reviewed by trusted authors, never for a template a
+> request can choose.
 
 ## Performance Optimization
 
