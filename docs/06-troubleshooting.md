@@ -53,15 +53,27 @@ $engine->render('page', [
 **Error:**
 
 ```
-Filter 'filterName' is not registered, and the sandbox is enabled, so there is
-nothing for it to resolve to. Register it with addFilter(), or call
-setSandboxMode(false) to let a PHP function of the same name be used.
+Filter 'filterName' is not registered, and this policy does not allow a template
+to reach PHP, so there is nothing for it to resolve to. Register it with
+addFilter(), or grant a capability to let a PHP function of the same name be used.
 ```
 
 **Cause:** Typo in filter name, or the filter was never registered.
 
 Raised **while compiling**, so it surfaces at the deploy that introduced the
 filter rather than on the first request that renders it.
+
+**Fix:** register the filter with `addFilter()`. If the name really is a PHP
+function you want templates to use, grant it — either by naming it in the
+allowlist, or by granting a capability that reaches PHP:
+
+```php
+$engine->setPolicy(Policy::custom()->allowFunctions('strtoupper', 'count'));
+```
+
+A non-empty `functions` allowlist is the complete set of names that may be
+called, so it needs no capability alongside it. See the
+[policy reference](09-policy-api.md).
 
 **Solutions:**
 

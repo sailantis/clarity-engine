@@ -589,16 +589,20 @@ $engine->render('page', $data);
 
 ## Security Model
 
-Clarity enforces strict security through compilation-time checks and runtime sandboxing.
+Clarity enforces strict security through compilation-time checks. **Nothing is
+checked at render time**, so the restrictions cost nothing to enforce.
 
-> **Sandbox is on by default.** Every restriction in this section applies while
-> the sandbox is enabled. Calling `setSandboxMode(false)` switches to
-> [PHP mode](#php-mode), which relaxes all of them. See that section for the
-> full consequences before disabling the sandbox.
+What a template may reach is decided by a **policy**: a set of _capabilities_
+plus two _allowlists_. The default is the most restrictive one.
+
+> See [The Policy API](09-policy-api.md) for the full reference. The rest of this
+> page describes what the default policy refuses, which is the safe mode the
+> engine has always had.
 
 ### Compile-Time Restrictions
 
-The following are **rejected at compile time** (template won't compile):
+The following are **rejected at compile time** (template won't compile) under
+the default policy:
 
 **Direct PHP variables:**
 
@@ -631,7 +635,19 @@ The following are **rejected at compile time** (template won't compile):
 {{ `ls -la` }} {# ERROR #}
 ```
 
-### Runtime Sandboxing
+**Class names:**
+
+```twig
+{{ new DateTime() }}    {# ERROR: needs the 'newExpressions' capability #}
+{{ Foo::create() }}     {# ERROR: needs the 'staticCalls' capability #}
+{{ Foo\Bar }}           {# ERROR: a class name is not a value #}
+```
+
+`instanceof` is the exception: `x instanceof Foo` takes a class name because
+that is what the operator means, and it reaches nothing the scope did not
+already hold. It works under every policy.
+
+### Object and Value Handling
 
 **Objects stay objects.**
 
@@ -732,7 +748,7 @@ Lambdas in `map`, `filter`, `reduce` only accept:
 
 ### Registered Filters/Functions
 
-Only **registered** filters and functions are callable:
+Only **registered** filters and functions are callable under the default policy:
 
 ```php
 $engine->addFilter('customFilter', $callable);
@@ -743,62 +759,135 @@ $engine->addFilter('customFilter', $callable);
 {{ value |> notRegistered }} {# ERROR: not registered #}
 ```
 
-### PHP Mode
-
-Disabling the sandbox grants templates the full power of PHP — **PHP mode**,
-also called _open mode_ — for parity with Blade / Stempler / Plates:
+A policy can also allow a PHP function to be called **by its own name**, without
+registering anything:
 
 ```php
-$engine->setSandboxMode(false);
+use Clarity\Engine\Policy;
+
+$engine->setPolicy(Policy::custom()->allowFunctions('strtoupper', 'count'));
 ```
 
-With the sandbox off:
+### Policies
 
-| Capability                   | Sandboxed | PHP mode |
-| ---------------------------- | --------- | -------- |
-| Registered filters/functions | ✅        | ✅       |
-| Arbitrary PHP function calls | ❌        | ✅       |
-| Any PHP function as a filter | ❌        | ✅       |
-| Method calls (`$obj->m()`)   | ❌        | ✅       |
-| `{% php %}` blocks           | ❌        | ✅       |
-| `{% php CODE %}` directives  | ❌        | ✅       |
-| Auto-escaping                | ✅        | ✅       |
-| Strict variable access       | ✅        | ✅       |
+A policy answers one question: _what is this template allowed to reach?_ It is a
+set of capabilities plus two allowlists, and the default is sandboxed.
 
-**This is equivalent to executing arbitrary PHP.** PHP mode disables every
-compile-time restriction listed above. Use it only for templates written and
-reviewed by trusted authors.
+```php
+use Clarity\Engine\Policy;
 
-#### Function guardrails
+$engine->setPolicy(Policy::sandboxed());   // the default
+$engine->setPolicy(Policy::open());        // everything on
+$engine->setPolicy(Policy::trusted());     // trusted templates, but no `new`
+$engine->setPolicy(Policy::custom()        // the useful one
+    ->allowCapability('methodCalls')
+    ->allowFunctions('strtoupper', 'count'));
+```
 
-**Empty by default.** PHP mode is full PHP access, so the engine does not
-smuggle a second, weaker sandbox into it: a fixed subset of "sinks" could never
-be a security boundary (hundreds of ordinary functions read the environment,
-write files or spawn processes), and blocking `exec` while allowing `proc_open`
-reads as protection the switch has already declined to give.
+| Capability          | Default | What it grants                                                                                         |
+| ------------------- | ------- | ------------------------------------------------------------------------------------------------------ |
+| `rawPhp`            | `false` | `{% php CODE %}` tags and `{% php %}…{% endphp %}` blocks                                              |
+| `methodCalls`       | `false` | `$obj->method()` and `$obj->method(arg, …)`                                                            |
+| `superglobals`      | `false` | `$_SERVER`, `$_GET`, `$_ENV`, … as chain roots                                                         |
+| `phpVariables`      | `false` | the render scope seeded as PHP locals — what makes `$title` and `{% php echo $title; %}` the same name |
+| `variableVariables` | `true`  | `$$name` / `${expr}`                                                                                   |
+| `newExpressions`    | `false` | `new Foo(args)`                                                                                        |
+| `staticCalls`       | `false` | `Foo::method(args)`, `Foo::CONST`, `Foo::class`, `Foo::$prop`                                          |
 
-What still holds in both modes is that the engine's own render-frame namespace
+| Allowlist   | Default | What it governs                                                                 |
+| ----------- | ------- | ------------------------------------------------------------------------------- |
+| `functions` | `[]`    | bare calls (`strtoupper(name)`) and filter steps that resolve to a PHP function |
+| `filters`   | `[]`    | names accepted after `\|>`, which need not be functions                         |
+
+**An empty allowlist is not a denial — it is no restriction.** A non-empty one is
+the complete set: only the listed names resolve, and anything else is a
+compile-time error. That is what makes `Policy::open()` exactly the engine's
+full-power mode rather than a mode that happens to deny everything.
+
+`denyFunctions(...)` applies last and wins, so an allowlist entry can still be
+revoked by name.
+
+**`Policy::open()` is equivalent to executing arbitrary PHP.** It grants every
+capability on the list above. Use it only for templates written and reviewed by
+trusted authors. The same is true of `rawPhp`, `phpVariables` and `methodCalls`
+individually — each is a real grant, not a cosmetic one.
+
+#### Guardrails
+
+An application can add its own limits on top of an open policy. This is the one
+case an allowlist cannot express, because "everything except `exec`" has no
+positive form:
+
+```php
+$engine->setPolicy(Policy::open()->denyFunctions('exec', 'system', 'proc_open'));
+```
+
+What still holds in every policy is that the engine's own render-frame namespace
 stays out of reach: a template cannot bind a `__c_`-prefixed name, and
 `$$name` / `${expr}` variable-variable expansion resolves against the render
-scope, so it can reach neither a superglobal nor an engine internal.
+scope, so it can never reach an engine internal.
 
-An application may still add its own guardrails on top of the switch:
+`superglobals` is a genuinely separate grant. Without it, `{{ _SERVER }}` is an
+ordinary scope read of a name that is absent, so it throws — even when
+`phpVariables` is on. With it, the name means PHP's own variable.
+
+#### Policy changes and the cache
+
+Every compiled template records a **digest** of the policy it was built under,
+and the loader recompiles when that differs from the current one. Without this, a
+template compiled under one policy could be served under another, since the cache
+keys on template source only.
+
+The digest covers every capability and every allowlist entry, so changing a
+single entry — or deleting one — invalidates what needs it. A digest rather than
+the policy itself, because the compiled file is source code that ships to a
+server and should not carry a readable inventory of what a template may call.
+
+## PHP Mode
+
+A policy that grants PHP turns the engine into a template engine with the full
+power of PHP — **PHP mode**, also called _open mode_. It is not a different
+language: the syntax is identical and every registered filter and function still
+resolves first. What changes is what an _unregistered_ name or a refused
+construct may reach.
+
+The whole of PHP mode is expressible as a policy, and three presets cover how
+much rope a template gets:
+
+| Preset                          | Grants                                                                      |
+| ------------------------------- | --------------------------------------------------------------------------- |
+| `Policy::sandboxed()` (default) | nothing that reaches PHP — the safe mode the engine has always had          |
+| `Policy::trusted()`             | `rawPhp`, `methodCalls`, `superglobals`, `phpVariables` — but not `new`/`::` |
+| `Policy::open()`                | every capability — equivalent to executing arbitrary PHP                    |
 
 ```php
-$engine->setDeniedFunctions(['exec', 'system']);   // add guardrails
-$engine->setDeniedFunctions([]);                   // block nothing (default)
+use Clarity\Engine\Policy;
+
+$engine->setPolicy(Policy::trusted());
+$engine->setPolicy(Policy::open());   // the full-power mode
 ```
 
-> Changing the list does **not** recompile already-cached templates, because the
-> compiled class embeds the function names it calls — clear the compiled-template
-> cache after changing it.
+`Policy::trusted()` is the one worth knowing: it is PHP mode minus the two
+capabilities that let a template name a class of its own. `newExpressions` and
+`staticCalls` are a different order of trust from calling a method on an object
+the application already passed in, so `trusted()` withholds them.
 
-#### Mode changes and the cache
+**What each capability turns on** is tabulated under [Policies](#policies)
+below. The one that is not obvious is `superglobals`: without it a superglobal
+name is an ordinary scope read, so `{{ _SERVER }}` throws _even when_
+`phpVariables` is granted, and `{{ $_SERVER }}` is the only spelling that means
+PHP's own variable.
 
-Every compiled template records whether it was built sandboxed
-(`$sandboxCompiled`), and the loader recompiles when that differs from the
-current setting. Without this, a template compiled under one mode could be
-served under the other, since the cache keys on template source only.
+**PHP mode is a strict superset of the sandbox syntax.** Every template that
+compiles under `sandboxed()` compiles identically under `open()`; only a
+construct the policy refused becomes available. A template is therefore never
+written _against_ a mode — the same `{{ name }}` reads the render scope in both.
+See [Template Syntax → PHP Mode](01-template-syntax.md#php-mode) for the
+template author's view of what each capability adds.
+
+> **`Policy::open()` is equivalent to executing arbitrary PHP.** Use it only for
+templates written and reviewed by trusted authors, never for a template a
+request can choose.
 
 ## Performance Optimization
 
@@ -853,22 +942,21 @@ opcache.revalidate_freq=2
 
 ### All Configuration Methods
 
-| Method                                      | Description                               |
-| ------------------------------------------- | ----------------------------------------- |
-| `setViewPath(string $path)`                 | Base directory for templates              |
-| `setLayout(?string $layout)`                | Default layout template                   |
-| `setExtension(string $ext)`                 | File extension (default: `.clarity.html`) |
-| `setCachePath(string $path)`                | Cache directory                           |
-| `getCachePath(): string`                    | Get current cache path                    |
-| `setSandboxMode(bool $enabled)`             | Enable/disable the sandbox (default on)   |
-| `isSandboxed(): bool`                       | Whether the sandbox is enabled            |
-| `setDeniedFunctions(array $names)`          | Add open-mode function guardrails         |
-| `getDeniedFunctions(): array`               | Current open-mode function guardrails     |
-| `flushCache(): void`                        | Delete all cached files                   |
-| `addFilter(string $name, callable $fn)`     | Register custom filter                    |
-| `addFunction(string $name, callable $fn)`   | Register custom function                  |
-| `setLoader(TemplateLoader $loader)`         | Set custom template loader                |
-| `render(string $view, array $vars): string` | Render template and return HTML           |
+| Method                                      | Description                                        |
+| ------------------------------------------- | -------------------------------------------------- |
+| `setViewPath(string $path)`                 | Base directory for templates                       |
+| `setLayout(?string $layout)`                | Default layout template                            |
+| `setExtension(string $ext)`                 | File extension (default: `.clarity.html`)          |
+| `setCachePath(string $path)`                | Cache directory                                    |
+| `getCachePath(): string`                    | Get current cache path                             |
+| `setPolicy(Policy\|array $policy)`          | What templates may reach (default: sandboxed)      |
+| `getPolicy(): Policy`                       | The current policy                                 |
+| `isSandboxed(): bool`                       | Whether the policy lets templates reach PHP at all |
+| `flushCache(): void`                        | Delete all cached files                            |
+| `addFilter(string $name, callable $fn)`     | Register custom filter                             |
+| `addFunction(string $name, callable $fn)`   | Register custom function                           |
+| `setLoader(TemplateLoader $loader)`         | Set custom template loader                         |
+| `render(string $view, array $vars): string` | Render template and return HTML                    |
 
 ### Example: Complete Setup
 

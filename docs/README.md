@@ -23,10 +23,11 @@ Learn the essential features:
 Deep dives into specialized features:
 
 5. **[Advanced Topics](04-advanced-topics.md)** — Namespaces, caching, auto-escaping, error handling, Unicode
-6. **[Modules](07-modules.md)** — Module system, LocaleService, TranslationModule, IntlFormatModule
-7. **[Best Practices](05-best-practices.md)** — Organization, naming, security, testing, and debugging
-8. **[Troubleshooting](06-troubleshooting.md)** — Common errors and how to fix them
-9. **[Benchmark](08-benchmark.md)** — How Clarity compares with other template engines, across rendering shapes
+6. **[The Policy API](09-policy-api.md)** — What a template may reach: capabilities, allowlists, presets
+7. **[Modules](07-modules.md)** — Module system, LocaleService, TranslationModule, IntlFormatModule
+8. **[Best Practices](05-best-practices.md)** — Organization, naming, security, testing, and debugging
+9. **[Troubleshooting](06-troubleshooting.md)** — Common errors and how to fix them
+10. **[Benchmark](08-benchmark.md)** — How Clarity compares with other template engines, across rendering shapes
 
 ## Additional Resources
 

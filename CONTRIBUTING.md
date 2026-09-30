@@ -78,6 +78,7 @@ Tokenizer (`src/Engine/Tokenizer/`):
 | `CallableTrait`          | lambdas + filter references (`map`/`filter`/`reduce`)                                                     |
 | `OperatorTestTrait`      | `in` / `is …` operator tests                                                                              |
 | `CollectionLiteralTrait` | array/object literals + postfix property/index access                                                     |
+| `PhpConstructTrait`      | class names: `new Foo(...)`, `Foo::member`, the `instanceof` operand                                      |
 
 Compiler (`src/Engine/Compiler/`):
 
@@ -96,6 +97,28 @@ run against the same `$this`, so the split is transparent. The public constants
 read from the traits as `self::CONST`; trait-local constants are declared in the
 trait that uses them (a trait constant requires **PHP 8.2**, which is why the
 engine's minimum is 8.2 rather than 8.1).
+
+### Where the capability checks live
+
+`Clarity\Engine\Policy` is the one object that answers _what may this template
+reach_. Every compile-time check asks it — the Tokenizer keeps a reference and
+the Compiler passes the same instance to it, so a capability cannot be granted in
+one half of the compiler and missed in the other.
+
+When adding a check:
+
+- Ask the POLICY, not a flag. `$this->allows('rawPhp')` in the tokenizer or
+  `$this->policy->allows('rawPhp')` in the compiler. There is no sandbox boolean
+  any more, and a new one would be a second source of truth.
+- Make the message name the grant that would fix it, in the form
+  `… is not allowed by this policy. Grant the 'X' capability to allow it.`
+- If the check decides **emitted code**, the policy digest already covers it — do
+  **not** bump `COMPILER_VERSION` for a policy change, and do bump it for a
+  grammar change.
+- `Policy` has its own test file; a new capability also needs a case in
+  `PolicyCapabilityTest` that grants it alone and asserts its neighbours are still
+  refused. The point of the split is that a grant is independent, so a test that
+  grants everything proves nothing.
 
 ## Adding a filter or function
 

@@ -95,20 +95,24 @@ $engine->setLayout('layouts/main');
 // Override file extension (default: .clarity.html)
 $engine->setExtension('.tpl.html');
 
-// Sandbox (default: true). Pass false to grant templates full PHP access.
-$engine->setSandboxMode(false);
+// What templates may reach (default: Policy::sandboxed()).
+use Clarity\Engine\Policy;
 
-// Optional guardrails. Nothing is blocked by default, because PHP mode is
-// full PHP access; add names here only if you want to restrict it again.
-$engine->setDeniedFunctions(['exec', 'system']);   // add guardrails
-$engine->setDeniedFunctions([]);                   // block nothing (default)
+$engine->setPolicy(Policy::open());                // grant templates full PHP
+$engine->setPolicy(Policy::custom()                // or grant one thing at a time
+    ->allowCapability('methodCalls')
+    ->allowFunctions('strtoupper', 'count'));
+
+// An open policy denies nothing by default, because being open IS the security
+// decision. Exclude specific names if you want guardrails on top of it:
+$engine->setPolicy(Policy::open()->denyFunctions('exec', 'system'));
 ```
 
-> **PHP mode.** `setSandboxMode(false)` is equivalent to executing arbitrary
-> PHP from templates. See
+> **A grant is not a cosmetic setting.** `Policy::open()` and each capability it
+> turns on are equivalent to executing arbitrary PHP from templates. See
 > [Advanced Topics → Security Model](04-advanced-topics.md#security-model) for
-> what it disables and how to restrict it. The same options are accepted in the
-> constructor as `sandbox` and `deniedFunctions`.
+> what each one reaches. The same policy is accepted in the constructor as
+> `policy`, in either the object or the array form.
 
 > For the full developer-facing picture — the config keys, both modes, and how to
 > register filters/functions — see

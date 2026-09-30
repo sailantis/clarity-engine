@@ -303,7 +303,8 @@ functions, superglobals and engine internals included, so `strtoupper(x)` and
 
 ## PHP Mode
 
-Disabling the sandbox (`$engine->setSandboxMode(false)`) turns off the function
+A policy that grants PHP (`Policy::open()`, or the individual capability)
+turns off the function restriction
 allow-list and the method-call restriction, giving templates the full power of
 PHP — **PHP mode**, also called _open mode_. Everything below still resolves
 **registered** filters and functions first; PHP mode only changes what happens
@@ -403,11 +404,13 @@ engine does not add a second, weaker sandbox on top of it. If an application
 wants its own guardrails it can add them:
 
 ```php
-$engine->setDeniedFunctions(['exec', 'system']);
+$engine->setPolicy(Policy::open()->denyFunctions('exec', 'system'));
 ```
 
-Changing the list does not recompile already-cached templates — clear the cache
-afterwards.
+Changing the list recompiles the templates that need it: a compiled class records
+a digest of the policy it was built under, and the loader recompiles on a
+mismatch. (Before the policy API the deny-list did **not** invalidate the cache;
+that was a bug, not a feature.)
 
 ## Directives
 

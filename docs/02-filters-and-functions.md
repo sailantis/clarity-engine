@@ -888,13 +888,13 @@ Named arguments can be combined with positional ones:
 
 ## PHP Functions as Filters (PHP Mode)
 
-When the sandbox is disabled (`$engine->setSandboxMode(false)`), any PHP function
+When a policy grants PHP (`Policy::open()`), any PHP function
 can be used directly as a filter or a function call, so no PHP API needs to be
 re-wrapped as a custom filter. Registered filters and functions always win over a
 PHP function of the same name.
 
 ```php
-$engine->setSandboxMode(false);
+$engine->setPolicy(Policy::open());
 ```
 
 As a filter, the piped value becomes the **first argument**:
@@ -918,7 +918,7 @@ As a call, arguments are passed as written:
 ```
 
 Nothing is blocked by default: PHP mode is full PHP access. An application can
-add its own guardrails with `setDeniedFunctions([...])`.
+add its own guardrails with `Policy::open()->denyFunctions([...])`.
 
 > See [Advanced Topics → PHP Mode](04-advanced-topics.md#php-mode) for the
 > security consequences. PHP mode is equivalent to executing arbitrary PHP.

@@ -1,121 +1,154 @@
-# Policy API — Design Proposal
+# The Policy API
 
-> **Status: proposal, not implemented.** Nothing on this page exists yet.
-> It is written down so the shape can be reviewed before any code lands. The
-> `sandbox` flag described in [PHP Mode](04-advanced-topics.md#php-mode) is what
-> Clarity ships today; this describes what would replace it — including its
-> removal.
+> **Status: implemented.** `Clarity\Engine\Policy` replaces the `sandbox`
+> boolean. Nothing on this page is a proposal any more.
 
 A template engine has one question to answer about a template: _what is this
-template allowed to reach?_ Today Clarity answers it with a single boolean.
-The boolean is a good default and a poor lever:
+template allowed to reach?_ Clarity answers it with a **policy** — a set of
+capabilities plus two allowlists.
 
-1. **It is all-or-nothing.** Denying one function means giving up every
-   compile-time guarantee, or keeping every guarantee and going without the
-   function.
-2. **It denies things nobody was worried about.** Sandbox mode refuses raw PHP,
-   which is the point — but it also refuses `strtoupper`, which is not a
-   security property. Latte and Twig both ship a `SecurityPolicy` built on
-   explicit allowlists, for exactly this reason. (Blade has none; it is PHP with
-   a different spelling.)
-3. **It leaks the decision into the render path.** A bare call to an unregistered
-   function is rejected at compile time, but the _same name used as a filter
-   step_ is not: it compiles to a runtime lookup and fails on the first render,
-   with an error that names a variable the template never wrote. One boolean
-   cannot express the difference, so the compiler has nothing to check against.
+Everything a policy decides is decided at **compile time**. Nothing on this page
+is consulted while a template renders: the compiled class has no policy object in
+it, and no check is added to the render path. That property is what makes the
+sandbox free, and it is the constraint the whole design is arranged around.
 
-The proposal inverts the mechanism rather than relaxing it. Everything stays
-**compile-time**; what changes is that the decision stops being made by one
-bit and starts being made by a policy object, which can say _this_ function yes
-and _that_ function no, without touching whether method calls are reachable.
+```php
+use Clarity\Engine\Policy;
 
-**No runtime checks are added.** A policy that made every property read consult
-a checker would cost the same on every render — and the harness in this
-workspace measures the sandbox as render-cost free, which is the property worth
-keeping. A policy has to be free at render time to be worth having.
+$engine->setPolicy(Policy::sandboxed());   // the default
+$engine->setPolicy(Policy::open());        // every capability on
+$engine->setPolicy(Policy::trusted());     // trusted, but no `new` / `::`
+$engine->setPolicy(Policy::custom()        // the useful one
+    ->allowCapability('methodCalls')
+    ->allowFunctions('strtoupper', 'count')
+    ->allowFilters('markdown'));
+```
 
 ---
 
 ## The model
 
-A policy is a set of **capabilities** plus two **allowlists**:
+### Capabilities
 
-| Capability          | Default (sandboxed) | What it grants                                                                                                    |
-| ------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `rawPhp`            | `false`             | `{% php CODE %}` tags and `{% php %}…{% endphp %}` blocks                                                         |
-| `methodCalls`       | `false`             | `$obj->method()` and `$obj->method(arg, …)` in expressions                                                        |
-| `superglobals`      | `false`             | `$_SERVER`, `$_GET`, `$_ENV`, … as chain roots                                                                    |
-| `phpVariables`      | `false`             | the render scope seeded as PHP locals — what makes `$title` and `{% php echo $title; %}` the same thing           |
-| `variableVariables` | `true`              | `$$name` / `${expr}` (see [why this defaults on](#why-variablevariables-defaults-on))                             |
-| `newExpressions`    | `false`             | `new Foo()`                                                                                                       |
-| `staticCalls`       | `false`             | `Foo::bar()`                                                                                                      |
-| `strictTypes`       | `false`             | emit `declare(strict_types=1)` into the compiled template (see [Strict types](#strict-types-a-separate-proposal)) |
+| Capability          | Default | What it grants                                                                                          |
+| ------------------- | ------- | ------------------------------------------------------------------------------------------------------- |
+| `rawPhp`            | `false` | `{% php CODE %}` tags and `{% php %}…{% endphp %}` blocks                                               |
+| `methodCalls`       | `false` | `$obj->method()` and `$obj->method(arg, …)`                                                             |
+| `superglobals`      | `false` | `$_SERVER`, `$_GET`, `$_ENV`, … as chain roots                                                          |
+| `phpVariables`      | `false` | the render scope seeded as PHP locals — what makes `$title` and `{% php echo $title; %}` the same thing |
+| `variableVariables` | `true`  | `$$name` / `${expr}` (see [why it defaults on](#why-variablevariables-defaults-on))                     |
+| `newExpressions`    | `false` | `new Foo(args)`                                                                                         |
+| `staticCalls`       | `false` | `Foo::method(args)`, `Foo::CONST`, `Foo::class`, `Foo::$prop`                                           |
 
-| Allowlist   | Default | What it governs                                                                           |
-| ----------- | ------- | ----------------------------------------------------------------------------------------- |
-| `functions` | `[]`    | bare calls (`strtoupper(name)`) and PHP functions as filter steps (`'ab' \|> strtoupper`) |
-| `filters`   | `[]`    | names accepted after `\|>`, which need not be functions                                   |
+### Allowlists
 
-An empty allowlist denies everything it governs. That is the whole rule — there
-is no "absent means unconfigured" case to explain, which is part of why `tags`
-is not here.
+| Allowlist   | Default | What it governs                                                                 |
+| ----------- | ------- | ------------------------------------------------------------------------------- |
+| `functions` | `[]`    | bare calls (`strtoupper(name)`) and filter steps that resolve to a PHP function |
+| `filters`   | `[]`    | names accepted after `\|>`, which need not be functions                         |
 
-### No `tags` allowlist
+### The one rule
 
-A `tags` allowlist (which `{% … %}` keywords a template may use) is **left out**
-of this proposal.
+> **An empty allowlist is no restriction. A non-empty allowlist is the complete
+> set: only the listed names resolve, and anything else is a compile-time error.**
 
-It is the allowlist with the weakest security story: every tag is Clarity's own
-vocabulary, and none of them reaches anything a filter or a function cannot. Its
-only real use is keeping a large template surface small, which is a linting
-concern rather than a policy one — worth adding once someone asks for it.
+That is the whole rule, and there is no "absent means unconfigured" case. It is
+also what makes `Policy::open()` the engine's former PHP mode _exactly_ — every
+capability on, both allowlists empty, therefore nothing denied — rather than a
+mode that happens to deny everything.
 
-Latte does ship one, so the omission is a deliberate difference rather than an
-oversight: Latte's policy has to express "no `php` tag, no `include`" because
-its tags are the only place those features appear. Clarity's are covered by
-capabilities (`rawPhp`) and, for the file-access part, by the include
-confinement described under [the security finding](#a-security-finding-included-in-this-review).
-
-### Sandbox becomes a policy; the boolean is deleted
-
-The boolean **goes away**, rather than surviving as an alias. A method that means
-"set the policy to a preset" is a second way to say one thing, and a second way
-to say one thing is a way for the two to disagree.
-
-| Preset                | Produces                                                                              |
-| --------------------- | ------------------------------------------------------------------------------------- |
-| `Policy::sandboxed()` | the defaults above — today's sandbox mode                                             |
-| `Policy::open()`      | every capability on, no allowlist: today's PHP mode                                   |
-| `Policy::trusted()`   | `rawPhp`, `methodCalls`, `superglobals`, `phpVariables` on; everything else still off |
-| `Policy::custom()`    | start from `sandboxed()` and change what you mean to change                           |
-
-The **default is unchanged**: a `new ClarityEngine()` is sandboxed, because
-`Policy::sandboxed()` is the default. A default is a documented promise; the
-boolean was only ever a way to change it.
+`denyFunctions(...)` applies **after** the allowlists and wins. It is the one
+thing an allowlist cannot express, because "everything except `exec`" has no
+positive form:
 
 ```php
-$engine->setPolicy(Policy::custom()
-    ->allowFunctions('strtoupper', 'strtolower', 'number_format', 'count')
-    ->allowFilters('markdown', 'excerpt')
-    ->allowCapability('methodCalls'));       // without giving up anything else
+$engine->setPolicy(Policy::open()->denyFunctions('exec', 'system', 'proc_open'));
 ```
+
+### Presets
+
+| Preset                | Produces                                                                                             |
+| --------------------- | ---------------------------------------------------------------------------------------------------- |
+| `Policy::sandboxed()` | the defaults above — the engine's historical safe mode, and what a bare `new ClarityEngine()` uses   |
+| `Policy::open()`      | every capability on, no allowlist                                                                    |
+| `Policy::trusted()`   | `rawPhp`, `methodCalls`, `superglobals`, `phpVariables` on; `newExpressions`/`staticCalls` still off |
+| `Policy::custom()`    | start from `sandboxed()` and change what you mean to change                                          |
+
+`Policy::trusted()` stops short of `newExpressions` and `staticCalls` on purpose:
+constructing an arbitrary class is a different order of trust from calling a
+method on an object the application already passed in.
+
+### Why `methodCalls` does not imply `phpVariables`
+
+The capabilities are independent, and the two that look most alike are worth
+spelling out. `methodCalls` lets `$obj->name()` compile. `phpVariables` seeds the
+render scope into PHP locals, which is what makes `{{ title }}` and
+`{% php echo $title; %}` the same variable — and it is only meaningful next to
+`rawPhp`.
+
+Because `$obj->m()` compiles to `$__c_va['obj']->m()` unless `phpVariables` is
+also on, granting `methodCalls` **alone** does not require the scope to be
+seeded, and does not seed it. A policy can therefore hand a template the ability
+to call methods without also handing it a frame of PHP locals to scribble on.
 
 ### Why `variableVariables` defaults on
 
-Because denying it does not achieve anything. `$$name` and `${expr}` resolve
-against the render scope and loop locals in **both** modes, and the engine's own
-`__c_`-prefixed namespace is protected by the binding order in the compiled body
-rather than by rejecting the syntax — so a template that uses the form reaches
-nothing it could not already reach.
-
-Latte is _stricter_ here than Clarity is: its sandbox rejects `${expr}` outright
-with "Forbidden variable variables.", while Clarity allows the form and relies on
-the scope being closed. That is a real difference and it is deliberate, because
-the two guards protect different things — Latte's guard is about syntax, and
-Clarity's is about what the syntax can name.
+Because denying it achieves nothing. `$$name` and `${expr}` resolve against the
+render scope and loop locals under every policy, and the engine's own
+`__c_`-prefixed frame is protected by the binding order in the compiled body
+rather than by rejecting the syntax — so the form reaches nothing a literal name
+could not already reach.
 
 It exists as a capability so an application can be explicit, not because the
-engine needs it.
+engine needs it. It is deliberately **not** counted as "reaching PHP" for
+[the coarse question](#the-coarse-question), because turning it off does not make
+a template any less able to run PHP.
+
+### `superglobals` is genuinely separate
+
+Without the capability, a superglobal name is an ordinary scope read of a name
+the scope does not hold, so `{{ _SERVER }}` throws — **even when `phpVariables`
+is granted**, which is the case that matters:
+
+```php
+// Refused: no superglobals capability, so this is a scope read of an absent name
+$engine->setPolicy(Policy::custom()->allowCapability('phpVariables'));
+
+// Granted: the name now means PHP's own variable, whatever the scope holds
+$engine->setPolicy(Policy::custom()->allowCapability('superglobals'));
+```
+
+The second half is load-bearing. Without it, a template would reach every
+superglobal through the seeded-local form the moment `phpVariables` was granted,
+and the two capabilities would really be one.
+
+Only the known names count — `GLOBALS`, `_SERVER`, `_GET`, `_POST`, `_FILES`,
+`_COOKIE`, `_SESSION`, `_REQUEST`, `_ENV`. `_SERVERX` is an ordinary variable.
+
+### `newExpressions` and `staticCalls`
+
+These are the two capabilities that required real compiler work rather than a
+flag, because neither construct was usable before: the tokenizer emitted the
+leading `\` of a fully qualified name as a stray character, so `new DateTime()`
+and `DateTime::createFromFormat(...)` produced
+`syntax error, unexpected fully qualified name`.
+
+Class names are now read by a dedicated handler and compiled to a genuinely
+**fully qualified** form (`\DateTime`). That is not cosmetic: a compiled template
+is a plain class in the global namespace with no `use` statements, so an
+unqualified name would resolve by luck. Emitting the separator makes the
+resolution explicit and independent of where the engine lives.
+
+`instanceof` is the exception among the class-name constructs. It takes a class
+name because that is what the operator means, it reaches nothing the scope did
+not already hold, and it therefore works under **every** policy:
+
+```twig
+{% if order instanceof App\Order %}…{% endif %}
+```
+
+A class name in any other position (`{{ Foo\Bar }}`) is reported rather than
+silently compiled.
 
 ---
 
@@ -126,37 +159,40 @@ engine needs it.
 ```php
 // Fluent — the primary shape
 $policy = Policy::custom()
-    ->allowFunctions(...)
-    ->allowFilters(...)
-    ->allowCapability(...)
-    ->denyCapability(...);
+    ->allowCapability('methodCalls', 'superglobals')
+    ->denyCapability('variableVariables')
+    ->allowFunctions('strtoupper', 'count')
+    ->allowFilters('markdown')
+    ->denyFunctions('exec');
 
 // Array — for config files, which cannot call methods
 $policy = Policy::fromArray([
-    'capabilities' => ['methodCalls' => true],
-    'functions'    => ['strtoupper', 'count'],
-    'filters'      => ['markdown'],
+    'capabilities'    => ['methodCalls' => true],
+    'functions'       => ['strtoupper', 'count'],
+    'filters'         => ['markdown'],
+    'deniedFunctions' => ['exec'],
 ]);
 ```
 
-The array form is what an `env.php` or a framework config can express, and it
-is the same object: `toArray()` round-trips, so a policy can be dumped into a
-config file and read back.
+The array form is what an `env.php` or a framework config can express, and it is
+the same object: `toArray()` round-trips. Every key and every capability name is
+validated, so a typo is refused rather than silently ignored — a policy that drops
+a rule the author wrote is worse than one that refuses to load.
+
+`fromArray()` starts from `sandboxed()`, so a config only has to name what it
+changes.
 
 ### Engine integration
 
 ```php
 $engine->setPolicy(Policy::sandboxed());   // the default
 $engine->setPolicy(Policy::open());        // was: setSandboxMode(false)
-$policy = $engine->getPolicy();            // inspectable, always resolves to a real object
+$engine->setPolicy(['capabilities' => ['rawPhp' => true]]);   // array form
+$policy = $engine->getPolicy();            // always resolves to a real object
 ```
 
-There is no `setSandboxMode()`. Its removal is a **breaking change**, so it goes
-with a minor-version bump on `0.x` and a migration note.
-
-If a coarse predicate is still wanted, `$engine->getPolicy()->isOpen()` answers
-it from the policy, so the question keeps an answer without the flag keeping a
-second source of truth.
+`setPolicy()` accepts either form; `getPolicy()` never returns null, because a
+freshly built engine answers with `Policy::sandboxed()`.
 
 ### `allowFunctions()` vs `addFunction()`
 
@@ -164,99 +200,31 @@ They are different statements and both are needed:
 
 - `addFunction('upper', $fn)` registers a **callable** under a name. Existing
   API, unchanged.
-- `allowFunctions('strtoupper')` **permits a PHP function to be called by its
-  own name**, without registering anything.
+- `allowFunctions('strtoupper')` **permits a PHP function to be called by its own
+  name**, without registering anything.
 
 A name that is registered _and_ allowed is a registered callable. A name that is
 allowed and not registered calls the PHP function of that name. A name that is
-neither stays a compile-time error.
+neither is a compile-time error. Registered names always win over a PHP function
+of the same name, in every policy.
 
----
+### The coarse question
 
-## A security finding, found in this review and FIXED
+`isSandboxed()` survives on the engine, reading the policy, and
+`$policy->isOpen()` answers the rest:
 
-Reading the engine back for this proposal surfaced a defect that is not part of
-the policy design and could not be fixed by it. It is recorded here because it
-was found here.
+| Method                   | True when                                                             |
+| ------------------------ | --------------------------------------------------------------------- |
+| `$policy->isOpen()`      | every capability is on **and** neither allowlist restricts anything   |
+| `$policy->isSandboxed()` | no capability that reaches PHP is on                                  |
+| `$policy->allowsPhp()`   | a capability that reaches PHP is on, **or** an allowlist is non-empty |
 
-**A sandboxed template could read any file the PHP process could read.**
-
-```twig
-{% include "../../../../etc/passwd.clarity.html" %}
-{% extends "C:/secrets/config.clarity.html" %}
-```
-
-Both **compiled**, so the file's contents were read at compile time and compiled
-into the cached class, ready to be printed. Sandbox mode was on (the default)
-throughout.
-
-The cause was two permissive checks in series, neither of which constrained the
-path:
-
-- `CompilerCoreTrait::resolveLogicalName()` validated only **characters**:
-  `/^[\w.\-\/:]+$/u`. `.` and `/` are both in the class, so `../` passed by
-  construction — the check was written to stop shell metacharacters, not
-  traversal.
-- `Template/FileLoader::resolveName()` then accepted an absolute path (leading
-  `/`, a Windows drive, a UNC share) or a `./`-relative path **verbatim**, and
-  otherwise mapped `.` to `/`. Nothing compared the result against the view path.
-
-One caveat that mattered when reproducing it: the loader appends the configured
-extension, so a traversal only found a file whose name already ended in it
-(`.clarity.html`). A test against `/etc/passwd` "passes" for the wrong reason;
-the vector was real for any file that matched the extension.
-
-### The fix
-
-The loader no longer decides _what to strip_; it decides _what to accept_. A
-name is split on `/` (with `.` and `\` read as the same separator, so
-`admin.user`, `admin/users` and `admin\users` are one name) and every segment
-must be a plain name:
-
-| Rejected                 | Because                                                                                     |
-| ------------------------ | ------------------------------------------------------------------------------------------- |
-| `/etc/passwd`            | absolute                                                                                    |
-| `C:/x`, `\\server\share` | absolute                                                                                    |
-| `../secret`              | a `..` segment                                                                              |
-| `admin/../../secret`     | a `..` segment, anywhere in the name                                                        |
-| `admin//user`, `''`      | an empty segment — it would collapse in the filesystem while remaining a distinct cache key |
-
-Because no surviving segment can be `.` or `..`, the path **cannot** climb out,
-whatever the spelling. That is the property worth having: it is a check on the
-outcome, not a list of dangerous spellings somebody has to remember to extend.
-
-`resolveName()` throws a `ClarityException` naming the name, and the two
-character checks stayed in the compiler as a second layer.
-
-**Absolute template names are gone entirely.** They were documented, and they
-were the whole of the risk: a template name can be derived from a request, and a
-template can be stored in a database, so accepting one meant accepting an
-arbitrary file reader. A host that genuinely wants a loader rooted elsewhere
-says so in configuration — `new FileLoader('/their/root')` — where the base path
-is the root and the rules above apply to it unchanged.
-
-### What this means for reaching another tree
-
-Nothing, if it was being done correctly: `addNamespace()` is the supported way,
-and an explicit namespace is visible in the configuration rather than encoded in
-a template name. What is no longer possible is a template _naming its way_ into
-an arbitrary directory.
-
-**Latte is not vulnerable in the same way, by construction**: it has no path
-syntax in templates at all — `{include}` was removed from the language, and its
-safe policy excludes `include`, `extends`, `layout` and `import`. Clarity's
-`{% include %}` deliberately takes only a string literal (`RE_INCLUDE`), so no
-expression could _build_ a path — but the literal itself was unconstrained, which
-was the whole of the problem. It is now constrained.
-
-Tests: `tests/Engine/LoadPathSecurityTest.php` (19 cases) pins every escape form
-above, checks the refusal through the engine rather than only through the loader,
-and asserts that `admin.user` and `admin/user` still resolve to the same file.
-
-This is orthogonal to the flags: no capability setting changes it, and turning
-PHP mode off does not turn it off. It needs its own fix in the loader
-(confine resolved paths to the view base, rejecting absolute and UNC forms), and
-its own tests.
+`allowsPhp()` is the honest middle answer and the one the compiler asks: it gates
+a bare call to an unregistered name and a filter step falling back to a PHP
+function. A **non-empty allowlist counts as reaching PHP**, because listing names
+is the explicit statement "these PHP functions may be used" — otherwise
+`Policy::sandboxed()->allowFunctions('count')` would be a grant that grants
+nothing.
 
 ---
 
@@ -264,230 +232,198 @@ its own tests.
 
 ### Every rejection is a compile-time `ClarityException`
 
-True for capabilities, allowlists, **bare function calls**, and — since the
-defect below was fixed — **filter steps** as well. A template that violates its
-policy does not compile, so the failure happens at the deploy that introduced it
-rather than on a request.
+True for capabilities, allowlists, bare function calls and filter steps. A
+template that violates its policy does not compile, so the failure happens at the
+deploy that introduced it rather than on a request.
 
-**Filter steps used to be the exception, and no longer are.** A `|>` name that
-was not registered compiled to a lookup in the runtime callable table and failed
-on the first render, reporting:
-
-```
-Variable "strtoupper" is not defined in this context
-```
-
-It named a variable the template never wrote, so the author was told to fix
-something that did not exist. The bare-call path had always done this correctly:
-
-```
-Call to unregistered function in context '…'. Register it via addFunction() first.
-```
-
-It is now rejected at compile time, in the same place and for the same reason,
-because sandbox mode leaves nothing for an unregistered name to fall back to —
-the open-mode branch is the only other resolution path and it is unreachable
-while the sandbox is on. "Not registered" and "cannot ever resolve" are the same
-statement, so the compiler can act on it.
+Filter steps used to be the exception: a `|>` name that resolved to no registered
+filter compiled to a lookup in the runtime callable table and failed on the first
+render, reporting `Variable "strtoupper" is not defined in this context` — naming
+a variable the template never wrote. The check can be made at compile time
+because a policy that reaches no PHP leaves _nothing_ for an unregistered name to
+fall back to, so "not registered" and "cannot ever resolve" are the same
+statement.
 
 ### The message must name the remedy
 
-Every rejection says what to change:
+Every rejection says what to change.
 
-| Situation                    | Message                                                                                                                                                                                                                    |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| unregistered **function**    | `Call to unregistered function in context '…'. Register it via addFunction() first.`                                                                                                                                       |
-| unregistered **filter step** | `Filter 'strtoupper' is not registered, and the sandbox is enabled, so there is nothing for it to resolve to. Register it with addFilter(), or call setSandboxMode(false) to let a PHP function of the same name be used.` |
-| blocked function (PHP mode)  | `Function 'x' is blocked in PHP mode. Allow it by removing it from the deny-list.`                                                                                                                                         |
+| Situation                         | Message                                                                                                                                                                                                                               |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| unregistered **function**         | `Call to unregistered function in context '…'. Register it via addFunction() first.`                                                                                                                                                  |
+| unregistered **filter step**      | `Filter 'x' is not registered, and this policy does not allow a template to reach PHP, so there is nothing for it to resolve to. Register it with addFilter(), or grant a capability to let a PHP function of the same name be used.` |
+| a **denied or unlisted** function | `Function 'x' is not allowed by this policy: it is not in the function allowlist, or it is denied. Add it with allowFunctions().`                                                                                                     |
+| an **unlisted filter**            | `Filter 'x' is not registered and is not in the policy's filter allowlist. Add it with allowFilters(), or register it with addFilter().`                                                                                              |
+| a **denied capability**           | `'{% php %}' is not allowed by this policy. Grant the 'rawPhp' capability to allow it.`                                                                                                                                               |
 
-The filter message names both remedies rather than one because in sandbox mode
-there are genuinely two, and which one is right depends on whether the author
-wants a template filter or a PHP function.
+The filter messages name both remedies rather than one, because there genuinely
+are two and which is right depends on whether the author wants a template filter
+or a PHP function.
 
 ### A policy change invalidates the compiled cache
 
-The compiled class already records `$sandboxCompiled`, and the cache compares
-it — which is what makes flipping the flag safe today. A policy is the same
-class of input, so it needs the same treatment: the compiled class records a
-**digest** of the effective policy, and a mismatch recompiles.
+A compiled template records a **digest** of the effective policy, and the loader
+recompiles on a mismatch. This is what makes changing a policy safe: the cache
+keys on template source only, so a class built under one policy must never be
+served under another.
 
-A digest, not the policy itself: the compiled file is source code that ships to
-a server, and it should not carry a readable inventory of what a template may
-call. It also has to be a digest of the _full_ identity rather than a truncated
-form — a prefix would collide on exactly the policies that differ in their last
-entry.
+A **digest**, not the policy itself: the compiled file is source code that ships
+to a server and should not carry a readable inventory of what a template may
+call. It covers the full identity — every capability and every allowlist entry,
+sorted — so two policies that differ in their last entry cannot collide. That is
+what lets an allowlist change recompile correctly **without** bumping
+`COMPILER_VERSION`.
 
-### Registration order cannot silently narrow the policy
+### Registration order cannot narrow the policy
 
-`allowFunctions('a', 'b')` must not behave differently depending on whether it
-is called before or after the engine's own registration. The policy is resolved
-against the registry **when the template compiles**, so the last policy set
-before a render is the one that applies, and no ordering inside the builder
-changes the outcome.
+`allowFunctions('a', 'b')` behaves the same whether it is called before or after
+the engine's own registration, because the policy is resolved against the
+registry when the template compiles. The last policy set before a render is the
+one that applies.
 
 ---
 
-## Strict types: a separate proposal
+## Strict types
 
-Latte's strict typing is a genuinely different idea from the capability model,
-and it is worth separating them: it is not about _what a template may reach_, it
-is about **what a filter may assume about its input**.
+Latte's strict typing is a different idea from the capability model, and it is
+not implemented here. It is not about _what a template may reach_ but about
+**what a filter may assume about its input**:
 
 ```twig
-{{ items |> upper }}       {# items is a list — a mistake in any engine #}
-{{ 42 |> upper }}          {# an integer: Latte throws, Clarity and Twig coerce #}
+{{ 42 |> upper }}    {# an integer reaching a string filter #}
 ```
 
-Latte is stricter here and the strictness is defensible — `upper` on an integer
-is almost always a template bug, and a `TypeError` says so at the point of the
-mistake instead of rendering `42` and looking fine.
+Latte throws a `TypeError`; Clarity renders `42` and looks fine. The mechanism is
+narrower than it looks: Latte does not check at compile time (it cannot — the type
+is unknown until a value exists). It emits `declare(strict_types=1)` into the
+compiled template and declares `upper(Stringable|string|null $s)`, so PHP throws
+at the call boundary. All of the strictness is PHP's, and all of it is decided by
+what gets emitted — zero render-time cost.
 
-**The mechanism is narrower than it looks.** Latte does not check types at
-compile time because it cannot: the type is unknown until a value exists. What
-it actually does is emit `declare(strict_types=1)` into the compiled template,
-and declare its own filter signature `upper(Stringable|string|null $s)`. PHP then
-throws at the call boundary because strict mode forbids the `int` → `string`
-coercion. All the strictness is PHP's, and all of it is decided at compile time
-by what gets emitted.
-
-**Clarity is closer to that than it looks, and further from it in one way that
-matters.** Clarity's compiled template does _not_ declare strict types, so PHP
-coerces: `{{ 42 |> upper }}` renders `42` and looks fine. But Clarity's built-in
-filters do not simply pass the value through — `upper` compiles to
+Clarity is closer to that than it looks, and further in one way that matters. A
+compiled template does **not** declare strict types, so PHP coerces. But Clarity's
+built-in filters do not pass the value through: `upper` compiles to a hard cast
+written into the emitted code,
 
 ```php
 \mb_strtoupper((string) {1})
 ```
 
-a **hard cast written into the emitted code**, with no runtime table lookup and
-no strict mode needed. Every inline filter is written this way. That is the
-interesting asymmetry:
+so a built-in filter silently coerces a wrong type into a right one. The
+asymmetry worth stating is:
 
 > Clarity's built-in filters are cast-based and therefore never throw;
-> a user-registered or PHP-mode filter receives the raw value and is coerced by
+> a registered or PHP-function filter receives the raw value and is coerced by
 > PHP. Latte makes **all** of them throw. Neither engine checks anything at
 > runtime — the difference is entirely in what each compiler emits.
 
-So a `strictTypes` setting is cheap for us in a way it is not for a design that
-would check at runtime. The options, in order of how much they cost the render
-path:
-
-1. **Nothing.** Cast, as the built-in filters already do. `{{ 42 |> upper }}`
-   renders. This is today.
-2. **Emit `declare(strict_types=1)` in the compiled template** and declare filter
-   signatures strictly, for a `{{ 42 |> upper }}` that throws. Zero render-time
-   cost — it changes compiled output and nothing else — which is exactly how
-   Latte does it.
-3. **A runtime type check per filter**, deferring the decision to render time.
-   Correct for cases a signature cannot describe, and the one approach this
-   proposal deliberately avoids.
-
-**Recommendation: option 2, as a policy capability.** It is the only option that
-catches the mistake in the example (an int reaching a string filter) without
-adding a single instruction to the render path, and it is the same mechanism the
-engine it is being compared against uses, so the comparison stays honest. It is
-strictly better than where Clarity is now: today a built-in filter casts a wrong
-type into a right one silently, which is the outcome the example is complaining
-about.
-
-It should land **after** the capability work, for two reasons: the emitted-code
-path is the one part of the compiler with no policy equivalent today
-(`$sandboxCompiled` is a single boolean and strictness would be its second
-flag), and the cache digest has to be extended for it either way.
-
-> The honest comparison to publish, if this lands, is that both engines make the
-> mistake visible at the same moment — a thrown `TypeError` — and neither pays
-> for it at render time. Clarity's built-in filters would then differ from
-> Latte's only in being cast-based: they coerce the type they can safely coerce
-> and throw on the one they cannot.
+So a `strictTypes` setting would be cheap for us: emit `declare(strict_types=1)`
+and declare filter signatures strictly. It lands **after** the capability work,
+because it changes emitted code rather than reach, and because the digest already
+has the shape to carry it.
 
 ---
 
-## Mapping the existing API onto the policy
+## Mapping the old API
 
-| Existing API                      | Expressed as policy                                                   |
-| --------------------------------- | --------------------------------------------------------------------- |
-| `setSandboxMode(true/false)`      | **removed** — `setPolicy(Policy::sandboxed())` / `Policy::open()`     |
-| `isSandboxed()`                   | **removed** — `getPolicy()->isOpen()` answers the same question       |
-| `setDeniedFunctions(['exec', …])` | a **denylist**, which today applies in PHP mode only                  |
-| `addFilter()`, `addFunction()`    | registration, not permission — unchanged                              |
-| `COMPILER_VERSION`                | bumped once; the policy digest handles every subsequent policy change |
+| Old API                           | Express with                                                                |
+| --------------------------------- | --------------------------------------------------------------------------- |
+| `setSandboxMode(true)`            | `setPolicy(Policy::sandboxed())` — or just the default                      |
+| `setSandboxMode(false)`           | `setPolicy(Policy::open())`                                                 |
+| `['sandbox' => true/false]`       | `['policy' => Policy::sandboxed()/open()]`                                  |
+| `isSandboxed()`                   | kept on the engine; `getPolicy()->isSandboxed()` / `isOpen()` for the parts |
+| `setDeniedFunctions(['exec', …])` | `setPolicy(Policy::open()->denyFunctions('exec', …))`                       |
+| `getDeniedFunctions()`            | `getPolicy()->deniedFunctions()`                                            |
+| `['deniedFunctions' => [...]]`    | `['policy' => ['deniedFunctions' => [...]]]`                                |
 
-Removing the two boolean methods is the only **breaking** part of this proposal.
-Everything else is additive. On `0.x` that is a minor bump and a migration note;
-the replacement is a one-line change at each call site.
-
-`setDeniedFunctions()` is the one that needs a decision. It exists because
-`Registry::DEFAULT_DENIED_FUNCTIONS` is empty — blocking names in PHP mode was
-offered as an application-chosen guardrail. In a policy world the allowlist
-supersedes it: `allowFunctions(...)` is the same idea stated positively, and it
-works in both modes rather than only where the sandbox is already off. The
-denylist should stay as a thin alias while it is in use, and should gain a
-deprecation note pointing at `allowFunctions()`.
-
----
-
-## Implementation sketch
-
-| File                                            | Change                                                                        |
-| ----------------------------------------------- | ----------------------------------------------------------------------------- |
-| `src/Engine/Policy.php`                         | new: capabilities, allowlists, presets, `fromArray()`/`toArray()`, `digest()` |
-| `src/Engine/Registry.php`                       | expose the registered filter/callable names a policy resolves against         |
-| `src/ClarityEngineTrait.php`                    | `setPolicy()`/`getPolicy()`; delete `setSandboxMode()`/`isSandboxed()`        |
-| `src/Engine/Compiler/CompilerCoreTrait.php`     | read capabilities where `$this->sandboxMode` is read today                    |
-| `src/Engine/Compiler/DirectiveSupportTrait.php` | `{% php %}` on `rawPhp` instead of `!sandboxMode`                             |
-| `src/Engine/Tokenizer/CallableTrait.php`        | bare calls on `functions`, with the current message                           |
-| `src/Engine/Tokenizer/FilterCompilerTrait.php`  | filter steps on `filters`/`functions`, as a compile-time check                |
-| `src/Engine/Tokenizer/ExpressionCoreTrait.php`  | method calls on `methodCalls`                                                 |
-| `src/Engine/Compiler/CodeBuilderTrait.php`      | emit the policy digest beside `$sandboxCompiled`                              |
-| `src/Template/FileLoader.php`                   | **contain resolved paths** (the security finding — separate change)           |
-| `docs/04-advanced-topics.md`                    | move the capability table here and link to it                                 |
-| `docs/09-policy-api.md`                         | this page, minus the status note                                              |
-
-The compile-time checks themselves already exist; most of the work is replacing
-`$this->sandboxMode` with a named capability, which makes each check say what it
-is guarding instead of inferring it from one flag. Two behaviours genuinely
-change: the filter step moves from a runtime failure to a compile-time
-rejection, and calling `setSandboxMode()` stops existing.
+**Only the removal of `setSandboxMode()` is breaking**, and the replacement is a
+one-line change per call site. Keeping it as an alias was rejected deliberately: a
+method that means "set the policy to a preset" is a second way to say one thing,
+and a second way to say one thing is a way for the two to disagree.
 
 ---
 
 ## Deliberately not included
 
-- **A `tags` allowlist.** See [above](#no-tags-allowlist): weakest security
-  story of the three, and a linting concern rather than a policy one.
+- **A `tags` allowlist.** It is the allowlist with the weakest security story:
+  every tag is Clarity's own vocabulary, and none of them reaches anything a
+  filter or a function cannot. Its only real use is keeping a large template
+  surface small, which is a linting concern rather than a policy one. Latte ships
+  one, so the omission is a deliberate difference — Latte's tags are the only
+  place its features appear, whereas Clarity's are covered by capabilities.
 - **Method and property allowlists by class.** This is the one part of Latte's
-  policy that **cannot** be compile-time: whether `$order->total()` is
-  permitted depends on an object that does not exist yet, so Latte resolves it
-  in `RuntimeChecker` on every access. Adopting it would add per-access cost to
-  the mode the benchmark shows is already the slower of the two. `methodCalls`
-  stays the whole of the grant.
-- **A separate read-only mode.** Read-only is a property of the _data_, not of
-  the template, so it belongs to whatever passes the scope in.
-- **Runtime checks of any kind.** See above; the whole design is arranged around
-  this constraint.
+  policy that **cannot** be compile-time: whether `$order->total()` is permitted
+  depends on an object that does not exist yet, so Latte resolves it in a
+  `RuntimeChecker` on every access. Adopting it would add per-access cost to the
+  mode the benchmark shows is already the slower one. `methodCalls` stays the
+  whole of the grant.
+- **A separate read-only mode.** Read-only is a property of the _data_, not of the
+  template, so it belongs to whatever passes the scope in.
+- **Runtime checks of any kind.** The whole design is arranged around this
+  constraint.
 
----
+## Differences from other engines
+
+Worth stating plainly, because the direction is not always in Clarity's favour:
+
+- **Superglobals.** Latte's sandbox permits them: its `SecurityPolicy` has five
+  axes (tags, filters, functions, methods, properties) and no superglobal one, and
+  its variable check rejects only `${this}` and non-string names, so `$_SERVER` is
+  an ordinary variable. Clarity's is stricter here — but the honest framing is
+  that Clarity's strict-access contract covers a template's scope and nothing
+  ambient, not "we block superglobals and others do not".
+- **Includes.** Latte has no path syntax in templates at all (`{include}` was
+  removed and its safe policy excludes `include`/`extends`/`layout`/`import`), so
+  it is not vulnerable to a traversal the way Clarity's literal-only
+  `{% include %}` was before the loader was confined. See
+  [the view path](#the-view-path-is-a-boundary).
+- **Variable variables.** Latte is stricter: its sandbox rejects `${expr}` outright
+  with "Forbidden variable variables." Clarity allows the form and relies on the
+  scope being closed. The two guards protect different things — Latte's is about
+  syntax, Clarity's is about what the syntax can name.
+- **Blade** has no policy at all; it is PHP with a different spelling. **Twig** has
+  one (`SecurityPolicy`: allowed tags/filters/methods/properties/functions), and
+  its `is defined` compiles to `array_key_exists` — the same model Clarity's
+  `is defined` uses.
+
+## The view path is a boundary
+
+Not part of the policy and not fixable by it, but documented here because it is
+the other half of "what can a template reach". A template name may not address a
+file outside the view path:
+
+| Rejected                 | Because                                                                         |
+| ------------------------ | ------------------------------------------------------------------------------- |
+| `/etc/passwd`            | absolute                                                                        |
+| `C:/x`, `\\server\share` | absolute                                                                        |
+| `../secret`              | a `..` segment                                                                  |
+| `admin/../../secret`     | a `..` segment, anywhere in the name                                            |
+| `admin//user`, `''`      | an empty segment — it would collapse on disk while staying a distinct cache key |
+
+The loader splits the name on `/` (with `.` and `\` read as the same separator) and
+requires every segment to be a plain name. Because no surviving segment can be `.`
+or `..`, the path **cannot** climb out, whatever the spelling — the property worth
+having, since it is a check on the outcome rather than a list of dangerous
+spellings somebody has to remember to extend.
+
+**Absolute template names are gone entirely.** They were documented, and they were
+the whole of the risk: a template name can be derived from a request and a
+template can be stored in a database, so accepting one made a name an arbitrary
+file reader. A host that genuinely wants a loader rooted elsewhere says so in
+configuration — `new FileLoader('/their/root')` — where the base path is the root
+and the same rules apply to it.
+
+A custom loader therefore has to apply the same rules itself, which is part of
+`TemplateLoader`'s contract rather than something to discover.
 
 ## Open questions
 
-1. **Should `rawPhp` be a capability, or the opposite of one?** Latte has no
-   raw-PHP tag at all, so its policy never needs to express this. Ours does,
-   which is why it is a capability here.
-2. **Does `superglobals` want an allowlist** (`['_SERVER']`) rather than a
-   boolean? The cost is a second allowlist to explain; the benefit is that a
-   template reading `$_SERVER['HTTP_HOST']` no longer implies `$_ENV`.
-3. **Where does `strictTypes` belong** — in the policy, or as its own engine
-   setting? It is the only entry that changes emitted code rather than reach.
-   It is also the only one whose _removal_ would change already-compiled output,
-   which makes it a candidate for the separate "compilation" group.
-4. **Should the path rules live in `FileLoader`, or in the compiler?** They are
-   in the loader (with the character checks still in the compiler as a second
-   layer), because the loader is what touches the filesystem. A custom loader
-   therefore has to apply the same rules itself — worth documenting in
-   `TemplateLoader`'s contract rather than leaving to be discovered.
-5. **Should `superglobals` be presented as an advantage at all?** Latte's
-   sandbox permits them, so this is a difference rather than a win. The honest
-   framing is "Clarity's strict-access contract covers a template's scope and
-   nothing ambient; a template cannot read process state unless you say so" —
-   not "we block superglobals and others do not".
+1. **Does `superglobals` want an allowlist** (`['_SERVER']`) rather than a boolean?
+   The cost is a second allowlist to explain; the benefit is that a template
+   reading `$_SERVER['HTTP_HOST']` no longer implies `$_ENV`.
+2. **Where does `strictTypes` belong** — in the policy, or as its own engine
+   setting? It is the only candidate that changes emitted code rather than reach,
+   which makes it a candidate for a separate "compilation" group.
+3. **Should `functions` and `filters` be one allowlist?** They are separate because
+   a filter name need not be a function and the remedies differ, but two lists is
+   two things to explain.

@@ -89,18 +89,36 @@ Named arguments
 
 ---
 
-### setSandboxMode() · <small>[🗎](../../src/Engine/Tokenizer.php#L247)</small>
+### __construct() · <small>[🗎](../../src/Engine/Tokenizer.php#L268)</small>
 
-`public function setSandboxMode(bool $sandboxed): void`
+`public function __construct(): mixed`
 
-Enable or disable sandbox mode.  `true` (default) rejects arbitrary PHP
-function and method calls; `false` allows them (see class docs).
+Built from the engine's policy before any compilation.  A Tokenizer that
+was handed no policy compiles as [`Policy::sandboxed()`](Clarity_Engine_Policy.md#sandboxed), so the default
+is safe even for a hand-built tokenizer.
+
+**Return value**
+
+- Type: `mixed`
+
+
+---
+
+### setPolicy() · <small>[🗎](../../src/Engine/Tokenizer.php#L280)</small>
+
+`public function setPolicy(Clarity\Engine\Policy $policy): void`
+
+Set the policy every capability question is answered from.
+
+Also mirrors the deny-list into the flat map the call sites read, so the
+policy stays the single source of truth while the hot paths keep a plain
+array lookup.
 
 **Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
-| `$sandboxed` | bool | - |  |
+| `$policy` | [Policy](Clarity_Engine_Policy.md) | - |  |
 
 **Return value**
 
@@ -109,7 +127,18 @@ function and method calls; `false` allows them (see class docs).
 
 ---
 
-### setLocalRoots() · <small>[🗎](../../src/Engine/Tokenizer.php#L258)</small>
+### getPolicy() · <small>[🗎](../../src/Engine/Tokenizer.php#L291)</small>
+
+`public function getPolicy(): Clarity\Engine\Policy`
+
+**Return value**
+
+- Type: [Policy](Clarity_Engine_Policy.md)
+
+
+---
+
+### setLocalRoots() · <small>[🗎](../../src/Engine/Tokenizer.php#L312)</small>
 
 `public function setLocalRoots(bool $enabled): void`
 
@@ -131,18 +160,7 @@ compiler that seeds no locals never emits a local read.
 
 ---
 
-### isSandboxed() · <small>[🗎](../../src/Engine/Tokenizer.php#L264)</small>
-
-`public function isSandboxed(): bool`
-
-**Return value**
-
-- Type: `bool`
-
-
----
-
-### setDeniedFunctions() · <small>[🗎](../../src/Engine/Tokenizer.php#L275)</small>
+### setDeniedFunctions() · <small>[🗎](../../src/Engine/Tokenizer.php#L324)</small>
 
 `public function setDeniedFunctions(array $names): void`
 
@@ -162,7 +180,7 @@ names; empty (the default) allows every PHP function.
 
 ---
 
-### setRegistry() · <small>[🗎](../../src/Engine/Tokenizer.php#L291)</small>
+### setRegistry() · <small>[🗎](../../src/Engine/Tokenizer.php#L343)</small>
 
 `public function setRegistry(Clarity\Engine\Registry $registry): void`
 
@@ -179,7 +197,7 @@ names; empty (the default) allows every PHP function.
 
 ---
 
-### setLocalVars() · <small>[🗎](../../src/Engine/Tokenizer.php#L305)</small>
+### setLocalVars() · <small>[🗎](../../src/Engine/Tokenizer.php#L357)</small>
 
 `public function setLocalVars(array $localVars): void`
 
@@ -440,7 +458,7 @@ arguments (`identifier: phpExpr`). PHP validates names and arity at runtime.
 
 ---
 
-### varChainToPhp() · <small>[🗎](../../src/Engine/Tokenizer/VarChainTrait.php#L656)</small>
+### varChainToPhp() · <small>[🗎](../../src/Engine/Tokenizer/VarChainTrait.php#L691)</small>
 
 `public function varChainToPhp(string $chain): string`
 
