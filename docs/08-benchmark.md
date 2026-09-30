@@ -37,12 +37,12 @@ Generated from the same rows the charts above are drawn from. Rows are ordered b
 
 | Engine | First render (ms) | Mean (ms) | Median (ms) | Min (ms) | p95 (ms) | Retained (MB) | Peak (MB) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Clarity | 14.558 | 0.322 | 0.313 | 0.291 | 0.369 | 1.10 | 2.64 |
-| Stempler | 28.456 | 0.336 | 0.326 | 0.307 | 0.387 | 1.45 | 2.00 |
-| Native | 0.623 | 0.353 | 0.343 | 0.320 | 0.405 | 0.91 | 1.52 |
-| Plates | 2.412 | 0.408 | 0.395 | 0.371 | 0.472 | 0.98 | 1.52 |
-| Blade | 30.775 | 0.628 | 0.612 | 0.567 | 0.722 | 1.69 | 2.12 |
-| Twig | 35.285 | 0.852 | 0.828 | 0.784 | 0.983 | 1.65 | 2.15 |
+| Clarity | 15.653 | 0.322 | 0.313 | 0.293 | 0.370 | 1.17 | 1.59 |
+| Stempler | 30.288 | 0.337 | 0.326 | 0.306 | 0.388 | 1.45 | 2.00 |
+| Native | 0.591 | 0.353 | 0.342 | 0.321 | 0.398 | 0.91 | 1.52 |
+| Plates | 2.392 | 0.406 | 0.394 | 0.368 | 0.471 | 0.98 | 1.52 |
+| Blade | 33.222 | 0.639 | 0.621 | 0.578 | 0.747 | 1.69 | 2.12 |
+| Twig | 35.839 | 0.854 | 0.829 | 0.782 | 0.991 | 1.65 | 2.15 |
 
 ## Objects
 
@@ -72,12 +72,12 @@ Generated from the same rows the charts above are drawn from. Rows are ordered b
 
 | Engine | First render (ms) | Mean (ms) | Median (ms) | Min (ms) | p95 (ms) | Retained (MB) | Peak (MB) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Clarity | 13.574 | 0.112 | 0.106 | 0.091 | 0.137 | 0.98 | 2.54 |
-| Native | 0.334 | 0.118 | 0.111 | 0.099 | 0.144 | 0.81 | 1.52 |
-| Stempler | 23.562 | 0.123 | 0.116 | 0.105 | 0.148 | 1.32 | 1.52 |
-| Plates | 1.914 | 0.147 | 0.139 | 0.123 | 0.181 | 0.88 | 1.52 |
-| Blade | 31.156 | 0.328 | 0.316 | 0.293 | 0.391 | 1.59 | 2.01 |
-| Twig | 35.474 | 0.621 | 0.600 | 0.563 | 0.722 | 1.54 | 1.76 |
+| Clarity | 15.339 | 0.111 | 0.105 | 0.095 | 0.133 | 1.05 | 1.52 |
+| Native | 0.417 | 0.117 | 0.111 | 0.093 | 0.140 | 0.81 | 1.52 |
+| Stempler | 22.398 | 0.123 | 0.116 | 0.107 | 0.149 | 1.32 | 1.52 |
+| Plates | 2.010 | 0.148 | 0.139 | 0.122 | 0.181 | 0.88 | 1.52 |
+| Blade | 30.908 | 0.329 | 0.317 | 0.293 | 0.394 | 1.59 | 2.01 |
+| Twig | 34.159 | 0.619 | 0.598 | 0.568 | 0.720 | 1.54 | 1.76 |
 
 ## What the columns are
 
@@ -88,15 +88,15 @@ Generated from the same rows the charts above are drawn from. Rows are ordered b
 
 Two engines sitting next to each other at the top of a table are not thereby ranked: a difference of a few percent is still within the spread of a single engine's own runs, and a gap that small is a tie, not a win.
 
-**Environment** — PHP 8.3.33 · Linux 6.8.0-139-generic · SAPI cli · OPcache (`opcache.enable_cli`): yes · Memory probe: `opcache.enable_cli=1 with a primed shared segment (probe children run opcache-warm)`
+**Environment** — PHP 8.3.33 · Linux 6.8.0-139-generic · SAPI cli · OPcache (`opcache.enable_cli`): yes · Memory probe: `a fresh process with opcache.enable_cli=1 but a per-process CLI segment, so engine source is compiled in that process`
 
 **Budget** — 10,000 renders × 30 runs, 200 items per render
 
 **Method** — Steady-state timings: the render loop for each (engine, page) cell runs in its own fresh process against a warm cache: one untimed warm-up render, then runs x iterations-per-run timed renders. No order: each (engine, page) cell is measured in its own process, so measurement order cannot affect a cell. The first render was measured as one render in a fresh process with a cold template cache: engine class loading, template compile, cache write and one render.
 
-**Engines** — Clarity dev-main (0b818ad+dirty) · NativeEngine (Azera) dev-main (v0.1.0+dirty) · Plates 3.6.0 · Blade 12.69.2 · Twig 3.27.0 · Stempler 3.17.2
+**Engines** — Clarity dev-main (0a1c64d) · NativeEngine (Azera) dev-main (v0.1.0+dirty) · Plates 3.6.0 · Blade 12.69.2 · Twig 3.27.0 · Stempler 3.17.2
 
-_Measured 2026-09-29T16:02:40+00:00_
+_Measured 2026-09-29T22:42:39+00:00_
 
 Every chart on this page is a plain SVG generated from the run's own JSON, so a number and a diagram cannot disagree. The full published report, including the headline page and each shape's live page: <https://sailantis.github.io/azera-competition/benchmarks/view-engine.html>
 <!-- view-engine:end -->
