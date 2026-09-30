@@ -156,7 +156,7 @@ $template = $engine->render($_GET['template'] ?? 'home', $data);
 
 That guard is not a substitute for validating input, for two reasons: a name that
 is refused is a failed request rather than a sensible page, and a name that
-resolves *inside* the view path can still be one the visitor was never meant to
+resolves _inside_ the view path can still be one the visitor was never meant to
 reach. Allowlist it as well:
 
 **Recommended:**

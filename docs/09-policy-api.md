@@ -108,7 +108,7 @@ against the render scope and loop locals in **both** modes, and the engine's own
 rather than by rejecting the syntax — so a template that uses the form reaches
 nothing it could not already reach.
 
-Latte is *stricter* here than Clarity is: its sandbox rejects `${expr}` outright
+Latte is _stricter_ here than Clarity is: its sandbox rejects `${expr}` outright
 with "Forbidden variable variables.", while Clarity allows the form and relies on
 the scope being closed. That is a real difference and it is deliberate, because
 the two guards protect different things — Latte's guard is about syntax, and
@@ -208,18 +208,18 @@ the vector was real for any file that matched the extension.
 
 ### The fix
 
-The loader no longer decides *what to strip*; it decides *what to accept*. A
+The loader no longer decides _what to strip_; it decides _what to accept_. A
 name is split on `/` (with `.` and `\` read as the same separator, so
 `admin.user`, `admin/users` and `admin\users` are one name) and every segment
 must be a plain name:
 
-| Rejected                | Because                                              |
-| ----------------------- | ---------------------------------------------------- |
-| `/etc/passwd`           | absolute                                             |
-| `C:/x`, `\\server\share`| absolute                                             |
-| `../secret`             | a `..` segment                                       |
-| `admin/../../secret`    | a `..` segment, anywhere in the name                 |
-| `admin//user`, `''`     | an empty segment — it would collapse in the filesystem while remaining a distinct cache key |
+| Rejected                 | Because                                                                                     |
+| ------------------------ | ------------------------------------------------------------------------------------------- |
+| `/etc/passwd`            | absolute                                                                                    |
+| `C:/x`, `\\server\share` | absolute                                                                                    |
+| `../secret`              | a `..` segment                                                                              |
+| `admin/../../secret`     | a `..` segment, anywhere in the name                                                        |
+| `admin//user`, `''`      | an empty segment — it would collapse in the filesystem while remaining a distinct cache key |
 
 Because no surviving segment can be `.` or `..`, the path **cannot** climb out,
 whatever the spelling. That is the property worth having: it is a check on the
@@ -239,20 +239,19 @@ is the root and the rules above apply to it unchanged.
 
 Nothing, if it was being done correctly: `addNamespace()` is the supported way,
 and an explicit namespace is visible in the configuration rather than encoded in
-a template name. What is no longer possible is a template *naming its way* into
+a template name. What is no longer possible is a template _naming its way_ into
 an arbitrary directory.
 
 **Latte is not vulnerable in the same way, by construction**: it has no path
 syntax in templates at all — `{include}` was removed from the language, and its
 safe policy excludes `include`, `extends`, `layout` and `import`. Clarity's
 `{% include %}` deliberately takes only a string literal (`RE_INCLUDE`), so no
-expression could *build* a path — but the literal itself was unconstrained, which
+expression could _build_ a path — but the literal itself was unconstrained, which
 was the whole of the problem. It is now constrained.
 
 Tests: `tests/Engine/LoadPathSecurityTest.php` (19 cases) pins every escape form
 above, checks the refusal through the engine rather than only through the loader,
 and asserts that `admin.user` and `admin/user` still resolve to the same file.
-
 
 This is orthogonal to the flags: no capability setting changes it, and turning
 PHP mode off does not turn it off. It needs its own fix in the loader
@@ -295,16 +294,15 @@ statement, so the compiler can act on it.
 
 Every rejection says what to change:
 
-| Situation                    | Message                                                                                                                              |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| unregistered **function**    | `Call to unregistered function in context '…'. Register it via addFunction() first.`                                                  |
+| Situation                    | Message                                                                                                                                                                                                                    |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| unregistered **function**    | `Call to unregistered function in context '…'. Register it via addFunction() first.`                                                                                                                                       |
 | unregistered **filter step** | `Filter 'strtoupper' is not registered, and the sandbox is enabled, so there is nothing for it to resolve to. Register it with addFilter(), or call setSandboxMode(false) to let a PHP function of the same name be used.` |
-| blocked function (PHP mode)  | `Function 'x' is blocked in PHP mode. Allow it by removing it from the deny-list.`                                                    |
+| blocked function (PHP mode)  | `Function 'x' is blocked in PHP mode. Allow it by removing it from the deny-list.`                                                                                                                                         |
 
 The filter message names both remedies rather than one because in sandbox mode
 there are genuinely two, and which one is right depends on whether the author
 wants a template filter or a PHP function.
-
 
 ### A policy change invalidates the compiled cache
 
@@ -481,7 +479,7 @@ rejection, and calling `setSandboxMode()` stops existing.
    template reading `$_SERVER['HTTP_HOST']` no longer implies `$_ENV`.
 3. **Where does `strictTypes` belong** — in the policy, or as its own engine
    setting? It is the only entry that changes emitted code rather than reach.
-   It is also the only one whose *removal* would change already-compiled output,
+   It is also the only one whose _removal_ would change already-compiled output,
    which makes it a candidate for the separate "compilation" group.
 4. **Should the path rules live in `FileLoader`, or in the compiler?** They are
    in the loader (with the character checks still in the compiler as a second
