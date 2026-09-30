@@ -5,7 +5,7 @@ All notable changes to `sailantis/clarity-engine` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] - 2026-09-30
 
 ### Fixed
 
@@ -134,6 +134,7 @@ setSandboxMode(false) to let a PHP function of the same name be used.` The
   removed the documented-but-unimplemented `loop` object.
 - Removed a stale docblock reference to a `castToArray()` that no longer exists.
 
-[Unreleased]: https://github.com/sailantis/clarity-engine/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/sailantis/clarity-engine/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/sailantis/clarity-engine/releases/tag/v0.2.0
 [0.1.1]: https://github.com/sailantis/clarity-engine/releases/tag/v0.1.1
 [0.1.0]: https://github.com/sailantis/clarity-engine/releases/tag/v0.1.0
