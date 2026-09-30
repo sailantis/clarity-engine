@@ -482,6 +482,10 @@ trait OperatorTestTrait
      *
      * The probe is a presence test that never warns, and the value read sits
      * behind a short-circuit `||`, so an absent name is never read.
+     *
+     * `isset()` reports a present-but-null name as absent, deliberately: that is
+     * the one answer a PHP local can give, so it is the only answer both modes
+     * can give together. See {@see presenceProbeFor()}.
      */
     private function buildPresenceTest(string $value, string $call): string
     {
@@ -498,29 +502,28 @@ trait OperatorTestTrait
     }
 
     /**
-     * An `isset()` probe for a compiled access expression, or a `true` fallback
-     * for anything that is not a plain variable/property/key chain (which cannot
-     * appear inside isset()).
+     * A presence probe for a compiled access expression, or a `null` comparison
+     * for anything that cannot appear inside isset().
+     *
+     * `isset()` is the probe for EVERY form, one spelling in both modes. An
+     * earlier version special-cased a bare `$__c_va['name']` with
+     * `array_key_exists()` so that a scope entry holding an explicit `null`
+     * counted as defined. That special case is gone: open mode emits a bare
+     * PHP local for the same name, and no O(1) existence test for a local can
+     * see through null — so the two modes could not agree, and `x is defined`
+     * meant something different depending on a setting the template cannot see.
+     *
+     * The contract is now one sentence: a name counts as defined when it holds a
+     * value other than null. That is also what a local can answer, so both modes
+     * compile to the same expression and a template never has to know the mode.
      */
     private function presenceProbeFor(string $php): string
     {
-        // A bare scope variable is PRESENT when the key exists, even if its
-        // value is null — `array_key_exists` rather than `isset` is what makes
-        // `x is defined` true for an explicitly-null scope entry.
-        if (\preg_match('/^\$__c_va\[\'([^\']*)\'\]$/', $php, $m) === 1) {
-            return 'array_key_exists(\'' . \addslashes($m[1]) . '\', $__c_va)';
-        }
-
-        // A longer chain: any intermediate absence makes it undefined, and a
-        // null leaf is indistinguishable from an absent one, so isset() is the
-        // right probe. Restricted to forms valid inside isset().
+        // A variable or a chain over one (the only forms isset() accepts). One
+        // regex covers both `$__c_va['a']['b']` and open mode's `$a['b']`, so no
+        // branch here depends on the mode.
         $chain = '/^\$[A-Za-z_][A-Za-z0-9_]*(?:(?:\[(?:\'[^\']*\'|-?\d+)\]|->[A-Za-z_][A-Za-z0-9_]*))*$/';
         if (\preg_match($chain, $php) === 1) {
-            return 'isset(' . $php . ')';
-        }
-
-        $chainScope = '/^\$__c_va\[(?:\'[^\']*\'|-?\d+)\](?:(?:\[(?:\'[^\']*\'|-?\d+)\]|->[A-Za-z_][A-Za-z0-9_]*))*$/';
-        if (\preg_match($chainScope, $php) === 1) {
             return 'isset(' . $php . ')';
         }
 

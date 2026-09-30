@@ -792,6 +792,18 @@ safe on a name that was never passed to the template:
 {% if items is not empty %}…{% endif %}
 ```
 
+**`is defined` asks whether a name holds a value other than `null`.** A name that
+was passed as `null` is reported as **not** defined, because the probe is PHP's
+`isset()` — the one existence test that works identically whether the value lives
+in the render scope (sandbox) or in a PHP local (PHP mode). Use `is null` to ask
+about the value instead; the two together still separate all three states:
+
+| `user`       | `user is defined` | `user is null` |
+| ------------ | ----------------- | -------------- |
+| absent       | `false`           | `true`         |
+| `null`       | `false`           | `true`         |
+| `'x'`, `0`   | `true`            | `false`        |
+
 A test is an ordinary expression, so it composes with `and`, `or`, `not`, the
 ternary, and filters:
 

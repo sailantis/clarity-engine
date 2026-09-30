@@ -3,6 +3,8 @@ namespace Clarity\Tests\Engine;
 
 use Clarity\ClarityException;
 use Clarity\Tests\BaseTestCase;
+use Clarity\Tests\TestClarityEngine;
+use Clarity\Tests\TestEnvironment;
 
 /**
  * Twig-style operator tests:
@@ -20,7 +22,8 @@ use Clarity\Tests\BaseTestCase;
  * in sandbox and open mode. The three absence-tolerant tests (`defined`, `null`,
  * `empty`) must NOT throw when the left operand is absent — that is the whole
  * point of them, and the reason they compile to a presence probe rather than a
- * value call.
+ * value call. Because the probe has to be one expression in both modes, it is
+ * `isset()`, which reports a present-but-null name as absent.
  */
 class OperatorTest extends BaseTestCase
 {
@@ -102,12 +105,53 @@ class OperatorTest extends BaseTestCase
         $this->assertSame('N', self::render('op_defined_no'));
     }
 
-    public function testIsDefinedTrueForExplicitNull(): void
+    /**
+     * A name that EXISTS in the scope but holds `null` is reported as NOT defined —
+     * in both modes.
+     *
+     * This reverses the previous contract (`array_key_exists`, so null counted as
+     * defined). That probe could only ever be applied in sandbox mode: open mode
+     * emits a bare PHP local for the same name, and `isset()` on a local cannot see
+     * through null, so the two modes disagreed about a template the template
+     * cannot even see the mode of. `isset` is now the one probe, which makes
+     * `is defined` mean "holds a value other than null" everywhere.
+     *
+     * `is null` is the test that reports presence independently, which is what the
+     * split was protecting — see testIsNullOnNullValue.
+     */
+    public function testIsDefinedFalseForExplicitNull(): void
     {
-        // Present-but-null is DEFINED (the key exists), which is why the probe
-        // uses array_key_exists() rather than isset().
         self::tpl('op_defined_null', '{% if user is defined %}Y{% else %}N{% endif %}');
-        $this->assertSame('Y', self::render('op_defined_null', ['user' => null]));
+        $this->assertSame('N', self::render('op_defined_null', ['user' => null]));
+    }
+
+    public function testIsDefinedFalseForExplicitNullInOpenMode(): void
+    {
+        self::tpl('op_defined_null_open', '{% if user is defined %}Y{% else %}N{% endif %}');
+        $engine = new TestClarityEngine([
+            'viewPath'  => TestEnvironment::viewDir(),
+            'cachePath' => TestEnvironment::cacheDir(),
+            'extension' => 'clarity.html',
+            'sandbox'   => false,
+        ]);
+
+        $this->assertSame('N', $engine->renderPartial('op_defined_null_open', ['user' => null]));
+        $this->assertSame('Y', $engine->renderPartial('op_defined_null_open', ['user' => 'x']));
+        $this->assertSame('Y', $engine->renderPartial('op_defined_null_open', ['user' => 0]));
+        $this->assertSame('N', $engine->renderPartial('op_defined_null_open', []));
+    }
+
+    public function testIsNullReportsPresenceIndependentlyOfIsDefined(): void
+    {
+        // The reason `is null` exists as a separate test: `is defined` cannot
+        // report a present-but-null name, so `is null` and `is not defined`
+        // together still distinguish the three states.
+        self::tpl('op_null_vs_defined', '{% if user is null %}null{% endif %}|'
+            . '{% if user is defined %}defined{% else %}absent{% endif %}');
+
+        $this->assertSame('null|absent', self::render('op_null_vs_defined', ['user' => null]));
+        $this->assertSame('|defined', self::render('op_null_vs_defined', ['user' => 'x']));
+        $this->assertSame('null|absent', self::render('op_null_vs_defined', []));
     }
 
     public function testIsNotDefined(): void
