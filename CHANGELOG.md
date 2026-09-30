@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **A template name can no longer address a file outside the view path.**
+  `FileLoader::resolveName()` accepted an absolute path (leading `/`, a Windows
+  drive, a UNC share) or a `./`-relative path verbatim, and the compiler's
+  character check allowed `.` and `/`, so `{% include "../../../../etc/passwd" %}`
+  and `{% include "C:/secrets/app" %}` both **compiled**, reading the file at
+  compile time and baking its contents into the cached class. A template name is
+  often derived from a request, and a template can be stored in a database, so
+  this made a name an arbitrary file reader — with the sandbox **on**. Resolving
+  now splits the name on `/` (with `.` and `\` as the same separator) and refuses
+  any absolute name or any empty, `.` or `..` segment, so the result cannot leave
+  the base path however it is spelled. **Breaking:** absolute template names are
+  no longer supported; a loader rooted elsewhere is configured as
+  `new FileLoader('/their/root')`, where the base path is the root. See
+  `docs/09-policy-api.md` and `tests/Engine/LoadPathSecurityTest.php`.
+
 ### Changed
 
 - **Internal architecture: the compiler and tokenizer are composed from
