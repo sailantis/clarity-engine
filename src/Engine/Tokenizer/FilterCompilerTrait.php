@@ -253,23 +253,35 @@ trait FilterCompilerTrait
             );
         }
 
-        // An unregistered filter name in SANDBOX mode is rejected HERE, not at
-        // runtime. It used to compile to a `$__c_fn[...]` lookup and fail on the
-        // first render, which reported `Variable "strtoupper" is not defined in
-        // this context` — naming a variable the template never wrote, and
-        // surfacing on a request rather than at the deploy that introduced it.
+        // An unregistered filter name can only resolve to a PHP function, so it is
+        // rejected HERE, at compile time, when the policy does not let a template
+        // reach PHP at all. It used to compile to a `$__c_fn[...]` lookup and fail
+        // on the first render, which reported `Variable "strtoupper" is not
+        // defined in this context` — naming a variable the template never wrote,
+        // and surfacing on a request rather than at the deploy that introduced it.
         //
-        // The check can be made here because sandbox mode leaves NOTHING for an
-        // unregistered name to fall back to: the open-mode branch below is the
-        // only other resolution path, and it is not reachable while the sandbox
-        // is on. So "not registered" and "cannot ever resolve" are the same
+        // The check can be made here because an empty-handed policy leaves NOTHING
+        // for an unregistered name to fall back to: the PHP-function path below is
+        // the only other resolution path, and it is not reachable without a
+        // capability. So "not registered" and "cannot ever resolve" are the same
         // statement, and the message can say what to do about it instead of
         // describing the runtime table it would have consulted.
-        if (!$isRegistered && $this->sandboxMode) {
+        if (!$isRegistered && !$this->policy->allowsPhp()) {
             throw new ClarityException(
-                "Filter '{$name}' is not registered, and the sandbox is enabled, so there is "
-                    . 'nothing for it to resolve to. Register it with addFilter(), or call '
-                    . "setSandboxMode(false) to let a PHP function of the same name be used."
+                "Filter '{$name}' is not registered, and this policy does not allow a template to "
+                    . 'reach PHP, so there is nothing for it to resolve to. Register it with '
+                    . 'addFilter(), or grant a capability to let a PHP function of the same name '
+                    . 'be used.'
+            );
+        }
+
+        // PHP is reachable, so the name gets its chance as a PHP function — but a
+        // non-empty filter allowlist is the complete set of names that get that
+        // chance, so an unlisted one is refused before anything else looks at it.
+        if (!$isRegistered && !$this->policy->allowsFilter($name)) {
+            throw new ClarityException(
+                "Filter '{$name}' is not registered and is not in the policy's filter allowlist. "
+                    . 'Add it with allowFilters(), or register it with addFilter().'
             );
         }
 
@@ -352,7 +364,8 @@ trait FilterCompilerTrait
     {
         if (!$this->isFunctionCallAllowed($name)) {
             throw new ClarityException(
-                "Function '{$name}' is blocked in PHP mode. Allow it by removing it from the deny-list."
+                "Function '{$name}' is not allowed by this policy: it is not in the "
+                    . 'function allowlist, or it is denied. Add it with allowFunctions().'
             );
         }
 

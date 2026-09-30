@@ -1,6 +1,8 @@
 <?php
 namespace Clarity;
 
+use Clarity\Engine\Policy;
+
 /**
  * Clarity Template Engine
  *
@@ -13,7 +15,8 @@ namespace Clarity;
  * ------------
  * - **Compiled & Cached**: Templates compile to PHP classes, leveraging OPcache for performance
  * - **Secure Sandbox**: No arbitrary PHP execution, strict variable access control
- * - **Opt-In PHP Mode**: Disable the sandbox to unleash the full power of PHP (any function, method calls, raw `{% php %}` blocks)
+ * - **Opt-In PHP Mode**: A policy can grant templates the full power of PHP
+ *   (any function, method calls, raw `{% php %}` blocks)
  * - **Auto-escaping**: Built-in XSS protection with automatic HTML escaping
  * - **Template Inheritance**: Reusable layouts via extends/blocks
  * - **Filter Pipeline**: Transform data with chainable filters (|>)
@@ -96,11 +99,12 @@ namespace Clarity;
  * - Execute arbitrary code (no eval, backticks, etc.)
  * - Call methods on objects
  *
- * The sandbox can be disabled on purpose with setSandboxMode(false), which
- * grants templates the full power of PHP (arbitrary function calls, PHP
- * functions as filters, method calls, and {% php %} blocks).  That mode is
- * equivalent to executing arbitrary PHP and is intended for trusted template
- * authors only; see ClarityEngineTrait::setSandboxMode().
+ * What a template may reach is decided by a {@see \Clarity\Engine\Policy}: a set
+ * of capabilities plus two allowlists, resolved entirely at compile time.  An
+ * application that needs one PHP function grants it without giving up the
+ * sandbox (see Policy::custom()); granting the capabilities that reach PHP at
+ * all (rawPhp, phpVariables, methodCalls) is equivalent to executing arbitrary
+ * PHP and is intended for templates written by trusted authors only.
  *
  * @see https://github.com/clarity/engine Documentation and examples
  */
@@ -126,11 +130,9 @@ class ClarityEngine
      * - `namespaces`: associative array of namespace => path
      * - `cachePath`: path to compiled template cache (applied after init)
      * - `debug`: bool to enable debug mode
-     * - `sandbox`: bool — true (default) keeps templates sandboxed; false grants
-     *   templates full PHP access (arbitrary calls, PHP functions as filters,
-     *   method calls, raw PHP blocks)
-     * - `deniedFunctions`: list<string> — extra functions to block in PHP mode;
-     *   empty by default, since PHP mode is full PHP access
+     * - `policy`: what templates may reach — a {@see \Clarity\Engine\Policy} or
+     *   the array form it accepts. Sandboxed by default; `Policy::open()` is the
+     *   full-power PHP mode.
      *
      * @param array $config Configuration options for the engine.
      */
@@ -160,15 +162,14 @@ class ClarityEngine
             $this->setLayout($config['layout']);
         }
 
-        // PHP mode: `sandbox => false` grants templates full PHP access.
-        if (\array_key_exists('sandbox', $config)) {
-            $this->setSandboxMode((bool) $config['sandbox']);
-        }
-        if (isset($config['deniedFunctions']) && \is_array($config['deniedFunctions'])) {
-            $this->setDeniedFunctions($config['deniedFunctions']);
-        }
-
         $this->initializeClarityEngine();
+
+        // What templates may reach.  Applied AFTER initializeClarityEngine(),
+        // which installs the sandboxed default — the other order silently
+        // discarded the configured policy.
+        if (isset($config['policy'])) {
+            $this->setPolicy($config['policy']);
+        }
 
         // Post-init config that requires the registry/cache to exist
         if (isset($config['cachePath']) && \is_string($config['cachePath'])) {

@@ -217,10 +217,10 @@ trait DirectiveSupportTrait
      */
     private function storePhpBlock(string $openTag, string $bodyRaw, int $regionLines): string
     {
-        if ($this->sandboxMode) {
+        if (!$this->policy->allows('rawPhp')) {
             throw new ClarityException(
-                "'{% php %}' is not allowed in sandbox mode. "
-                    . "Call setSandboxMode(false) to allow raw PHP."
+                "'{% php %}' is not allowed by this policy. "
+                    . "Grant the 'rawPhp' capability to allow it."
             );
         }
 

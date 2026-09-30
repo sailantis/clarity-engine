@@ -238,9 +238,9 @@ trait BodyCompilerTrait
             // complete form never gets here -- extraction handles it, and rejects
             // it outright while the sandbox is enabled.
             'php'                          => throw new ClarityException(
-                $this->sandboxMode
-                    ? "'{% php %}' is not allowed in sandbox mode. "
-                        . "Call setSandboxMode(false) to allow raw PHP."
+                !$this->policy->allows('rawPhp')
+                    ? "'{% php %}' is not allowed by this policy. "
+                        . "Grant the 'rawPhp' capability to allow it."
                     : "Unclosed '{% php %}': expected a matching '{% endphp %}'.",
                 $sourcePath,
                 $tplLine

@@ -2,6 +2,7 @@
 namespace Clarity\Tests\Engine;
 
 use Clarity\ClarityException;
+use Clarity\Engine\Policy;
 use Clarity\Tests\BaseTestCase;
 use Clarity\Tests\TestClarityEngine;
 use Clarity\Tests\TestEnvironment;
@@ -23,7 +24,7 @@ class CallSyntaxTest extends BaseTestCase
             'viewPath'  => TestEnvironment::viewDir(),
             'cachePath' => TestEnvironment::cacheDir(),
             'extension' => 'clarity.html',
-            'sandbox'   => false,
+            'policy'    => Policy::open(),
         ], $config));
     }
 

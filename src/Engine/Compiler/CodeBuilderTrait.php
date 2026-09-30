@@ -166,10 +166,11 @@ trait CodeBuilderTrait
         $filesExport = var_export($this->sourceFiles, true);
         // Compact packed form (see SourceMap): one short single-quoted string
         // instead of a nested array literal per range.
-        $mapExport   = SourceMap::packedLiteral($this->sourceMap);
-        $debugFlag   = $this->debugMode ? 'true' : 'false';
-        $sandboxFlag = $this->sandboxMode ? 'true' : 'false';
-        $versionInt  = self::COMPILER_VERSION;
+        $mapExport    = SourceMap::packedLiteral($this->sourceMap);
+        $debugFlag    = $this->debugMode ? 'true' : 'false';
+        $sandboxFlag  = $this->policy->isSandboxed() ? 'true' : 'false';
+        $versionInt   = self::COMPILER_VERSION;
+        $policyDigest = $this->policy->digest();
 
         // Detect which registries are actually referenced in the compiled body.
         // The constructor always accepts both (so the caller stays simple), but
@@ -185,8 +186,9 @@ trait CodeBuilderTrait
             $unpacks .= "                \$__c_sv = \$this->__c_sv;\n";
         }
 
-        // Open mode only: seed the render scope into PHP locals so a template
-        // variable is the same thing in `{{ title }}` and `{% php echo $title; %}`.
+        // A policy that grants `phpVariables` seeds the render scope into PHP
+        // locals, so a template variable is the same thing in `{{ title }}` and
+        // `{% php echo $title; %}`.
         //
         // The internals are bound FIRST so EXTR_SKIP protects them: a view
         // variable named `__c_fn` cannot shadow the callable registry, and `this`
@@ -219,8 +221,13 @@ trait CodeBuilderTrait
             // debugCompiled: whether the compiler was in debug mode when this class was generated
             public static bool \$debugCompiled = {$debugFlag};
 
-            // sandboxCompiled: whether the compiler was in sandbox mode when this class was generated
+            // sandboxCompiled: whether the compiled template cannot reach PHP at all
             public static bool \$sandboxCompiled = {$sandboxFlag};
+
+            // policyDigest: fingerprint of the policy this class was compiled under.
+            // The loader recompiles on a mismatch, which is what makes changing a
+            // policy (or an allowlist) safe without bumping COMPILER_VERSION.
+            public static string \$policyDigest = '{$policyDigest}';
 
             // compilerVersion: the compiler that produced this class
             public static int \$compilerVersion = {$versionInt};

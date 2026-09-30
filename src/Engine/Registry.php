@@ -123,28 +123,27 @@ use Stringable;
 class Registry
 {
     /**
-     * Functions blocked by default when the engine runs in PHP mode (sandbox
-     * disabled).
+     * Functions blocked by default.
      *
-     * EMPTY on purpose: PHP mode means "the full power of PHP", so the engine
-     * does not smuggle a second, weaker sandbox into it.  A fixed subset of
-     * "sinks" could never be a security boundary anyway -- hundreds of ordinary
-     * functions read the environment, write files or spawn processes -- and a
-     * list that silently blocks `exec` while allowing `proc_open` reads as
-     * protection that the switch has already declined to give.  The switch is
-     * the security decision; this constant exists only so an application can
-     * still add its own guardrails on top of it:
+     * EMPTY on purpose, and nothing in the engine reads it any more: what a
+     * template may call is decided by a {@see \Clarity\Engine\Policy}, whose
+     * `functions` allowlist is the same idea stated positively and works in every
+     * policy rather than only where the sandbox is already off.
      *
-     *     $engine->setDeniedFunctions(['exec', 'system']);
+     * It is kept as a named constant because applications set it and because
+     * `Policy::denyFunctions()` is the replacement for the guardrails it used to
+     * describe:
      *
-     * What remains out of reach in both modes is the engine's own render-frame
+     *     $engine->setPolicy(Policy::open()->denyFunctions('exec', 'system'));
+     *
+     * What remains out of reach in every policy is the engine's own render-frame
      * namespace: a template may not BIND a `__c_`-prefixed name (it would swap an
      * internal for the rest of the render).  `$$name` / `${expr}` variable-variable
-     * expansion is an ordinary scope lookup in BOTH modes (it resolves against the
-     * render scope and loop locals, so it can reach neither a superglobal nor an
-     * engine internal), and PHP mode's dynamic dereference is likewise a plain local
-     * lookup — strictly weaker than the literal `$_SERVER` spelling PHP mode already
-     * permits.
+     * expansion is an ordinary scope lookup in every policy (it resolves against
+     * the render scope and loop locals, so it can reach neither a superglobal nor
+     * an engine internal), and a policy's dynamic dereference is likewise a plain
+     * local lookup — strictly weaker than the literal `$_SERVER` spelling a
+     * `superglobals` grant already permits.
      *
      * @var array<string, true>
      */
