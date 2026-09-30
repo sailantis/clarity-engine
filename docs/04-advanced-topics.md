@@ -462,9 +462,10 @@ Even though the error occurs in compiled PHP, Clarity traces it back to the sour
 {{ value |> unknownFilter }}
 ```
 
-**Error:** `Filter 'unknownFilter' is not registered`
+**Error:** `Filter 'unknownFilter' is not registered, and the sandbox is enabled, …`
 
-**Solution:** Register the filter or fix the typo.
+Raised at compile time. **Solution:** register the filter, fix the typo, or — for
+a trusted template that means to call a PHP function — run in PHP mode.
 
 #### Syntax Errors
 

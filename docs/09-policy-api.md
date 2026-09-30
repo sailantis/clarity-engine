@@ -265,41 +265,46 @@ its own tests.
 
 ### Every rejection is a compile-time `ClarityException`
 
-Unchanged from today for capabilities, allowlists and **bare function calls**:
-a template that violates its policy does not compile, so the failure happens at
-the deploy that introduced it rather than on a request.
+True for capabilities, allowlists, **bare function calls**, and — since the
+defect below was fixed — **filter steps** as well. A template that violates its
+policy does not compile, so the failure happens at the deploy that introduced it
+rather than on a request.
 
-**Filter steps are the exception, and should not stay one.** A `|>` name that is
-not registered compiles today (in sandbox mode) to a lookup in the runtime
-callable table, so an unregistered filter step fails **at render time**, not at
-compile time — and the message the error handler produces is:
+**Filter steps used to be the exception, and no longer are.** A `|>` name that
+was not registered compiled to a lookup in the runtime callable table and failed
+on the first render, reporting:
 
 ```
 Variable "strtoupper" is not defined in this context
 ```
 
-That is a real defect, not a preference. It names a variable the template never
-wrote, so the author is told to fix something that does not exist. The bare-call
-path already does this correctly:
+It named a variable the template never wrote, so the author was told to fix
+something that did not exist. The bare-call path had always done this correctly:
 
 ```
 Call to unregistered function in context '…'. Register it via addFunction() first.
 ```
 
-The two paths should agree. This is fixable on its own, before any policy lands,
-and probably should be — and a policy makes it more important, because the
-allowlist gives the compiler the information to reject the filter step at compile
-time, where the author will see it.
+It is now rejected at compile time, in the same place and for the same reason,
+because sandbox mode leaves nothing for an unregistered name to fall back to —
+the open-mode branch is the only other resolution path and it is unreachable
+while the sandbox is on. "Not registered" and "cannot ever resolve" are the same
+statement, so the compiler can act on it.
 
 ### The message must name the remedy
 
-Whichever path reports a rejection, the message should say what to change:
+Every rejection says what to change:
 
-| Situation                    | Message today                                                                      | Should be                                                                                                                   |
-| ---------------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| unregistered **function**    | `Call to unregistered function … Register it via addFunction() first.`             | keep — it is the model                                                                                                      |
-| unregistered **filter step** | `Variable "strtoupper" is not defined in this context`                             | `Filter \|strtoupper is not allowed. Allow it via Policy::allowFunctions()/allowFilters(), or register it via addFilter().` |
-| blocked function (PHP mode)  | `Function 'x' is blocked in PHP mode. Allow it by removing it from the deny-list.` | `…not allowed by this policy. Allow it via Policy::allowFunctions().`                                                       |
+| Situation                    | Message                                                                                                                              |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| unregistered **function**    | `Call to unregistered function in context '…'. Register it via addFunction() first.`                                                  |
+| unregistered **filter step** | `Filter 'strtoupper' is not registered, and the sandbox is enabled, so there is nothing for it to resolve to. Register it with addFilter(), or call setSandboxMode(false) to let a PHP function of the same name be used.` |
+| blocked function (PHP mode)  | `Function 'x' is blocked in PHP mode. Allow it by removing it from the deny-list.`                                                    |
+
+The filter message names both remedies rather than one because in sandbox mode
+there are genuinely two, and which one is right depends on whether the author
+wants a template filter or a PHP function.
+
 
 ### A policy change invalidates the compiled cache
 

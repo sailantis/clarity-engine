@@ -1077,6 +1077,13 @@ trait ClarityEngineTrait
             $tplFile = $tplFile ?? $templateName;
 
             // 1) Undefined array key "foo"
+            //
+            //    Deliberately NOT reworded to mention a filter or a variable by
+            //    name: the same PHP diagnostic covers a missing render-scope
+            //    entry (`$__c_va['foo']`) AND a missing key on a present array
+            //    (`$__c_va['user']['foo']`), and the message cannot tell which
+            //    array it was. A missing FILTER no longer reaches this branch at
+            //    all — it is rejected at compile time (see FilterCompilerTrait).
             if (preg_match('/Undefined array key "([^"]+)"/', $errstr, $m)) {
                 $varName = $m[1];
                 throw new ClarityException(
