@@ -8,7 +8,7 @@
 
 - **Compiled & Cached** – Templates compile to PHP classes and leverage OPcache for blazing-fast rendering
 - **Secure Sandbox** – No arbitrary PHP execution by default; templates are strictly sandboxed with controlled access
-- **Opt-In PHP Mode** – Disable the sandbox to give templates the full power of PHP (any function call or filter, method calls, `{% php %}` blocks)
+- **Opt-In PHP Mode** – Disable the sandbox to give templates the full power of PHP (any function call or filter, method calls, `{% php %}` tags)
 - **Expressive Syntax** – Clean, readable template syntax inspired by modern template engines
 - **Twig-Style Tests** – `in`, `is defined`, `starts with`, `matches`, `divisible by`, and more, with absence-tolerant `defined`/`null`/`empty`
 - **Whitespace Control** – `{%- … -%}` trims whitespace around a tag
@@ -300,7 +300,7 @@ Clarity is sandboxed by default:
 - **No arbitrary PHP execution** – Templates cannot call PHP functions or access global state
 - **Auto-escaping by default** – All output is HTML-escaped to prevent XSS attacks
 - **Compile-time validation** – Syntax errors caught during compilation, not at runtime
-- **Object safety** – Objects stay objects: `a.b` reads a public property and `a:b` reads an array key, so method calls are unreachable from templates and PHP visibility rules apply. Container operations read an object's public properties, and the `date` filter accepts `DateTimeInterface` directly
+- **Object safety** – Objects stay objects: `a.b` reads a public property and `a:b` reads an array key, so method calls are unreachable from templates and PHP visibility rules apply. Container operations read an object's public properties; the `date` filter accepts `DateTimeInterface` directly
 - **Controlled lambdas** – Lambda expressions can only use registered filters
 
 ### Policies
@@ -355,10 +355,10 @@ that is uniformly slower.
 
 ![Memory retained per run](docs/images/benchmarks/mixed-memory.svg)
 
-Measured in a fresh process per engine, so no engine inherits another's
-footprint. The bar runs from the floor that engine costs to have loaded (left
-cap) to the peak it reached (right cap), and the dot is what it still holds once
-the run is done — the figure a serving process actually carries.
+The bar runs from the floor that engine costs to have loaded (left cap) to the
+peak it reached (right cap); the dot is what it still holds once the run is done
+— the figure a serving process actually carries. Measured in a fresh process per
+engine, so no engine inherits another's footprint.
 
 The full comparison — every shape, every chart, and the environment and engine
 versions this run recorded — is in the [benchmark

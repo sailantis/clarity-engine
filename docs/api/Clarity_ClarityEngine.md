@@ -14,7 +14,7 @@ Key Features
 - **Compiled & Cached**: Templates compile to PHP classes, leveraging OPcache for performance
 - **Secure Sandbox**: No arbitrary PHP execution, strict variable access control
 - **Opt-In PHP Mode**: A policy can grant templates the full power of PHP
-  (any function, method calls, raw `{% php %}` blocks)
+  (any function, method calls, raw `{% php %}` tags)
 - **Auto-escaping**: Built-in XSS protection with automatic HTML escaping
 - **Template Inheritance**: Reusable layouts via extends/blocks
 - **Filter Pipeline**: Transform data with chainable filters (|>)

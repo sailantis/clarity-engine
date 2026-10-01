@@ -132,10 +132,9 @@ The rule is **`?` guards the LEFT side, never the right one**:
 | `user.name ?? 'x'`  | ERROR              | `'x'`                          |
 | `user?.name ?? 'x'` | `'x'`              | `'x'`                          |
 
-Use `?` when the **receiver** may be missing, and `??` when the **member** may be.
-That separation is deliberate: if `?` also swallowed a missing member, a typo
-would render as an empty string instead of failing — the exact silence the strict
-access design exists to prevent.
+That is deliberate: swallowing a missing member too would render a typo as an
+empty string instead of failing it. Use `?` when the **receiver** may be missing,
+and `??` when the **member** may be:
 
 ```twig
 {{ user?.nickname }}                  {# '' when user absent; ERROR on a typo #}
@@ -152,18 +151,15 @@ Emission differs per side because the operators differ in what they accept:
 | `a?.b?.c`  | `(isset($vars['a']) ? $vars['a']->b : null)?->c`         |
 | `a?:b?:c`  | a `=== null` test that binds the receiver to a temporary |
 
-Both sides use the shortest form that tolerates an absent receiver, and a bare
-root gets `isset()` on both sides so an absent ROOT behaves the same way. Neither
+Both sides use the shortest form that tolerates an absent receiver, and neither
 form re-embeds its receiver, so a chain of N optional segments stays a linear
-expression rather than growing exponentially — a property the test suite pins,
-because an exponential emission is behaviourally invisible and only shows up in
-what has to be parsed and cached on every request.
+expression rather than growing exponentially.
 
 > **Array-side note.** The array guard is a ternary, and a branch is evaluated
 > before an outer operator sees it. `items?[9] ?? 'fb'` therefore cannot suppress
 > a missing INDEX (the branch reads it first). Coalesce a STRICT read instead:
-> `items[9] ?? 'fb'` supplies the fallback with no warning. The object side has no
-> such limit, because `?->` composes with a following `??`.
+> `items[9] ?? 'fb'`. The object side has no such limit, because `?->` composes
+> with a following `??`.
 
 An absent ROOT behaves the same on both sides — `{{ missing?.name }}` renders
 empty — while the strict form reports it:
@@ -310,9 +306,7 @@ resolves **registered** filters and functions first; PHP mode only changes what
 happens when a name is _not_ registered.
 
 > See [Advanced Topics → PHP Mode](04-advanced-topics.md#php-mode) for the
-> PHP-developer view of the two modes ("sandbox mode" vs. "PHP mode"), and
-> [Registering Custom Filters](00-getting-started.md#registering-custom-filters)
-> for registration.
+> PHP-developer view of the two modes ("sandbox mode" vs. "PHP mode").
 
 ### PHP functions as calls
 
@@ -354,20 +348,21 @@ mode), so they stay greppable in a trusted template:
 A call on the _root_ value (`$fn()`) is still rejected: a variable-driven
 callable is the function-level equivalent of variable-variable expansion.
 
-### Raw PHP blocks
+### Raw PHP tags
 
-Two interchangeable spellings give a trusted template the full power of PHP:
+One spelling gives a trusted template the full power of PHP — one statement, or
+one fragment of a control structure, per tag:
 
 ```twig
-{% php %}
-$total = 0;
-foreach ($items as $item) { $total += $item['qty']; }
-echo $total;
-{% endphp %}
+{% php $total = 0; %}
+{% php foreach ($items as $item) : %}
+    {% php $total += $item['qty']; %}
+{% php endforeach %}
+{% php echo $total; %}
 ```
 
-**Standalone form** — one statement, or one fragment of a control structure,
-per tag. This is what lets PHP structure wrap template markup:
+Splitting a control structure across tags is what lets PHP structure wrap
+template markup:
 
 ```twig
 {% php if ($items) : %}
@@ -381,10 +376,20 @@ per tag. This is what lets PHP structure wrap template markup:
 {% php endif %}
 ```
 
-In both forms the body is emitted **verbatim** into the compiled class. Because a
-body may contain text that is not valid PHP in isolation, it is extracted before
+A body may also span lines, for a run of statements in one tag:
+
+```twig
+{% php
+$total = 0;
+foreach ($items as $item) { $total += $item['qty']; }
+echo $total;
+%}
+```
+
+The body is emitted **verbatim** into the compiled class. Because a body may
+contain text that is not valid PHP in isolation, it is extracted before
 tokenization and each of its lines is mapped one-to-one back to the template, so
-a runtime error inside a block points at the offending line. Inside a `{% php %}`
+a runtime error inside a tag points at the offending line. Inside a `{% php %}`
 tag a loop local is a genuine PHP variable (`echo $n;`), and it reaches `{{ }}`
 only through the variables array (`$__c_va['n'] = $n;`).
 
@@ -394,7 +399,7 @@ seeded with `extract($__c_va, EXTR_SKIP)`, so `{{ title }}` and
 reachable as `$__c_va` when a dynamic name is needed.
 
 > The closing delimiter is matched non-greedily, so a literal `%}` inside a body
-> ends the region early — spell it `'%' . '}'` when that exact sequence is needed.
+> ends the tag early — spell it `'%' . '}'` when that exact sequence is needed.
 
 ### Function guardrails
 
@@ -793,11 +798,10 @@ safe on a name that was never passed to the template:
 {% if items is not empty %}…{% endif %}
 ```
 
-**`is defined` asks whether a name holds a value other than `null`.** A name that
-was passed as `null` is reported as **not** defined, because the probe is PHP's
-`isset()` — the one existence test that works identically whether the value lives
-in the render scope (sandbox) or in a PHP local (PHP mode). Use `is null` to ask
-about the value instead; the two together still separate all three states:
+**`is defined` asks whether a name holds a value other than `null`.** A name
+that was passed as `null` is reported as **not** defined, because the probe is
+PHP's `isset()`. Use `is null` to ask about the value instead; the two together
+still separate all three states:
 
 | `user`     | `user is defined` | `user is null` |
 | ---------- | ----------------- | -------------- |
@@ -1102,11 +1106,15 @@ Instead, use filters:
 PHP statements or semicolons:
 
 ```twig
-{{ $x = 5; }} {# ERROR #}
+{{ $x = 5; }} {# ERROR — instead, use {% set %}: #}
 ```
 
-Dynamic variable access (`${expr}` / `$$name`) reads the variable whose NAME is
-an expression, in both sandbox and PHP mode. The lookup resolves against the
+```twig
+{% set x = 5 %} {# CORRECT #}
+```
+
+Dynamic variable access (`${expr}` / `$$name`) is **allowed** in both modes and
+reads the variable whose NAME is an expression. The lookup resolves against the
 render scope and loop locals, so it can reach neither a superglobal nor an engine
 internal:
 
@@ -1114,12 +1122,6 @@ internal:
 {{ $$name }}          {# reads the variable named by {{ name }}, in both modes #}
 {{ ${which} }}        {# the same construct, spelled with braces #}
 {{ ${ref} ?? 'none' }}{# absent name: fall back instead of throwing #}
-```
-
-Instead, use `{% set %}`:
-
-```twig
-{% set x = 5 %} {# CORRECT #}
 ```
 
 ## Next Steps

@@ -729,20 +729,6 @@ echo $engine->render('partials/user-list', ['users' => $users]);
 3. [Filters Reference](02-filters-and-functions.md)
 4. [Advanced Topics](04-advanced-topics.md)
 
-### Enable Debugging
-
-```php
-// Show all errors
-ini_set('display_errors', '1');
-error_reporting(E_ALL);
-
-// Dump template context
-{{ dump(context()) }}
-
-// Clear cache
-$engine->flushCache();
-```
-
 ### Minimal Reproducible Example
 
 Create a simple test case:

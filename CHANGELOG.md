@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   | Capability          | Default | What it grants                                                                                    |
   | ------------------- | ------- | ------------------------------------------------------------------------------------------------- |
-  | `rawPhp`            | `false` | `{% php CODE %}` and `{% php %}…{% endphp %}`                                                     |
+  | `rawPhp`            | `false` | `{% php CODE %}`                                                                                  |
   | `methodCalls`       | `false` | `$obj->method(args)`                                                                              |
   | `superglobals`      | `false` | `$_SERVER`, `$_GET`, `$_ENV`, … as chain roots                                                    |
   | `phpVariables`      | `false` | the render scope seeded as PHP locals — what makes `$title` and `{% php echo $title; %}` one name |
@@ -128,6 +128,36 @@ setSandboxMode(false) to let a PHP function of the same name be used.` The
   rejection is possible at compile time because sandbox mode leaves nothing for
   an unregistered name to fall back to — the open-mode branch is the only other
   resolution path, and it is unreachable while the sandbox is on.
+
+### Removed
+
+- **The `{% php %}…{% endphp %}` block spelling is gone; `{% php <code> %}` is
+  now the only raw-PHP form.** The two spellings compiled through the same
+  extraction and the same sentinel, so the block form bought almost nothing — a
+  tag could already carry several statements, because the body pattern is `/s`
+  and spans lines:
+
+  ```twig
+  {% php
+  $total = 0;
+  foreach ($items as $item) { $total += $item['qty']; }
+  echo $total;
+  %}
+  ```
+
+  The one thing it did buy was a body containing a literal `%}`; spell that
+  `'%' . '}'` instead. What the removal buys back is the two-pass extraction,
+  whose ordering caveat existed only because the block opener is
+  indistinguishable from an empty `{% php %}` tag. `{% endphp %}` is no longer a
+  keyword and a bare `{% php %}` is now a compile-time error naming what it
+  needs, rather than a half-sentence about a missing `{% endphp %}`.
+  `COMPILER_VERSION` 19 → 20, so every cached template recompiles.
+
+  ```twig
+  {# before #}                          {# after #}
+  {% php %}echo $x;{% endphp %}          {% php echo $x; %}
+  {% php %}…multi-line…{% endphp %}      {% php …multi-line… %}
+  ```
 
 ### Security
 

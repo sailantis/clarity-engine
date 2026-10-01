@@ -154,10 +154,10 @@ $template = $engine->render($_GET['template'] ?? 'home', $data);
 // '../app/config' and '/etc/passwd.clarity.html' are both refused
 ```
 
-That guard is not a substitute for validating input, for two reasons: a name that
-is refused is a failed request rather than a sensible page, and a name that
-resolves _inside_ the view path can still be one the visitor was never meant to
-reach. Allowlist it as well:
+That guard is not a substitute for validating input: a name that resolves
+_inside_ the view path can still be one the visitor was never meant to reach, and
+a refused name is a failed request rather than a sensible page. Allowlist it as
+well:
 
 **Recommended:**
 
@@ -179,19 +179,16 @@ $engine->render($template, $data);
 
 ### Never Trust User Data
 
-```php
-// Bad: Passing unfiltered user input
-$engine->render('search', [
-    'query' => $_GET['q'],  // Unfiltered
-]);
+Clarity auto-escapes by default, so even unsanitized input is safe in most cases
+— be cautious only with `|> raw`. Validate at the boundary anyway so the
+template receives data in the shape it expects:
 
-// Good: Validate/sanitize first
+```php
+// Good: validate and give the template a defined value
 $engine->render('search', [
-    'query' => htmlspecialchars($_GET['q'] ?? '', ENT_QUOTES, 'UTF-8'),
+    'query' => trim($_GET['q'] ?? ''),
 ]);
 ```
-
-But remember: **Clarity auto-escapes by default**, so even unsanitized input is safe in most cases. Just be cautious with `|> raw`.
 
 ## Performance Best Practices
 

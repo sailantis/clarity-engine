@@ -70,7 +70,7 @@ $engine->setPolicy(Policy::sandboxed());
 
 The most restrictive mode: no capability that reaches PHP is on. A template may
 read the scope it was rendered with, use every Clarity tag, and call registered
-filters and functions. It may not open a `{% php %}` block, call a method, read a
+filters and functions. It may not open a `{% php %}` tag, call a method, read a
 superglobal, construct a class or reach a static member.
 
 This is the default — what a bare `new ClarityEngine()` uses — and the mode the
@@ -83,7 +83,7 @@ $engine->setPolicy(Policy::trusted());
 ```
 
 Enables everything `sandboxed()` omits except the two class-reaching
-capabilities. A template may write `{% php %}` blocks, call methods on objects
+capabilities. A template may write `{% php %}` tags, call methods on objects
 from the scope, read superglobals and reach the scope through PHP locals. It may
 not use `new` or `::`.
 
@@ -127,7 +127,7 @@ is nearly right, and one or two named allowances make it exactly right.
 
 | Capability          | Default | What it grants                                                                                          |
 | ------------------- | ------- | ------------------------------------------------------------------------------------------------------- |
-| `rawPhp`            | `false` | `{% php CODE %}` tags and `{% php %}…{% endphp %}` blocks                                               |
+| `rawPhp`            | `false` | `{% php CODE %}` tags                                                                                   |
 | `methodCalls`       | `false` | `$obj->method()` and `$obj->method(arg, …)`                                                             |
 | `superglobals`      | `false` | `$_SERVER`, `$_GET`, `$_ENV`, … as chain roots                                                          |
 | `phpVariables`      | `false` | the render scope seeded as PHP locals — what makes `$title` and `{% php echo $title; %}` the same thing |
@@ -175,15 +175,12 @@ to call methods without also handing it a frame of PHP locals to scribble on.
 
 ### `variableVariables`
 
-It is on by default because turning it off changes nothing about what a template
-can reach. `$$name` and `${expr}` resolve against the render scope and loop
-locals under every policy, and the engine's own `__c_`-prefixed frame is
-protected by the binding order in the compiled body rather than by rejecting the
-syntax — so the form reaches nothing a literal name could not already reach.
-
-The capability exists so an application can be explicit about the syntax. It is
-not counted as "reaching PHP" for [inspecting a policy](#inspecting-a-policy),
-because turning it off does not make a template any less able to run PHP.
+`$$name` and `${expr}` resolve against the render scope and loop locals under
+every policy, and the engine's own `__c_`-prefixed frame is protected by the
+binding order in the compiled body — so turning the capability off changes
+nothing about what a template can reach. It exists so an application can be
+explicit about the syntax, and it is not counted as "reaching PHP" for
+[inspecting a policy](#inspecting-a-policy).
 
 ### `superglobals`
 
@@ -192,16 +189,16 @@ the scope does not hold, so `{{ _SERVER }}` throws — **even when `phpVariables
 is granted**, which is the case that matters:
 
 ```php
-// Refused: no superglobals capability, so this is a scope read of an absent name
+// Refused without 'superglobals': a scope read of an absent name
 $engine->setPolicy(Policy::custom()->allowCapability('phpVariables'));
 
-// Granted: the name now means PHP's own variable, whatever the scope holds
+// Granted: the name now means PHP's own variable
 $engine->setPolicy(Policy::custom()->allowCapability('superglobals'));
 ```
 
-The second example matters: without a capability of its own, `superglobals` would
-collapse into `phpVariables`, since a template could reach every superglobal
-through the seeded-local form as soon as the scope was seeded.
+Without a capability of its own, `superglobals` would collapse into
+`phpVariables`, since a template could reach every superglobal through the
+seeded-local form as soon as the scope was seeded.
 
 Only the known names count — `GLOBALS`, `_SERVER`, `_GET`, `_POST`, `_FILES`,
 `_COOKIE`, `_SESSION`, `_REQUEST`, `_ENV`. `_SERVERX` is an ordinary variable.
@@ -456,10 +453,10 @@ denied-functions list. The `Policy` object replaces both.
 | `getDeniedFunctions()`            | `getPolicy()->deniedFunctions()`                                            |
 | `['deniedFunctions' => [...]]`    | `['policy' => ['deniedFunctions' => [...]]]`                                |
 
-**Only the removal of `setSandboxMode()` is a breaking change**, and the
-replacement is a one-line change per call site. There is no alias for it:
-`setPolicy()` covers every case the old method did, and a mode and a rule set by
-the same method cannot drift out of sync.
+**Only the removal of `setSandboxMode()` is a breaking change** — a one-line
+change per call site, with no alias: `setPolicy()` covers every case the old
+method did, and a mode and a rule set by the same method cannot drift out of
+sync.
 
 ## The view path is a boundary
 

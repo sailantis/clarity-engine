@@ -2,16 +2,14 @@
 
 namespace Clarity\Engine;
 
+use Clarity\Engine\Compiler\BodyCompilerTrait;
+use Clarity\Engine\Compiler\CodeBuilderTrait;
 use Clarity\Engine\Compiler\CompilerCoreTrait;
+use Clarity\Engine\Compiler\ControlFlowTrait;
 use Clarity\Engine\Compiler\DirectiveSupportTrait;
 use Clarity\Engine\Compiler\InheritanceTrait;
-use Clarity\Engine\Compiler\BodyCompilerTrait;
-use Clarity\Engine\Compiler\ControlFlowTrait;
-use Clarity\Engine\Compiler\CodeBuilderTrait;
-
-use Clarity\ClarityException;
-use Clarity\Template\FileLoader;
 use Clarity\Template\TemplateLoader;
+use Clarity\Engine\Registry;
 
 /**
  * Compiles a single Clarity template source file into a PHP class.
@@ -20,7 +18,7 @@ use Clarity\Template\TemplateLoader;
  * ------------
  * This class holds the public API, the constants and the per-compilation state;
  * the behaviour is composed from the traits in `Clarity\Engine\Compiler\`
- * (inheritance, control flow, macros, raw-PHP blocks, source map, code builder,
+ * (inheritance, control flow, macros, raw-PHP tags, source map, code builder,
  * …).  See CONTRIBUTING.md for the trait map.
  *
  * The compilation pipeline
@@ -96,7 +94,7 @@ class Compiler
      * A POLICY change needs no bump: the compiled class carries a digest of the
      * effective policy and the loader recompiles on a mismatch.
      */
-    public const COMPILER_VERSION = 19;
+    public const COMPILER_VERSION = 20;
 
     /**
      * Prefix owned by the engine for every PHP variable it binds into the render
@@ -148,9 +146,6 @@ class Compiler
 
     /** Current PHP output line counter (tracks lines emitted to the render body) */
     private int $phpLine = 0;
-
-    /** View extension (e.g. '.clarity.html') — used only to strip extension from template refs */
-    private string $extension = FileLoader::DEFAULT_EXTENSION;
 
     /** Active loader for this compilation (set at start of compile()) */
     private ?TemplateLoader $loader = null;
@@ -228,13 +223,12 @@ class Compiler
     private int $mappedMergedLineBase = 1;
 
     /**
-     * Raw-PHP block bodies extracted during the pre-scan of the current
-     * template, keyed by the sentinel token that replaced them in the source.
+     * Raw-PHP tag bodies extracted during the pre-scan of the current template,
+     * keyed by the sentinel token that replaced them in the source.
      *
      * `offset` is the number of template lines between the sentinel's own line
-     * and the block's first PHP line (the breaks the opening tag spans, plus one
-     * when the body starts on the following line).  It is what turns a block into
-     * a per-line source map instead of a single range.
+     * and the tag's first PHP line (the breaks the tag's opening portion spans).
+     * It is what turns a tag into a per-line source map instead of a single range.
      *
      * @var array<string, array{body: string, offset: int}>
      */
@@ -252,16 +246,22 @@ class Compiler
      */
     private bool $seedsScope = false;
 
-    /** Monotonic counter for raw-PHP block sentinels. */
+    /** Monotonic counter for raw-PHP tag sentinels. */
     private int $phpBlockSeq = 0;
 
     private ?Registry $registry = null;
 
     public function __construct()
     {
-        $this->policy    = Policy::sandboxed();
         $this->tokenizer = new Tokenizer();
-        $this->tokenizer->setPolicy($this->policy);
+    }
+
+    public static function sandboxed(): self
+    {
+        $compiler = new self();
+        $compiler->setPolicy(Policy::sandboxed());
+        $compiler->setRegistry(new Registry());
+        return $compiler;
     }
 
     public function setRegistry(Registry $registry): static
@@ -274,12 +274,6 @@ class Compiler
     // -------------------------------------------------------------------------
     // Configuration
     // -------------------------------------------------------------------------
-
-    public function setExtension(string $extension): static
-    {
-        $this->extension = $extension[0] === '.' ? $extension : '.' . $extension;
-        return $this;
-    }
 
     public function setDebugMode(bool $debug): static
     {

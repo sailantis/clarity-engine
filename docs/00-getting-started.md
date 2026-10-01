@@ -114,12 +114,6 @@ $engine->setPolicy(Policy::open()->denyFunctions('exec', 'system'));
 > what each one reaches. The same policy is accepted in the constructor as
 > `policy`, in either the object or the array form.
 
-> For the full developer-facing picture — the config keys, both modes, and how to
-> register filters/functions — see
-> [Registering Custom Filters](00-getting-started.md#registering-custom-filters),
-> [Registering Custom Functions](00-getting-started.md#registering-custom-functions)
-> and [Advanced Topics → PHP Mode](04-advanced-topics.md#php-mode).
-
 ### Registering Template Namespaces
 
 Namespaces let you reference templates from additional directories using the `namespace::path` syntax:
@@ -381,13 +375,6 @@ if ($_ENV['APP_ENV'] === 'development') {
 }
 ```
 
-Or manually flush when needed:
-
-```bash
-# CLI command to flush cache
-php -r "require 'vendor/autoload.php'; (new \Clarity\ClarityEngine())->setCachePath(__DIR__ . '/cache')->flushCache();"
-```
-
 ### In Production
 
 1. Ensure cache directory is persistent and writable by the web server
@@ -422,41 +409,14 @@ $engine->setCachePath(__DIR__ . '/cache/clarity');
 
 ### Do I need to manually clear the cache?
 
-No! Clarity automatically detects when template files (including extended layouts and included partials) are modified and recompiles them. Only call `flushCache()` during development if you encounter issues.
+No. Clarity automatically detects when template files (including extended layouts and included partials) are modified and recompiles them. Only call `flushCache()` during development if you encounter issues.
 
 ### Can I use Clarity without a framework?
 
-Yes! Clarity is completely standalone. The examples above show standalone usage without any framework dependencies.
+Yes — Clarity is completely standalone. The examples above show standalone usage without any framework dependencies.
 
 ### Is the output cached?
 
 No. Clarity caches the **compiled PHP code**, not the rendered output. Each render call executes the compiled template with fresh data.
 
-## Troubleshooting
-
-### Cache directory not writable
-
-**Error:** `Failed to write cache file...`
-
-**Solution:** Ensure the cache directory exists and is writable:
-
-```bash
-mkdir -p cache/clarity
-chmod 755 cache/clarity
-```
-
-### Templates not updating
-
-**Solution:** Clear the cache manually:
-
-```php
-$engine->flushCache();
-```
-
-If using OPcache, restart PHP-FPM or clear OPcache.
-
-### Class not found errors
-
-**Solution:** Run `composer dump-autoload` to regenerate the autoloader.
-
-For more troubleshooting help, see [Troubleshooting Guide](06-troubleshooting.md).
+For troubleshooting, see the [Troubleshooting Guide](06-troubleshooting.md).
