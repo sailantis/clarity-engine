@@ -303,12 +303,11 @@ functions, superglobals and engine internals included, so `strtoupper(x)` and
 
 ## PHP Mode
 
-A policy that grants PHP (`Policy::open()`, or the individual capability)
-turns off the function restriction
-allow-list and the method-call restriction, giving templates the full power of
-PHP — **PHP mode**, also called _open mode_. Everything below still resolves
-**registered** filters and functions first; PHP mode only changes what happens
-when a name is _not_ registered.
+A policy that grants PHP (`Policy::open()`, or the individual capability) lifts
+the function allow-list and the method-call restriction, giving templates the
+full power of PHP — **PHP mode**, also called _open mode_. Everything below still
+resolves **registered** filters and functions first; PHP mode only changes what
+happens when a name is _not_ registered.
 
 > See [Advanced Topics → PHP Mode](04-advanced-topics.md#php-mode) for the
 > PHP-developer view of the two modes ("sandbox mode" vs. "PHP mode"), and
@@ -409,8 +408,7 @@ $engine->setPolicy(Policy::open()->denyFunctions('exec', 'system'));
 
 Changing the list recompiles the templates that need it: a compiled class records
 a digest of the policy it was built under, and the loader recompiles on a
-mismatch. (Before the policy API the deny-list did **not** invalidate the cache;
-that was a bug, not a feature.)
+mismatch.
 
 ## Directives
 

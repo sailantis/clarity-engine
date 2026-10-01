@@ -421,7 +421,7 @@ set_error_handler(function (int $no, string $msg, string $file, int $line): bool
 $engine->render('pages/list', $data);
 ```
 
-Two consequences worth knowing:
+Two consequences follow:
 
 - **Clarity does not impose a severity policy.** Non-variable diagnostics are handed to you
   with their level translated to the matching `E_USER_*` constant (`E_WARNING` →
@@ -596,8 +596,7 @@ What a template may reach is decided by a **policy**: a set of _capabilities_
 plus two _allowlists_. The default is the most restrictive one.
 
 > See [The Policy API](09-policy-api.md) for the full reference. The rest of this
-> page describes what the default policy refuses, which is the safe mode the
-> engine has always had.
+> page describes what the default policy refuses.
 
 ### Compile-Time Restrictions
 
@@ -620,7 +619,7 @@ the default policy:
 **Method calls:**
 
 ```twig
-{{ user:getName() }} {# ERROR #}
+{{ user.getName() }} {# ERROR #}
 ```
 
 **PHP statements:**
@@ -674,7 +673,7 @@ $engine->render('page', ['user' => $user]);
 ```twig
 {{ user.name }}       {# 'John' — real property read #}
 {{ user:name }}       {# ERROR: a key read on an object #}
-{{ user:getName() }}  {# COMPILE ERROR: method calls not allowed #}
+{{ user.getName() }}  {# COMPILE ERROR: method calls not allowed #}
 ```
 
 `a.b` is an **object property read** (`->b`); `a:b` is an **array key read**
@@ -684,9 +683,9 @@ enforced by PHP itself, so private/protected state is never exposed.
 
 **Containers read public properties — not `toArray()`.**
 
-The old object → array conversion is gone, and with it the `toArray()` /
-`JsonSerializable` access path. **Container** operations — `{% for %}`, `keys`,
-`values`, `length`, `first`, `last` — read an object's **public properties**:
+`toArray()` and `JsonSerializable` are not consulted on the access path.
+**Container** operations — `{% for %}`, `keys`, `values`, `length`, `first`,
+`last` — read an object's **public properties**:
 
 ```php
 class User {
@@ -715,7 +714,7 @@ properties that implements `Stringable` keeps its string form, which is why
 | object with **no** public properties that is `Stringable` | Output via its `__toString()` value                           |
 | scalar / `null`                                           | passed through                                                |
 
-Two consequences worth knowing:
+Two consequences follow:
 
 - **`DateTime` works directly.** It is kept as an object and accepted by the
   `date` filter, so `{{ order.createdAt |> date("Y-m-d") }}` renders correctly.
@@ -743,7 +742,7 @@ Lambdas in `map`, `filter`, `reduce` only accept:
 
 ```twig
 {{ items |> map(i => i:name) }} {# Lambda: safe #}
-{{ items |> map("upper") }} {# Filter reference: safe #}
+{{ items |> map("upper") }}     {# Filter reference: safe #}
 ```
 
 ### Registered Filters/Functions
@@ -777,12 +776,27 @@ set of capabilities plus two allowlists, and the default is sandboxed.
 use Clarity\Engine\Policy;
 
 $engine->setPolicy(Policy::sandboxed());   // the default
-$engine->setPolicy(Policy::open());        // everything on
-$engine->setPolicy(Policy::trusted());     // trusted templates, but no `new`
-$engine->setPolicy(Policy::custom()        // the useful one
+$engine->setPolicy(Policy::trusted());     // raw PHP, method calls and superglobals
+$engine->setPolicy(Policy::open());        // every capability
+$engine->setPolicy(Policy::custom()        // the default, plus named grants
     ->allowCapability('methodCalls')
     ->allowFunctions('strtoupper', 'count'));
 ```
+
+The three presets differ only in their capabilities:
+
+| Capability          | `sandboxed()` | `trusted()` | `open()` |
+| ------------------- | ------------- | ----------- | -------- |
+| `rawPhp`            | off           | **on**      | **on**   |
+| `methodCalls`       | off           | **on**      | **on**   |
+| `superglobals`      | off           | **on**      | **on**   |
+| `phpVariables`      | off           | **on**      | **on**   |
+| `variableVariables` | on            | on          | on       |
+| `newExpressions`    | off           | off         | **on**   |
+| `staticCalls`       | off           | off         | **on**   |
+
+Every preset leaves both allowlists empty and denies no function. An individual
+capability is turned on with `allowCapability()`, and each one grants:
 
 | Capability          | Default | What it grants                                                                                         |
 | ------------------- | ------- | ------------------------------------------------------------------------------------------------------ |
@@ -799,18 +813,16 @@ $engine->setPolicy(Policy::custom()        // the useful one
 | `functions` | `[]`    | bare calls (`strtoupper(name)`) and filter steps that resolve to a PHP function |
 | `filters`   | `[]`    | names accepted after `\|>`, which need not be functions                         |
 
-**An empty allowlist is not a denial — it is no restriction.** A non-empty one is
-the complete set: only the listed names resolve, and anything else is a
-compile-time error. That is what makes `Policy::open()` exactly the engine's
-full-power mode rather than a mode that happens to deny everything.
+**An empty allowlist is no restriction.** A non-empty one is the complete set:
+only the listed names resolve, and anything else is a compile-time error.
 
 `denyFunctions(...)` applies last and wins, so an allowlist entry can still be
 revoked by name.
 
-**`Policy::open()` is equivalent to executing arbitrary PHP.** It grants every
-capability on the list above. Use it only for templates written and reviewed by
-trusted authors. The same is true of `rawPhp`, `phpVariables` and `methodCalls`
-individually — each is a real grant, not a cosmetic one.
+**Every capability that reaches PHP is a real grant.** `rawPhp`, `phpVariables`,
+`methodCalls`, `newExpressions` and `staticCalls` are equivalent to executing
+arbitrary PHP from a template, and `Policy::open()` turns all of them on. Use it
+only for templates written and reviewed by trusted authors.
 
 #### Guardrails
 
@@ -822,14 +834,14 @@ positive form:
 $engine->setPolicy(Policy::open()->denyFunctions('exec', 'system', 'proc_open'));
 ```
 
-What still holds in every policy is that the engine's own render-frame namespace
-stays out of reach: a template cannot bind a `__c_`-prefixed name, and
+What holds in every policy is that the engine's own render-frame namespace stays
+out of reach: a template cannot bind a `__c_`-prefixed name, and
 `$$name` / `${expr}` variable-variable expansion resolves against the render
 scope, so it can never reach an engine internal.
 
-`superglobals` is a genuinely separate grant. Without it, `{{ _SERVER }}` is an
-ordinary scope read of a name that is absent, so it throws — even when
-`phpVariables` is on. With it, the name means PHP's own variable.
+`superglobals` is a separate grant. Without it, `{{ _SERVER }}` is an ordinary
+scope read of a name that is absent, so it throws — even when `phpVariables` is
+on. With it, the name means PHP's own variable.
 
 #### Policy changes and the cache
 
@@ -851,12 +863,12 @@ language: the syntax is identical and every registered filter and function still
 resolves first. What changes is what an _unregistered_ name or a refused
 construct may reach.
 
-The whole of PHP mode is expressible as a policy, and three presets cover how
-much rope a template gets:
+PHP mode is expressed as a policy, and the three presets differ in how much a
+template may reach:
 
 | Preset                          | Grants                                                                       |
 | ------------------------------- | ---------------------------------------------------------------------------- |
-| `Policy::sandboxed()` (default) | nothing that reaches PHP — the safe mode the engine has always had           |
+| `Policy::sandboxed()` (default) | nothing that reaches PHP                                                     |
 | `Policy::trusted()`             | `rawPhp`, `methodCalls`, `superglobals`, `phpVariables` — but not `new`/`::` |
 | `Policy::open()`                | every capability — equivalent to executing arbitrary PHP                     |
 
@@ -867,13 +879,12 @@ $engine->setPolicy(Policy::trusted());
 $engine->setPolicy(Policy::open());   // the full-power mode
 ```
 
-`Policy::trusted()` is the one worth knowing: it is PHP mode minus the two
-capabilities that let a template name a class of its own. `newExpressions` and
-`staticCalls` are a different order of trust from calling a method on an object
-the application already passed in, so `trusted()` withholds them.
+`Policy::trusted()` is PHP mode minus the two capabilities that let a template
+name a class of its own. `newExpressions` and `staticCalls` reach code the
+application never handed the template, so `trusted()` withholds them.
 
 **What each capability turns on** is tabulated under [Policies](#policies)
-below. The one that is not obvious is `superglobals`: without it a superglobal
+above. The one that is not obvious is `superglobals`: without it a superglobal
 name is an ordinary scope read, so `{{ _SERVER }}` throws _even when_
 `phpVariables` is granted, and `{{ $_SERVER }}` is the only spelling that means
 PHP's own variable.
