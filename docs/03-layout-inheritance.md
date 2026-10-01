@@ -524,7 +524,7 @@ Use for **reusable components** that appear multiple times:
 
 ## Real-World Example
 
-### E-commerce Site Structure
+An e-commerce site: a base layout, a shop layout that extends it, and pages that extend the shop layout.
 
 **Base Layout: `layouts/base.clarity.html`**
 
@@ -588,141 +588,18 @@ Use for **reusable components** that appear multiple times:
     {% endfor %}
   </div>
 {% endblock %}
-{% block scripts %}
-  <script src="/js/product-filters.js"></script>
-{% endblock %}
-```
-
-**Product Detail Page: `products/show.clarity.html`**
-
-```twig
-{% extends "layouts/base" %}
-{% block title %}{{ product:name }}{% endblock %}
-{% block bodyClass %}product-detail{% endblock %}
-{% block styles %}
-  <link rel="stylesheet" href="/css/product-detail.css" />
-{% endblock %}
-{% block body %}
-  {% include "partials/shop-header" %}
-
-  <div class="product-detail">
-    <div class="product-images">
-      {% for image in product:images %}
-      <img src="{{ image }}" alt="{{ product:name }}" />
-      {% endfor %}
-    </div>
-
-    <div class="product-info">
-      <h1>{{ product:name }}</h1>
-      <p class="price">{{ product:price |> currency }}</p>
-      <p>{{ product:description }}</p>
-
-      <button class="btn-add-cart">Add to Cart</button>
-    </div>
-  </div>
-
-  {% include "partials/footer" %} {% endblock %} {% block scripts %}
-  <script src="/js/product-gallery.js"></script>
-{% endblock %}
-```
-
-## Best Practices
-
-### 1. Define Clear Block Hierarchy
-
-Organize blocks logically:
-
-```twig
-{% block head %}
-  {% block meta %}{% endblock %}
-  {% block title %}{% endblock %}
-  {% block styles %}{% endblock %}
-{% endblock %}
-{% block body %}
-  {% block header %}{% endblock %}
-  {% block content %}{% endblock %}
-  {% block footer %}{% endblock %}
-  {% block scripts %}{% endblock %}
-{% endblock %}
-```
-
-### 2. Use Descriptive Block Names
-
-✅ Good: `{% block pageTitle %}`, `{% block mainContent %}`, `{% block sidebarWidgets %}`
-
-❌ Bad: `{% block b1 %}`, `{% block content2 %}`, `{% block stuff %}`
-
-### 3. Provide Sensible Defaults
-
-Make blocks work out-of-the-box:
-
-```twig
-{% block header %}
-  <h1>{{ siteName }}</h1>
-  {% include "partials/nav" %}
-{% endblock %}
-```
-
-### 4. Keep Layouts Focused
-
-Don't overcomplicate layouts with business logic:
-
-```twig
-{# ❌ Bad: Logic in layout #}
-{% if user:isPremium and user:notifications > 0 %}
-  ...
-{% endif %}
-{# ✅ Good: Logic in PHP, simple variables in layout #}
-{% if showNotificationBadge %}
-  <span class="badge">{{ notificationCount }}</span>
-{% endif %}
-```
-
-### 5. Leverage Multi-Level Inheritance
-
-Create a hierarchy for flexibility:
-
-```
-base.clarity.html           → Everything shares this
-├── public.clarity.html     → Public pages
-│   ├── home.clarity.html
-│   └── about.clarity.html
-└── admin.clarity.html      → Admin pages
-    ├── dashboard.clarity.html
-    └── users.clarity.html
 ```
 
 ## Troubleshooting
 
-### Block Not Overriding
+- **Child block doesn't replace the parent's** — block names must match exactly (case-sensitive); check for typos, and make sure `{% extends %}` is the first directive.
+- **Content in a child template doesn't appear** — rendered content must be inside a block. Leading `{% set %}` directives after `{% extends %}` are the exception (see [above](#leading-set-directives-are-preserved)); HTML/text outside blocks is ignored.
+- **Template renders without the layout** — `{% extends %}` overrides `setLayout()`; use one or the other, not both.
 
-**Problem:** Child block doesn't replace parent block.
-
-**Causes:**
-
-1. Block names don't match exactly (case-sensitive)
-2. Typo in block name
-3. `{% extends %}` is not the first directive
-
-### Content Not Appearing
-
-**Problem:** Content in child template doesn't appear.
-
-**Solution:** Ensure rendered content is **inside a block**. Leading `{% set %}` directives may appear after `{% extends %}` for layout metadata, but HTML/text outside blocks in child templates is ignored.
-
-### Layout Not Applied
-
-**Problem:** Template renders without layout.
-
-**Causes:**
-
-1. `setLayout(null)` was called
-2. `{% extends %}` overrides `setLayout()`
-
-**Solution:** Use either `setLayout()` in PHP or `{% extends %}` in template, not both.
+See the [Troubleshooting Guide](06-troubleshooting.md) for errors outside inheritance.
 
 ## Next Steps
 
-- **[Advanced Topics](04-advanced-topics.md)** — Namespaces, caching, error handling
 - **[Best Practices](05-best-practices.md)** — Organization and patterns
+- **[Advanced Topics](04-advanced-topics.md)** — Namespaces, caching, error handling
 - **[Examples](examples/README.md)** — See complete layout examples

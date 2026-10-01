@@ -47,7 +47,7 @@ class PolicyCapabilityTest extends BaseTestCase
 
     public function testRawPhpIsRefusedWithoutTheCapability(): void
     {
-        self::tpl('pc_php_off', "{% php %}echo 'x';{% endphp %}");
+        self::tpl('pc_php_off', "{% php echo 'x'; %}");
 
         $this->expectException(ClarityException::class);
         $this->expectExceptionMessageMatches("/'rawPhp' capability/");
@@ -56,7 +56,7 @@ class PolicyCapabilityTest extends BaseTestCase
 
     public function testRawPhpIsGrantedByItsOwnCapability(): void
     {
-        self::tpl('pc_php_on', "{% php %}echo 'x';{% endphp %}");
+        self::tpl('pc_php_on', "{% php echo 'x'; %}");
 
         $this->assertSame('x', self::engine(Policy::custom()->allowCapability('rawPhp'))->renderPartial('pc_php_on'));
     }
@@ -277,7 +277,7 @@ class PolicyCapabilityTest extends BaseTestCase
 
     public function testPhpVariablesMakesALocalAndTheScopeTheSameName(): void
     {
-        self::tpl('pc_pv_on', "{% php %}\$t = 'from-php';{% endphp %}{{ t }}");
+        self::tpl('pc_pv_on', "{% php \$t = 'from-php'; %}{{ t }}");
 
         $this->assertSame(
             'from-php',

@@ -368,65 +368,41 @@ class OpenModeTest extends BaseTestCase
     }
 
     // =========================================================================
-    // {% php %} raw blocks
+    // {% php <code> %} raw tags
     // =========================================================================
 
-    public function testPhpBlockRejectedWhenSandboxed(): void
+    public function testPhpTagRendersInOpenMode(): void
     {
-        self::tpl('om_php_sandbox', "{% php %}echo 'x';{% endphp %}");
-
-        $this->expectException(ClarityException::class);
-        $this->expectExceptionMessageMatches('/not allowed by this policy/');
-        self::render('om_php_sandbox');
-    }
-
-    public function testPhpBlockRendersInOpenMode(): void
-    {
-        self::tpl('om_php', "{% php %}echo strtoupper('hi');{% endphp %}");
+        self::tpl('om_php', '{% php echo strtoupper(\'hi\'); %}');
         $this->assertSame('HI', self::openEngine()->renderPartial('om_php'));
     }
 
-    public function testPhpBlockMultiLine(): void
-    {
-        // Multi-statement body. The block itself contributes no literal text,
-        // and the newline after `{% endphp %}` is stripped by the same
-        // post-block rule that applies to every `{% %}` tag.
-        $tpl = 'A' . "\n"
-            . '{% php %}' . "\n"
-            . '$n = 2;' . "\n"
-            . 'echo $n * 3;' . "\n"
-            . 'echo "\n";' . "\n"
-            . '{% endphp %}B';
-        self::tpl('om_php_multi', $tpl);
-        $this->assertSame("A\n6\nB", self::openEngine()->renderPartial('om_php_multi'));
-    }
-
-    public function testPhpBlockReadsIncomingVariableAsLocal(): void
+    public function testPhpTagReadsIncomingVariableAsLocal(): void
     {
         // Open mode seeds the scope into locals, so a template variable is a
-        // plain PHP variable inside the block — no internals, exactly as in
+        // plain PHP variable inside the tag — no internals, exactly as in
         // Blade / Stempler / Plates.
         self::tpl('om_php_read', '{% php echo strtoupper($title); %}');
         $this->assertSame('TITLE', self::openEngine()->renderPartial('om_php_read', ['title' => 'title']));
     }
 
-    public function testPhpBlockAndTemplateExpressionShareOneVariable(): void
+    public function testPhpTagAndTemplateExpressionShareOneVariable(): void
     {
-        // The load-bearing property: a local written by a block is the SAME
+        // The load-bearing property: a local written by a tag is the SAME
         // variable a {{ }} expression reads. Two views of one store, not two
         // environments.
         self::tpl('om_php_share', "{% php \$x = 'set'; %}{{ x }}");
         $this->assertSame('set', self::openEngine()->renderPartial('om_php_share'));
     }
 
-    public function testSetAndPhpBlockShareOneVariable(): void
+    public function testSetAndPhpTagShareOneVariable(): void
     {
-        // The same from the other direction: {% set %} and a raw block agree.
+        // The same from the other direction: {% set %} and a raw tag agree.
         self::tpl('om_set_php', "{% set t = 'foo' %}{{ t }}|{% php echo \$t; %}");
         $this->assertSame('foo|foo', self::openEngine()->renderPartial('om_set_php'));
     }
 
-    public function testLoopLocalIsSharedWithPhpBlock(): void
+    public function testLoopLocalIsSharedWithPhpTag(): void
     {
         self::tpl('om_loop_php', '{% for f in items %}{{ f }}-{% php echo $f; %};{% endfor %}');
         $this->assertSame(
@@ -435,7 +411,7 @@ class OpenModeTest extends BaseTestCase
         );
     }
 
-    public function testPhpBlockCanStillReadTheVarArray(): void
+    public function testPhpTagCanStillReadTheVarArray(): void
     {
         // $__c_va survives as the explicit escape hatch (dynamic names, context()).
         self::tpl('om_php_va', "{% php echo \$__c_va['title']; %}");
@@ -453,7 +429,7 @@ class OpenModeTest extends BaseTestCase
         self::openEngine()->renderPartial('om_undef');
     }
 
-    public function testUndefinedRootInPhpBlockCausesAnError(): void
+    public function testUndefinedRootInPhpTagCausesAnError(): void
     {
         self::tpl('om_undef_php', '{% php echo $missing; %}');
 
@@ -473,40 +449,26 @@ class OpenModeTest extends BaseTestCase
         );
     }
 
-    public function testPhpBlockInteractsWithFilters(): void
+    public function testPhpTagInteractsWithFilters(): void
     {
-        self::tpl('om_php_mix', "{% php %}\$up = strtoupper('ab'); echo \$up;{% endphp %}-{{ 'cd' |> strtoupper }}");
+        self::tpl('om_php_mix', "{% php \$up = strtoupper('ab'); echo \$up; %}-{{ 'cd' |> strtoupper }}");
         $this->assertSame('AB-CD', self::openEngine()->renderPartial('om_php_mix'));
     }
 
-    public function testPhpBlockMapsRuntimeErrorToBodyLine(): void
-    {
-        self::tpl('om_php_map', "{% php %}\n\$a = 1;\nthrow new \\RuntimeException('boom');\n{% endphp %}");
-
-        try {
-            self::openEngine()->renderPartial('om_php_map');
-            $this->fail('expected the block to throw');
-        } catch (ClarityException $e) {
-            // `throw` is template line 3. A block mapped as a single range would
-            // report line 1 (its opening tag); per-line mapping points at the bug.
-            $this->assertSame(3, $e->templateLine);
-        }
-    }
-
     // =========================================================================
-    // {% php CODE %} standalone directive
+    // {% php <code> %}: multi-statement, multi-line tags
     // =========================================================================
 
-    public function testStandalonePhpStatement(): void
+    public function testPhpTagStatement(): void
     {
         self::tpl('om_php_sa_stmt', '{% php $x = 1; echo "bla" . $x; %}');
         $this->assertSame('bla1', self::openEngine()->renderPartial('om_php_sa_stmt'));
     }
 
-    public function testStandalonePhpControlStructureWrapsMarkup(): void
+    public function testPhpTagControlStructureWrapsMarkup(): void
     {
-        // The point of the standalone form: PHP structure in one tag, markup
-        // between, the closing keyword in another.
+        // PHP structure in one tag, markup between, the closing keyword in
+        // another — the property no single-tag form can express.
         self::tpl(
             'om_php_sa_if',
             "{% php if (\$__c_va['ok']) : %}YES{% php else : %}NO{% php endif %}"
@@ -517,7 +479,7 @@ class OpenModeTest extends BaseTestCase
         $this->assertSame('NO', $engine->renderPartial('om_php_sa_if', ['ok' => false]));
     }
 
-    public function testStandalonePhpForeachEchoesPhpLocal(): void
+    public function testPhpTagForeachEchoesPhpLocal(): void
     {
         // Inside a php tag a loop local is a genuine PHP variable, so it is
         // echoed by PHP directly (it is not a template variable).
@@ -528,7 +490,7 @@ class OpenModeTest extends BaseTestCase
         $this->assertSame('123', self::openEngine()->renderPartial('om_php_sa_foreach'));
     }
 
-    public function testStandalonePhpExposesLocalToTemplateOutput(): void
+    public function testPhpTagExposesLocalToTemplateOutput(): void
     {
         self::tpl(
             'om_php_sa_expose',
@@ -537,13 +499,26 @@ class OpenModeTest extends BaseTestCase
         $this->assertSame('78', self::openEngine()->renderPartial('om_php_sa_expose'));
     }
 
-    public function testStandalonePhpMultiLineTag(): void
+    public function testPhpTagMultiLine(): void
+    {
+        // A body that opens on the tag's first line. The tag contributes no
+        // literal text, and the newline after `%}` is stripped by the same
+        // post-tag rule that applies to every `{% %}` tag.
+        $tpl = 'A' . "\n"
+            . '{% php $n = 2;' . "\n"
+            . 'echo $n * 3;' . "\n"
+            . 'echo "\n"; %}B';
+        self::tpl('om_php_sa_multi_line', $tpl);
+        $this->assertSame("A\n6\nB", self::openEngine()->renderPartial('om_php_sa_multi_line'));
+    }
+
+    public function testPhpTagMultiLineTag(): void
     {
         self::tpl('om_php_sa_multi', "A\n{% php\n\$n = 2;\necho \$n * 3;\n%}\nB");
         $this->assertSame("A\n6B", self::openEngine()->renderPartial('om_php_sa_multi'));
     }
 
-    public function testStandalonePhpMapsRuntimeErrorToBodyLine(): void
+    public function testPhpTagMapsRuntimeErrorToBodyLine(): void
     {
         self::tpl(
             'om_php_sa_map',
@@ -559,7 +534,21 @@ class OpenModeTest extends BaseTestCase
         }
     }
 
-    public function testStandalonePhpSyntaxErrorMapsToTagLine(): void
+    public function testPhpTagMapsSingleLineRuntimeErrorToItsLine(): void
+    {
+        // The same mapping without a multi-line tag: `throw` is template line 3,
+        // so a tag mapped as a single range would wrongly report line 1.
+        self::tpl('om_php_map', "{% php \$a = 1; %}\n{% php \$b = 2; %}\n{% php throw new \\RuntimeException('boom'); %}");
+
+        try {
+            self::openEngine()->renderPartial('om_php_map');
+            $this->fail('expected the tag to throw');
+        } catch (ClarityException $e) {
+            $this->assertSame(3, $e->templateLine);
+        }
+    }
+
+    public function testPhpTagSyntaxErrorMapsToTagLine(): void
     {
         self::tpl('om_php_sa_syntax', "top\n{% php \$a = ; %}\nbottom");
 
@@ -572,7 +561,19 @@ class OpenModeTest extends BaseTestCase
         }
     }
 
-    public function testStandalonePhpRejectedWhenSandboxed(): void
+    public function testPhpTagSingleClosingBraceBody(): void
+    {
+        // Brace-style control structure: the closer is a lone `}`. The
+        // empty-opener lookahead rejects only the `%}` spelling, so this body
+        // must still compile.
+        self::tpl('om_php_sa_brace', '{% php if ($__c_va["ok"]) { %}YES{% php } %}');
+
+        $engine = self::openEngine();
+        $this->assertSame('YES', $engine->renderPartial('om_php_sa_brace', ['ok' => true]));
+        $this->assertSame('', $engine->renderPartial('om_php_sa_brace', ['ok' => false]));
+    }
+
+    public function testPhpTagRejectedWhenSandboxed(): void
     {
         self::tpl('om_php_sa_deny', '{% php echo "x"; %}');
 
@@ -581,12 +582,35 @@ class OpenModeTest extends BaseTestCase
         self::render('om_php_sa_deny');
     }
 
-    public function testStrayEndphpIsReported(): void
+    public function testEmptyPhpTagIsReported(): void
     {
+        // `{% php %}` with no body is not a tag: it has no code to run. (The
+        // `…{% endphp %}` block spelling it used to open is no longer supported,
+        // so nothing but `{% php <code> %}` compiles.)
+        self::tpl('om_php_empty', '{% php %}');
+
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches("/Empty '\{% php %\}' tag/");
+        self::openEngine()->renderPartial('om_php_empty');
+    }
+
+    public function testUnclosedPhpTagIsReportedAsEmpty(): void
+    {
+        self::tpl('om_php_unclosed', "{% php %}\necho 'x';\n{% endphp %}");
+
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches("/Empty '\{% php %\}' tag/");
+        self::openEngine()->renderPartial('om_php_unclosed');
+    }
+
+    public function testStrayEndphpIsReportedAsUnknownDirective(): void
+    {
+        // `{% endphp %}` is no longer a keyword, so it falls through to the
+        // unknown-directive path rather than getting a message of its own.
         self::tpl('om_php_stray', '{% php if (true) : %}{% endphp %}');
 
         $this->expectException(ClarityException::class);
-        $this->expectExceptionMessageMatches('/Unexpected/');
+        $this->expectExceptionMessageMatches("/Unknown directive 'endphp'/");
         self::openEngine()->renderPartial('om_php_stray');
     }
 
@@ -597,8 +621,8 @@ class OpenModeTest extends BaseTestCase
     public function testSuperglobalIsReadableInOpenMode(): void
     {
         // Open mode grants the full power of PHP, and raw PHP already reaches the
-        // superglobals, so the EXPRESSION form must not be stricter than the block
-        // form. Absent from the render scope in sandbox mode, so it throws there.
+        // superglobals, so the EXPRESSION form must not be stricter than the raw
+        // tag form. Absent from the render scope in sandbox mode, so it throws there.
         self::tpl('om_super', '{{ _SERVER |> length > 0 ? "yes" : "no" }}');
 
         self::tpl('om_super_php', '{% php echo is_array($_SERVER) ? "yes" : "no"; %}');

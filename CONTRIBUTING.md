@@ -85,7 +85,7 @@ Compiler (`src/Engine/Compiler/`):
 | Trait                   | Responsibility                                                        |
 | ----------------------- | --------------------------------------------------------------------- |
 | `CompilerCoreTrait`     | `compile()` entry point, template loading, source map + error mapping |
-| `DirectiveSupportTrait` | variable scope, macros and `{% php %}` regions                        |
+| `DirectiveSupportTrait` | variable scope, macros and `{% php %}` tags                           |
 | `InheritanceTrait`      | static `{% extends %}` / `{% block %}` merge                          |
 | `BodyCompilerTrait`     | segment loop + directive dispatch (re-entry point)                    |
 | `ControlFlowTrait`      | for / if / else / set / include                                       |

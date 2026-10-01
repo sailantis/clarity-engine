@@ -97,7 +97,11 @@ trait ClarityEngineTrait
      */
     public function setPolicy(Policy|array $policy): static
     {
-        $this->policy = Policy::fromUserValue($policy);
+        if ($policy instanceof Policy) {
+            $this->policy = $policy;
+        } else {
+            $this->policy = Policy::fromArray($policy);
+        }
         return $this;
     }
 
@@ -828,10 +832,9 @@ trait ClarityEngineTrait
         // using plain `require` so the new versioned class is always declared.
         $this->compiler ??= new Compiler();
         $this->compiler
-            ->setExtension($this->extension ?? FileLoader::DEFAULT_EXTENSION)
             ->setRegistry($this->registry)
-            ->setDebugMode($this->debugMode)
-            ->setPolicy($this->policy);
+            ->setPolicy($this->policy)
+            ->setDebugMode($this->debugMode);
         $compileStart = $this->debugMode ? \microtime(true) : 0.0;
         $compiled     = $this->compiler->compile($templateName, $loader);
         if ($this->debugMode) {

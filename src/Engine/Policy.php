@@ -18,7 +18,7 @@ use Clarity\ClarityException;
  *
  * Capabilities
  * ------------
- *   rawPhp             `{% php CODE %}` and `{% php %}…{% endphp %}`
+ *   rawPhp             `{% php CODE %}`
  *   methodCalls        `$obj->method(args)` on a `$`-sigil chain
  *   superglobals       `$_SERVER`, `$_GET`, … as chain roots
  *   phpVariables       the render scope seeded into PHP locals — the thing that
@@ -254,16 +254,6 @@ final class Policy
             'filters'         => \array_keys($this->filters),
             'deniedFunctions' => \array_keys($this->denied),
         ];
-    }
-
-    /**
-     * A {@see self} from either form, so a config key can take both.
-     *
-     * @param self|array<string, mixed> $value
-     */
-    public static function fromUserValue(self|array $value): self
-    {
-        return $value instanceof self ? $value : self::fromArray($value);
     }
 
     // -------------------------------------------------------------------------
@@ -506,18 +496,12 @@ final class Policy
      * mismatch, which is what makes changing a policy safe — a class compiled
      * under one policy must never be served under another, and the cache keys on
      * template source only.
-     *
-     * A DIGEST, not the policy: the compiled file is source code that ships to a
-     * server and should not carry a readable inventory of what a template may
-     * call.  It covers the FULL identity — every capability and every allowlist
-     * entry, sorted, with lengths — so two policies that differ in their last
-     * entry cannot collide.
      */
     public function digest(): string
     {
         $capabilities = [];
         foreach ($this->capabilities as $name => $allowed) {
-            $capabilities[] = $name . "\x01" . ($allowed ? '1' : '0');
+            $capabilities[] = $name . ":" . ($allowed ? '1' : '0');
         }
         \sort($capabilities);
 

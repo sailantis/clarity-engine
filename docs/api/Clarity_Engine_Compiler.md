@@ -71,7 +71,7 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ## Public Constants
 
-- **COMPILER_VERSION** = `19`
+- **COMPILER_VERSION** = `20`
 - **INTERNAL_PREFIX** = `'__c_'`
 
 ## Public methods

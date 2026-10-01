@@ -15,7 +15,7 @@ it at all — which is what keeps the sandbox free of runtime cost.
 
 Capabilities
 ------------
-  rawPhp             `{% php CODE %}` and `{% php %}…{% endphp %}`
+  rawPhp             `{% php CODE %}`
   methodCalls        `$obj->method(args)` on a `$`-sigil chain
   superglobals       `$_SERVER`, `$_GET`, … as chain roots
   phpVariables       the render scope seeded into PHP locals — the thing that

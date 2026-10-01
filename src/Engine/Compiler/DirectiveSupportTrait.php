@@ -143,24 +143,31 @@ trait DirectiveSupportTrait
     }
 
     /**
-     * Extract `{% php %}…{% endphp %}` regions from the source, replacing each
-     * with a line-preserving sentinel tag that {@see compileSourceInto()} later
-     * turns back into raw PHP.
+     * Extract `{% php <code> %}` regions from the source, replacing each with a
+     * line-preserving sentinel tag that {@see compileSourceInto()} later turns
+     * back into raw PHP.
      *
-     * Two interchangeable spellings are accepted:
+     * One spelling is accepted:
      *
-     *   block form       {% php %} ... {% endphp %}
-     *   standalone form  {% php <code> %}
+     *   {% php <code> %}
      *
-     * The standalone form carries one statement -- or one fragment of a control
-     * structure -- per tag, which is what lets PHP structure wrap template
-     * markup without a single block spanning it:
+     * It carries one statement -- or one fragment of a control structure -- per
+     * tag, which is what lets PHP structure wrap template markup without a single
+     * tag spanning it:
      *
      *   {% php if ($items) : %}
      *   ... markup ...
      *   {% php endif %}
      *
-     * Both are OPEN-MODE features and are rejected while the sandbox is enabled.
+     * The body may also span lines: the `.` below is `/s`, so
+     *
+     *   {% php
+     *   $a = 1;
+     *   echo $a;
+     *   %}
+     *
+     * is a multi-statement tag.  It is an OPEN-MODE feature and is rejected while
+     * the sandbox is enabled.
      *
      * The body is held aside rather than tokenized, for two reasons:
      *  - It must reach the compiled class VERBATIM: only the surrounding `{% %}`
@@ -172,8 +179,7 @@ trait DirectiveSupportTrait
      *
      * LIMITATION: the closing delimiter is found by a plain non-greedy match, so
      * a literal `%}` inside the body ends the region early -- spell it `'%' . '}'`
-     * when that exact sequence is needed.  (The block form has the same rule
-     * about a literal `endphp %}`.)
+     * when that exact sequence is needed.
      *
      * @param string $source Merged template source (mutated in place).
      */
@@ -183,20 +189,15 @@ trait DirectiveSupportTrait
             return;
         }
 
-        // Block form first: its opener is indistinguishable from an empty
-        // standalone tag, so consuming it here keeps the two passes from ever
-        // competing for the same text.
+        // The body must begin with a non-whitespace character, which is exactly
+        // what keeps an empty `{% php %}` opener out.  The lookahead rejects it
+        // before the body is scanned: without it, the non-greedy `(.+?)` would
+        // treat the opener's own `%}` as the start of a body and swallow the rest
+        // of the template as one (invalid) PHP statement.  It deliberately rejects
+        // only `%}` / `-%}`, so a lone `}` -- the closing brace of a brace-style
+        // block, `{% php } %}` -- is still a legal body.
         $source = (string) \preg_replace_callback(
-            '/(\{%-?\s*php\s*-?%\})(.*?)(\{%-?\s*endphp\s*-?%\})/is',
-            fn(array $m): string =>
-                $this->storePhpBlock($m[1], $m[2], \substr_count($m[0], "\n")),
-            $source
-        );
-
-        // Standalone form.  The body must begin with a non-whitespace character,
-        // which is exactly what keeps an empty `{% php %}` opener out.
-        $source = (string) \preg_replace_callback(
-            '/(\{%-?\s*php\s+)(.+?)(-?%\})/is',
+            '/(\{%-?\s*php\s+(?!-?%\}))(.+?)(-?%\})/is',
             function (array $m): string {
                 if (\trim($m[2]) === '') {
                     return $m[0];
@@ -210,9 +211,9 @@ trait DirectiveSupportTrait
     /**
      * Register one raw-PHP body and return the sentinel tag that replaces it.
      *
-     * @param string $openTag     The region's opening tag, verbatim.
-     * @param string $bodyRaw     Body exactly as written between the delimiters.
-     * @param int    $regionLines Line breaks the whole region spans; the sentinel
+     * @param string $openTag     The tag's opening portion, verbatim.
+     * @param string $bodyRaw     Body exactly as written, before the closing `%}`.
+     * @param int    $regionLines Line breaks the whole tag spans; the sentinel
      *                            carries them so following segments stay aligned.
      */
     private function storePhpBlock(string $openTag, string $bodyRaw, int $regionLines): string
@@ -224,19 +225,12 @@ trait DirectiveSupportTrait
             );
         }
 
-        // Template line of the body's FIRST line, relative to the region's line:
-        // the breaks the opening tag itself spans, plus one when the layout put
-        // the body on the following line.
+        // Template line of the body's FIRST line, relative to the tag's line: the
+        // breaks the opening portion itself spans.  The body never starts with a
+        // break -- the `\s+` before it consumes them -- so the body's own
+        // indentation survives as written.
         $offset = \substr_count($openTag, "\n");
-
-        $body = $bodyRaw;
-        if (\preg_match('/^\r?\n/', $body) === 1) {
-            // ONE leading break is layout, not code: strip it, but count it, so
-            // the mapping stays exact and the body's own indentation survives.
-            $body = (string) \preg_replace('/^\r?\n/', '', $body, 1);
-            $offset++;
-        }
-        $body = \rtrim($body);
+        $body   = \rtrim($bodyRaw);
 
         // Give a complete statement its terminator, but never a fragment that
         // ends INSIDE a control structure: `if ($x) :`, `else:`, `{` and `}` are

@@ -467,8 +467,7 @@ Count array elements or string length:
 {{ "hello" |> length }} {# Output: 5 #}
 ```
 
-`len` is an alias — all four spellings above work with it too, e.g.
-`{{ items |> len }}` and `{{ len(items) }}`.
+`len` is an alias — all four spellings above work with it too.
 
 #### slice(start, length?)
 
@@ -733,14 +732,11 @@ Get array values (re-indexed):
 
 ### len(var)
 
-An alias of [`length`](#length) — identical behavior, provided because `len`
-reads naturally as a call. Both names work in **both** syntaxes:
+An alias of [`length`](#length) — identical behavior in **both** syntaxes. `len` is provided because it reads naturally as a call:
 
 ```twig
-{{ len(data) }}          {# function form              #}
-{{ data |> len }}        {# filter form (same result)   #}
-{{ length(data) }}       {# the canonical name…         #}
-{{ data |> length }}     {# …also in both forms         #}
+{{ len(data) }}      {# function form #}
+{{ data |> len }}    {# filter form #}
 ```
 
 ### range(low, high, step?)
@@ -921,10 +917,7 @@ Nothing is blocked by default: PHP mode is full PHP access. An application can
 add its own guardrails with `Policy::open()->denyFunctions([...])`.
 
 > See [Advanced Topics → PHP Mode](04-advanced-topics.md#php-mode) for the
-> security consequences. PHP mode is equivalent to executing arbitrary PHP.
-> [Registering Custom Filters](00-getting-started.md#registering-custom-filters)
-> and [Registering Custom Functions](00-getting-started.md#registering-custom-functions)
-> cover adding your own, in both modes.
+> security consequences — PHP mode is equivalent to executing arbitrary PHP.
 
 ## Filter Reference Quick Table
 
@@ -975,14 +968,12 @@ add its own guardrails with `Policy::open()->denyFunctions([...])`.
 | `escape` / `esc`   | HTML escape            | `{{ html \|> escape }}`                                  |
 | `raw`              | Disable auto-escaping  | `{{ html \|> raw }}`                                     |
 
-Every name above is also callable with parentheses. The value that would be
-piped becomes the first argument (`number(value, 2)`), except `date` and `join`,
-whose call form mirrors PHP: `date(fmt, value)` and `join(glue, array)`. `len`
-is an alias of `length` and behaves identically in both forms.
-
-The reverse is not true: a few names are **call-only** because their first
-argument is not a piped value — `context`, `include`, `dump` and `dd`. Writing
-`{{ x |> context }}` is a compile error; call them instead (`{{ context() }}`).
+Every name above is also callable with parentheses; the value that would be piped
+becomes the first argument, except `date` and `join`, whose call form mirrors PHP
+(see [One call model](#one-call-model-two-signatures)). The reverse is not true:
+a few names are **call-only** because their first argument is not a piped value —
+`context`, `include`, `dump` and `dd`. Writing `{{ x |> context }}` is a compile
+error; call them instead (`{{ context() }}`).
 
 ## Next Steps
 

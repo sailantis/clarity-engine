@@ -234,19 +234,15 @@ trait BodyCompilerTrait
             'extends', 'block', 'endblock' => '',
             'include'                      => $this->compileInclude($rest, $sourcePath, $tplLine, $lines),
             // A `php` keyword that reaches code generation was NOT extracted by
-            // extractPhpBlocks(): the raw form was written but never closed.  A
-            // complete form never gets here -- extraction handles it, and rejects
-            // it outright while the sandbox is enabled.
+            // extractPhpBlocks(): either the sandbox refused it, or the tag
+            // carried no body.  A well-formed `{% php <code> %}` never gets here
+            // -- extraction handles it.
             'php'                          => throw new ClarityException(
                 !$this->policy->allows('rawPhp')
                     ? "'{% php %}' is not allowed by this policy. "
                         . "Grant the 'rawPhp' capability to allow it."
-                    : "Unclosed '{% php %}': expected a matching '{% endphp %}'.",
-                $sourcePath,
-                $tplLine
-            ),
-            'endphp'                       => throw new ClarityException(
-                "Unexpected '{% endphp %}': no matching '{% php %}' block.",
+                    : "Empty '{% php %}' tag: it needs code, as in "
+                        . "'{% php echo \$total; %}'.",
                 $sourcePath,
                 $tplLine
             ),

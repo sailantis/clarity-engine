@@ -59,7 +59,7 @@ class DocExamplesTest extends TestCase
         $root   = \dirname(__DIR__, 2) . '/docs/examples';
         $loader = new FileLoader($root, '.clarity.html');
 
-        (new Compiler())->setRegistry(new Registry())->compile($view, $loader);
+        Compiler::sandboxed()->compile($view, $loader);
 
         $this->addToAssertionCount(1);
     }

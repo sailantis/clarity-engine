@@ -148,12 +148,12 @@ trait CompilerCoreTrait
     }
 
     /**
-     * Append a raw-PHP block, mapping each of its lines to its OWN template line.
+     * Append a raw-PHP tag, mapping each of its lines to its OWN template line.
      *
-     * A raw block is the one construct whose compiled lines and template lines
-     * run in lockstep, so an exact one-to-one mapping is both possible and worth
-     * the extra source-map ranges: a runtime error inside the block then points
-     * at the offending template line instead of at the block's opening tag.
+     * A raw tag is the one construct whose compiled lines and template lines run
+     * in lockstep, so an exact one-to-one mapping is both possible and worth the
+     * extra source-map ranges: a runtime error inside the tag then points at the
+     * offending template line instead of at the tag itself.
      *
      * @param array  $lines        The accumulated render-body lines (mutated).
      * @param string $php          Verbatim PHP body.
@@ -284,15 +284,6 @@ trait CompilerCoreTrait
 
         if ($ref === '') {
             throw new ClarityException("Template reference must not be empty.", $currentName);
-        }
-
-        // Strip extension if the engine has an explicit extension configured
-        if (
-            $this->extension !== null
-                && $this->extension !== ''
-                && str_ends_with($ref, $this->extension)
-        ) {
-            $ref = substr($ref, 0, -strlen($this->extension));
         }
 
         // Allow only safe characters: letters, digits, underscores, hyphens, dots, slashes, and ::

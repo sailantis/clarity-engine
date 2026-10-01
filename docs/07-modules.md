@@ -36,7 +36,6 @@ class MyModule implements ModuleInterface
 
     public function register(ClarityEngine $engine): void
     {
-        // Filters
         $engine->addFilter('shout', fn($v) => strtoupper($v) . '!');
 
         // Inline filter (zero runtime overhead — compiled directly into template)
@@ -44,23 +43,19 @@ class MyModule implements ModuleInterface
             'php' => '({1} * 2)',
         ]);
 
-        // Functions
         $engine->addFunction('asset', fn(string $path) => '/assets/' . ltrim($path, '/'));
 
-        // Shared service (accessible from inline filters and directive PHP
-        // via $__c_sv['key'])
+        // Shared service, read in template and directive PHP as $__c_sv['myapi']
         $engine->addService('myapi', new MyApiClient($this->apiKey));
 
         // Custom directive
-        //
-        // Check if debug mode is enabled via a 'checkDebug' service
         $engine->addService('checkDebug', fn(): bool => $engine->isDebugMode());
         $engine->addDirective(
             'debug_if',
             function (string $rest, string $path, int $line, callable $processExpr): string {
                 return 'if (' . $processExpr($rest) . ' && $__c_sv["checkDebug"]()) {';
             }
-        });
+        );
         $engine->addDirective('debug_endif', fn() => '}');
     }
 }
@@ -68,12 +63,12 @@ class MyModule implements ModuleInterface
 
 ### What a Module Can Register
 
-| API                                 | Purpose                                                                       |
-| ----------------------------------- | ----------------------------------------------------------------------------- |
-| `addFilter(name, callable)`         | Named filter callable invoked at render time                                  |
-| `addInlineFilter(name, definition)` | Filter expression compiled directly into the template PHP                     |
-| `addFunction(name, callable)`       | Function callable available in template expressions                           |
-| `addDirective(keyword, handler)`    | Custom `{% keyword %}` directive processed at compile time                    |
+| API                                 | Purpose                                                                         |
+| ----------------------------------- | ------------------------------------------------------------------------------- |
+| `addFilter(name, callable)`         | Named filter callable invoked at render time                                    |
+| `addInlineFilter(name, definition)` | Filter expression compiled directly into the template PHP                       |
+| `addFunction(name, callable)`       | Function callable available in template expressions                             |
+| `addDirective(keyword, handler)`    | Custom `{% keyword %}` directive processed at compile time                      |
 | `addService(key, object)`           | Shared value/object, read in template PHP and directive PHP as `$__c_sv['key']` |
 
 ---
