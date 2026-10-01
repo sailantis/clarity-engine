@@ -1,6 +1,6 @@
 ![Clarity Logo](docs/images/clarity-engine-logo.svg)
 
-> **A fast, secure, and expressive PHP template engine** – Maximum performance, whether sandboxed and secure or in **PHP mode** with the full power of PHP.
+> **A fast, secure, and expressive PHP template engine** – Maximum performance, whether sandboxed and secure or with the full power of PHP.
 
 ---
 
@@ -175,7 +175,7 @@ Integration and advanced topics:
 {% for i in 1...10 %}{{ i }}{% endfor %}         {# Range: 1 to 9 (exclusive) #}
 {% for i in 0..100 step 10 %}{{ i }}{% endfor %} {# With step #}
 
-{% set total = items | length %}
+{% set total = len(items) %}
 ```
 
 ### Macros

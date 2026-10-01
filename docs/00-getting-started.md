@@ -1,6 +1,6 @@
 # Getting Started with Clarity
 
-Clarity is a fast, secure PHP template engine that compiles `.clarity.html` templates into cached PHP classes. It provides a clean, expressive syntax while maintaining strict security through sandboxing.
+Clarity is a fast, secure PHP template engine that compiles `.clarity.html` templates into cached PHP classes. It provides a clean, expressive syntax and enforces security at compile time.
 
 ## Key Features
 
@@ -103,8 +103,8 @@ $engine->setPolicy(Policy::custom()                // or grant one thing at a ti
     ->allowCapability('methodCalls')
     ->allowFunctions('strtoupper', 'count'));
 
-// An open policy denies nothing by default, because being open IS the security
-// decision. Exclude specific names if you want guardrails on top of it:
+// An open policy denies nothing by default. Exclude specific names to keep
+// guardrails on top of it:
 $engine->setPolicy(Policy::open()->denyFunctions('exec', 'system'));
 ```
 
