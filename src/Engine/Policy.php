@@ -515,8 +515,11 @@ final class Policy
      */
     public function digest(): string
     {
-        $capabilities = $this->capabilities;
-        \ksort($capabilities);
+        $capabilities = [];
+        foreach ($this->capabilities as $name => $allowed) {
+            $capabilities[] = $name . "\x01" . ($allowed ? '1' : '0');
+        }
+        \sort($capabilities);
 
         $functions = \array_keys($this->functions);
         $filters   = \array_keys($this->filters);
@@ -525,12 +528,12 @@ final class Policy
         \sort($filters);
         \sort($denied);
 
-        return \substr(\sha1(\json_encode([
-            \array_map(static fn(bool $v): int => $v ? 1 : 0, $capabilities),
-            $functions,
-            $filters,
-            $denied,
-        ], \JSON_THROW_ON_ERROR)), 0, 16);
+        $canonical = \implode("\x1E", $capabilities)
+            . "\x1F" . \implode("\x1E", $functions)
+            . "\x1F" . \implode("\x1E", $filters)
+            . "\x1F" . \implode("\x1E", $denied);
+
+        return \hash('fnv1a64', $canonical);
     }
 
     private static function normalizeName(string $name): string
