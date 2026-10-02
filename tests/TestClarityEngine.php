@@ -14,7 +14,7 @@ class TestClarityEngine extends ClarityEngine
 
     /**
      * A fresh engine that compiles with an explicit policy, for tests that need
-     * one capability rather than the whole set.
+     * one rule rather than the whole set.
      */
     public static function withPolicy(Policy|array $policy, array $config = []): self
     {

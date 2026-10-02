@@ -54,7 +54,7 @@ trait CompilerCoreTrait
         $this->phpBlockBodies = [];
         $this->phpBlockSeq    = 0;
 
-        // The `phpVariables` capability seeds the render scope into PHP locals
+        // The `phpVariables` rule seeds the render scope into PHP locals
         // (see $seedsScope).  Decided from the POLICY, not per template, so an
         // inlined include can never read locals its host body did not seed.
         // Applied before any expression is compiled, because it changes every

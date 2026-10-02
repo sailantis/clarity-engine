@@ -10,7 +10,7 @@ use Clarity\ClarityException;
  * The three constructs that name a PHP CLASS rather than a template value:
  * `new Foo(...)`, `Foo::member`, and the right operand of `instanceof`.
  *
- * All three are gated on a policy capability (`newExpressions`, `staticCalls`)
+ * All three are gated on a policy rule (`newExpressions`, `staticCalls`)
  * and all three compile the name to a FULLY QUALIFIED form with a leading `\`.
  *
  * That leading separator is the whole point.  A compiled template is a plain

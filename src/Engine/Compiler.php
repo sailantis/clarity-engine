@@ -92,9 +92,12 @@ class Compiler
      * Bump this whenever a change alters the PHP that a template compiles to.
      *
      * A POLICY change needs no bump: the compiled class carries a digest of the
-     * effective policy and the loader recompiles on a mismatch.
+     * effective policy and the loader recompiles on a mismatch. A change that
+     * alters emitted code for EVERY template — removing a cast from a built-in
+     * filter, say — is what the version is for, because it is not a policy
+     * difference and no digest can express it.
      */
-    public const COMPILER_VERSION = 21;
+    public const COMPILER_VERSION = 23;
 
     /**
      * Prefix owned by the engine for every PHP variable it binds into the render
@@ -184,7 +187,7 @@ class Compiler
     private bool $debugMode = false;
 
     /**
-     * What a compiled template is allowed to reach.  Every capability question
+     * What a compiled template is allowed to reach.  Every rule question
      * the compiler and tokenizer ask is answered from here.
      */
     private Policy $policy;
@@ -243,7 +246,7 @@ class Compiler
     /**
      * Whether the render body must seed the scope into PHP locals.
      *
-     * Decided from the `phpVariables` capability, not per template: includes are
+     * Decided from the `phpVariables` rule, not per template: includes are
      * inlined into the SAME render body, so a partial containing raw PHP would
      * otherwise be emitted into a body that never seeded the locals it reads.
      * Tying it to the policy removes that failure entirely, and a policy that
@@ -304,7 +307,7 @@ class Compiler
      * Set what compiled templates are allowed to reach.
      *
      * The tokenizer is given the same object rather than a copy of the flag it
-     * used to receive, so a capability can never be granted in one half of the
+     * used to receive, so a rule can never be granted in one half of the
      * compiler and denied in the other.
      */
     public function setPolicy(Policy $policy): static

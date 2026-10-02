@@ -258,7 +258,7 @@ errors and Xdebug point to the template source:
 >
 > ```
 > Fatal error: Uncaught Clarity\ClarityException: '{% php %}' is not allowed by this policy.
-> Grant the 'rawPhp' capability to allow it. in pages/home on line 4 in
+> Grant the 'rawPhp' rule to allow it. in pages/home on line 4 in
 > /srv/app/views/pages/home.clarity.html on line 4
 > ```
 >
@@ -431,8 +431,8 @@ Under the default policy, the following are rejected at compile time (the templa
 {{ user.getName() }}                   {# ERROR: method calls #}
 {{ $x = 5; }}                          {# ERROR: PHP statements #}
 {{ `ls -la` }}                         {# ERROR: backticks, heredocs, PHP tags #}
-{{ new DateTime() }}                   {# ERROR: needs the 'newExpressions' capability #}
-{{ Foo::create() }}                    {# ERROR: needs the 'staticCalls' capability #}
+{{ new DateTime() }}                   {# ERROR: needs the 'newExpressions' rule #}
+{{ Foo::create() }}                    {# ERROR: needs the 'staticCalls' rule #}
 {{ Foo\Bar }}                          {# ERROR: a class name is not a value #}
 ```
 
@@ -534,16 +534,16 @@ $engine->setPolicy(Policy::default()->allowFunctions('strtoupper', 'count'));
 
 ### Policies
 
-A policy answers one question: _what is this template allowed to reach?_ It is a set of capabilities plus two allowlists, and the default is sandboxed:
+A policy answers one question: _what is this template allowed to reach?_ It is a set of rules plus two allowlists, and the default is sandboxed:
 
 ```php
 use Clarity\Engine\Policy;
 
 $engine->setPolicy(Policy::restricted());   // the default
 $engine->setPolicy(Policy::trusted());     // method calls, superglobals and PHP locals — but no `{% php %}` and no `new`/`::`
-$engine->setPolicy(Policy::unrestricted());        // every capability
+$engine->setPolicy(Policy::unrestricted());        // every rule
 $engine->setPolicy(Policy::default()        // the default, plus named grants
-    ->allowCapability('methodCalls')
+    ->allowRule('methodCalls')
     ->allowFunctions('strtoupper', 'count'));
 
 // Deny these function names in template expressions:
@@ -552,8 +552,8 @@ $engine->setPolicy(Policy::unrestricted()->denyFunctions('exec', 'system', 'proc
 
 `denyFunctions()` does not inspect calls inside raw `{% php %}` blocks.
 
-Capabilities expose different levels of access. `rawPhp` permits template-authored
-PHP; other capabilities enable specific constructs. `Policy::unrestricted()`
+Rules expose different levels of access. `rawPhp` permits template-authored
+PHP; other rules enable specific constructs. `Policy::unrestricted()`
 enables them all, so use it only for templates written and reviewed by trusted
 authors.
 
@@ -562,7 +562,7 @@ Two things hold in every policy:
 - **The engine's render frame stays out of reach.** Templates cannot bind `__c_` names; dynamic variables resolve against the render scope and loop locals.
 - **Superglobals require a separate grant.** Without it, `{{ _SERVER }}` is a scope read and throws if that name is absent, even when `phpVariables` is enabled.
 
-See [The Policy API](09-policy-api.md) for the capability and allowlist
+See [The Policy API](09-policy-api.md) for the rule and allowlist
 reference.
 
 ## PHP Mode

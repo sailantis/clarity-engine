@@ -71,12 +71,12 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ## Public Constants
 
-- **COMPILER_VERSION** = `21`
+- **COMPILER_VERSION** = `23`
 - **INTERNAL_PREFIX** = `'__c_'`
 
 ## Public methods
 
-### __construct() · <small>[🗎](../../src/Engine/Compiler.php#L260)</small>
+### __construct() · <small>[🗎](../../src/Engine/Compiler.php#L263)</small>
 
 `public function __construct(): mixed`
 
@@ -87,7 +87,7 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ---
 
-### default() · <small>[🗎](../../src/Engine/Compiler.php#L265)</small>
+### default() · <small>[🗎](../../src/Engine/Compiler.php#L268)</small>
 
 `public static function default(): static`
 
@@ -98,7 +98,7 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ---
 
-### setRegistry() · <small>[🗎](../../src/Engine/Compiler.php#L277)</small>
+### setRegistry() · <small>[🗎](../../src/Engine/Compiler.php#L280)</small>
 
 `public function setRegistry(Clarity\Engine\Registry $registry): static`
 
@@ -115,7 +115,7 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ---
 
-### setDebugMode() · <small>[🗎](../../src/Engine/Compiler.php#L284)</small>
+### setDebugMode() · <small>[🗎](../../src/Engine/Compiler.php#L287)</small>
 
 `public function setDebugMode(bool $debug): static`
 
@@ -132,14 +132,14 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ---
 
-### setPolicy() · <small>[🗎](../../src/Engine/Compiler.php#L310)</small>
+### setPolicy() · <small>[🗎](../../src/Engine/Compiler.php#L313)</small>
 
 `public function setPolicy(Clarity\Engine\Policy $policy): static`
 
 Set what compiled templates are allowed to reach.
 
 The tokenizer is given the same object rather than a copy of the flag it
-used to receive, so a capability can never be granted in one half of the
+used to receive, so a rule can never be granted in one half of the
 compiler and denied in the other.
 
 **Parameters**

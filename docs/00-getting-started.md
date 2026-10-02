@@ -100,7 +100,7 @@ use Clarity\Engine\Policy;
 
 $engine->setPolicy(Policy::unrestricted());                // grant templates full PHP
 $engine->setPolicy(Policy::default()                // or grant one thing at a time
-    ->allowCapability('methodCalls')
+    ->allowRule('methodCalls')
     ->allowFunctions('strtoupper', 'count'));
 
 // Deny named PHP functions when called from template expressions.
@@ -108,10 +108,22 @@ $engine->setPolicy(Policy::default()                // or grant one thing at a t
 $engine->setPolicy(Policy::unrestricted()->denyFunctions('exec', 'system'));
 ```
 
-Capabilities grant different levels of PHP access. `rawPhp` and
-`Policy::unrestricted()` allow arbitrary PHP; other capabilities enable specific
+Rules grant different levels of PHP access. `rawPhp` and
+`Policy::unrestricted()` allow arbitrary PHP; other rules enable specific
 constructs. See [The Policy API](09-policy-api.md) for details. Pass the policy
 in the constructor as an object or array using the `policy` option.
+
+One rule is on in `Policy::restricted()` as well: `strictTypes` compiles
+templates with `declare(strict_types=1)`, so a value of the wrong type at a
+filter or function boundary throws instead of being coerced. If an existing
+template relies on coercion (most often a `null` reaching a string filter), deny
+the rule rather than widen anything else:
+
+```php
+$engine->setPolicy(Policy::default()->denyRule('strictTypes'));
+```
+
+See [Why strict by default](09-policy-api.md#why-strict-by-default).
 
 ### Registering Template Namespaces
 

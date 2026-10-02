@@ -318,14 +318,22 @@ Styles: `none`, `short`, `medium`, `long`, `full`
 
 > **Requires:** PHP `intl` extension. For more extensive locale-aware formatting (numbers, currencies, relative time, etc.) see the `IntlFormatModule` in [Advanced Topics](04-advanced-topics.md#modules).
 
-#### date_modify(modifier)
+#### date_modify(modifier, format='c')
 
-Apply date modification and return new timestamp:
+Apply a date modification and return the result formatted with `format`. The
+default is ISO 8601; pass a format to get a different shape directly.
+
+```twig
+{{ timestamp |> date_modify('+1 day', 'Y-m-d') }}
+{{ timestamp |> date_modify('-1 month', 'F Y') }}
+{{ timestamp |> date_modify('next Monday', 'l, F j') }}
+```
+
+The default is a full ISO 8601 string, and `date` parses it, so a chain still
+works — but the two-argument form above is the shorter way to the same result:
 
 ```twig
 {{ timestamp |> date_modify('+1 day') |> date('Y-m-d') }}
-{{ timestamp |> date_modify('-1 month') |> date('F Y') }}
-{{ timestamp |> date_modify('next Monday') |> date('l, F j') }}
 ```
 
 ### Array Filters
@@ -956,7 +964,7 @@ expressions. It does not inspect calls inside raw `{% php %}` blocks.
 | `round(prec)`      | Round number           | `{{ n \|> round(2) }}`                                   |
 | `ceil` / `floor`   | Ceil/floor             | `{{ n \|> ceil }}`                                       |
 | `date(fmt)`        | Format date            | `{{ time \|> date('Y-m-d') }}`                           |
-| `date_modify(mod)` | Modify date            | `{{ time \|> date_modify('+1 day') \|> date('Y-m-d') }}` |
+| `date_modify(mod, fmt='c')` | Modify date      | `{{ time \|> date_modify('+1 day', 'Y-m-d') }}`           |
 | `format_datetime`  | Locale-aware datetime  | `{{ time \|> format_datetime('long','short') }}`         |
 | `first`            | First element/char     | `{{ items \|> first }}`                                  |
 | `last`             | Last element/char      | `{{ items \|> last }}`                                   |

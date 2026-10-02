@@ -27,25 +27,27 @@ and Clarity's own runtime mapping walks it.
 
 ## Public Properties
 
-- `public` string `$templatePath` · <small>[🗎](../../src/ClarityException.php)</small>
 - `public readonly` string `$templateName` · <small>[🗎](../../src/ClarityException.php)</small>
 - `public readonly` int `$templateLine` · <small>[🗎](../../src/ClarityException.php)</small>
+- `public` string `$templatePath` · <small>[🗎](../../src/ClarityException.php)</small>
 
 ## Public methods
 
-### __construct() · <small>[🗎](../../src/ClarityException.php#L42)</small>
+### __construct() · <small>[🗎](../../src/ClarityException.php#L38)</small>
 
 `public function __construct(string $message, string $templateName = '', int $templateLine = 0, string $templatePath = '', Throwable|null $previous = null): mixed`
+
+Construct a new ClarityException.
 
 **Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
-| `$message` | string | - |  |
-| `$templateName` | string | `''` |  |
-| `$templateLine` | int | `0` |  |
-| `$templatePath` | string | `''` |  |
-| `$previous` | Throwable\|null | `null` |  |
+| `$message` | string | - | The exception message. |
+| `$templateName` | string | `''` | The logical name of the template. |
+| `$templateLine` | int | `0` | The line number within the template. |
+| `$templatePath` | string | `''` | The physical path to the template file. |
+| `$previous` | Throwable\|null | `null` | The previous exception, if any. |
 
 **Return value**
 

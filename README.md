@@ -77,7 +77,7 @@ That's it! Clarity automatically compiles and caches your template.
 
 ### What a Template May Reach
 
-Every template compiles under a **policy**: a set of capabilities plus two
+Every template compiles under a **policy**: a set of rules plus two
 allowlists. The default is the most restrictive one, and the syntax is the same
 in all of them — only what a template may _reach_ changes:
 
@@ -90,7 +90,7 @@ in all of them — only what a template may _reach_ changes:
 {{ "now" |> date("H:i:s") }}           {# registered filters and functions #}
 {{ $missing is defined }}              {# operator tests #}
 
-{# Granted by a capability #}
+{# Granted by a rule #}
 {{ strtoupper(name) }}                 {# any PHP function #}
 {{ 'ab' |> strtoupper }}               {# any function as a filter step #}
 {{ $user->greet() }}                   {# methodCalls #}
@@ -106,12 +106,12 @@ use Clarity\Engine\Policy;
 $engine->setPolicy(Policy::restricted());    // the default
 $engine->setPolicy(Policy::unrestricted());  // everything on
 $engine->setPolicy(Policy::default()         // grant one thing, not all
-    ->allowCapability('methodCalls')
+    ->allowRule('methodCalls')
     ->allowFunctions('strtoupper', 'count'));
 ```
 
-`Policy::unrestricted()` enables every capability and is equivalent to executing
-arbitrary PHP. Individual capabilities expose narrower features — see
+`Policy::unrestricted()` enables every rule and is equivalent to executing
+arbitrary PHP. Individual rules expose narrower features — see
 [the security model](docs/04-advanced-topics.md#security-model) and
 [the policy reference](docs/09-policy-api.md).
 
@@ -297,7 +297,7 @@ $engine->use(new \Clarity\Localization\TranslationModule([
 
 Clarity is sandboxed by default:
 
-- **No arbitrary PHP execution by default** – PHP access requires explicit capabilities
+- **No arbitrary PHP execution by default** – PHP access requires explicit rules
 - **Context-aware auto-escaping** – Output is escaped for its HTML, JavaScript, or CSS context unless marked raw
 - **Compile-time validation** – Invalid template syntax is caught during compilation
 - **Object access** – In the restricted policy, templates can read public properties but cannot call methods or access private/protected members. `a.b` reads a property; `a:b` reads an array key
@@ -305,7 +305,7 @@ Clarity is sandboxed by default:
 
 ### Policies
 
-What a template may reach is decided by a policy — capabilities and two
+What a template may reach is decided by a policy — rules and two
 allowlists, all resolved at **compile time**. The default keeps templates
 sandboxed; grant only the access they need:
 
@@ -314,14 +314,14 @@ use Clarity\Engine\Policy;
 
 $engine->setPolicy(Policy::unrestricted());   // full PHP: any function, methods, raw PHP
 $engine->setPolicy(Policy::default()
-    ->allowCapability('methodCalls')
+    ->allowRule('methodCalls')
     ->allowFunctions('strtoupper', 'count'));
 ```
 
-Capabilities expose different levels of access. `rawPhp` lets templates run
+Rules expose different levels of access. `rawPhp` lets templates run
 their own PHP code; `methodCalls` lets them call methods on objects provided by
 the host. Grant only what the templates need, and trust authors accordingly.
-`Policy::unrestricted()` enables every capability and is equivalent to executing
+`Policy::unrestricted()` enables every rule and is equivalent to executing
 arbitrary PHP.
 
 Templates record a digest of the policy that compiled them and are recompiled

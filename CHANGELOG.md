@@ -9,13 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **The policy API: a template's reach is now a set of capabilities, not one
-  boolean.** A `Clarity\Engine\Policy` is a set of capabilities plus two
+- **The policy API: a template's reach is now a set of rules, not one
+  boolean.** A `Clarity\Engine\Policy` is a set of rules plus two
   allowlists, and every decision it makes is made **at compile time** — there is
   no policy object on the render path, so none of this costs anything to
   enforce.
 
-  | Capability          | Default | What it grants                                                                                    |
+  | Rule          | Default | What it grants                                                                                    |
   | ------------------- | ------- | ------------------------------------------------------------------------------------------------- |
   | `rawPhp`            | `false` | `{% php CODE %}`                                                                                  |
   | `methodCalls`       | `false` | `obj.method(args)` / `$obj->method(args)`, with arguments and dynamic names                        |
@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   | `variableVariables` | `true`  | `$$name` / `${expr}`                                                                              |
   | `newExpressions`    | `false` | `new Foo(args)`                                                                                   |
   | `staticCalls`       | `false` | `Foo::method(args)`, `Foo::CONST`, `Foo::class`, `Foo::$prop`                                     |
+  | `strictTypes`       | `true`  | `declare(strict_types=1)` in the compiled template                                                |
 
   | Allowlist   | Default | What it governs                                            |
   | ----------- | ------- | ---------------------------------------------------------- |
@@ -37,12 +38,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   ```php
   $engine->setPolicy(Policy::restricted());    // the default
-  $engine->setPolicy(Policy::unrestricted());  // every capability on
+  $engine->setPolicy(Policy::unrestricted());  // every rule on
   $engine->setPolicy(Policy::trusted());       // trusted, but no `new`/`::`
   $engine->setPolicy(Policy::default()         // the default plus named grants
-      ->allowCapability('methodCalls')
+      ->allowRule('methodCalls')
       ->allowFunctions('strtoupper', 'count'));
-  $engine->setPolicy(['capabilities' => ['rawPhp' => true]]);   // config form
+  $engine->setPolicy(['rules' => ['rawPhp' => true]]);   // config form
   ```
 
   The gain over the boolean is that a grant is **independent**: an application
@@ -54,7 +55,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `exec`").
 
 - **`new Foo(...)` and `Foo::bar()` now compile instead of producing invalid
-  PHP.** Neither was a capability that could be relaxed — the tokenizer emitted
+  PHP.** Neither was a rule that could be relaxed — the tokenizer emitted
   the leading `\` of a fully qualified name as a stray character, so
   `new DateTime()` and `DateTime::createFromFormat(...)` produced
   `syntax error, unexpected fully qualified name`, and a bare `Foo\Bar` was
@@ -63,15 +64,111 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   emitted code independent of where the engine happens to live. Gated on
   `newExpressions` and `staticCalls` respectively.
 - **`x instanceof Foo`** is supported and, unlike the two above, needs no
-  capability: it takes a class name because that is what the operator means, and
+  rule: it takes a class name because that is what the operator means, and
   it reaches nothing the scope did not already hold.
 - **`dump` is now a filter as well as a function.** `{{ x |> dump }}` emits the
   dumped value at that point in the pipeline and passes `x` through unchanged, so
   the documented form `{{ items |> filter(i => i:active) |> dump |> slice(0, 5) }}`
   compiles and the trailing steps still see the value. In production the step is
   eliminated to its input, exactly as `dump(x)` is pruned to `''`.
+- **The `strictTypes` rule: a template can now declare PHP's strict types.**
+  `declare(strict_types=1)` is per-file, and every compiled template is its own
+  file whose `<?php` the engine emits — so a caller could not opt a template into
+  strict types from their own code, and a typed filter (`fn(string $s)`) silently
+  received `42` as `"42"`. When the rule is granted the compiled file
+  carries the declaration, and a mismatched argument to a registered filter or
+  function throws a `ClarityException` naming the template line instead of being
+  coerced. It also makes a fractional float passed to an `int` parameter throw
+  rather than truncate.
+
+  It is **not** a reach rule: it grants no construct and names no class, so
+  `allowsPhp()` does not count it and a strict template is no less sandboxed than
+  a weak one. It is the only rule that defaults **on**, in every preset including
+  `restricted()`. `COMPILER_VERSION` moves 21 → 23, because both the declaration
+  and the cast changes alter the emitted file for every template, and a policy
+  digest cannot express either.
 
 ### Changed
+
+- **Strict types are on by default, and coercion is now something you opt out
+  of.** `strictTypes` is enabled in every preset, `restricted()` included, so an
+  unconfigured engine — and every policy built from a config array — compiles
+  templates with `declare(strict_types=1)`. A project that relied on coercion
+  gets the old behaviour back with one line:
+
+  ```php
+  $engine->setPolicy(Policy::default()->denyRule('strictTypes'));
+  ```
+
+  The reasoning is that the failure being replaced is invisible. A silently
+  coerced value and a type error are the same event except that only one of them
+  can be debugged, and coercion hides real mistakes:
+
+  | Template                                | Weak mode          | Default (strict) |
+  | --------------------------------------- | ------------------ | ---------------- |
+  | `{{ 42 \|> upper }}`                    | `'42'`             | `TypeError`      |
+  | `{{ null \|> upper }}`                  | `''` + deprecation | `TypeError`      |
+  | `{{ ' 3.14 ' \|> trim \|> number(1) }}` | `'3.1'`            | `TypeError`      |
+  | `{{ 42 }}`                              | `'42'`             | `'42'`           |
+
+  What this does **not** change: `strictTypes` grants no construct, so
+  `allowsPhp()` still reports the sandbox as sandboxed — it hardens the boundary
+  without moving it — and the output cast in `{{ … }}` stays, so a non-string
+  still renders. This is the change most likely to affect an existing
+  application: the second and third rows are ordinary template mistakes that
+  previously rendered something plausible.
+
+  The one built-in filter that keeps a cast is `number`: `number_format()` takes a
+  `float`, so a numeric string is a type error there, and casting is what keeps
+  `{{ ' 3.14 ' |> trim |> number(1) }}` — a pipeline whose preceding step yields a
+  string — working under strict types. Every other built-in hands its value to a
+  `string` parameter and relies on the mode.
+
+- **Policy "capabilities" are now Policy "rules".** The set grew a member that
+  grants nothing: `strictTypes` adds no construct and names no class, it changes
+  the contract at a call boundary. Calling that a *capability* forced every
+  description of it to open with a caveat ("not a reach capability…"), which is
+  the sign of the wrong noun. The type is unchanged; only the name is.
+
+  | Before                  | After              |
+  | ----------------------- | ------------------ |
+  | `Policy::CAPABILITIES`  | `Policy::RULES`    |
+  | `$policy->capabilities()` | `$policy->rules()` |
+  | `allowCapability('x')`  | `allowRule('x')`   |
+  | `denyCapability('x')`   | `denyRule('x')`    |
+  | `['capabilities' => …]` | `['rules' => …]`   |
+  | `$policy->allows('x')`  | unchanged          |
+
+  `allows()` keeps its name deliberately: `hasRule('x')` would be ambiguous — it
+  could mean "the policy contains such a rule" (always true, the name is in the
+  table) or "the rule is in force" — whereas `allows()` asks about the thing, not
+  the rule's existence. `strictTypes()`, `allowsPhp()`, `isSandboxed()` and the
+  `ALLOWLISTS` constant are unchanged. The API is unreleased, so there is no
+  migration path to keep.
+
+- **The built-in inline filters no longer cast their input.** Every
+  `(string)`/`(float)`/`(int)`/`(array)` wrapper came out of the filter templates:
+  `upper` is now `\mb_strtoupper({1})`, not `\mb_strtoupper((string) {1})`. The
+  coercion those casts performed still happens in weak mode, but weak mode is no
+  longer the default (see above), so these are the two things the removal changes:
+
+  | Template                | Before                                | After                                            |
+  | ----------------------- | ------------------------------------- | ------------------------------------------------ |
+  | `{{ null \|> upper }}`  | silent `''`                           | `''` + a `Deprecated` diagnostic                 |
+  | `{{ 42 \|> join(',') }}`| `'42'` (the scalar was wrapped)       | `ClarityException` — `(array)` was never a coercion |
+
+  The `join`/`merge` change is the one that affects the **default** mode, because
+  PHP has no scalar→array coercion in either mode: a scalar that used to be wrapped
+  into a one-element array now raises. Passing an array, which is the documented
+  and common form, is unchanged.
+
+- **`date_modify` returns a formatted string instead of a Unix timestamp.** It
+  gains an optional second argument — `date_modify(modifier, format='c')` — so
+  `{{ ts |> date_modify('+1 day', 'Y-m-d') }}` produces what previously took a
+  chain into `date`. The default is ISO 8601, which `date` parses, so
+  `{{ ts |> date_modify('+1 day') |> date('Y-m-d') }}` still yields the same
+  result. A template that did arithmetic on the old integer return is the
+  breaking case.
 
 - **A template's physical path now travels with its source, from the loader that
   knows it.** `TemplateSource` gains a `$path`, which `FileLoader` fills in and a
@@ -99,7 +196,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "closed"/"available" rather than "nothing reaches PHP"/"everything does" —
   `unrestricted()` in particular is the one name that must not be reached for by
   mistake. `default()` replaces `custom()` because it is not a blank slate: it
-  starts from `restricted()` and every capability you do not name stays off.
+  starts from `restricted()` and every rule you do not name stays off.
   `isUnrestricted()`/`isSandboxed()` are unchanged, and `Compiler::sandboxed()` keeps its
   name as the compiler-side constructor.
 - **`setSandboxMode()` and `isSandboxed()` are replaced by
@@ -120,13 +217,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rather than the policy itself, because the compiled file ships to a server and
   should not carry a readable inventory of what a template may call.
 - **An allowlist NARROWS; it never opens a door.** `allowsPhp()` is now decided by
-  capabilities alone, so `Policy::restricted()->allowFunctions('count')` stays
+  rules alone, so `Policy::restricted()->allowFunctions('count')` stays
   sandboxed: the allowlist filters which PHP functions a construct may call, and
   with no construct reaching PHP there is nothing for it to filter. Pair a grant
-  with a capability for it to apply to
-  (`Policy::restricted()->allowCapability('methodCalls')->allowFunctions('count')`).
+  with a rule for it to apply to
+  (`Policy::restricted()->allowRule('methodCalls')->allowFunctions('count')`).
   Unlisted names are still refused, by name.
-- **`superglobals` is a genuinely independent capability.** Without it, a
+- **`superglobals` is a genuinely independent rule.** Without it, a
   superglobal name is an ordinary scope read, so `{{ _SERVER }}` throws **even
   when `phpVariables` is granted** — previously the two were inseparable, and
   PHP mode reached every superglobal as a side effect of scope seeding. With it,
@@ -136,7 +233,7 @@ blocked in PHP mode. Allow it by removing it from the deny-list.` becomes
   `Function 'x' is not allowed by this policy: it is not in the function
 allowlist, or it is denied. Add it with allowFunctions().` — and
   `'{% php %}' … Call setSandboxMode(false) to allow raw PHP.` becomes
-  `'{% php %}' is not allowed by this policy. Grant the 'rawPhp' capability to
+  `'{% php %}' is not allowed by this policy. Grant the 'rawPhp' rule to
 allow it.` A separate message names an unlisted _filter_, because the remedy
   differs (a filter allowlist, or a registration).
 - `COMPILER_VERSION` 18 → 19, for the new grammar (`new`/`::`/`instanceof`).

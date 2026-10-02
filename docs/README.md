@@ -23,7 +23,7 @@ Learn the essential features:
 Deep dives into specialized features:
 
 5. **[Advanced Topics](04-advanced-topics.md)** — Namespaces, caching, auto-escaping, error handling, Unicode
-6. **[The Policy API](09-policy-api.md)** — What a template may reach: capabilities, allowlists, presets
+6. **[The Policy API](09-policy-api.md)** — What a template may reach: rules, allowlists, presets
 7. **[Modules](07-modules.md)** — Module system, LocaleService, TranslationModule, IntlFormatModule
 8. **[Best Practices](05-best-practices.md)** — Organization, naming, security, testing, and debugging
 9. **[Troubleshooting](06-troubleshooting.md)** — Common errors and how to fix them

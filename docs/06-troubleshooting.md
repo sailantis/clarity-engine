@@ -4,6 +4,44 @@ This guide helps you diagnose and fix common issues when working with Clarity te
 
 ## Common Errors
 
+### TypeError: Argument must be of type string
+
+**Error:**
+
+```
+Clarity\ClarityException: mb_strtoupper(): Argument #1 ($string) must be of type
+string, null given
+```
+
+**Cause:** A template passed a value of the wrong type into a filter or function.
+`strictTypes` is on by default, so a compiled template declares
+`declare(strict_types=1)` and a mismatched argument throws instead of being
+coerced. The most common form is a value that may be `null` reaching a string
+filter: `{{ maybeMissing |> upper }}` renders `''` in weak mode and throws here.
+The exception names the template line.
+
+**Fix:** Give the value a real type at the boundary:
+
+```twig
+{{ maybeMissing |> default('') |> upper }}
+```
+
+`default('')` handles both a `null` from the scope and a name the scope does not
+contain (a name absent from both the scope and the loop locals is a compile-time
+error on its own, which the filter chain suppresses).
+
+To restore PHP's old coercing behaviour instead, deny the rule — it is one rule,
+so nothing else opens up:
+
+```php
+$engine->setPolicy(Policy::default()->denyRule('strictTypes'));
+```
+
+See [strictTypes](09-policy-api.md#stricttypes) and
+[Why strict by default](09-policy-api.md#why-strict-by-default).
+
+---
+
 ### Undefined Variable
 
 **Error:**
@@ -55,7 +93,7 @@ $engine->render('page', [
 ```
 Filter 'filterName' is not registered, and this policy does not allow a template
 to reach PHP, so there is nothing for it to resolve to. Register it with
-addFilter(), or grant a capability to let a PHP function of the same name be used.
+addFilter(), or grant a rule to let a PHP function of the same name be used.
 ```
 
 **Cause:** Typo in filter name, or the filter was never registered.
@@ -63,11 +101,11 @@ addFilter(), or grant a capability to let a PHP function of the same name be use
 The error occurs during compilation, not rendering.
 
 **Fix:** Register a custom filter with `addFilter()`. To use a PHP function by
-name, enable a PHP-reaching capability and allowlist the function:
+name, enable a PHP-reaching rule and allowlist the function:
 
 ```php
 $engine->setPolicy(Policy::default()
-    ->allowCapability('methodCalls')
+    ->allowRule('methodCalls')
     ->allowFunctions('strtoupper', 'count'));
 ```
 

@@ -1,6 +1,6 @@
 # The Policy API
 
-A template is compiled against a **policy** that decides what it may reach. A policy is a set of **capabilities** — each one the kind of construct it permits — plus two **allowlists** naming the PHP functions and filters a template may call.
+A template is compiled against a **policy** that decides what it may reach. A policy is a set of **rules** — each one the kind of construct it permits — plus two **allowlists** naming the PHP functions and filters a template may call.
 
 Policies are enforced at **compile time**. A template that violates its policy fails to compile, and the error names the required change. Policies add no render-time checks.
 
@@ -14,7 +14,7 @@ $engine->setPolicy(Policy::unrestricted());        // full PHP
 
 // … or the default plus the grants you name
 $engine->setPolicy(Policy::default()
-    ->allowCapability('methodCalls')
+    ->allowRule('methodCalls')
     ->allowFunctions('strtoupper', 'count')
     ->allowFilters('markdown'));
 ```
@@ -30,17 +30,18 @@ Use one of three presets or start with `default()` and add specific grants.
 ```php
 Policy::restricted();     // the default, and the most restrictive
 Policy::trusted();        // method calls and superglobals
-Policy::unrestricted();   // every capability
+Policy::unrestricted();   // every rule
 Policy::default();        // the default, plus whatever you grant
 ```
 
 ### What each preset contains
 
-The three ready-made modes differ only in their capabilities. This table is the complete difference between them.
+The three ready-made modes differ only in their rules. This table is the complete difference between them.
 
-| Capability          | `restricted()` | `trusted()` | `unrestricted()` |
+| Rule          | `restricted()` | `trusted()` | `unrestricted()` |
 | ------------------- | -------------- | ----------- | ---------------- |
 | `variableVariables` | ✓              | ✓           | ✓                |
+| `strictTypes`       | ✓              | ✓           | ✓                |
 | `methodCalls`       | -              | **✓**       | **✓**            |
 | `superglobals`      | -              | **✓**       | **✓**            |
 | `phpVariables`      | -              | **✓**       | **✓**            |
@@ -49,7 +50,7 @@ The three ready-made modes differ only in their capabilities. This table is the 
 | `staticCalls`       | -              | -           | **✓**            |
 
 All presets start with empty allowlists and no denied functions. Empty allowlists
-do not restrict names; see [The one rule](#the-one-rule).
+do not restrict names; see [The rule for allowlists](#the-rule-for-allowlists).
 
 ### Choosing a preset
 
@@ -57,7 +58,7 @@ do not restrict names; see [The one rule](#the-one-rule).
 | ---------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | `restricted()`   | The template's scope and registered filters and functions.          | The default, especially for templates selected by a request.                          |
 | `trusted()`      | Adds method calls, superglobals and PHP locals.                     | Templates you write that need object access.                                          |
-| `unrestricted()` | Every capability: the full power of PHP.                            | Templates never chosen by a request, as a parity mode with Blade, Stempler or Plates. |
+| `unrestricted()` | Every rule: the full power of PHP.                            | Templates never chosen by a request, as a parity mode with Blade, Stempler or Plates. |
 | `default()`      | `restricted()`, plus the grants you name.                           | Most applications: a narrow, explicit set of allowances.                              |
 
 ### `Policy::restricted()`
@@ -66,10 +67,14 @@ do not restrict names; see [The one rule](#the-one-rule).
 $engine->setPolicy(Policy::restricted());
 ```
 
-No capability that reaches PHP is enabled. Templates can read their render scope,
+No rule that reaches PHP is enabled. Templates can read their render scope,
 use Clarity tags and call registered filters and functions. They cannot use
 `{% php %}`, call methods, read superglobals, construct classes or access static
 members.
+
+`strictTypes` is the one grant a sandboxed policy carries, because it is not a
+reach rule: it changes the contract at a call boundary, not what a template can
+name. See [`strictTypes`](#stricttypes).
 
 This is the default for `new ClarityEngine()`.
 
@@ -93,7 +98,7 @@ template.
 $engine->setPolicy(Policy::unrestricted());
 ```
 
-Every capability is enabled; both allowlists are empty and no function is denied.
+Every rule is enabled; both allowlists are empty and no function is denied.
 Templates have the full power of PHP. This is the engine's former PHP mode and
 supports template languages that expect inline PHP.
 
@@ -103,23 +108,23 @@ Use it only for templates that are never chosen by a request.
 
 ```php
 $policy = Policy::default()
-    ->allowCapability('methodCalls')
+    ->allowRule('methodCalls')
     ->allowFunctions('strtoupper', 'count')
     ->allowFilters('markdown');
 
 $engine->setPolicy($policy);
 ```
 
-Starts from `restricted()`. Add only the capabilities, functions and filters
+Starts from `restricted()`. Add only the rules, functions and filters
 your templates need.
 
 ---
 
 ## The model
 
-### Capabilities
+### Rules
 
-| Capability          | Default | What it grants                                                                                          |
+| Rule          | Default | What it grants                                                                                          |
 | ------------------- | ------- | ------------------------------------------------------------------------------------------------------- |
 | `rawPhp`            | `false` | `{% php CODE %}` tags                                                                                   |
 | `methodCalls`       | `false` | `obj.method()` / `$obj->method()`, with arguments and dynamic names                                     |
@@ -128,6 +133,9 @@ your templates need.
 | `variableVariables` | `true`  | `$$name` / `${expr}` (see [`variableVariables`](#variablevariables))                                    |
 | `newExpressions`    | `false` | `new Foo(args)`                                                                                         |
 | `staticCalls`       | `false` | `Foo::method(args)`, `Foo::CONST`, `Foo::class`, `Foo::$prop`                                           |
+| `strictTypes`       | `true`  | `declare(strict_types=1)` in the compiled template (see [`strictTypes`](#stricttypes))                  |
+
+Deny `strictTypes` to opt a template back into PHP's weak-mode coercion.
 
 ### Allowlists
 
@@ -136,7 +144,7 @@ your templates need.
 | `functions` | `[]`    | bare calls (`strtoupper(name)`) and filter steps that resolve to a PHP function |
 | `filters`   | `[]`    | names accepted after `\|>`, which need not be functions                         |
 
-### The one rule
+### The rule for allowlists
 
 > **An empty allowlist is no restriction. A non-empty allowlist is the complete
 > set: only the listed names resolve, and anything else is a compile-time error.**
@@ -152,7 +160,7 @@ $engine->setPolicy(Policy::unrestricted()->denyFunctions('exec', 'system', 'proc
 ### `methodCalls` and `phpVariables` are independent
 
 `methodCalls` permits method calls on objects in the scope. It works with either
-`obj.method()` or `$obj->method()` syntax; both use the same capability. Method
+`obj.method()` or `$obj->method()` syntax; both use the same rule. Method
 calls do not require `phpVariables`, which exposes the scope as PHP locals. See
 [Template Syntax → Method calls](01-template-syntax.md#method-calls).
 
@@ -160,7 +168,7 @@ calls do not require `phpVariables`, which exposes the scope as PHP locals. See
 
 `$$name` and `${expr}` resolve against the render scope and loop locals under
 every policy. They cannot access the engine's protected `__c_` variables, so
-disabling this capability does not change what a template can reach. It is not
+disabling this rule does not change what a template can reach. It is not
 counted as "reaching PHP" for [policy inspection](#inspecting-a-policy).
 
 ### `superglobals`
@@ -170,13 +178,13 @@ does not contain that name. This remains true when `phpVariables` is enabled:
 
 ```php
 // Refused without 'superglobals': a scope read of an absent name
-$engine->setPolicy(Policy::default()->allowCapability('phpVariables'));
+$engine->setPolicy(Policy::default()->allowRule('phpVariables'));
 
 // Granted: the name now means PHP's own variable
-$engine->setPolicy(Policy::default()->allowCapability('superglobals'));
+$engine->setPolicy(Policy::default()->allowRule('superglobals'));
 ```
 
-The capability recognizes only `GLOBALS`, `_SERVER`, `_GET`, `_POST`, `_FILES`,
+The rule recognizes only `GLOBALS`, `_SERVER`, `_GET`, `_POST`, `_FILES`,
 `_COOKIE`, `_SESSION`, `_REQUEST` and `_ENV`. Other names, such as `_SERVERX`,
 are ordinary variables.
 
@@ -195,6 +203,92 @@ constructing or accessing one:
 
 Class names in other positions, such as `{{ Foo\Bar }}`, are rejected.
 
+### `strictTypes`
+
+**On by default.** The compiled template file begins with
+`declare(strict_types=1);`, so the template is held to the types it declares at
+every call boundary. Deny it with `denyRule('strictTypes')` to get PHP's
+weak-mode coercion back.
+
+This rule exists because the declaration is **per-file** and the engine
+emits the file: a caller cannot opt a template into strict types by declaring
+them in their own code, and every compiled template is a separate file whose
+`<?php` Clarity writes. The rule is the only place a template can carry the
+declaration.
+
+It is on in every preset, `restricted()` included — not because it makes a
+template reach less, but because the alternative to a type error is not safety,
+it is silence. Weak mode coerces `'1abc'` to `1`, a `null` to `''`, and a
+fractional float to a truncated `int`, and nothing reports that a type was
+wrong. See [Why strict by default](#why-strict-by-default).
+
+What it changes is the contract at a **call boundary**. A registered filter or
+function that declares a parameter type now throws `TypeError` — reported as a
+`ClarityException` naming the template line — instead of receiving a coerced
+value:
+
+```php
+$engine->addFilter('shout', fn(string $s): string => strtoupper($s) . '!');
+
+// Default: a ClarityException at the template line.
+// After denyRule('strictTypes'): '42!' — the int was coerced, silently.
+$engine->setPolicy(Policy::default()->denyRule('strictTypes'));
+```
+
+```twig
+{{ 42 |> shout }}    {# TypeError under strictTypes: int given, string expected #}
+```
+
+It also makes a fractional float passed to an `int` parameter throw, rather than
+being truncated, and stops numeric strings coercing to `int` / `float` — a
+numeric string reaching `round`, `ceil` or `floor` (which take `int|float`) is a
+type error rather than a silently formatted number.
+
+**What it does not change.** `strictTypes` is not a reach rule: it grants no
+construct and names no class, so it is not counted by
+[`allowsPhp()`](#inspecting-a-policy) and a strict template is no less sandboxed
+than a weak one — `Policy::restricted()` is strict *and* sandboxed at once. It
+hardens the boundary; it does not move it.
+
+Nor does it remove the engine's **output** cast. `{{ … }}` compiles to
+`\htmlspecialchars((string)(<expr>), …)`, and that is how any non-string is
+printed at all — `{{ 42 }}`, `{{ items |> length }}`, `{{ price }}`. Stripping it
+would break most real templates rather than catch a mistake, so the cast stays:
+the rule governs the type of an argument passed *into* a filter or function,
+not the stringification of a value on its way out.
+
+```twig
+{{ 42 }}              {# still renders "42" under strictTypes #}
+{{ items |> length }} {# still renders "3" #}
+```
+
+Latte offers the same declaration, scoped the same way: it governs the signatures
+at the call boundary, not the engine's own output handling.
+
+#### Why strict by default
+
+Because the failure it replaces is invisible. A cast that succeeds silently and a
+type error are the same event as far as the template author is concerned, except
+that only one of them can be debugged:
+
+| Template                 | Weak mode          | `strictTypes`      |
+| ------------------------ | ------------------ | ------------------ |
+| `{{ 42 \|> upper }}`     | `'42'`             | `TypeError`        |
+| `{{ null \|> upper }}`   | `''` + deprecation | `TypeError`        |
+| `{{ ' 3.14 ' \|> round(1) }}` | `'3.1'`       | `TypeError`        |
+| `{{ 42 }}`               | `'42'`             | `'42'` (unchanged) |
+
+The third row is the one that matters: a numeric string from a form field or a
+query parameter formatted as if it were a number. It looked right and was not,
+and only strict types say so — `round`, `ceil` and `floor` take `int|float`, so a
+string is a type error there, unlike the filters that take a `string`.
+
+**What it costs.** A template that relied on coercion — most often a value that
+may be `null` arriving at a string filter — now throws. That is the intended
+trade, and it is why the rule is a *rule*: `denyRule('strictTypes')` gives a
+project weak mode back for one engine, or for the whole application, without
+touching anything else.
+
 ---
 
 ## The API
@@ -204,15 +298,15 @@ Class names in other positions, such as `{{ Foo\Bar }}`, are rejected.
 ```php
 // Fluent — the primary shape
 $policy = Policy::default()
-    ->allowCapability('methodCalls', 'superglobals')
-    ->denyCapability('variableVariables')
+    ->allowRule('methodCalls', 'superglobals')
+    ->denyRule('variableVariables')
     ->allowFunctions('strtoupper', 'count')
     ->allowFilters('markdown')
     ->denyFunctions('exec');
 
 // Array — for config files, which cannot call methods
 $policy = Policy::fromArray([
-    'capabilities'    => ['methodCalls' => true],
+    'rules'    => ['methodCalls' => true],
     'functions'       => ['strtoupper', 'count'],
     'filters'         => ['markdown'],
     'deniedFunctions' => ['exec'],
@@ -220,7 +314,7 @@ $policy = Policy::fromArray([
 ```
 
 Use the array form in `env.php` or framework configuration. `toArray()` produces
-a round-trippable representation. Unknown keys and capability names are rejected.
+a round-trippable representation. Unknown keys and rule names are rejected.
 
 `fromArray()` starts from `restricted()`, so a config only has to name what it
 changes.
@@ -231,7 +325,7 @@ changes.
 $engine->setPolicy(Policy::restricted());   // the default
 $engine->setPolicy(Policy::trusted());
 $engine->setPolicy(Policy::unrestricted());
-$engine->setPolicy(['capabilities' => ['rawPhp' => true]]);   // array form
+$engine->setPolicy(['rules' => ['rawPhp' => true]]);   // array form
 $policy = $engine->getPolicy();            // always a real object
 ```
 
@@ -254,20 +348,20 @@ name.
 
 ### Inspecting a policy
 
-Use these methods for a summary without inspecting individual capabilities:
+Use these methods for a summary without inspecting individual rules:
 
 | Method                   | True when                                                     |
 | ------------------------ | ------------------------------------------------------------- |
-| `$policy->isUnrestricted()` | every capability is on **and** nothing is restricted or denied |
-| `$policy->isSandboxed()` | no capability that reaches PHP is on                          |
-| `$policy->allowsPhp()`   | a capability that reaches PHP is on                           |
+| `$policy->isUnrestricted()` | every rule is on **and** nothing is restricted or denied |
+| `$policy->isSandboxed()` | no rule that reaches PHP is on                          |
+| `$policy->allowsPhp()`   | a rule that reaches PHP is on                           |
 
 `allowsPhp()` controls bare calls to unregistered names and filter steps that
 fall back to PHP functions. An allowlist alone does not enable PHP access; it
 only narrows which functions may be called. For example,
 `Policy::restricted()->allowFunctions('count')` remains sandboxed. Add a
-capability to enable PHP access:
-`->allowCapability('methodCalls')->allowFunctions('count')`.
+rule to enable PHP access:
+`->allowRule('methodCalls')->allowFunctions('count')`.
 
 The engine also exposes `isSandboxed()` as a shortcut for
 `getPolicy()->isSandboxed()`.
@@ -278,7 +372,7 @@ The engine also exposes `isSandboxed()` as a shortcut for
 
 ### Every rejection is a compile-time `ClarityException`
 
-Capability, allowlist, function-call and filter-step violations raise a
+Rule, allowlist, function-call and filter-step violations raise a
 `ClarityException` during compilation, not rendering. An unregistered filter
 that cannot resolve to a PHP function also fails at compile time.
 
@@ -291,16 +385,16 @@ Errors name the required change and report the template location through
 | Situation                         | Message                                                                                                                                                                                                                               |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | unregistered **function**         | `Call to unregistered function in context '…'. Register it via addFunction() first.`                                                                                                                                                  |
-| unregistered **filter step**      | `Filter 'x' is not registered, and this policy does not allow a template to reach PHP, so there is nothing for it to resolve to. Register it with addFilter(), or grant a capability to let a PHP function of the same name be used.` |
+| unregistered **filter step**      | `Filter 'x' is not registered, and this policy does not allow a template to reach PHP, so there is nothing for it to resolve to. Register it with addFilter(), or grant a rule to let a PHP function of the same name be used.` |
 | a **denied or unlisted** function | `Function 'x' is not allowed by this policy: it is not in the function allowlist, or it is denied. Add it with allowFunctions().`                                                                                                     |
 | an **unlisted filter**            | `Filter 'x' is not registered and is not in the policy's filter allowlist. Add it with allowFilters(), or register it with addFilter().`                                                                                              |
-| a **denied capability**           | `'{% php %}' is not allowed by this policy. Grant the 'rawPhp' capability to allow it.`                                                                                                                                               |
+| a **denied rule**           | `'{% php %}' is not allowed by this policy. Grant the 'rawPhp' rule to allow it.`                                                                                                                                               |
 
 ### A policy change invalidates the compiled cache
 
 Compiled templates record a digest of the effective policy. The loader recompiles
 when the digest changes, so a template compiled under one policy is not reused
-under another. The digest includes sorted capabilities and allowlist entries.
+under another. The digest includes sorted rules and allowlist entries.
 Compiled files store the digest, not the policy itself.
 
 ### Registration order does not change the policy
@@ -313,32 +407,10 @@ policy set before rendering applies.
 
 ## What the policy does not cover
 
-### Strict types
-
-Filter input types are separate from capabilities, which control what a template
-may reach.
-
-```twig
-{{ 42 |> upper }}    {# an integer reaching a string filter #}
-```
-
-A compiled template does not declare strict types, so PHP may coerce values.
-Built-in filters can also cast explicitly; for example, `upper` compiles to:
-
-```php
-\mb_strtoupper((string) {1})
-```
-
-This casts the input to a string. Registered filters and PHP-function filters
-receive the raw value; PHP applies its normal coercion rules.
-
-Latte can emit `declare(strict_types=1)` and enforce filter signatures at the call
-boundary.
-
 ### A `tags` allowlist
 
 There is no tag allowlist. Clarity tags do not expose access beyond the
-capabilities, filters and functions already described. Restricting tags is a
+rules, filters and functions already described. Restricting tags is a
 linting concern, not a security control.
 
 ### Method and property allowlists by class
@@ -363,7 +435,7 @@ Other template engines organize these controls differently:
 
 - **Superglobals.** Latte's `SecurityPolicy` controls tags, filters, functions,
   methods and properties, but has no superglobal control. Clarity treats
-  superglobals as a separate capability.
+  superglobals as a separate rule.
 - **Includes.** Clarity's `{% include %}` accepts a literal name; the
   [view path](#the-view-path-is-a-boundary) keeps it inside the view root.
 - **Variable variables.** Latte rejects `${expr}` in its sandbox. Clarity permits

@@ -7,7 +7,7 @@ namespace Clarity\Tests\Engine;
  *
  * @internal
  */
-final class PolicyCapabilityFixture
+final class PolicyRuleFixture
 {
     public static function label(): string
     {

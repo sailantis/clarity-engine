@@ -133,7 +133,7 @@ is safe even for a hand-built tokenizer.
 
 `public function setPolicy(Clarity\Engine\Policy $policy): void`
 
-Set the policy every capability question is answered from.
+Set the policy every rule question is answered from.
 
 Also mirrors the deny-list into the flat map the call sites read, so the
 policy stays the single source of truth while the hot paths keep a plain

@@ -52,7 +52,8 @@ Built-in Filters Catalog
 - `date [$format='Y-m-d']`    : Format timestamp/DateTimeInterface/date string
   (DateTimeInterface values reach this filter directly; the filter reads
   their timestamp without converting them)
-- `date_modify($modifier)`    : Apply date modifier (e.g. '+1 day'), return Unix timestamp
+- `date_modify($modifier, $format='c')` : Apply a date modifier (e.g. '+1 day'),
+                                         return the result formatted with `$format`
 
 **Arrays & Collections**
 - `first`                     : Get first element (works on arrays and strings)
@@ -122,7 +123,7 @@ Template usage:
 
 ## Public methods
 
-### setDumpHandler() · <small>[🗎](../../src/Engine/Registry.php#L278)</small>
+### setDumpHandler() · <small>[🗎](../../src/Engine/Registry.php#L279)</small>
 
 `public function setDumpHandler(Closure|null $fn): void`
 
@@ -150,7 +151,7 @@ Passing null restores that neutral state; it is what disabling debug does.
 
 ---
 
-### setDdHandler() · <small>[🗎](../../src/Engine/Registry.php#L283)</small>
+### setDdHandler() · <small>[🗎](../../src/Engine/Registry.php#L284)</small>
 
 `public function setDdHandler(Closure|null $fn): void`
 
@@ -167,7 +168,7 @@ Passing null restores that neutral state; it is what disabling debug does.
 
 ---
 
-### __construct() · <small>[🗎](../../src/Engine/Registry.php#L288)</small>
+### __construct() · <small>[🗎](../../src/Engine/Registry.php#L289)</small>
 
 `public function __construct(callable|null $includeRenderer = null): mixed`
 
@@ -184,7 +185,7 @@ Passing null restores that neutral state; it is what disabling debug does.
 
 ---
 
-### hasFilter() · <small>[🗎](../../src/Engine/Registry.php#L763)</small>
+### hasFilter() · <small>[🗎](../../src/Engine/Registry.php#L764)</small>
 
 `public function hasFilter(string $name): bool`
 
@@ -214,7 +215,7 @@ for it instead of dispatching the callable with the piped value.
 
 ---
 
-### addFilter() · <small>[🗎](../../src/Engine/Registry.php#L779)</small>
+### addFilter() · <small>[🗎](../../src/Engine/Registry.php#L780)</small>
 
 `public function addFilter(string $name, callable $fn): static`
 
@@ -238,7 +239,7 @@ registered as a function.
 
 ---
 
-### addInlineFilter() · <small>[🗎](../../src/Engine/Registry.php#L804)</small>
+### addInlineFilter() · <small>[🗎](../../src/Engine/Registry.php#L805)</small>
 
 `public function addInlineFilter(string $name, array $definition): void`
 
@@ -270,7 +271,7 @@ Registering an inline template makes the name BOTH pipeable and callable
 
 ---
 
-### hasInlineFilter() · <small>[🗎](../../src/Engine/Registry.php#L812)</small>
+### hasInlineFilter() · <small>[🗎](../../src/Engine/Registry.php#L813)</small>
 
 `public function hasInlineFilter(string $name): bool`
 
@@ -289,7 +290,7 @@ Check whether a named inline (compile-time) filter is registered.
 
 ---
 
-### getInlineFilter() · <small>[🗎](../../src/Engine/Registry.php#L823)</small>
+### getInlineFilter() · <small>[🗎](../../src/Engine/Registry.php#L824)</small>
 
 `public function getInlineFilter(string $name): array|null`
 
@@ -311,7 +312,7 @@ codegen template and yields null.
 
 ---
 
-### addService() · <small>[🗎](../../src/Engine/Registry.php#L838)</small>
+### addService() · <small>[🗎](../../src/Engine/Registry.php#L839)</small>
 
 `public function addService(string $name, mixed $service): static`
 
@@ -335,7 +336,7 @@ real filter names (e.g. `__locale`, `__translator`).
 
 ---
 
-### hasService() · <small>[🗎](../../src/Engine/Registry.php#L847)</small>
+### hasService() · <small>[🗎](../../src/Engine/Registry.php#L848)</small>
 
 `public function hasService(string $name): bool`
 
@@ -354,7 +355,7 @@ Check whether a named service is registered.
 
 ---
 
-### getService() · <small>[🗎](../../src/Engine/Registry.php#L857)</small>
+### getService() · <small>[🗎](../../src/Engine/Registry.php#L858)</small>
 
 `public function getService(string $name): mixed`
 
@@ -377,7 +378,7 @@ Retrieve a named service.
 
 ---
 
-### allServices() · <small>[🗎](../../src/Engine/Registry.php#L873)</small>
+### allServices() · <small>[🗎](../../src/Engine/Registry.php#L874)</small>
 
 `public function allServices(): array`
 
@@ -393,7 +394,7 @@ The returned array includes callable filters, inline-filter markers
 
 ---
 
-### allCallables() · <small>[🗎](../../src/Engine/Registry.php#L900)</small>
+### allCallables() · <small>[🗎](../../src/Engine/Registry.php#L901)</small>
 
 `public function allCallables(): array`
 
@@ -423,7 +424,7 @@ handing the table to a template — see
 
 ---
 
-### addFunction() · <small>[🗎](../../src/Engine/Registry.php#L915)</small>
+### addFunction() · <small>[🗎](../../src/Engine/Registry.php#L916)</small>
 
 `public function addFunction(string $name, callable $fn): static`
 
@@ -446,7 +447,7 @@ in templates via `name(...)`.
 
 ---
 
-### hasFunction() · <small>[🗎](../../src/Engine/Registry.php#L927)</small>
+### hasFunction() · <small>[🗎](../../src/Engine/Registry.php#L928)</small>
 
 `public function hasFunction(string $name): bool`
 
@@ -468,7 +469,7 @@ template (which compiles to the call itself) — is callable.
 
 ---
 
-### hasCallable() · <small>[🗎](../../src/Engine/Registry.php#L935)</small>
+### hasCallable() · <small>[🗎](../../src/Engine/Registry.php#L936)</small>
 
 `public function hasCallable(string $name): bool`
 
@@ -487,7 +488,7 @@ Check whether a name can be invoked under call syntax `name(...)`.
 
 ---
 
-### getCallable() · <small>[🗎](../../src/Engine/Registry.php#L944)</small>
+### getCallable() · <small>[🗎](../../src/Engine/Registry.php#L945)</small>
 
 `public function getCallable(string $name): callable|null`
 
@@ -507,7 +508,7 @@ is inline-only (the caller then derives the call inline from `php`).
 
 ---
 
-### addDirective() · <small>[🗎](../../src/Engine/Registry.php#L977)</small>
+### addDirective() · <small>[🗎](../../src/Engine/Registry.php#L978)</small>
 
 `public function addDirective(string $keyword, callable $handler): static`
 
@@ -549,7 +550,7 @@ $engine->addDirective('endwith_locale', fn(...) => "\$__c_sv['locale']->pop();")
 
 ---
 
-### hasDirective() · <small>[🗎](../../src/Engine/Registry.php#L986)</small>
+### hasDirective() · <small>[🗎](../../src/Engine/Registry.php#L987)</small>
 
 `public function hasDirective(string $keyword): bool`
 
@@ -568,7 +569,7 @@ Check whether a handler is registered for the given keyword.
 
 ---
 
-### compileDirective() · <small>[🗎](../../src/Engine/Registry.php#L1003)</small>
+### compileDirective() · <small>[🗎](../../src/Engine/Registry.php#L1004)</small>
 
 `public function compileDirective(string $keyword, string $rest, string $sourcePath, int $tplLine, callable $processExpr, Clarity\Engine\Compiler $compiler): string`
 

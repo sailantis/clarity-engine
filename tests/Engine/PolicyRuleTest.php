@@ -9,14 +9,14 @@ use Clarity\Tests\TestClarityEngine;
 use Clarity\Tests\TestEnvironment;
 
 /**
- * Each capability, compiled — the policy's effect on what a template can reach.
+ * Each rule, compiled — the policy's effect on what a template can reach.
  *
  * The point of splitting the old boolean is that a grant is INDEPENDENT: turning
  * on `methodCalls` must not turn on `rawPhp`, and an allowlist must not turn on
  * anything at all beyond the names it lists.  Every test below therefore grants
  * one thing and asserts the neighbours are still refused.
  */
-class PolicyCapabilityTest extends BaseTestCase
+class PolicyRuleTest extends BaseTestCase
 {
     private static function engine(Policy $policy): TestClarityEngine
     {
@@ -47,20 +47,20 @@ class PolicyCapabilityTest extends BaseTestCase
     // rawPhp
     // =========================================================================
 
-    public function testRawPhpIsRefusedWithoutTheCapability(): void
+    public function testRawPhpIsRefusedWithoutTheRule(): void
     {
         self::tpl('pc_php_off', "{% php echo 'x'; %}");
 
         $this->expectException(ClarityException::class);
-        $this->expectExceptionMessageMatches("/'rawPhp' capability/");
-        self::engine(Policy::default()->allowCapability('methodCalls'))->renderPartial('pc_php_off');
+        $this->expectExceptionMessageMatches("/'rawPhp' rule/");
+        self::engine(Policy::default()->allowRule('methodCalls'))->renderPartial('pc_php_off');
     }
 
-    public function testRawPhpIsGrantedByItsOwnCapability(): void
+    public function testRawPhpIsGrantedByItsOwnRule(): void
     {
         self::tpl('pc_php_on', "{% php echo 'x'; %}");
 
-        $this->assertSame('x', self::engine(Policy::default()->allowCapability('rawPhp'))->renderPartial('pc_php_on'));
+        $this->assertSame('x', self::engine(Policy::default()->allowRule('rawPhp'))->renderPartial('pc_php_on'));
     }
 
     /**
@@ -246,7 +246,7 @@ class PolicyCapabilityTest extends BaseTestCase
     }
 
     /**
-     * With the capability granted, an empty tag keeps its own message — the
+     * With the rule granted, an empty tag keeps its own message — the
      * pre-scan gate must not have swallowed it as a policy refusal.
      */
     public function testEmptyPhpTagKeepsItsOwnMessageWhenRawPhpIsGranted(): void
@@ -254,7 +254,7 @@ class PolicyCapabilityTest extends BaseTestCase
         self::tpl('pc_php_empty_on', implode("\n", ['one', '{% php %}']));
 
         try {
-            self::engine(Policy::default()->allowCapability('rawPhp'))->renderPartial('pc_php_empty_on');
+            self::engine(Policy::default()->allowRule('rawPhp'))->renderPartial('pc_php_empty_on');
             $this->fail('Expected ClarityException was not thrown');
         } catch (ClarityException $e) {
             $this->assertStringContainsString('Empty', $e->getMessage());
@@ -291,50 +291,50 @@ class PolicyCapabilityTest extends BaseTestCase
     // methodCalls
     // =========================================================================
 
-    public function testMethodCallIsRefusedWithoutTheCapability(): void
+    public function testMethodCallIsRefusedWithoutTheRule(): void
     {
         self::tpl('pc_mc_off', '{{ $obj->name() }}');
 
         $this->expectException(ClarityException::class);
         $this->expectExceptionMessageMatches('/Method calls are not allowed/');
-        self::engine(Policy::default()->allowCapability('rawPhp'))
+        self::engine(Policy::default()->allowRule('rawPhp'))
             ->renderPartial('pc_mc_off', ['obj' => self::makeObject()]);
     }
 
-    public function testMethodCallIsGrantedByItsOwnCapability(): void
+    public function testMethodCallIsGrantedByItsOwnRule(): void
     {
         self::tpl('pc_mc_on', "{{ \$obj->greet('Bob') }}");
 
         $this->assertSame(
             'Hi Bob',
-            self::engine(Policy::default()->allowCapability('methodCalls'))
+            self::engine(Policy::default()->allowRule('methodCalls'))
                 ->renderPartial('pc_mc_on', ['obj' => self::makeObject()])
         );
     }
 
     /**
-     * The capability gates the CALL, not a spelling — so it enables the bare
+     * The rule gates the CALL, not a spelling — so it enables the bare
      * forms too, which is what lets a template written in dot syntax adopt the
      * grant without a rewrite.
      */
-    public function testBareMethodCallIsGrantedByTheSameCapability(): void
+    public function testBareMethodCallIsGrantedByTheSameRule(): void
     {
         self::tpl('pc_mc_bare', "{{ obj.greet('Bob') }}");
 
         $this->assertSame(
             'Hi Bob',
-            self::engine(Policy::default()->allowCapability('methodCalls'))
+            self::engine(Policy::default()->allowRule('methodCalls'))
                 ->renderPartial('pc_mc_bare', ['obj' => self::makeObject()])
         );
     }
 
-    public function testBareMethodCallIsRefusedWithoutTheCapability(): void
+    public function testBareMethodCallIsRefusedWithoutTheRule(): void
     {
         self::tpl('pc_mc_bare_off', '{{ obj.name() }}');
 
         $this->expectException(ClarityException::class);
         $this->expectExceptionMessageMatches('/methodCalls/');
-        self::engine(Policy::default()->allowCapability('rawPhp'))
+        self::engine(Policy::default()->allowRule('rawPhp'))
             ->renderPartial('pc_mc_bare_off', ['obj' => self::makeObject()]);
     }
 
@@ -350,7 +350,7 @@ class PolicyCapabilityTest extends BaseTestCase
         foreach (['pc_mc_msg_bare', 'pc_mc_msg_sigil'] as $view) {
             try {
                 self::engine(Policy::restricted())->renderPartial($view, ['obj' => self::makeObject()]);
-                $this->fail("{$view} must not compile without the capability");
+                $this->fail("{$view} must not compile without the rule");
             } catch (ClarityException $e) {
                 $this->assertStringContainsString('methodCalls', $e->getMessage(), $view);
             }
@@ -361,22 +361,22 @@ class PolicyCapabilityTest extends BaseTestCase
     // newExpressions
     // =========================================================================
 
-    public function testNewIsRefusedWithoutTheCapability(): void
+    public function testNewIsRefusedWithoutTheRule(): void
     {
         self::tpl('pc_new_off', '{{ new DateTime("2020-01-02") }}');
 
         $this->expectException(ClarityException::class);
-        $this->expectExceptionMessageMatches("/'newExpressions' capability/");
+        $this->expectExceptionMessageMatches("/'newExpressions' rule/");
         self::engine(Policy::trusted())->renderPartial('pc_new_off');
     }
 
-    public function testNewIsGrantedByItsOwnCapability(): void
+    public function testNewIsGrantedByItsOwnRule(): void
     {
         self::tpl('pc_new_on', '{{ new DateTime("2020-01-02") |> date("Y") }}');
 
         $this->assertSame(
             '2020',
-            self::engine(Policy::default()->allowCapability('newExpressions'))->renderPartial('pc_new_on')
+            self::engine(Policy::default()->allowRule('newExpressions'))->renderPartial('pc_new_on')
         );
     }
 
@@ -388,7 +388,7 @@ class PolicyCapabilityTest extends BaseTestCase
 
         $this->assertSame(
             '2020-01-02',
-            self::engine(Policy::default()->allowCapability('newExpressions'))->renderPartial('pc_new_fqn')
+            self::engine(Policy::default()->allowRule('newExpressions'))->renderPartial('pc_new_fqn')
         );
     }
 
@@ -399,7 +399,7 @@ class PolicyCapabilityTest extends BaseTestCase
 
         $this->assertSame(
             'Y',
-            self::engine(Policy::default()->allowCapability('newExpressions'))
+            self::engine(Policy::default()->allowRule('newExpressions'))
                 ->renderPartial('pc_new_args', ['rows' => [1, 2, 3]])
         );
     }
@@ -408,13 +408,13 @@ class PolicyCapabilityTest extends BaseTestCase
     // staticCalls
     // =========================================================================
 
-    public function testStaticCallIsRefusedWithoutTheCapability(): void
+    public function testStaticCallIsRefusedWithoutTheRule(): void
     {
         self::tpl('pc_st_off', '{{ DateTime::ATOM }}');
 
         $this->expectException(ClarityException::class);
-        $this->expectExceptionMessageMatches("/'staticCalls' capability/");
-        self::engine(Policy::default()->allowCapability('newExpressions'))->renderPartial('pc_st_off');
+        $this->expectExceptionMessageMatches("/'staticCalls' rule/");
+        self::engine(Policy::default()->allowRule('newExpressions'))->renderPartial('pc_st_off');
     }
 
     public function testStaticMethodCallAndConstantBothWork(): void
@@ -422,18 +422,18 @@ class PolicyCapabilityTest extends BaseTestCase
         self::tpl('pc_st_method', '{{ DateTime::createFromFormat("Y-m-d", "2020-01-02") |> date("Y") }}');
         self::tpl('pc_st_const', '{{ DateTime::class }}');
 
-        $engine = self::engine(Policy::default()->allowCapability('staticCalls'));
+        $engine = self::engine(Policy::default()->allowRule('staticCalls'));
         $this->assertSame('2020', $engine->renderPartial('pc_st_method'));
         $this->assertSame('DateTime', $engine->renderPartial('pc_st_const'));
     }
 
     public function testStaticCallOnANamespacedClass(): void
     {
-        self::tpl('pc_st_ns', '{{ \Clarity\Tests\Engine\PolicyCapabilityFixture::label() }}');
+        self::tpl('pc_st_ns', '{{ \Clarity\Tests\Engine\PolicyRuleFixture::label() }}');
 
         $this->assertSame(
             'fixture',
-            self::engine(Policy::default()->allowCapability('staticCalls'))->renderPartial('pc_st_ns')
+            self::engine(Policy::default()->allowRule('staticCalls'))->renderPartial('pc_st_ns')
         );
     }
 
@@ -445,7 +445,7 @@ class PolicyCapabilityTest extends BaseTestCase
     {
         self::tpl('pc_io', '{% if obj instanceof DateTime %}Y{% else %}N{% endif %}');
 
-        // The default policy: no capability needed, because instanceof does not
+        // The default policy: no rule needed, because instanceof does not
         // reach anything the scope did not already hold.
         $engine = self::engine(Policy::restricted());
         $this->assertSame('Y', $engine->renderPartial('pc_io', ['obj' => new \DateTime()]));
@@ -467,35 +467,35 @@ class PolicyCapabilityTest extends BaseTestCase
     // superglobals
     // =========================================================================
 
-    public function testSuperglobalsAreRefusedWithoutTheCapability(): void
+    public function testSuperglobalsAreRefusedWithoutTheRule(): void
     {
         self::tpl('pc_sg_off', '{{ _SERVER["PHP_SELF"] }}');
 
         $this->expectException(ClarityException::class);
         $this->expectExceptionMessageMatches('/_SERVER.* is not defined in this context/');
-        self::engine(Policy::default()->allowCapability('phpVariables'))
+        self::engine(Policy::default()->allowRule('phpVariables'))
             ->renderPartial('pc_sg_off');
     }
 
-    public function testSuperglobalsAreGrantedByTheirOwnCapability(): void
+    public function testSuperglobalsAreGrantedByTheirOwnRule(): void
     {
         // Note the scope is NOT seeded: the read is PHP's `$_SERVER` because the
-        // capability says so, not because a local happens to exist.
+        // rule says so, not because a local happens to exist.
         self::tpl('pc_sg_on', '{{ _SERVER["PHP_SELF"] |> length > 0 ? "yes" : "no" }}');
 
         $this->assertSame(
             'yes',
-            self::engine(Policy::default()->allowCapability('superglobals'))->renderPartial('pc_sg_on')
+            self::engine(Policy::default()->allowRule('superglobals'))->renderPartial('pc_sg_on')
         );
     }
 
     public function testASuperglobalReadIsNotAScopeRead(): void
     {
         // A scope entry spelled `_SERVER` must not shadow PHP's own variable once
-        // the capability is granted: the capability is what the name means.
+        // the rule is granted: the rule is what the name means.
         self::tpl('pc_sg_shadow', '{{ _SERVER["marker"] }}');
 
-        $engine = self::engine(Policy::default()->allowCapability('superglobals'));
+        $engine = self::engine(Policy::default()->allowRule('superglobals'));
         try {
             $engine->renderPartial('pc_sg_shadow', ['_SERVER' => ['marker' => 'from-scope']]);
             $this->fail('a granted superglobal must not resolve to the render scope');
@@ -506,12 +506,12 @@ class PolicyCapabilityTest extends BaseTestCase
 
     public function testOnlyKnownSuperglobalsAreTreatedAsSuperglobals(): void
     {
-        // `_SERVERX` is an ordinary scope name even with the capability on.
+        // `_SERVERX` is an ordinary scope name even with the rule on.
         self::tpl('pc_sg_near', '{{ _SERVERX }}');
 
         $this->assertSame(
             'scope',
-            self::engine(Policy::default()->allowCapability('superglobals'))
+            self::engine(Policy::default()->allowRule('superglobals'))
                 ->renderPartial('pc_sg_near', ['_SERVERX' => 'scope'])
         );
     }
@@ -536,7 +536,7 @@ class PolicyCapabilityTest extends BaseTestCase
 
     public function testScopeIsNotSeededWithoutPhpVariables(): void
     {
-        // The capability is about the SEEDING, not about a read: a template can
+        // The rule is about the SEEDING, not about a read: a template can
         // still read its scope through the `$__c_va` form.
         self::tpl('pc_pv_off', '{{ title }}');
 
@@ -552,8 +552,67 @@ class PolicyCapabilityTest extends BaseTestCase
 
         $this->assertSame(
             'from-php',
-            self::engine(Policy::default()->allowCapability('phpVariables')->allowCapability('rawPhp'))
+            self::engine(Policy::default()->allowRule('phpVariables')->allowRule('rawPhp'))
                 ->renderPartial('pc_pv_on')
         );
+    }
+
+    // =========================================================================
+    // strictTypes
+    // =========================================================================
+
+    public function testStrictTypesMakesAMismatchedFilterArgumentThrow(): void
+    {
+        // The rule this exists for: a typed filter is handed the wrong type
+        // and, with the declaration in the compiled file, says so instead of
+        // accepting the coercion. It is now the DEFAULT, so the weak half of this
+        // test has to deny the rule to be weak at all.
+        self::tpl('pc_st_off', '{{ 42 |> shout }}');
+        self::tpl('pc_st_on', '{{ 42 |> shout }}');
+
+        $define = static function (TestClarityEngine $engine): TestClarityEngine {
+            $engine->addFilter('shout', static fn(string $s): string => 'STRICT:' . $s);
+            return $engine;
+        };
+
+        $weak = $define(self::engine(Policy::default()->denyRule('strictTypes')));
+        $this->assertSame('STRICT:42', $weak->renderPartial('pc_st_off'));
+
+        $strict = $define(self::engine(Policy::default()));
+        $this->expectException(ClarityException::class);
+        $strict->renderPartial('pc_st_on');
+    }
+
+    /**
+     * The counterpart to the test above, and the reason `strictTypes` is scoped
+     * the way it is: it governs the CONTRACT at a call boundary, not the
+     * stringification of output. `htmlspecialchars((string)(…))` at the output
+     * boundary is not a filter call and is how any non-string renders at all, so
+     * the rule must leave it alone — otherwise a strict template could not
+     * print a number.
+     */
+    public function testStrictTypesStillRendersNonStringOutput(): void
+    {
+        self::tpl('pc_st_render', '{{ 42 }}|{{ items |> length }}');
+
+        $this->assertSame(
+            '42|3',
+            self::engine(Policy::default())->renderPartial('pc_st_render', ['items' => [1, 2, 3]])
+        );
+    }
+
+    /**
+     * A related rule must stay refused — the whole point of granting one
+     * thing is that the neighbours do not come along.
+     */
+    public function testStrictTypesDoesNotGrantPhpAccess(): void
+    {
+        self::tpl('pc_st_isolated', "{% php echo 'x'; %}");
+
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches("/'rawPhp' rule/");
+        // Denying strictTypes, to show the reach answer does not depend on it
+        // either — the rule is orthogonal to PHP access in both directions.
+        self::engine(Policy::default()->denyRule('strictTypes'))->renderPartial('pc_st_isolated');
     }
 }

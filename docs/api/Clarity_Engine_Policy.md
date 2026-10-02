@@ -4,7 +4,7 @@
 
 What a template is allowed to reach.
 
-A policy is a set of CAPABILITIES plus two ALLOWLISTS.  It replaces the
+A policy is a set of RULES plus two ALLOWLISTS.  It replaces the
 single `sandbox` boolean the engine used to carry: one bit could only say
 "everything Clarity has" or "nothing that touches PHP", so an application
 that needed one PHP function had to give up every compile-time guarantee.
@@ -13,8 +13,8 @@ Every decision a policy makes is made at COMPILE TIME.  Nothing here is
 consulted while a template renders — the render path has no policy object in
 it at all — which is what keeps the sandbox free of runtime cost.
 
-Capabilities
-------------
+Rules
+-----
   rawPhp             `{% php CODE %}`
   methodCalls        `$obj->method(args)` on a `$`-sigil chain
   superglobals       `$_SERVER`, `$_GET`, … as chain roots
@@ -23,21 +23,24 @@ Capabilities
   variableVariables  `$$name` / `${expr}` (on by default; see below)
   newExpressions     `new Foo(args)`
   staticCalls        `Foo::method(args)` / `Foo::CONST`
+  strictTypes        `declare(strict_types=1)` in the compiled template, so a
+                     value of the wrong type at a call boundary throws instead
+                     of being coerced
 
 Allowlists
 ----------
   functions  bare calls and filter steps that resolve to a PHP function
   filters    names accepted after `|>`
 
-The rule for both is the same and is the whole rule:
+The rule for both allowlists is the same:
 
   An EMPTY allowlist means unrestricted.  A NON-EMPTY allowlist means only
   the listed names resolve; anything else is a compile-time error.
 
 An allowlist NARROWS; it never opens a door.  It is consulted only where a
-capability has already made a construct reachable, so
+rule has already made a construct reachable, so
 `restricted()->allowFunctions('count')` is still sandboxed — pair the grant
-with a capability for it to have anything to apply to.
+with a rule for it to have anything to apply to.
 
 Empty-means-unrestricted is what makes `Policy::unrestricted()` the engine's
 old PHP mode exactly, rather than a mode that happens to deny everything.
@@ -48,18 +51,47 @@ Because denying it achieves nothing.  `$$name` and `${expr}` resolve against
 the render scope and loop locals in every policy, and the engine's own
 `__c_`-prefixed frame is protected by binding order rather than by rejecting
 the syntax — so the form reaches nothing a literal name could not.  It exists
-as a capability so an application can be explicit about wanting it off.
+as a rule so an application can be explicit about wanting it off.
+
+Why `strictTypes` exists and defaults on
+----------------------------------------
+A caller cannot opt a template into PHP's strict types: `declare(strict_types=1)`
+is per-file, and every compiled template is its own file, whose `<?php` the
+engine emits.  Without this rule a typed filter — `fn(string $s)` — is
+handed `42` as `"42"` and nothing reports it.  The declaration is a
+rule, therefore, because that is the only way a template can carry it.
+
+It is on in every preset, including `restricted()`. Coercion is a silent
+success: `'1abc'` becomes `1`, a `null` becomes `''`, and nothing anywhere says
+a type was wrong.  A type error says so.  The cost is a diagnostic, and the
+alternative is not safety but invisibility — so the strict behaviour is what a
+template gets unless its application opts out with `denyRule('strictTypes')`.
+
+It is not a `allowsPhp()` rule: it grants no construct, and it decides
+nothing about what a template can name.  What it changes is the *contract at a
+call boundary*, which is why it is deliberately absent from
+`allowsPhp()` — a strict template is no less sandboxed than a weak one.
+It hardens the boundary; it does not move it.
+
+Scope: the declaration governs calls made *from* the compiled file, so it makes
+a mismatched argument to a registered filter or function throw, and it makes a
+fractional float passed to an `int` parameter throw.  It deliberately does NOT
+remove the engine's output cast in `{{ … }}`: `htmlspecialchars((string)(…))`
+is how any non-string renders at all, so stripping it would break
+`{{ 42 }}`, `{{ items |> length }}`, `{{ price }}` — most real templates —
+rather than catching a mistake.
 
 ## Public Constants
 
-- **CAPABILITIES** = `[
-    'rawPhp',
+- **RULES** = `[
     'methodCalls',
-    'superglobals',
-    'phpVariables',
-    'variableVariables',
     'newExpressions',
-    'staticCalls'
+    'phpVariables',
+    'rawPhp',
+    'staticCalls',
+    'strictTypes',
+    'superglobals',
+    'variableVariables'
 ]`
 - **ALLOWLISTS** = `[
     'functions',
@@ -68,12 +100,17 @@ as a capability so an application can be explicit about wanting it off.
 
 ## Public methods
 
-### restricted() · <small>[🗎](../../src/Engine/Policy.php#L109)</small>
+### restricted() · <small>[🗎](../../src/Engine/Policy.php#L146)</small>
 
 `public static function restricted(): self`
 
 The default: no template reaches PHP.  Identical to the engine's
 historical sandbox mode, and what a bare `new ClarityEngine()` uses.
+
+Two rules are on rather than off, for opposite reasons:
+`strictTypes` because it is desirable (it costs nothing and reports
+mismatches instead of hiding them), and `variableVariables` because
+turning it off would achieve nothing (see below).
 
 **Return value**
 
@@ -82,7 +119,7 @@ historical sandbox mode, and what a bare `new ClarityEngine()` uses.
 
 ---
 
-### unrestricted() · <small>[🗎](../../src/Engine/Policy.php#L130)</small>
+### unrestricted() · <small>[🗎](../../src/Engine/Policy.php#L168)</small>
 
 `public static function unrestricted(): self`
 
@@ -100,16 +137,20 @@ choose.
 
 ---
 
-### trusted() · <small>[🗎](../../src/Engine/Policy.php#L151)</small>
+### trusted() · <small>[🗎](../../src/Engine/Policy.php#L194)</small>
 
 `public static function trusted(): self`
 
-Trusted templates have access to most of the engine's capabilities, but not everything.
+Trusted templates have access to most of the engine's rules, but not everything.
 
-What stays off: `rawPhp`, and the two capabilities that let a template name
+What stays off: `rawPhp`, and the two rules that let a template name
 a class of its own. Raw `{% php %}` blocks and constructing an arbitrary
 class are both a different order of trust from calling a method on an
 object the application already passed in.
+
+`strictTypes` is on. It is not a reach rule — it grants no construct
+and names no class — so it is not one of the two things this preset
+withholds; a trusted template is simply held to the types it declares.
 
 **Return value**
 
@@ -118,17 +159,17 @@ object the application already passed in.
 
 ---
 
-### default() · <small>[🗎](../../src/Engine/Policy.php#L175)</small>
+### default() · <small>[🗎](../../src/Engine/Policy.php#L219)</small>
 
 `public static function default(): self`
 
 Start from the engine's default (`restricted()`) and change what you
 mean to change.  Nothing here is a blank slate: this is the sandboxed
-policy, so every capability you do not name stays off.
+policy, so every rule you do not name stays off.
 
 ```
 Policy::default()
-    ->allowCapability('methodCalls')
+    ->allowRule('methodCalls')
     ->allowFunctions('strtoupper', 'count');
 ```
 
@@ -139,7 +180,7 @@ Policy::default()
 
 ---
 
-### fromArray() · <small>[🗎](../../src/Engine/Policy.php#L202)</small>
+### fromArray() · <small>[🗎](../../src/Engine/Policy.php#L246)</small>
 
 `public static function fromArray(array $data): self`
 
@@ -147,15 +188,15 @@ Build a policy from a plain array — the form a config file can express.
 
 ```
 Policy::fromArray([
-    'capabilities' => ['methodCalls' => true],
+    'rules' => ['methodCalls' => true],
     'functions'    => ['strtoupper', 'count'],
     'filters'      => ['markdown'],
 ]);
 ```
 
-An omitted `capabilities` key starts from `restricted()`, so a config
+An omitted `rules` key starts from `restricted()`, so a config
 only has to name what it changes.  Every key is validated; an unknown
-capability or allowlist is refused rather than ignored, because a policy
+rule or allowlist is refused rather than ignored, because a policy
 that silently drops a rule is worse than one that refuses to load.
 
 **Parameters**
@@ -171,7 +212,7 @@ that silently drops a rule is worse than one that refuses to load.
 
 ---
 
-### toArray() · <small>[🗎](../../src/Engine/Policy.php#L256)</small>
+### toArray() · <small>[🗎](../../src/Engine/Policy.php#L300)</small>
 
 `public function toArray(): array`
 
@@ -184,15 +225,15 @@ The array form of this policy.  Round-trips through `fromArray()`.
 
 ---
 
-### allows() · <small>[🗎](../../src/Engine/Policy.php#L270)</small>
+### allows() · <small>[🗎](../../src/Engine/Policy.php#L314)</small>
 
-`public function allows(string $capability): bool`
+`public function allows(string $rule): bool`
 
 **Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
-| `$capability` | string | - |  |
+| `$rule` | string | - |  |
 
 **Return value**
 
@@ -201,9 +242,9 @@ The array form of this policy.  Round-trips through `fromArray()`.
 
 ---
 
-### capabilities() · <small>[🗎](../../src/Engine/Policy.php#L284)</small>
+### rules() · <small>[🗎](../../src/Engine/Policy.php#L328)</small>
 
-`public function capabilities(): array`
+`public function rules(): array`
 
 **Return value**
 
@@ -212,17 +253,17 @@ The array form of this policy.  Round-trips through `fromArray()`.
 
 ---
 
-### allowCapability() · <small>[🗎](../../src/Engine/Policy.php#L294)</small>
+### allowRule() · <small>[🗎](../../src/Engine/Policy.php#L338)</small>
 
-`public function allowCapability(string ...$capabilities): self`
+`public function allowRule(string ...$rules): self`
 
-Turn capabilities on.  Accepts more than one so a grant reads as a list.
+Turn rules on.  Accepts more than one so a grant reads as a list.
 
 **Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
-| `$capabilities` | string | - |  |
+| `$rules` | string | - |  |
 
 **Return value**
 
@@ -231,17 +272,17 @@ Turn capabilities on.  Accepts more than one so a grant reads as a list.
 
 ---
 
-### denyCapability() · <small>[🗎](../../src/Engine/Policy.php#L308)</small>
+### denyRule() · <small>[🗎](../../src/Engine/Policy.php#L352)</small>
 
-`public function denyCapability(string ...$capabilities): self`
+`public function denyRule(string ...$rules): self`
 
-Turn capabilities off.  Accepts more than one so a denial reads as a list.
+Turn rules off.  Accepts more than one so a denial reads as a list.
 
 **Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
-| `$capabilities` | string | - |  |
+| `$rules` | string | - |  |
 
 **Return value**
 
@@ -250,7 +291,7 @@ Turn capabilities off.  Accepts more than one so a denial reads as a list.
 
 ---
 
-### allowFunctions() · <small>[🗎](../../src/Engine/Policy.php#L329)</small>
+### allowFunctions() · <small>[🗎](../../src/Engine/Policy.php#L373)</small>
 
 `public function allowFunctions(string ...$names): self`
 
@@ -274,7 +315,7 @@ that is allowed and not registered calls the PHP function of that name.
 
 ---
 
-### allowFilters() · <small>[🗎](../../src/Engine/Policy.php#L343)</small>
+### allowFilters() · <small>[🗎](../../src/Engine/Policy.php#L387)</small>
 
 `public function allowFilters(string ...$names): self`
 
@@ -296,14 +337,14 @@ list is about the PHP-function fallback.
 
 ---
 
-### restrictsFunctions() · <small>[🗎](../../src/Engine/Policy.php#L357)</small>
+### restrictsFunctions() · <small>[🗎](../../src/Engine/Policy.php#L401)</small>
 
 `public function restrictsFunctions(): bool`
 
 Whether the function allowlist restricts anything at all.
 
 An EMPTY allowlist is not "nothing allowed" — it is "no filter applied", so
-what decides is the capabilities plus this list.  See the class docblock.
+what decides is the rules plus this list.  See the class docblock.
 
 **Return value**
 
@@ -312,7 +353,7 @@ what decides is the capabilities plus this list.  See the class docblock.
 
 ---
 
-### restrictsFilters() · <small>[🗎](../../src/Engine/Policy.php#L363)</small>
+### restrictsFilters() · <small>[🗎](../../src/Engine/Policy.php#L407)</small>
 
 `public function restrictsFilters(): bool`
 
@@ -325,14 +366,14 @@ Whether the filter allowlist restricts anything at all.
 
 ---
 
-### allowsFunction() · <small>[🗎](../../src/Engine/Policy.php#L375)</small>
+### allowsFunction() · <small>[🗎](../../src/Engine/Policy.php#L419)</small>
 
 `public function allowsFunction(string $name): bool`
 
 Whether a PHP function may be called by name under this policy.
 
 Only meaningful where a PHP function is reachable at all; the caller
-decides that from the capabilities.  Names are case-insensitive and a
+decides that from the rules.  Names are case-insensitive and a
 leading namespace separator is ignored, because PHP's are.
 
 **Parameters**
@@ -348,7 +389,7 @@ leading namespace separator is ignored, because PHP's are.
 
 ---
 
-### allowsFilter() · <small>[🗎](../../src/Engine/Policy.php#L382)</small>
+### allowsFilter() · <small>[🗎](../../src/Engine/Policy.php#L426)</small>
 
 `public function allowsFilter(string $name): bool`
 
@@ -367,7 +408,7 @@ Whether a name may be used as a `|>` filter step under this policy.
 
 ---
 
-### allowedFunctions() · <small>[🗎](../../src/Engine/Policy.php#L389)</small>
+### allowedFunctions() · <small>[🗎](../../src/Engine/Policy.php#L433)</small>
 
 `public function allowedFunctions(): array`
 
@@ -378,7 +419,7 @@ Whether a name may be used as a `|>` filter step under this policy.
 
 ---
 
-### allowedFilters() · <small>[🗎](../../src/Engine/Policy.php#L395)</small>
+### allowedFilters() · <small>[🗎](../../src/Engine/Policy.php#L439)</small>
 
 `public function allowedFilters(): array`
 
@@ -389,15 +430,14 @@ Whether a name may be used as a `|>` filter step under this policy.
 
 ---
 
-### denyFunctions() · <small>[🗎](../../src/Engine/Policy.php#L407)</small>
+### denyFunctions() · <small>[🗎](../../src/Engine/Policy.php#L450)</small>
 
 `public function denyFunctions(string ...$names): self`
 
-Refuse names outright, whatever the allowlists say.
+Deny PHP function calls resolved from template expressions.
 
-Applied last, so a name that is both allowlisted and denied is denied. The
-denial is the more specific statement, and a policy that allows and denies
-the same name is a mistake worth resolving in favour of the safer reading.
+Raw `{% php %}` blocks are emitted verbatim and are not inspected by this
+deny list. Denial takes precedence over the function allowlist.
 
 **Parameters**
 
@@ -412,7 +452,7 @@ the same name is a mistake worth resolving in favour of the safer reading.
 
 ---
 
-### deniesFunction() · <small>[🗎](../../src/Engine/Policy.php#L416)</small>
+### deniesFunction() · <small>[🗎](../../src/Engine/Policy.php#L459)</small>
 
 `public function deniesFunction(string $name): bool`
 
@@ -431,7 +471,7 @@ Whether this policy denies a function name outright.
 
 ---
 
-### deniedFunctions() · <small>[🗎](../../src/Engine/Policy.php#L422)</small>
+### deniedFunctions() · <small>[🗎](../../src/Engine/Policy.php#L465)</small>
 
 `public function deniedFunctions(): array`
 
@@ -442,11 +482,11 @@ Whether this policy denies a function name outright.
 
 ---
 
-### isUnrestricted() · <small>[🗎](../../src/Engine/Policy.php#L435)</small>
+### isUnrestricted() · <small>[🗎](../../src/Engine/Policy.php#L478)</small>
 
 `public function isUnrestricted(): bool`
 
-True when every capability is on and neither allowlist restricts anything:
+True when every rule is on and neither allowlist restricts anything:
 the engine's former PHP mode.
 
 **Return value**
@@ -456,20 +496,20 @@ the engine's former PHP mode.
 
 ---
 
-### allowsPhp() · <small>[🗎](../../src/Engine/Policy.php#L463)</small>
+### allowsPhp() · <small>[🗎](../../src/Engine/Policy.php#L506)</small>
 
 `public function allowsPhp(): bool`
 
 True when this template may reach PHP at all — the gate for the two things
-that are not a named capability because they ARE "PHP is reachable": a bare
+that are not a named rule because they ARE "PHP is reachable": a bare
 call to an unregistered name, and a filter step falling back to a PHP
 function.
 
 An allowlist does NOT count as reachable on its own. It narrows which PHP
 functions a construct may call; it does not create a construct to call them
 from. `Policy::restricted()->allowFunctions('count')` therefore stays
-sandboxed — the grant needs a capability to apply to, so pair it with one
-(`->allowCapability('methodCalls')->allowFunctions('count')`).
+sandboxed — the grant needs a rule to apply to, so pair it with one
+(`->allowRule('methodCalls')->allowFunctions('count')`).
 
 `variableVariables` is deliberately not part of this.  It decides a syntax
 the engine resolves against its own scope, so turning it off does not make
@@ -482,7 +522,7 @@ a template any less able to run PHP.
 
 ---
 
-### isSandboxed() · <small>[🗎](../../src/Engine/Policy.php#L487)</small>
+### isSandboxed() · <small>[🗎](../../src/Engine/Policy.php#L530)</small>
 
 `public function isSandboxed(): bool`
 
@@ -499,7 +539,28 @@ one source of truth rather than a second flag that could disagree.
 
 ---
 
-### digest() · <small>[🗎](../../src/Engine/Policy.php#L504)</small>
+### strictTypes() · <small>[🗎](../../src/Engine/Policy.php#L546)</small>
+
+`public function strictTypes(): bool`
+
+Whether compiled templates declare PHP's strict types.
+
+`declare(strict_types=1)` is per-file and the engine emits the file, so this
+is the only way a template can carry it. It is read at compile time by the
+code builder, which is why the rule and not a global flag: the digest
+then makes the cache recompile when it changes.
+
+Deliberately NOT part of `allowsPhp()`: a strict template reaches no
+less PHP than a weak one, it is merely held to the types it declares.
+
+**Return value**
+
+- Type: `bool`
+
+
+---
+
+### digest() · <small>[🗎](../../src/Engine/Policy.php#L563)</small>
 
 `public function digest(): string`
 

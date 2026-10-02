@@ -100,9 +100,9 @@ use Clarity\Engine\Policy;
  * - Call methods on objects
  *
  * What a template may reach is decided by a {@see \Clarity\Engine\Policy}: a set
- * of capabilities plus two allowlists, resolved entirely at compile time.  An
+ * of rules plus two allowlists, resolved entirely at compile time.  An
  * application that needs one PHP function grants it without giving up the
- * sandbox (see Policy::default()); granting the capabilities that reach PHP at
+ * sandbox (see Policy::default()); granting the rules that reach PHP at
  * all (rawPhp, phpVariables, methodCalls) is equivalent to executing arbitrary
  * PHP and is intended for templates written by trusted authors only.
  *

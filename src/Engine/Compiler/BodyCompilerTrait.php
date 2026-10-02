@@ -240,7 +240,7 @@ trait BodyCompilerTrait
             'php'                          => throw new ClarityException(
                 !$this->policy->allows('rawPhp')
                     ? "'{% php %}' is not allowed by this policy. "
-                        . "Grant the 'rawPhp' capability to allow it."
+                        . "Grant the 'rawPhp' rule to allow it."
                     : "Empty '{% php %}' tag: it needs code, as in "
                         . "'{% php echo \$total; %}'.",
                 $sourcePath,

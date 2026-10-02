@@ -644,6 +644,10 @@ class FiltersFunctionsTest extends BaseTestCase
 
     public function testNamedArgPipelinePreserved(): void
     {
+        // `trim` yields a numeric STRING, which reaches `number(decimals=1)` under
+        // the default strict policy. It works because `number` casts its value with
+        // `(float)`: `number_format()` takes neither a string nor a null, so it is
+        // the one built-in that cannot rely on weak mode.
         self::tpl('named_pipeline', '{{ v |> trim |> number(decimals=1) }}');
         $this->assertSame(number_format(3.1, 1), self::render('named_pipeline', ['v' => ' 3.14159 ']));
     }
@@ -746,5 +750,142 @@ class FiltersFunctionsTest extends BaseTestCase
         TestEnvironment::engine()->addFunction('choose', fn($a, $b) => $a ?: $b);
         self::tpl('bare_pipe_depth', '{{ choose(x, y) | upper }}');
         $this->assertSame('HELLO', self::render('bare_pipe_depth', ['x' => 'hello', 'y' => 'world']));
+    }
+
+    // =========================================================================
+    // No casts in the built-in filters — what weak mode does now
+    // =========================================================================
+    //
+    // The inline-filter templates no longer cast their input, so the coercion a
+    // template observes is PHP's own (weak mode) rather than the engine's.
+    // `strictTypes` is on by default, so "weak mode" is now something a test
+    // opts into — these use `weakEngine()` to pin what that mode still does.
+
+    public function testAnIntegerStillCoercesIntoAStringFilter(): void
+    {
+        // `upper` is `\mb_strtoupper({1})` now; weak mode coerces the int itself.
+        self::tpl('nocast_upper_int', '{{ 42 |> upper }}');
+        $this->assertSame('42', self::weakEngine()->renderPartial('nocast_upper_int'));
+    }
+
+    public function testAnIntegerIntoAStringFilterThrowsUnderTheDefaultPolicy(): void
+    {
+        // The counterpart: with `strictTypes` on — the default — weak mode's
+        // coercion is what a template no longer gets. `mb_strtoupper()` wants a
+        // string and says so.
+        self::tpl('nocast_upper_int_strict', '{{ 42 |> upper }}');
+
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/must be of type string, int given/');
+        self::render('nocast_upper_int_strict');
+    }
+
+    public function testANullStillRendersEmptyThroughAStringFilter(): void
+    {
+        // The one place weak mode does NOT fully reproduce the old cast:
+        // `(string) null` was a silent '', and `mb_strtoupper(null)` is a
+        // DEPRECATION. The value is unchanged — still '' — and that is what this
+        // pins.
+        //
+        // The diagnostic is the point of removing the cast, and it is raised inside
+        // the compiled body, so PHP reports it the way PHP reports any deprecation:
+        // by the application's `error_reporting` / `display_errors` settings. The
+        // engine's handler deliberately excludes deprecations, so Clarity does not
+        // swallow it and does not turn it into a `ClarityException` either — it
+        // belongs to the app's error handling. Deprecations are disabled here only
+        // so the notice PHP prints (display_errors is on under CLI) does not land
+        // in the assertion; production runs with them off.
+        self::tpl('nocast_upper_null', '{{ null |> upper }}');
+
+        $saved = \error_reporting(\E_ALL & ~\E_DEPRECATED & ~\E_USER_DEPRECATED);
+        try {
+            $output = self::weakEngine()->renderPartial('nocast_upper_null');
+        } finally {
+            \error_reporting($saved);
+        }
+
+        $this->assertSame('', $output);
+    }
+
+    public function testANullThroughAStringFilterThrowsUnderTheDefaultPolicy(): void
+    {
+        // And the case that bites real templates: a missing or null value arriving
+        // at a string filter used to be a deprecation and an empty string; it is
+        // now a mapped ClarityException. Pinned because it is the most likely
+        // breakage the default flip causes in an existing application.
+        self::tpl('nocast_upper_null_strict', '{{ null |> upper }}');
+
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/must be of type string, null given/');
+        self::render('nocast_upper_null_strict');
+    }
+
+    public function testJoinStillAcceptsAnArray(): void
+    {
+        self::tpl('nocast_join_array', "{{ items |> join(',') }}");
+        $this->assertSame('1,2', self::render('nocast_join_array', ['items' => [1, 2]]));
+    }
+
+    public function testJoinNoLongerWrapsAScalar(): void
+    {
+        // `(array)` was never a coercion — PHP has no scalar→array coercion in
+        // either mode — so removing it changes the DEFAULT mode: a scalar that
+        // used to become a one-element array now raises. This is the breaking
+        // half of the cast removal, pinned so it is a decision and not a
+        // surprise.
+        self::tpl('nocast_join_scalar', "{{ 42 |> join(',') }}");
+
+        $this->expectException(ClarityException::class);
+        $this->render('nocast_join_scalar');
+    }
+
+    public function testNumberIsTheOneFilterThatMustCastItsValue(): void
+    {
+        // `number_format()` takes a float — verified, not assumed — so a numeric
+        // string reaching it is a type error under the strict default, and `number`
+        // would be unusable in a pipeline whose preceding step yields a string
+        // (`{{ v |> trim |> number(1) }}`). It therefore keeps an explicit
+        // `(float)` cast, and this pins both halves: it works under the default,
+        // and it works in weak mode, which is *different* from every other
+        // built-in — they coerce in weak mode and throw in strict.
+        self::tpl('nocast_number_string', "{{ ' 3.14 ' |> trim |> number(1) }}");
+
+        $this->assertSame('3.1', self::render('nocast_number_string'));
+        $this->assertSame('3.1', self::weakEngine()->renderPartial('nocast_number_string'));
+    }
+
+    public function testANumericStringIntoARoundThrowsUnderTheDefaultPolicy(): void
+    {
+        // The third row of the "why strict by default" table in the policy manual:
+        // `round`, `ceil` and `floor` take `int|float`, so a numeric string from a
+        // form field or query parameter — which weak mode happily formats — is a
+        // type error under the default. This is the mistake the default exists to
+        // surface: a value that looked right and was not.
+        self::tpl('nocast_round_string', "{{ ' 3.14 ' |> round(1) }}");
+
+        $this->assertSame('3.1', self::weakEngine()->renderPartial('nocast_round_string'));
+
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/round\(\): Argument #1 .*string given/');
+        self::render('nocast_round_string');
+    }
+
+    // -- date_modify: the format argument ------------------------------------
+
+    public function testDateModifyDefaultsToIso8601(): void
+    {
+        self::tpl('date_modify_default', "{{ ts |> date_modify('+1 day') }}");
+        $ts = mktime(12, 0, 0, 6, 14, 2023);
+        $this->assertSame('2023-06-15T12:00:00+00:00', self::render('date_modify_default', ['ts' => $ts]));
+    }
+
+    public function testDateModifyAcceptsAFormatArgument(): void
+    {
+        // The direct form, which replaces `… |> date_modify('+1 day') |> date('Y-m-d')`
+        // as the idiom. The chain still works (see testFilterDateModify) because
+        // `date` parses the ISO string the default produces.
+        self::tpl('date_modify_format', "{{ ts |> date_modify('+1 day', 'Y-m-d') }}");
+        $ts = mktime(12, 0, 0, 6, 14, 2023);
+        $this->assertSame('2023-06-15', self::render('date_modify_format', ['ts' => $ts]));
     }
 }

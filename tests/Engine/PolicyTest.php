@@ -7,7 +7,7 @@ use Clarity\Tests\BaseTestCase;
 use Clarity\Tests\TestClarityEngine;
 
 /**
- * The policy object itself: presets, capabilities, allowlists, digests.
+ * The policy object itself: presets, rules, allowlists, digests.
  *
  * These are pure-object tests — nothing is compiled — because the properties
  * that matter here are ones the compiler depends on and cannot repair: that two
@@ -23,27 +23,29 @@ class PolicyTest extends BaseTestCase
 
     public function testRestrictedIsTheDefaultShape(): void
     {
-        // The shape is what matters here: every capability off except
-        // `variableVariables`, which defaults on because denying it would achieve
-        // nothing (see the Policy docblock). Compared order-insensitively — the
+        // The shape is what matters here: every rule off except two.
+        // `variableVariables` is on because denying it would achieve nothing (see
+        // the Policy docblock); `strictTypes` is on because coercion hides
+        // mistakes and a type error does not. Compared order-insensitively — the
         // preset's insertion order is not part of the contract.
-        $capabilities = Policy::restricted()->capabilities();
+        $rules = Policy::restricted()->rules();
 
-        $expected = \array_fill_keys(Policy::CAPABILITIES, false);
+        $expected = \array_fill_keys(Policy::RULES, false);
         $expected['variableVariables'] = true;
+        $expected['strictTypes'] = true;
 
         \ksort($expected);
-        \ksort($capabilities);
+        \ksort($rules);
 
-        $this->assertSame($expected, $capabilities);
+        $this->assertSame($expected, $rules);
     }
 
-    public function testOpenGrantsEveryCapabilityAndNoAllowlist(): void
+    public function testOpenGrantsEveryRuleAndNoAllowlist(): void
     {
         $policy = Policy::unrestricted();
 
-        foreach (Policy::CAPABILITIES as $capability) {
-            $this->assertTrue($policy->allows($capability), "{$capability} must be on");
+        foreach (Policy::RULES as $rule) {
+            $this->assertTrue($policy->allows($rule), "{$rule} must be on");
         }
         $this->assertFalse($policy->restrictsFunctions());
         $this->assertFalse($policy->restrictsFilters());
@@ -59,13 +61,18 @@ class PolicyTest extends BaseTestCase
         $this->assertTrue($policy->allows('superglobals'));
         $this->assertTrue($policy->allows('phpVariables'));
 
-        // What it withholds: raw php blocks, and the two capabilities that let a
+        // What it withholds: raw php blocks, and the two rules that let a
         // template name a class of its own. Constructing an arbitrary class is a
         // different order of trust from calling a method on an object the
         // application already passed in.
         $this->assertFalse($policy->allows('rawPhp'));
         $this->assertFalse($policy->allows('newExpressions'));
         $this->assertFalse($policy->allows('staticCalls'));
+
+        // And what it keeps despite that: `strictTypes` grants no construct and
+        // names no class, so it is not one of the two things this preset
+        // withholds — a trusted template is held to the types it declares.
+        $this->assertTrue($policy->allows('strictTypes'));
     }
 
     public function testAnEngineWithNoConfigurationIsSandboxed(): void
@@ -91,14 +98,14 @@ class PolicyTest extends BaseTestCase
     }
 
     // =========================================================================
-    // Capabilities
+    // Rules
     // =========================================================================
 
-    public function testCapabilitiesAreFluentAndAccumulate(): void
+    public function testRulesAreFluentAndAccumulate(): void
     {
         $policy = Policy::default()
-            ->allowCapability('methodCalls')
-            ->allowCapability('superglobals');
+            ->allowRule('methodCalls')
+            ->allowRule('superglobals');
 
         $this->assertTrue($policy->allows('methodCalls'));
         $this->assertTrue($policy->allows('superglobals'));
@@ -107,17 +114,17 @@ class PolicyTest extends BaseTestCase
 
     public function testDenyWinsOverAllow(): void
     {
-        $policy = Policy::unrestricted()->denyCapability('rawPhp');
+        $policy = Policy::unrestricted()->denyRule('rawPhp');
 
         $this->assertFalse($policy->allows('rawPhp'));
         $this->assertTrue($policy->allows('methodCalls'));
     }
 
-    public function testAnUnknownCapabilityIsRefused(): void
+    public function testAnUnknownRuleIsRefused(): void
     {
         $this->expectException(ClarityException::class);
-        $this->expectExceptionMessageMatches('/Unknown policy capability/');
-        Policy::default()->allowCapability('teleportation');
+        $this->expectExceptionMessageMatches('/Unknown policy rule/');
+        Policy::default()->allowRule('teleportation');
     }
 
     // =========================================================================
@@ -176,14 +183,14 @@ class PolicyTest extends BaseTestCase
         // An allowlist narrows what may be called; it does not open a door. PHP
         // function filtering is only consulted where a construct reaches PHP in
         // the first place, and `restricted()` has none on, so a lone allowlist
-        // stays sandboxed — the grant needs a capability to apply to.
+        // stays sandboxed — the grant needs a rule to apply to.
         $this->assertFalse(Policy::restricted()->allowFunctions('count')->allowsPhp());
         $this->assertFalse(Policy::restricted()->allowFilters('markdown')->allowsPhp());
         $this->assertFalse(Policy::restricted()->allowsPhp());
 
-        // Pair the allowlist with a capability and PHP is reachable, and only
+        // Pair the allowlist with a rule and PHP is reachable, and only
         // the listed names resolve.
-        $granted = Policy::restricted()->allowCapability('methodCalls')->allowFunctions('count');
+        $granted = Policy::restricted()->allowRule('methodCalls')->allowFunctions('count');
         $this->assertTrue($granted->allowsPhp());
         $this->assertTrue($granted->allowsFunction('count'));
         $this->assertFalse($granted->allowsFunction('strrev'));
@@ -196,7 +203,7 @@ class PolicyTest extends BaseTestCase
     public function testArrayFormRoundTrips(): void
     {
         $policy = Policy::default()
-            ->allowCapability('methodCalls')
+            ->allowRule('methodCalls')
             ->allowFunctions('strtoupper', 'count')
             ->allowFilters('markdown')
             ->denyFunctions('exec');
@@ -209,7 +216,7 @@ class PolicyTest extends BaseTestCase
 
     public function testFromArrayStartsFromTheSandboxedPreset(): void
     {
-        $policy = Policy::fromArray(['capabilities' => ['rawPhp' => true]]);
+        $policy = Policy::fromArray(['rules' => ['rawPhp' => true]]);
 
         $this->assertTrue($policy->allows('rawPhp'));
         $this->assertTrue($policy->allows('variableVariables'));
@@ -220,19 +227,19 @@ class PolicyTest extends BaseTestCase
     {
         $this->expectException(ClarityException::class);
         $this->expectExceptionMessageMatches('/Unknown policy key/');
-        Policy::fromArray(['capabilites' => []]);
+        Policy::fromArray(['bogusKey' => []]);
     }
 
-    public function testFromArrayRefusesUnknownCapabilities(): void
+    public function testFromArrayRefusesUnknownRules(): void
     {
         $this->expectException(ClarityException::class);
-        $this->expectExceptionMessageMatches('/Unknown policy capability/');
-        Policy::fromArray(['capabilities' => ['teleportation' => true]]);
+        $this->expectExceptionMessageMatches('/Unknown policy rule/');
+        Policy::fromArray(['rules' => ['teleportation' => true]]);
     }
 
     public function testAnEngineAcceptsTheArrayForm(): void
     {
-        $engine = TestClarityEngine::withPolicy(['capabilities' => ['rawPhp' => true]]);
+        $engine = TestClarityEngine::withPolicy(['rules' => ['rawPhp' => true]]);
 
         $this->assertTrue($engine->getPolicy()->allows('rawPhp'));
     }
@@ -257,26 +264,26 @@ class PolicyTest extends BaseTestCase
 
         $this->assertNotSame($base->digest(), Policy::default()->allowFunctions('a', 'b', 'c')->digest());
         $this->assertNotSame($base->digest(), Policy::default()->allowFunctions('a', 'z')->digest());
-        $this->assertNotSame($base->digest(), Policy::default()->allowCapability('methodCalls')->digest());
+        $this->assertNotSame($base->digest(), Policy::default()->allowRule('methodCalls')->digest());
         $this->assertNotSame($base->digest(), Policy::default()->allowFunctions('a', 'b')->denyFunctions('a')->digest());
         $this->assertNotSame($base->digest(), Policy::restricted()->digest());
     }
 
-    public function testEveryCapabilityContributesToTheDigest(): void
+    public function testEveryRuleContributesToTheDigest(): void
     {
-        // One assertion per capability, so a forgotten field in digest() fails
+        // One assertion per rule, so a forgotten field in digest() fails
         // here rather than as a stale compiled template in production.
         $seen = [];
-        foreach (Policy::CAPABILITIES as $capability) {
-            $flipped = Policy::unrestricted()->denyCapability($capability);
+        foreach (Policy::RULES as $rule) {
+            $flipped = Policy::unrestricted()->denyRule($rule);
             $this->assertNotSame(
                 Policy::unrestricted()->digest(),
                 $flipped->digest(),
-                "flipping '{$capability}' must change the digest"
+                "flipping '{$rule}' must change the digest"
             );
             $seen[$flipped->digest()] = true;
         }
-        $this->assertCount(\count(Policy::CAPABILITIES), $seen);
+        $this->assertCount(\count(Policy::RULES), $seen);
     }
 
     public function testTheDigestIsShortAndOpaque(): void
@@ -306,7 +313,7 @@ class PolicyTest extends BaseTestCase
     {
         // `isUnrestricted()` means "the engine's old PHP mode exactly", so a
         // policy that narrows anything — a function list, or a single denial —
-        // is not it, even though every capability is on.
+        // is not it, even though every rule is on.
         $this->assertFalse(Policy::unrestricted()->allowFunctions('count')->isUnrestricted());
         $this->assertFalse(Policy::unrestricted()->denyFunctions('exec')->isUnrestricted());
     }
@@ -316,7 +323,43 @@ class PolicyTest extends BaseTestCase
         // It resolves against the engine's own scope, so turning it off makes a
         // template no less able to run PHP.
         $this->assertFalse(Policy::restricted()->allowsPhp());
-        $this->assertFalse(Policy::default()->denyCapability('variableVariables')->allowsPhp());
+        $this->assertFalse(Policy::default()->denyRule('variableVariables')->allowsPhp());
+    }
+
+    public function testStrictTypesIsOnInEveryPresetAndIsNotAReachRule(): void
+    {
+        // On everywhere, including the sandbox. Not because it constrains what a
+        // template can reach, but because the alternative to a type error is a
+        // silent coercion — so "unconfigured" and "sandboxed" both mean strict.
+        $this->assertTrue(Policy::restricted()->strictTypes());
+        $this->assertTrue(Policy::default()->strictTypes());
+
+        // `unrestricted()` is "every rule on", and the digest test flips
+        // each one against it, so this has to be true rather than merely
+        // defensible.
+        $this->assertTrue(Policy::unrestricted()->strictTypes());
+        $this->assertTrue(Policy::trusted()->strictTypes());
+
+        // A strict template still reaches no PHP: the declaration changes the
+        // contract at a call boundary, not what a template can name. If it
+        // counted as reaching PHP, the sandbox would report itself as a sandbox
+        // escape — because the sandbox is now strict by construction.
+        $this->assertTrue(Policy::restricted()->strictTypes());
+        $this->assertFalse(Policy::restricted()->allowsPhp());
+        $this->assertTrue(Policy::restricted()->isSandboxed());
+        $this->assertFalse(Policy::restricted()->isUnrestricted());
+    }
+
+    public function testStrictTypesCanBeDeniedToRecoverWeakMode(): void
+    {
+        // The escape hatch the default makes necessary: a project that relied on
+        // coercion denies one rule and gets the old behaviour back, without
+        // opening anything else up.
+        $weak = Policy::default()->denyRule('strictTypes');
+
+        $this->assertFalse($weak->strictTypes());
+        $this->assertTrue($weak->isSandboxed());
+        $this->assertNotSame(Policy::default()->digest(), $weak->digest());
     }
 
     // =========================================================================
@@ -343,21 +386,21 @@ class PolicyTest extends BaseTestCase
         // change is the case a `COMPILER_VERSION` bump cannot express.
         //
         // An allowlist only filters the PHP functions a construct may reach, so
-        // it needs a capability to apply to: `methodCalls` is the one that makes
+        // it needs a rule to apply to: `methodCalls` is the one that makes
         // the bare `strrev()` reachable at all.
         self::tpl('policy_allow', "{{ 'abc' |> strrev }}");
 
         $restricted = TestClarityEngine::withPolicy(
-            Policy::restricted()->allowCapability('methodCalls')->allowFilters('strrev')
+            Policy::restricted()->allowRule('methodCalls')->allowFilters('strrev')
         );
         $this->assertSame('cba', $restricted->renderPartial('policy_allow'));
 
         // Same cache directory, same template, a policy that no longer allows it —
-        // the capability stays, and the allowlist names `count` instead of
+        // the rule stays, and the allowlist names `count` instead of
         // `strrev`. An empty allowlist would be WIDER (no restriction), which is
         // why the narrowing has to be another explicit list.
         $narrower = TestClarityEngine::withPolicy(
-            Policy::restricted()->allowCapability('methodCalls')->allowFilters('count')
+            Policy::restricted()->allowRule('methodCalls')->allowFilters('count')
         );
         try {
             $narrower->renderPartial('policy_allow');
@@ -371,7 +414,7 @@ class PolicyTest extends BaseTestCase
         $this->assertSame('cba', $wider->renderPartial('policy_allow'));
     }
 
-    public function testChangingACapabilityRecompilesACachedTemplate(): void
+    public function testChangingARuleRecompilesACachedTemplate(): void
     {
         self::tpl('policy_cap', '{{ $obj->name() }}');
         $obj = new class
@@ -390,7 +433,7 @@ class PolicyTest extends BaseTestCase
             $this->addToAssertionCount(1);
         }
 
-        $with = TestClarityEngine::withPolicy(Policy::default()->allowCapability('methodCalls'));
+        $with = TestClarityEngine::withPolicy(Policy::default()->allowRule('methodCalls'));
         $this->assertSame('Alice', $with->renderPartial('policy_cap', ['obj' => $obj]));
     }
 

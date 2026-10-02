@@ -7,7 +7,7 @@ use Clarity\ClarityException;
 /**
  * What a template is allowed to reach.
  *
- * A policy is a set of CAPABILITIES plus two ALLOWLISTS.  It replaces the
+ * A policy is a set of RULES plus two ALLOWLISTS.  It replaces the
  * single `sandbox` boolean the engine used to carry: one bit could only say
  * "everything Clarity has" or "nothing that touches PHP", so an application
  * that needed one PHP function had to give up every compile-time guarantee.
@@ -16,8 +16,8 @@ use Clarity\ClarityException;
  * consulted while a template renders — the render path has no policy object in
  * it at all — which is what keeps the sandbox free of runtime cost.
  *
- * Capabilities
- * ------------
+ * Rules
+ * -----
  *   rawPhp             `{% php CODE %}`
  *   methodCalls        `$obj->method(args)` on a `$`-sigil chain
  *   superglobals       `$_SERVER`, `$_GET`, … as chain roots
@@ -26,21 +26,24 @@ use Clarity\ClarityException;
  *   variableVariables  `$$name` / `${expr}` (on by default; see below)
  *   newExpressions     `new Foo(args)`
  *   staticCalls        `Foo::method(args)` / `Foo::CONST`
+ *   strictTypes        `declare(strict_types=1)` in the compiled template, so a
+ *                      value of the wrong type at a call boundary throws instead
+ *                      of being coerced
  *
  * Allowlists
  * ----------
  *   functions  bare calls and filter steps that resolve to a PHP function
  *   filters    names accepted after `|>`
  *
- * The rule for both is the same and is the whole rule:
+ * The rule for both allowlists is the same:
  *
  *   An EMPTY allowlist means unrestricted.  A NON-EMPTY allowlist means only
  *   the listed names resolve; anything else is a compile-time error.
  *
  * An allowlist NARROWS; it never opens a door.  It is consulted only where a
- * capability has already made a construct reachable, so
+ * rule has already made a construct reachable, so
  * `restricted()->allowFunctions('count')` is still sandboxed — pair the grant
- * with a capability for it to have anything to apply to.
+ * with a rule for it to have anything to apply to.
  *
  * Empty-means-unrestricted is what makes `Policy::unrestricted()` the engine's
  * old PHP mode exactly, rather than a mode that happens to deny everything.
@@ -51,26 +54,55 @@ use Clarity\ClarityException;
  * the render scope and loop locals in every policy, and the engine's own
  * `__c_`-prefixed frame is protected by binding order rather than by rejecting
  * the syntax — so the form reaches nothing a literal name could not.  It exists
- * as a capability so an application can be explicit about wanting it off.
+ * as a rule so an application can be explicit about wanting it off.
+ *
+ * Why `strictTypes` exists and defaults on
+ * ----------------------------------------
+ * A caller cannot opt a template into PHP's strict types: `declare(strict_types=1)`
+ * is per-file, and every compiled template is its own file, whose `<?php` the
+ * engine emits.  Without this rule a typed filter — `fn(string $s)` — is
+ * handed `42` as `"42"` and nothing reports it.  The declaration is a
+ * rule, therefore, because that is the only way a template can carry it.
+ *
+ * It is on in every preset, including {@see restricted()}. Coercion is a silent
+ * success: `'1abc'` becomes `1`, a `null` becomes `''`, and nothing anywhere says
+ * a type was wrong.  A type error says so.  The cost is a diagnostic, and the
+ * alternative is not safety but invisibility — so the strict behaviour is what a
+ * template gets unless its application opts out with `denyRule('strictTypes')`.
+ *
+ * It is not a `allowsPhp()` rule: it grants no construct, and it decides
+ * nothing about what a template can name.  What it changes is the *contract at a
+ * call boundary*, which is why it is deliberately absent from
+ * {@see allowsPhp()} — a strict template is no less sandboxed than a weak one.
+ * It hardens the boundary; it does not move it.
+ *
+ * Scope: the declaration governs calls made *from* the compiled file, so it makes
+ * a mismatched argument to a registered filter or function throw, and it makes a
+ * fractional float passed to an `int` parameter throw.  It deliberately does NOT
+ * remove the engine's output cast in `{{ … }}`: `htmlspecialchars((string)(…))`
+ * is how any non-string renders at all, so stripping it would break
+ * `{{ 42 }}`, `{{ items |> length }}`, `{{ price }}` — most real templates —
+ * rather than catching a mistake.
  */
 final class Policy
 {
-    /** Every capability, in the order the documentation lists them. */
-    public const CAPABILITIES = [
-        'rawPhp',
+    /** Every rule, in the order the documentation lists them. */
+    public const RULES = [
         'methodCalls',
-        'superglobals',
-        'phpVariables',
-        'variableVariables',
         'newExpressions',
+        'phpVariables',
+        'rawPhp',
         'staticCalls',
+        'strictTypes',
+        'superglobals',
+        'variableVariables',
     ];
 
     /** The two allowlists, in documentation order. */
     public const ALLOWLISTS = ['functions', 'filters'];
 
-    /** @var array<string, bool> capability name => allowed */
-    private array $capabilities;
+    /** @var array<string, bool> rule name => allowed */
+    private array $rules;
 
     /** @var array<string, true> lowercase function name => true; empty = unrestricted */
     private array $functions = [];
@@ -91,11 +123,11 @@ final class Policy
     private array $denied = [];
 
     /**
-     * @param array<string, bool> $capabilities Complete capability map.
+     * @param array<string, bool> $rules Complete rule map.
      */
-    private function __construct(array $capabilities)
+    private function __construct(array $rules)
     {
-        $this->capabilities = $capabilities;
+        $this->rules = $rules;
     }
 
     // -------------------------------------------------------------------------
@@ -105,6 +137,11 @@ final class Policy
     /**
      * The default: no template reaches PHP.  Identical to the engine's
      * historical sandbox mode, and what a bare `new ClarityEngine()` uses.
+     *
+     * Two rules are on rather than off, for opposite reasons:
+     * `strictTypes` because it is desirable (it costs nothing and reports
+     * mismatches instead of hiding them), and `variableVariables` because
+     * turning it off would achieve nothing (see below).
      */
     public static function restricted(): self
     {
@@ -114,6 +151,7 @@ final class Policy
             'phpVariables'      => false,
             'rawPhp'            => false,
             'staticCalls'       => false,
+            'strictTypes'       => true,
             'superglobals'      => false,
             'variableVariables' => true,
         ]);
@@ -135,18 +173,23 @@ final class Policy
             'phpVariables'      => true,
             'rawPhp'            => true,
             'staticCalls'       => true,
+            'strictTypes'       => true,
             'superglobals'      => true,
             'variableVariables' => true,
         ]);
     }
 
     /**
-     * Trusted templates have access to most of the engine's capabilities, but not everything.
+     * Trusted templates have access to most of the engine's rules, but not everything.
      *
-     * What stays off: `rawPhp`, and the two capabilities that let a template name
+     * What stays off: `rawPhp`, and the two rules that let a template name
      * a class of its own. Raw `{% php %}` blocks and constructing an arbitrary
      * class are both a different order of trust from calling a method on an
      * object the application already passed in.
+     *
+     * `strictTypes` is on. It is not a reach rule — it grants no construct
+     * and names no class — so it is not one of the two things this preset
+     * withholds; a trusted template is simply held to the types it declares.
      */
     public static function trusted(): self
     {
@@ -156,6 +199,7 @@ final class Policy
             'phpVariables'      => true,
             'rawPhp'            => false,
             'staticCalls'       => false,
+            'strictTypes'       => true,
             'superglobals'      => true,
             'variableVariables' => true,
         ]);
@@ -164,11 +208,11 @@ final class Policy
     /**
      * Start from the engine's default ({@see restricted()}) and change what you
      * mean to change.  Nothing here is a blank slate: this is the sandboxed
-     * policy, so every capability you do not name stays off.
+     * policy, so every rule you do not name stays off.
      *
      * ```
      * Policy::default()
-     *     ->allowCapability('methodCalls')
+     *     ->allowRule('methodCalls')
      *     ->allowFunctions('strtoupper', 'count');
      * ```
      */
@@ -186,15 +230,15 @@ final class Policy
      *
      * ```
      * Policy::fromArray([
-     *     'capabilities' => ['methodCalls' => true],
+     *     'rules' => ['methodCalls' => true],
      *     'functions'    => ['strtoupper', 'count'],
      *     'filters'      => ['markdown'],
      * ]);
      * ```
      *
-     * An omitted `capabilities` key starts from {@see restricted()}, so a config
+     * An omitted `rules` key starts from {@see restricted()}, so a config
      * only has to name what it changes.  Every key is validated; an unknown
-     * capability or allowlist is refused rather than ignored, because a policy
+     * rule or allowlist is refused rather than ignored, because a policy
      * that silently drops a rule is worse than one that refuses to load.
      *
      * @param array<string, mixed> $data
@@ -204,18 +248,18 @@ final class Policy
         $policy = self::restricted();
 
         foreach ($data as $key => $value) {
-            if ($key === 'capabilities') {
+            if ($key === 'rules') {
                 if (!\is_array($value)) {
-                    throw new ClarityException("Policy 'capabilities' must be an array of name => bool.");
+                    throw new ClarityException("Policy 'rules' must be an array of name => bool.");
                 }
                 foreach ($value as $name => $allowed) {
-                    if (!\in_array($name, self::CAPABILITIES, true)) {
+                    if (!\in_array($name, self::RULES, true)) {
                         throw new ClarityException(
-                            "Unknown policy capability '{$name}'. Known capabilities: "
-                                . \implode(', ', self::CAPABILITIES) . '.'
+                            "Unknown policy rule '{$name}'. Known rules: "
+                                . \implode(', ', self::RULES) . '.'
                         );
                     }
-                    $policy->capabilities[$name] = (bool) $allowed;
+                    $policy->rules[$name] = (bool) $allowed;
                 }
                 continue;
             }
@@ -241,7 +285,7 @@ final class Policy
 
             throw new ClarityException(
                 "Unknown policy key '{$key}'. Known keys: "
-                    . \implode(', ', \array_merge(['capabilities'], self::ALLOWLISTS, ['deniedFunctions'])) . '.'
+                    . \implode(', ', \array_merge(['rules'], self::ALLOWLISTS, ['deniedFunctions'])) . '.'
             );
         }
 
@@ -251,12 +295,12 @@ final class Policy
     /**
      * The array form of this policy.  Round-trips through {@see fromArray()}.
      *
-     * @return array{capabilities: array<string, bool>, functions: list<string>, filters: list<string>, deniedFunctions: list<string>}
+     * @return array{rules: array<string, bool>, functions: list<string>, filters: list<string>, deniedFunctions: list<string>}
      */
     public function toArray(): array
     {
         return [
-            'capabilities'    => $this->capabilities,
+            'rules'    => $this->rules,
             'functions'       => \array_keys($this->functions),
             'filters'         => \array_keys($this->filters),
             'deniedFunctions' => \array_keys($this->denied),
@@ -264,52 +308,52 @@ final class Policy
     }
 
     // -------------------------------------------------------------------------
-    // Capabilities
+    // Rules
     // -------------------------------------------------------------------------
 
-    public function allows(string $capability): bool
+    public function allows(string $rule): bool
     {
-        if (!\array_key_exists($capability, $this->capabilities)) {
+        if (!\array_key_exists($rule, $this->rules)) {
             throw new ClarityException(
-                "Unknown policy capability '{$capability}'. Known capabilities: "
-                    . \implode(', ', self::CAPABILITIES) . '.'
+                "Unknown policy rule '{$rule}'. Known rules: "
+                    . \implode(', ', self::RULES) . '.'
             );
         }
-        return $this->capabilities[$capability];
+        return $this->rules[$rule];
     }
 
     /**
      * @return array<string, bool>
      */
-    public function capabilities(): array
+    public function rules(): array
     {
-        return $this->capabilities;
+        return $this->rules;
     }
 
     /**
-     * Turn capabilities on.  Accepts more than one so a grant reads as a list.
+     * Turn rules on.  Accepts more than one so a grant reads as a list.
      *
-     * @param string ...$capabilities
+     * @param string ...$rules
      */
-    public function allowCapability(string ...$capabilities): self
+    public function allowRule(string ...$rules): self
     {
-        foreach ($capabilities as $capability) {
-            $this->allows($capability); // validates the name
-            $this->capabilities[$capability] = true;
+        foreach ($rules as $rule) {
+            $this->allows($rule); // validates the name
+            $this->rules[$rule] = true;
         }
         return $this;
     }
 
     /**
-     * Turn capabilities off.  Accepts more than one so a denial reads as a list.
+     * Turn rules off.  Accepts more than one so a denial reads as a list.
      *
-     * @param string ...$capabilities
+     * @param string ...$rules
      */
-    public function denyCapability(string ...$capabilities): self
+    public function denyRule(string ...$rules): self
     {
-        foreach ($capabilities as $capability) {
-            $this->allows($capability); // validates the name
-            $this->capabilities[$capability] = false;
+        foreach ($rules as $rule) {
+            $this->allows($rule); // validates the name
+            $this->rules[$rule] = false;
         }
         return $this;
     }
@@ -352,7 +396,7 @@ final class Policy
      * Whether the function allowlist restricts anything at all.
      *
      * An EMPTY allowlist is not "nothing allowed" — it is "no filter applied", so
-     * what decides is the capabilities plus this list.  See the class docblock.
+     * what decides is the rules plus this list.  See the class docblock.
      */
     public function restrictsFunctions(): bool
     {
@@ -369,7 +413,7 @@ final class Policy
      * Whether a PHP function may be called by name under this policy.
      *
      * Only meaningful where a PHP function is reachable at all; the caller
-     * decides that from the capabilities.  Names are case-insensitive and a
+     * decides that from the rules.  Names are case-insensitive and a
      * leading namespace separator is ignored, because PHP's are.
      */
     public function allowsFunction(string $name): bool
@@ -428,12 +472,12 @@ final class Policy
     // -------------------------------------------------------------------------
 
     /**
-     * True when every capability is on and neither allowlist restricts anything:
+     * True when every rule is on and neither allowlist restricts anything:
      * the engine's former PHP mode.
      */
     public function isUnrestricted(): bool
     {
-        foreach ($this->capabilities as $allowed) {
+        foreach ($this->rules as $allowed) {
             if (!$allowed) {
                 return false;
             }
@@ -445,15 +489,15 @@ final class Policy
 
     /**
      * True when this template may reach PHP at all — the gate for the two things
-     * that are not a named capability because they ARE "PHP is reachable": a bare
+     * that are not a named rule because they ARE "PHP is reachable": a bare
      * call to an unregistered name, and a filter step falling back to a PHP
      * function.
      *
      * An allowlist does NOT count as reachable on its own. It narrows which PHP
      * functions a construct may call; it does not create a construct to call them
      * from. `Policy::restricted()->allowFunctions('count')` therefore stays
-     * sandboxed — the grant needs a capability to apply to, so pair it with one
-     * (`->allowCapability('methodCalls')->allowFunctions('count')`).
+     * sandboxed — the grant needs a rule to apply to, so pair it with one
+     * (`->allowRule('methodCalls')->allowFunctions('count')`).
      *
      * `variableVariables` is deliberately not part of this.  It decides a syntax
      * the engine resolves against its own scope, so turning it off does not make
@@ -468,8 +512,8 @@ final class Policy
             'phpVariables',
             'newExpressions',
             'staticCalls',
-        ] as $capability) {
-            if ($this->capabilities[$capability]) {
+        ] as $rule) {
+            if ($this->rules[$rule]) {
                 return true;
             }
         }
@@ -488,6 +532,22 @@ final class Policy
         return !$this->allowsPhp();
     }
 
+    /**
+     * Whether compiled templates declare PHP's strict types.
+     *
+     * `declare(strict_types=1)` is per-file and the engine emits the file, so this
+     * is the only way a template can carry it. It is read at compile time by the
+     * code builder, which is why the rule and not a global flag: the digest
+     * then makes the cache recompile when it changes.
+     *
+     * Deliberately NOT part of {@see allowsPhp()}: a strict template reaches no
+     * less PHP than a weak one, it is merely held to the types it declares.
+     */
+    public function strictTypes(): bool
+    {
+        return $this->allows('strictTypes');
+    }
+
     // -------------------------------------------------------------------------
     // Identity
     // -------------------------------------------------------------------------
@@ -502,11 +562,11 @@ final class Policy
      */
     public function digest(): string
     {
-        $capabilities = [];
-        foreach ($this->capabilities as $name => $allowed) {
-            $capabilities[] = $name . ":" . ($allowed ? '1' : '0');
+        $rules = [];
+        foreach ($this->rules as $name => $allowed) {
+            $rules[] = $name . ":" . ($allowed ? '1' : '0');
         }
-        \sort($capabilities);
+        \sort($rules);
 
         $functions = \array_keys($this->functions);
         $filters   = \array_keys($this->filters);
@@ -515,7 +575,7 @@ final class Policy
         \sort($filters);
         \sort($denied);
 
-        $canonical = \implode("\x1E", $capabilities)
+        $canonical = \implode("\x1E", $rules)
             . "\x1F" . \implode("\x1E", $functions)
             . "\x1F" . \implode("\x1E", $filters)
             . "\x1F" . \implode("\x1E", $denied);

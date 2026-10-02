@@ -265,10 +265,6 @@ and `|> reverse` accept a container (array, `Traversable`, `Countable`, or an
 object exposing a public `toArray()`). A value object with no public state and a
 `__toString()` keeps STRING semantics, so `|> length` counts its characters.
 
-In the default policy, templates cannot use bare `->`, call methods, or access
-names outside the render scope. This includes PHP functions and superglobals.
-See [PHP Mode](#php-mode) for how a policy can enable PHP access.
-
 ## PHP Mode
 
 **PHP mode** is enabled by a policy that grants PHP access. The syntax stays the
@@ -298,39 +294,31 @@ When the value does not belong first, a single `_` placeholder positions it:
 {{ 'k' |> array_key_exists(_, m) }}   {# \array_key_exists($value, $m) #}
 ```
 
-`_` may appear at most once, and only in an open-mode filter argument list;
+`_` may appear at most once, and only in PHP mode as filter argument;
 elsewhere `_` keeps its meaning as an ordinary variable.
 
 ### Method calls
 
-A method call needs the `methodCalls` capability. The **capability** is the gate,
-not the spelling, so both styles work and compile to the same PHP — a template
-written in dot syntax needs no rewriting when the capability is granted:
+A method call needs the `methodCalls` rule. Both styles work and compile to the same PHP — a template written in dot syntax works as good as one written in PHP-style syntax.
 
 ```twig
 {{ user.name() }}                {# static method, dot syntax #}
-{{ obj{m}() }}                   {# dynamic method name, brace syntax #}
-{{ $user->name() }}              {# PHP-style (equivalent) #}
+{{ user?.name() }}               {# nullsafe #}
+{{ obj{m}() }}                   {# dynamic method, brace syntax #}
+
+{{ $user->name() }}              {# static method, PHP-style #}
 {{ $user?->name() }}             {# nullsafe #}
-{{ $user->{$method}() }}         {# PHP-style dynamic name (equivalent) #}
+{{ $user->{$method}() }}         {# dynamic method, PHP-style #}
 ```
 
-`user.name()`, `$user.name()` and `$user->name()` are the same call. The same
-holds for the dynamic spellings: `obj{m}()`, `$obj{m}()` and `$obj->{$m}()` are
-one construct.
-
-Two calls stay rejected under every policy, because neither is a method call:
+Other calls stay rejected under every policy, because they are not method calls:
 
 ```twig
 {{ $fn() }}                      {# ERROR: a call on the root value #}
 {{ arr:greet() }}                {# ERROR: a call on a key read, not a member #}
 ```
 
-A variable-driven callable is the function-level equivalent of
-variable-variable expansion, and a call may follow only a **property** — never a
-key (`a:b`) or index (`a[b]`) read. A bare `->` (`obj->name()`) is also still
-refused, because `$` is what distinguishes `->` from the `-` operator; use
-`obj.name()` or `$obj->name()`.
+Variable-driven calls are not allowed under any policy, and array-driven calls are also rejected.
 
 ### Raw PHP tags
 
@@ -369,16 +357,6 @@ foreach ($items as $item) { $total += $item['qty']; }
 echo $total;
 %}
 ```
-
-The body is emitted **verbatim** into the compiled class. It is extracted before
-tokenization, and each line maps to the corresponding template line so runtime
-errors point to the right location. Loop locals inside `{% php %}` are PHP
-variables; copy them to `$__c_va` to expose them to template expressions.
-
-In **PHP mode** template variables are also PHP locals: the render scope is
-seeded with `extract($__c_va, EXTR_SKIP)`, so `{{ title }}` and
-`{% php echo $title; %}` are the same variable. The backing array is always
-reachable as `$__c_va` when a dynamic name is needed.
 
 > The closing delimiter is matched non-greedily, so a literal `%}` inside a body
 > ends the tag early — spell it `'%' . '}'` when that exact sequence is needed.

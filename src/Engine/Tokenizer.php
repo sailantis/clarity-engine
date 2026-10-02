@@ -266,7 +266,7 @@ class Tokenizer
 
     /**
      * PHP's own superglobals, as chain roots.  A read of one of these names emits
-     * the PHP variable directly when the `superglobals` capability is granted, so
+     * the PHP variable directly when the `superglobals` rule is granted, so
      * `$_SERVER` means PHP's `$_SERVER` rather than a scope entry that happens to
      * be named that.
      *
@@ -295,7 +295,7 @@ class Tokenizer
     }
 
     /**
-     * Set the policy every capability question is answered from.
+     * Set the policy every rule question is answered from.
      *
      * Also mirrors the deny-list into the flat map the call sites read, so the
      * policy stays the single source of truth while the hot paths keep a plain
@@ -318,13 +318,13 @@ class Tokenizer
     }
 
     /**
-     * Whether a capability is granted.  The one question every compile-time
+     * Whether a rule is granted.  The one question every compile-time
      * check in the tokenizer asks, so a check can name what it guards instead of
      * inferring it from a single flag.
      */
-    private function allows(string $capability): bool
+    private function allows(string $rule): bool
     {
-        return $this->policy->allows($capability);
+        return $this->policy->allows($rule);
     }
 
     /**

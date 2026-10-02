@@ -52,10 +52,10 @@ namespace PHPSTORM_META
             'example'     => "{{ ts |> date('F j, Y') }}",
         ],
         'date_modify' => [
-            'return'      => 'int',
-            'params'      => [['modifier']],
-            'description' => "Apply a date modifier (e.g. '+1 day') and return the Unix timestamp.",
-            'example'     => "{{ ts |> date_modify('+1 day') }}",
+            'return'      => 'string',
+            'params'      => [['modifier'], ['format', "'c'"]],
+            'description' => "Apply a date modifier (e.g. '+1 day') and format the result.",
+            'example'     => "{{ ts |> date_modify('+1 day', 'Y-m-d') }}",
         ],
         'default' => [
             'return'      => 'mixed',

@@ -1,6 +1,7 @@
 <?php
 namespace Clarity\Tests;
 
+use Clarity\Engine\Policy;
 use PHPUnit\Framework\TestCase as PHPUnitTestCase;
 
 abstract class BaseTestCase extends PHPUnitTestCase
@@ -25,6 +26,16 @@ abstract class BaseTestCase extends PHPUnitTestCase
     protected static function render(string $view, array $vars = []): string
     {
         return TestEnvironment::engine()->renderPartial($view, $vars);
+    }
+
+    /**
+     * The same engine, with `strictTypes` denied: what a template did before that
+     * rule defaulted on. Used to pin weak-mode behaviour deliberately, rather than
+     * by accident of the default.
+     */
+    protected static function weakEngine(): TestClarityEngine
+    {
+        return TestClarityEngine::withPolicy(Policy::default()->denyRule('strictTypes'));
     }
 
     // instance wrapper

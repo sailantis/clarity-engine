@@ -337,10 +337,10 @@ class OpenModeTest extends BaseTestCase
     }
 
     /**
-     * The capability, not the sigil, is what gates a call — so a bare `obj.m()`
+     * The rule, not the sigil, is what gates a call — so a bare `obj.m()`
      * is a method call like any other once `methodCalls` is granted, and emits
      * the same PHP as `$obj.m()`. A template may therefore stay in dot syntax
-     * after the capability is turned on, with nothing to rewrite.
+     * after the rule is turned on, with nothing to rewrite.
      */
     public function testBareDotMethodCallIsAllowedInOpenMode(): void
     {
@@ -391,7 +391,7 @@ class OpenModeTest extends BaseTestCase
 
     /**
      * A call on a KEY read can never be a method call, whatever the policy, so it
-     * reports its own reason instead of naming a capability that would not help.
+     * reports its own reason instead of naming a rule that would not help.
      */
     public function testBareKeyReadCallIsRejectedWithItsOwnReason(): void
     {
@@ -411,10 +411,10 @@ class OpenModeTest extends BaseTestCase
     }
 
     /**
-     * Root invocation is refused by a rule of its own, not by the capability —
+     * Root invocation is refused by a rule of its own, not by `methodCalls` —
      * so no grant would fix it and the message must not claim one would.
      */
-    public function testRootInvocationMessageDoesNotNameACapability(): void
+    public function testRootInvocationMessageDoesNotNameARule(): void
     {
         self::tpl('om_mc_root_msg', '{{ $fn() }}');
 

@@ -288,14 +288,14 @@ trait FilterCompilerTrait
         // The check can be made here because an empty-handed policy leaves NOTHING
         // for an unregistered name to fall back to: the PHP-function path below is
         // the only other resolution path, and it is not reachable without a
-        // capability. So "not registered" and "cannot ever resolve" are the same
+        // rule. So "not registered" and "cannot ever resolve" are the same
         // statement, and the message can say what to do about it instead of
         // describing the runtime table it would have consulted.
         if (!$isRegistered && !$this->policy->allowsPhp()) {
             throw new ClarityException(
                 "Filter '{$name}' is not registered, and this policy does not allow a template to "
                     . 'reach PHP, so there is nothing for it to resolve to. Register it with '
-                    . 'addFilter(), or grant a capability to let a PHP function of the same name '
+                    . 'addFilter(), or grant a rule to let a PHP function of the same name '
                     . 'be used.'
             );
         }

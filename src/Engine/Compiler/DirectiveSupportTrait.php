@@ -193,7 +193,7 @@ trait DirectiveSupportTrait
         // tag with a line-only sentinel, so a check inside it can no longer see
         // where the tag was.  Asking here keeps the tag's own line, and makes
         // this the single gate -- storePhpBlock() is unreachable while the
-        // capability is denied.
+        // rule is denied.
         //
         // The opener is matched exactly as the extraction below spells it, so the
         // refusal covers precisely the tags extraction would have stored: an
@@ -205,7 +205,7 @@ trait DirectiveSupportTrait
             [$file, $line] = $this->resolveOffsetLocation($source, $m[0][1]);
             throw new ClarityException(
                 "'{% php %}' is not allowed by this policy. "
-                    . "Grant the 'rawPhp' capability to allow it.",
+                    . "Grant the 'rawPhp' rule to allow it.",
                 $file,
                 $line,
                 $this->templatePath($file)
@@ -300,7 +300,7 @@ trait DirectiveSupportTrait
     /**
      * Register one raw-PHP body and return the sentinel tag that replaces it.
      *
-     * The `rawPhp` capability was already checked by {@see extractPhpBlocks()},
+     * The `rawPhp` rule was already checked by {@see extractPhpBlocks()},
      * which is the only caller: it has to refuse before the sentinel exists, or
      * the offending tag has no position left to report.
      *

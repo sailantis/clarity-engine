@@ -333,7 +333,7 @@ trait ExpressionCoreTrait
                     if (!$this->allows('staticCalls')) {
                         throw new ClarityException(
                             "Static calls ('::') are not allowed by this policy. "
-                                . "Grant the 'staticCalls' capability to allow them."
+                                . "Grant the 'staticCalls' rule to allow them."
                         );
                     }
                     $out .= $static['php'];
@@ -436,7 +436,7 @@ trait ExpressionCoreTrait
                 // into their property segment.  Root invocation stays rejected:
                 // a variable-driven callable is the function-level equivalent of
                 // variable-variable expansion.  That rule is INDEPENDENT of the
-                // policy, so its message must not name a capability that would not
+                // policy, so its message must not name a rule that would not
                 // help.
                 $j = $i;
                 while ($j < $len && \ctype_space($expr[$j])) {
@@ -446,13 +446,13 @@ trait ExpressionCoreTrait
                     $context = \substr($expr, \max(0, $sigilStart - 10), 70);
 
                     // A chain that reached a member (`$obj->m`) is a method call the
-                    // capability can grant, so that message names the grant. Only a
+                    // rule can grant, so that message names the grant. Only a
                     // root-only chain (`$fn`) is the callable-variable case, which no
                     // grant would fix — the two are told apart by segment count.
                     if (\count($segments) > 1) {
                         throw new ClarityException(
                             "Method calls are not allowed by this policy: '\${$token}(...)' in context '{$context}'. "
-                                . "Grant the 'methodCalls' capability to allow them."
+                                . "Grant the 'methodCalls' rule to allow them."
                         );
                     }
 
@@ -486,7 +486,7 @@ trait ExpressionCoreTrait
 
             // `new Foo(...)` names a class rather than a scope value, so it is
             // recognised explicitly: it is an accepted Clarity keyword whose
-            // operand must not resolve through the scope.  The capability check
+            // operand must not resolve through the scope.  The rule check
             // lives here, where the keyword is unambiguous.
             if (
                 $ch === 'n' && \substr($expr, $i, 3) === 'new'
@@ -496,7 +496,7 @@ trait ExpressionCoreTrait
                 if (!$this->allows('newExpressions')) {
                     throw new ClarityException(
                         "'new' is not allowed by this policy: it would let a template build any object it names. "
-                            . "Grant the 'newExpressions' capability to allow it."
+                            . "Grant the 'newExpressions' rule to allow it."
                     );
                 }
                 $end = null;
@@ -507,7 +507,7 @@ trait ExpressionCoreTrait
 
             // `instanceof` takes a CLASS name on the right, so the operand is
             // compiled as a name rather than as an expression.  This is grammar,
-            // not a capability: it is how the operator has to work.
+            // not a rule: it is how the operator has to work.
             if (
                 $ch === 'i' && \substr($expr, $i, 10) === 'instanceof'
                     && !self::isIdentifierChar($expr[$i + 10] ?? '')
@@ -576,7 +576,7 @@ trait ExpressionCoreTrait
                         if (!$this->allows('staticCalls')) {
                             throw new ClarityException(
                                 "Static calls ('::') are not allowed by this policy. "
-                                    . "Grant the 'staticCalls' capability to allow them."
+                                    . "Grant the 'staticCalls' rule to allow them."
                             );
                         }
                         $out .= $static['php'];
@@ -699,7 +699,7 @@ trait ExpressionCoreTrait
                 // Identifier followed by a chain continuation â€” full chain parsing required.
                 // `allowArrow` stays FALSE (a bare `a->b` is rejected below), but the
                 // call flag is the policy's, exactly as on the `$`-sigil path: the
-                // capability, not the sigil, is what decides whether a method may be
+                // rule, not the sigil, is what decides whether a method may be
                 // called.  A bare `obj.m()` therefore compiles to the same PHP as
                 // `$obj.m()`.
                 $parsed = $this->parseVarChainAt($expr, $start, false, $ternarySeen, $this->allows('methodCalls'));
@@ -747,7 +747,7 @@ trait ExpressionCoreTrait
                     if (!$this->allows('methodCalls')) {
                         throw new ClarityException(
                             "Method calls are not allowed by this policy: '{$token}(...)' in context '{$context}'. "
-                                . "Grant the 'methodCalls' capability to allow them."
+                                . "Grant the 'methodCalls' rule to allow them."
                         );
                     }
 

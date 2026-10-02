@@ -56,7 +56,8 @@ use Stringable;
  * - `date [$format='Y-m-d']`    : Format timestamp/DateTimeInterface/date string
  *   (DateTimeInterface values reach this filter directly; the filter reads
  *   their timestamp without converting them)
- * - `date_modify($modifier)`    : Apply date modifier (e.g. '+1 day'), return Unix timestamp
+ * - `date_modify($modifier, $format='c')` : Apply a date modifier (e.g. '+1 day'),
+ *                                          return the result formatted with `$format`
  *
  * **Arrays & Collections**
  * - `first`                     : Get first element (works on arrays and strings)
@@ -310,25 +311,26 @@ class Registry
                 'php' => '\abs({1} + 0)',
             ],
             'capitalize' => [
-                'php' => '($__c_tmp = (string){1}) === "" ? "" : \mb_strtoupper(\mb_substr($__c_tmp, 0, 1)) . \mb_strtolower(\mb_substr($__c_tmp, 1))',
+                'php' => '($__c_tmp = {1}) === "" ? "" : \mb_strtoupper(\mb_substr($__c_tmp, 0, 1)) . \mb_strtolower(\mb_substr($__c_tmp, 1))',
             ],
             'ceil' => [
-                'php' => '\ceil((float){1})',
+                'php' => '\ceil({1})',
             ],
             'data_uri' => [
-                'php'      => '"data:" . {2} . ";base64," . \base64_encode((string){1})',
+                'php'      => '"data:" . {2} . ";base64," . \base64_encode({1})',
                 'params'   => ['mime'],
                 'defaults' => ['mime' => "'application/octet-stream'"],
             ],
             'date' => [
-                'php'        => '\date({1}, ($__c_tmp = {2}) instanceof \DateTimeInterface ? $__c_tmp->getTimestamp() : (\is_int($__c_tmp) ? $__c_tmp : (int) \strtotime((string) $__c_tmp)))',
+                'php'        => '\date({1}, ($__c_tmp = {2}) instanceof \DateTimeInterface ? $__c_tmp->getTimestamp() : (\is_int($__c_tmp) ? $__c_tmp : \strtotime($__c_tmp)))',
                 'params'     => ['format', 'date'],
                 'defaults'   => ['format' => "'Y-m-d'", 'date' => '\\time()'],
                 'valueParam' => 'date',
             ],
             'date_modify' => [
-                'php'    => '(int) ((new \DateTimeImmutable("@" . (($__c_tmp = {1}) instanceof \DateTimeInterface ? $__c_tmp->getTimestamp() : (\is_int($__c_tmp) ? $__c_tmp : (int) \strtotime((string) $__c_tmp)))))->modify({2})->getTimestamp())',
-                'params' => ['modifier'],
+                'php'      => '(new \DateTimeImmutable("@" . (($__c_tmp = {1}) instanceof \DateTimeInterface ? $__c_tmp->getTimestamp() : (\is_int($__c_tmp) ? $__c_tmp : \strtotime($__c_tmp)))))->modify({2})->format({3})',
+                'params'   => ['modifier', 'format'],
+                'defaults' => ['format' => "'c'"],
             ],
             'default' => [
                 'php'      => '({1} ?? {2})',
@@ -341,17 +343,17 @@ class Registry
                 'defaults' => ['fallback' => '""'],
             ],
             'escape' => [
-                'php' => '\htmlspecialchars((string){1}, \ENT_QUOTES | \ENT_SUBSTITUTE, "UTF-8")',
+                'php' => '\htmlspecialchars({1}, \ENT_QUOTES | \ENT_SUBSTITUTE, "UTF-8")',
             ],
             'floor' => [
-                'php' => '\floor((float){1})',
+                'php' => '\floor({1})',
             ],
             'join' => [
                 // Params-led (valueParam='array'): `{1}` is the glue, `{2}` is the
                 // array. Mirrors PHP `implode($separator, $array)`. The `array`
                 // param has NO default, so `join(items)` fails loudly instead of
                 // silently implying an empty separator.
-                'php'        => '\implode({1}, (array){2})',
+                'php'        => '\implode({1}, {2})',
                 'params'     => ['glue', 'array'],
                 'defaults'   => ['glue' => "''"],
                 'valueParam' => 'array',
@@ -364,42 +366,47 @@ class Registry
                 'php' => '\json_encode({1}, 0x200340)',
             ],
             'lower' => [
-                'php' => '\mb_strtolower((string){1})',
+                'php' => '\mb_strtolower({1})',
             ],
             'merge' => [
-                'php'      => '[...(array){1}, ...(array){2}]',
+                'php'      => '[...{1}, ...{2}]',
                 'params'   => ['other'],
                 'defaults' => ['other' => '[]'],
             ],
             'nl2br' => [
-                'php' => '\nl2br((string){1})',
+                'php' => '\nl2br({1})',
             ],
             'number' => [
-                'php'      => '\number_format((float){1}, {2})',
+                // `number_format()` is the one built-in whose *value* parameter takes
+                // neither a string nor a null, so under `strictTypes` its coercion
+                // would be a type error rather than a coercion. The other built-ins
+                // hand their value to a `string` parameter, where weak mode still
+                // accepts an int/float — this one cannot rely on that, so it casts.
+                'php'      => '\number_format((float) ({1}), {2})',
                 'params'   => ['decimals'],
                 'defaults' => ['decimals' => '2'],
             ],
             // `raw` is handled specially by the compiler to disable auto-escaping; it is not a real filter.
             'replace' => [
-                'php'      => '\str_replace({2}, {3}, (string){1})',
+                'php'      => '\str_replace({2}, {3}, {1})',
                 'params'   => ['search', 'replace'],
                 'defaults' => ['replace' => "''"],
             ],
             'reverse' => [
-                'php' => '(\is_array($__c_tmp = {1}) ? \array_reverse($__c_tmp) : \implode("", \array_reverse(\preg_split("//u", (string) $__c_tmp, -1, \PREG_SPLIT_NO_EMPTY) ?: [])))',
+                'php' => '(\is_array($__c_tmp = {1}) ? \array_reverse($__c_tmp) : \implode("", \array_reverse(\preg_split("//u", $__c_tmp, -1, \PREG_SPLIT_NO_EMPTY) ?: [])))',
             ],
             'round' => [
-                'php'      => '\round((float){1}, {2})',
+                'php'      => '\round({1}, {2})',
                 'params'   => ['precision'],
                 'defaults' => ['precision' => '0'],
             ],
             'slice' => [
-                'php'      => '(\is_array($__c_tmp = {1}) ? \array_slice($__c_tmp, {2}, {3}) : \mb_substr((string) $__c_tmp, {2}, {3}))',
+                'php'      => '(\is_array($__c_tmp = {1}) ? \array_slice($__c_tmp, {2}, {3}) : \mb_substr($__c_tmp, {2}, {3}))',
                 'params'   => ['start', 'length'],
                 'defaults' => ['length' => 'null'],
             ],
             'split' => [
-                'php'      => '\explode({2}, (string){1}, {3})',
+                'php'      => '\explode({2}, {1}, {3})',
                 'params'   => ['delimiter', 'limit'],
                 'defaults' => ['limit' => '\\PHP_INT_MAX'],
             ],
@@ -409,18 +416,18 @@ class Registry
                 'variadic' => true,
             ],
             'striptags' => [
-                'php'      => '\strip_tags((string) {1}, {2})',
+                'php'      => '\strip_tags({1}, {2})',
                 'params'   => ['allowedTags'],
                 'defaults' => ['allowedTags' => "''"],
             ],
             'title' => [
-                'php' => '\mb_convert_case((string){1}, \MB_CASE_TITLE)',
+                'php' => '\mb_convert_case({1}, \MB_CASE_TITLE)',
             ],
             'trim' => [
-                'php' => '\trim((string){1})',
+                'php' => '\trim({1})',
             ],
             'truncate' => [
-                'php'    => '(\mb_strlen($__c_tmp = ((string){1})) <= {2} ? $__c_tmp : \mb_substr($__c_tmp, 0, {2}) . {3})',
+                'php'    => '(\mb_strlen($__c_tmp = ({1})) <= {2} ? $__c_tmp : \mb_substr($__c_tmp, 0, {2}) . {3})',
                 'params' => ['length', 'ellipsis'],
                 // Double-quoted so PHP interprets `\u{2026}` as the actual
                 // ellipsis character "…" at runtime. The value is substituted
@@ -430,15 +437,15 @@ class Registry
                 'defaults' => ['ellipsis' => '"\u{2026}"'],
             ],
             'unicode' => [
-                'php'      => 'new \Clarity\Engine\UnicodeString((string){1}, {2}, {3})',
+                'php'      => 'new \Clarity\Engine\UnicodeString({1}, {2}, {3})',
                 'params'   => ['start', 'length'],
                 'defaults' => ['start' => '0', 'length' => 'null'],
             ],
             'upper' => [
-                'php' => '\mb_strtoupper((string){1})',
+                'php' => '\mb_strtoupper({1})',
             ],
             'url_encode' => [
-                'php' => '\rawurlencode((string) {1})',
+                'php' => '\rawurlencode({1})',
             ],
         ];
 

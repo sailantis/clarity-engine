@@ -67,9 +67,9 @@ trait VarChainTrait
      *                              separator in the enclosing expression.
      * @param bool $allowCall    Whether a property read may be followed by a
      *                              method-call argument list (`m(...)`).  Driven
-     *                              purely by the `methodCalls` capability, so it
+     *                              purely by the `methodCalls` rule, so it
      *                              holds on the bare path as well as the sigil
-     *                              one — the capability, not the sigil, decides
+     *                              one — the rule, not the sigil, decides
      *                              whether a method may be called.
      * @return array{end:int, segments:array<int,array{type:string,value:string,optional:bool,call?:string}>}|null
      */
@@ -505,7 +505,7 @@ trait VarChainTrait
     /**
      * Compile a method-call argument list to PHP.
      *
-     * Only reachable when the `methodCalls` capability is granted.  Arguments are
+     * Only reachable when the `methodCalls` rule is granted.  Arguments are
      * full Clarity expressions and named arguments become PHP named arguments.
      */
     private function compileMethodArgs(string $argsRaw): string
@@ -599,7 +599,7 @@ trait VarChainTrait
         }
 
         // A superglobal name is a special case in BOTH directions, and the two
-        // must be stated together or the capability is a lie:
+        // must be stated together or the rule is a lie:
         //
         //   granted     -> PHP's own `$_SERVER`, whatever the scope holds
         //   not granted -> an ordinary scope read, which is absent and therefore
@@ -607,7 +607,7 @@ trait VarChainTrait
         //
         // The second half is the load-bearing one.  Without it a template could
         // reach every superglobal through the seeded-local form the moment
-        // `phpVariables` was granted, and the two capabilities would be one.
+        // `phpVariables` was granted, and the two rules would be one.
         if (self::isSuperglobalName($name)) {
             return $this->allows('superglobals')
                 ? '$' . $name

@@ -31,7 +31,7 @@ trait ClarityEngineTrait
     /**
      * What compiled templates are allowed to reach.  Sandboxed by default.
      *
-     * One object answers every capability question, so a grant cannot be made in
+     * One object answers every rule question, so a grant cannot be made in
      * one half of the engine and missed in another.  A compiled template records
      * a digest of this policy and is recompiled whenever the digest changes.
      */
@@ -84,7 +84,7 @@ trait ClarityEngineTrait
 
             $this->debugMode = true;
 
-            // Every debug capability is installed here and nowhere else, so "debug
+            // Every debug facility is installed here and nowhere else, so "debug
             // is on" and "dump() is formatted" can never disagree.  The registry owns
             // no debug behaviour of its own; it is handed the runtime's handlers.
             $this->debugRuntime = new DebugRuntime($opts);
@@ -134,14 +134,14 @@ trait ClarityEngineTrait
     /**
      * Set what compiled templates are allowed to reach.
      *
-     * A policy is a set of capabilities plus two allowlists; see
+     * A policy is a set of rules plus two allowlists; see
      * {@see \Clarity\Engine\Policy}.  Start from a preset and change what you
      * mean to change:
      *
      * ```php
      * $engine->setPolicy(Policy::unrestricted());
      * $engine->setPolicy(Policy::default()
-     *     ->allowCapability('methodCalls')
+     *     ->allowRule('methodCalls')
      *     ->allowFunctions('strtoupper', 'count'));
      * ```
      *
