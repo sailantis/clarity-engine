@@ -30,6 +30,8 @@ trait CompilerCoreTrait
         $this->dependencies     = [];
         $this->sourceMap        = [];
         $this->sourceFiles      = [];
+        $this->sourcePaths      = [];
+        $this->resolvedPaths    = [];
         $this->sourceFileIndex  = [];
         $this->phpLine          = 0;
         $this->forStack         = [];
@@ -113,6 +115,7 @@ trait CompilerCoreTrait
             dependencies: $this->dependencies,
             sourceFiles: $this->sourceFiles,
             renderBodyLine: $renderBodyLine,
+            sourcePaths: $this->sourcePaths,
         );
     }
 
@@ -133,6 +136,10 @@ trait CompilerCoreTrait
         if (!isset($this->sourceFileIndex[$file])) {
             $this->sourceFileIndex[$file] = \count($this->sourceFiles);
             $this->sourceFiles[]          = $file;
+            // The physical path (when the loader named one) travels WITH the
+            // source, so it is recorded here beside the name — same index, no
+            // second lookup, and it survives into the compiled class.
+            $this->sourcePaths[]          = $this->resolvedPaths[$file] ?? '';
         }
         $fileIdx = $this->sourceFileIndex[$file];
 
@@ -309,6 +316,15 @@ trait CompilerCoreTrait
             throw new ClarityException("Template '{$name}' not found by loader.");
         }
         $this->dependencies[$name] = $src->revision;
+
+        // The loader is the authority on where this came from.  Captured now
+        // because the source is gone once compilation ends, and the path is
+        // needed for both the source map (error reporting) and the exception
+        // raised by a compile failure in a template read before this point.
+        if ($src->path !== null) {
+            $this->resolvedPaths[$name] = $src->path;
+        }
+
         return $src->getCode();
     }
 

@@ -1,6 +1,6 @@
 ![Clarity Logo](docs/images/clarity-engine-logo.svg)
 
-> **A fast, secure, and expressive PHP template engine** – Maximum performance, whether sandboxed and secure or with the full power of PHP.
+> **A fast, secure, and expressive PHP template engine** – Start with a restricted policy, then grant templates only the access they need.
 
 ---
 
@@ -8,7 +8,7 @@
 
 - **Compiled & Cached** – Templates compile to PHP classes and leverage OPcache for blazing-fast rendering
 - **Secure Sandbox** – No arbitrary PHP execution by default; templates are strictly sandboxed with controlled access
-- **Opt-In PHP Mode** – Disable the sandbox to give templates the full power of PHP (any function call or filter, method calls, `{% php %}` tags)
+- **Policy-Based Access** – Grant specific PHP features or enable full PHP access for trusted templates
 - **Expressive Syntax** – Clean, readable template syntax inspired by modern template engines
 - **Twig-Style Tests** – `in`, `is defined`, `starts with`, `matches`, `divisible by`, and more, with absence-tolerant `defined`/`null`/`empty`
 - **Whitespace Control** – `{%- … -%}` trims whitespace around a tag
@@ -19,7 +19,7 @@
 - **Modules** – Bundle filters, functions, and directives into self-registering plug-ins
 - **Auto-escaping** – Built-in XSS protection with context-aware automatic HTML/JS/CSS escaping
 - **Unicode Support** – Full multibyte string handling with transparent normalization
-- **Zero Dependencies** – Standalone engine with no external dependencies beyond PHP 8.2+
+- **Minimal Dependencies** – Requires PHP 8.2+ and the `mbstring` extension; no other external dependencies
 
 ---
 
@@ -29,7 +29,7 @@
 composer require sailantis/clarity-engine
 ```
 
-**Requirements:** PHP 8.2 or higher
+**Requirements:** PHP 8.2 or higher and the `mbstring` extension
 
 ---
 
@@ -103,15 +103,15 @@ in all of them — only what a template may _reach_ changes:
 ```php
 use Clarity\Engine\Policy;
 
-$engine->setPolicy(Policy::sandboxed());   // the default
-$engine->setPolicy(Policy::open());        // everything on
-$engine->setPolicy(Policy::custom()        // grant one thing, not all
+$engine->setPolicy(Policy::restricted());    // the default
+$engine->setPolicy(Policy::unrestricted());  // everything on
+$engine->setPolicy(Policy::default()         // grant one thing, not all
     ->allowCapability('methodCalls')
     ->allowFunctions('strtoupper', 'count'));
 ```
 
-`Policy::open()` is the full-power **PHP mode** and is equivalent to executing
-arbitrary PHP. A `Policy::custom()` grant is a real grant too — see
+`Policy::unrestricted()` enables every capability and is equivalent to executing
+arbitrary PHP. Individual capabilities expose narrower features — see
 [the security model](docs/04-advanced-topics.md#security-model) and
 [the policy reference](docs/09-policy-api.md).
 
@@ -274,7 +274,7 @@ $engine->setLoader(new \Clarity\Template\DomainRouterLoader(
     ['admin' => new \Clarity\Template\FileLoader('/path/to/admin/views')],
     fallback: new \Clarity\Template\FileLoader('/path/to/views'),
 ));
-$engine->setDebugMode(true);                  // Runtime safety checks (dev only)
+$engine->setDebugMode(true);                  // Full debug mode (dev only)
 
 // Add custom filter
 $engine->addFilter('currency', fn($v) => '€ ' . number_format($v, 2));
@@ -297,35 +297,37 @@ $engine->use(new \Clarity\Localization\TranslationModule([
 
 Clarity is sandboxed by default:
 
-- **No arbitrary PHP execution** – Templates cannot call PHP functions or access global state
-- **Auto-escaping by default** – All output is HTML-escaped to prevent XSS attacks
-- **Compile-time validation** – Syntax errors caught during compilation, not at runtime
-- **Object safety** – Objects stay objects: `a.b` reads a public property and `a:b` reads an array key, so method calls are unreachable from templates and PHP visibility rules apply. Container operations read an object's public properties; the `date` filter accepts `DateTimeInterface` directly
+- **No arbitrary PHP execution by default** – PHP access requires explicit capabilities
+- **Context-aware auto-escaping** – Output is escaped for its HTML, JavaScript, or CSS context unless marked raw
+- **Compile-time validation** – Invalid template syntax is caught during compilation
+- **Object access** – In the restricted policy, templates can read public properties but cannot call methods or access private/protected members. `a.b` reads a property; `a:b` reads an array key
 - **Controlled lambdas** – Lambda expressions can only use registered filters
 
 ### Policies
 
-What a template may reach is decided by a policy — a set of capabilities plus two
-allowlists, all resolved at **compile time**. The default is sandboxed and
-unreachable from PHP:
+What a template may reach is decided by a policy — capabilities and two
+allowlists, all resolved at **compile time**. The default keeps templates
+sandboxed; grant only the access they need:
 
 ```php
 use Clarity\Engine\Policy;
 
-$engine->setPolicy(Policy::open());        // full PHP: any function, methods, raw PHP
-$engine->setPolicy(Policy::custom()
+$engine->setPolicy(Policy::unrestricted());   // full PHP: any function, methods, raw PHP
+$engine->setPolicy(Policy::default()
     ->allowCapability('methodCalls')
     ->allowFunctions('strtoupper', 'count'));
 ```
 
-A policy that grants `rawPhp`, `phpVariables` or `methodCalls` is
-**equivalent to executing arbitrary PHP** and disables every guarantee listed
-above. Use it only for templates written and reviewed by trusted authors.
+Capabilities expose different levels of access. `rawPhp` lets templates run
+their own PHP code; `methodCalls` lets them call methods on objects provided by
+the host. Grant only what the templates need, and trust authors accordingly.
+`Policy::unrestricted()` enables every capability and is equivalent to executing
+arbitrary PHP.
 
 Templates record a digest of the policy that compiled them and are recompiled
-automatically when it changes — including when a single allowlist entry is added
-or removed. `denyFunctions()` adds guardrails on top of an open policy; nothing
-is denied by default, because an open policy is already the security decision.
+automatically when it changes. Allowlists narrow PHP-function fallbacks; they do
+not enable PHP access. `denyFunctions()` adds guardrails to policies that already
+allow PHP function calls, but does not inspect raw `{% php %}` blocks.
 
 **[The policy reference →](docs/09-policy-api.md)**
 **[Security best practices →](docs/05-best-practices.md#security-best-practices)**
@@ -343,22 +345,18 @@ Clarity is designed for speed. Templates compile to native PHP classes and lever
 
 ### Benchmark Results
 
-Clarity is measured against the other mainstream PHP template engines rendering
+Clarity is measured against the other popular PHP template engines rendering
 the same page, on the same machine and PHP build. The two charts below are
 generated from the benchmark.
 
 ![Per-render time](docs/images/benchmarks/mixed-render-time.svg)
 
-The dot is the median render and the caps bound the fastest observation and p95,
-so an engine that is usually fast but occasionally slow looks different from one
-that is uniformly slower.
+The render-time dot is the median; its caps show the fastest observation and p95.
 
 ![Memory retained per run](docs/images/benchmarks/mixed-memory.svg)
 
-The bar runs from the floor that engine costs to have loaded (left cap) to the
-peak it reached (right cap); the dot is what it still holds once the run is done
-— the figure a serving process actually carries. Measured in a fresh process per
-engine, so no engine inherits another's footprint.
+The memory bar spans the loaded baseline to peak use; its dot shows memory
+retained after the run. Each engine is measured in a fresh process.
 
 The full comparison — every shape, every chart, and the environment and engine
 versions this run recorded — is in the [benchmark

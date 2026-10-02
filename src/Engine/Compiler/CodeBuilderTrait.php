@@ -164,11 +164,11 @@ trait CodeBuilderTrait
 
         $depsExport  = var_export($this->dependencies, true);
         $filesExport = var_export($this->sourceFiles, true);
+        $pathsExport = var_export($this->sourcePaths, true);
         // Compact packed form (see SourceMap): one short single-quoted string
         // instead of a nested array literal per range.
         $mapExport    = SourceMap::packedLiteral($this->sourceMap);
         $debugFlag    = $this->debugMode ? 'true' : 'false';
-        $sandboxFlag  = $this->policy->isSandboxed() ? 'true' : 'false';
         $versionInt   = self::COMPILER_VERSION;
         $policyDigest = $this->policy->digest();
 
@@ -215,18 +215,16 @@ trait CodeBuilderTrait
             // sourceFiles: logical template names, indexed by \$sourceMap
             public static array \$sourceFiles = {$filesExport};
 
+            // sourcePaths: physical file per \$sourceFiles entry, or '' — same index
+            public static array \$sourcePaths = {$pathsExport};
+
             // sourceMap: packed "lineDelta,fileIndex,tplLineDelta;" ranges
             public static string \$sourceMap = {$mapExport};
 
             // debugCompiled: whether the compiler was in debug mode when this class was generated
             public static bool \$debugCompiled = {$debugFlag};
 
-            // sandboxCompiled: whether the compiled template cannot reach PHP at all
-            public static bool \$sandboxCompiled = {$sandboxFlag};
-
-            // policyDigest: fingerprint of the policy this class was compiled under.
-            // The loader recompiles on a mismatch, which is what makes changing a
-            // policy (or an allowlist) safe without bumping COMPILER_VERSION.
+            // policyDigest: fingerprint of the policy this class was compiled under
             public static string \$policyDigest = '{$policyDigest}';
 
             // compilerVersion: the compiler that produced this class

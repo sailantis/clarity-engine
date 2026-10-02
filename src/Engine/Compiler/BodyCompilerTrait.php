@@ -244,7 +244,8 @@ trait BodyCompilerTrait
                     : "Empty '{% php %}' tag: it needs code, as in "
                         . "'{% php echo \$total; %}'.",
                 $sourcePath,
-                $tplLine
+                $tplLine,
+                $this->templatePath($sourcePath)
             ),
             default                        => $this->registry->hasDirective($keyword)
             ? $this->registry->compileDirective(

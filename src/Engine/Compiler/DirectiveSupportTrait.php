@@ -189,6 +189,29 @@ trait DirectiveSupportTrait
             return;
         }
 
+        // Deny BEFORE the scan, not while storing a body: the scan replaces each
+        // tag with a line-only sentinel, so a check inside it can no longer see
+        // where the tag was.  Asking here keeps the tag's own line, and makes
+        // this the single gate -- storePhpBlock() is unreachable while the
+        // capability is denied.
+        //
+        // The opener is matched exactly as the extraction below spells it, so the
+        // refusal covers precisely the tags extraction would have stored: an
+        // empty `{% php %}` is not a raw-PHP region and keeps its own message
+        // (raised by the code generator, which still sees the tag).
+        if (!$this->policy->allows('rawPhp')
+            && \preg_match('/\{%-?\s*php\s+(?!-?%\})/i', $source, $m, \PREG_OFFSET_CAPTURE)
+        ) {
+            [$file, $line] = $this->resolveOffsetLocation($source, $m[0][1]);
+            throw new ClarityException(
+                "'{% php %}' is not allowed by this policy. "
+                    . "Grant the 'rawPhp' capability to allow it.",
+                $file,
+                $line,
+                $this->templatePath($file)
+            );
+        }
+
         // The body must begin with a non-whitespace character, which is exactly
         // what keeps an empty `{% php %}` opener out.  The lookahead rejects it
         // before the body is scanned: without it, the non-greedy `(.+?)` would
@@ -209,7 +232,77 @@ trait DirectiveSupportTrait
     }
 
     /**
+     * Locate a compile construct from its byte offset in the source currently
+     * being compiled, as a [file, line] pair for a {@see ClarityException}.
+     *
+     * The compiler's normal mapping (the `$mappedSourcePath` cursor) is driven by
+     * the SEGMENT scan: it advances as segments are compiled, so it cannot answer
+     * for a pre-scan construct, and it cannot see that an inlined include started
+     * mid-file.  Both are answered here instead:
+     *
+     *  - `{# @source … #}` markers, which inheritance and includes already emit,
+     *    are the file identity for every region of the merged source, so the
+     *    innermost marker before the offset names the file;
+     *  - inlining an include copies its markers into the host's source, so the
+     *    line is resolved relative to that marker and is correct for both an
+     *    included file and a plain one.
+     *
+     * @param string $source Merged source being compiled.
+     * @param int    $offset Byte offset of the construct inside $source.
+     * @return array{0:string, 1:int} Logical template name and 1-based line.
+     */
+    private function resolveOffsetLocation(string $source, int $offset): array
+    {
+        $sourceName = $this->compileStack === [] ? '' : \end($this->compileStack);
+
+        // A macro body is compiled as its own unit and carries no `{# @source #}`
+        // marker of its own, so the markers (or the unit name) would otherwise be
+        // returned with the internal `#macro@` suffix — the same reason
+        // {@see resolveCurrentLocation()} strips it.
+        $macroAt = \strpos($sourceName, '#macro@');
+        if ($macroAt !== false) {
+            return [\substr($sourceName, 0, $macroAt), $this->sourceLineAtOffset($source, $offset)];
+        }
+
+        // No `resolveSegmentSource()` here: that cursor tracks the SEGMENT scan of
+        // the source being inlined INTO.  An include's own pre-scan happens while
+        // that cursor still names the host, so applying it would report the host
+        // file for an error in the included one.  The markers are already the
+        // authoritative unit identity.
+        return $this->resolveSourceOriginAtOffset($source, $sourceName, $offset);
+    }
+
+    /**
+     * The physical path the active loader reported for a logical template name,
+     * or '' when it reported none.
+     *
+     * Paths travel with the source ({@see TemplateSource::$path}) and are recorded
+     * by {@see readWithDep()}, so this is a lookup rather than a re-derivation —
+     * the compiler has no loader of its own and must not grow one.
+     *
+     * @param string $templateName Logical name, or a `<name>#macro@<macro>` unit.
+     */
+    private function templatePath(string $templateName): string
+    {
+        return $this->resolvedPaths[self::baseTemplateName($templateName)] ?? '';
+    }
+
+    /**
+     * Strip the internal `#macro@…` suffix a macro body carries as its unit name.
+     */
+    private static function baseTemplateName(string $unitName): string
+    {
+        $macroAt = \strpos($unitName, '#macro@');
+
+        return $macroAt === false ? $unitName : \substr($unitName, 0, $macroAt);
+    }
+
+    /**
      * Register one raw-PHP body and return the sentinel tag that replaces it.
+     *
+     * The `rawPhp` capability was already checked by {@see extractPhpBlocks()},
+     * which is the only caller: it has to refuse before the sentinel exists, or
+     * the offending tag has no position left to report.
      *
      * @param string $openTag     The tag's opening portion, verbatim.
      * @param string $bodyRaw     Body exactly as written, before the closing `%}`.
@@ -218,13 +311,6 @@ trait DirectiveSupportTrait
      */
     private function storePhpBlock(string $openTag, string $bodyRaw, int $regionLines): string
     {
-        if (!$this->policy->allows('rawPhp')) {
-            throw new ClarityException(
-                "'{% php %}' is not allowed by this policy. "
-                    . "Grant the 'rawPhp' capability to allow it."
-            );
-        }
-
         // Template line of the body's FIRST line, relative to the tag's line: the
         // breaks the opening portion itself spans.  The body never starts with a
         // break -- the `\s+` before it consumes them -- so the body's own

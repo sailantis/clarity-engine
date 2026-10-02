@@ -24,7 +24,7 @@ class CallSyntaxTest extends BaseTestCase
             'viewPath'  => TestEnvironment::viewDir(),
             'cachePath' => TestEnvironment::cacheDir(),
             'extension' => 'clarity.html',
-            'policy'    => Policy::open(),
+            'policy'    => Policy::unrestricted(),
         ], $config));
     }
 
@@ -459,7 +459,6 @@ class CallSyntaxTest extends BaseTestCase
         return [
             'context' => ['context'],
             'include' => ['include'],
-            'dump'    => ['dump'],
             'dd'      => ['dd'],
         ];
     }
@@ -475,11 +474,37 @@ class CallSyntaxTest extends BaseTestCase
      */
     public function testCallOnlyNameRejectedAsFilterReference(): void
     {
-        self::tpl('cs_ref_callonly', '{{ map(items, "dump") }}');
+        self::tpl('cs_ref_callonly', '{{ map(items, "context") }}');
 
         $this->expectException(ClarityException::class);
         $this->expectExceptionMessageMatches('/is not a filter; it is a function/');
         self::render('cs_ref_callonly', ['items' => [1, 2]]);
+    }
+
+    /**
+     * `dump` is filterable, so it is a legal callable reference. The reference
+     * resolves to the pass-through probe, which the lambda invokes per element:
+     * each element is rendered as a dump and still returned to `map`.
+     */
+    public function testDumpIsAcceptedAsFilterReference(): void
+    {
+        self::tpl('cs_ref_dump', '{{ map(items, "dump") |> length }}');
+        $this->assertStringEndsWith('2', self::render('cs_ref_dump', ['items' => [1, 2]]));
+    }
+
+    /**
+     * The reference form obeys the same rule as every other dump form: with
+     * debug off it is the IDENTITY. A debug reference must never print into
+     * production output.
+     */
+    public function testDumpReferenceIsTheIdentityWithoutDebug(): void
+    {
+        self::tpl('cs_ref_dump_prod', '{{ map(items, "dump") |> join(",") }}');
+
+        $this->assertSame(
+            'a,b',
+            self::render('cs_ref_dump_prod', ['items' => ['a', 'b']])
+        );
     }
 
     public function testUnknownNameRejectedAsFilterReference(): void

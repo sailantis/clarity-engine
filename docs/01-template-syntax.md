@@ -48,7 +48,7 @@ Use double curly braces to output a value:
 
 ### Auto-Escaping
 
-**All output is automatically HTML-escaped** for security:
+**All output is automatically HTML-escaped**:
 
 ```twig
 {{ userInput }}
@@ -56,13 +56,11 @@ Use double curly braces to output a value:
 <!-- Outputs: &lt;script&gt;alert('xss')&lt;/script&gt; -->
 ```
 
-To output raw HTML (use with caution!), use the `raw` filter:
+To output raw HTML, use the `raw` filter:
 
 ```twig
 {{ trustedHtml |> raw }}
 ```
-
-> **Security Warning:** Only use `raw` with trusted content. Never use it with user input.
 
 ### Variable Access
 
@@ -71,14 +69,15 @@ the value IS, and the engine emits exactly that read. There is no conversion of
 objects to arrays before rendering, so reading an object's state costs one
 property access and nothing else.
 
-| Syntax                        | Meaning                                  | Emits                           |
-| ----------------------------- | ---------------------------------------- | ------------------------------- |
-| `a.b.c`                       | **object property** (static)             | `$vars['a']->b->c`              |
-| `a{expr}`                     | object property (dynamic)                | `$vars['a']->{$exprPhp}`        |
-| `items[expr]`                 | **array index**                          | `$vars['items'][$exprPhp]`      |
-| `a:b:c`                       | **array key** (static)                   | `$vars['a']['b']['c']`          |
-| `$a.b` / `$a->b`              | PHP-style alias for `.` (sigil required) | `$vars['a']->b`                 |
-| `a?.b` `a?[i]` `a?{k}` `a?:k` | optional **receiver**                    | `isset(…) ? … : null` / `…?->b` |
+| Syntax                        | Meaning                      | Emits                           |
+| ----------------------------- | ---------------------------- | ------------------------------- |
+| `a.b.c`                       | **object property** (static) | `$vars['a']->b->c`              |
+| `a{expr}`                     | object property (dynamic)    | `$vars['a']->{<expr>}`          |
+| `items[expr]`                 | **array index**              | `$vars['items'][<expr>]`        |
+| `a:b:c`                       | **array key** (static)       | `$vars['a']['b']['c']`          |
+| `$a->b`                       | PHP-style alias for `.`      | `$vars['a']->b`                 |
+| `$a->{<expr>}`                | PHP-style alias for `.`      | `$vars['a']->{<expr>}`          |
+| `a?.b` `a?[i]` `a?{k}` `a?:k` | optional **receiver**        | `isset(…) ? … : null` / `…?->b` |
 
 ```twig
 <!-- Object properties -->
@@ -108,9 +107,6 @@ Applying the wrong operator is an error, not a silent `null`:
 ```
 
 A missing key or property raises `ClarityException` naming the template and line.
-**Deliberately absent** is `null`, so a present-but-null value is never confused
-with a missing one: an absent key throws, while a key holding `null` returns
-`null`.
 
 #### Optional access
 
@@ -132,16 +128,6 @@ The rule is **`?` guards the LEFT side, never the right one**:
 | `user.name ?? 'x'`  | ERROR              | `'x'`                          |
 | `user?.name ?? 'x'` | `'x'`              | `'x'`                          |
 
-That is deliberate: swallowing a missing member too would render a typo as an
-empty string instead of failing it. Use `?` when the **receiver** may be missing,
-and `??` when the **member** may be:
-
-```twig
-{{ user?.nickname }}                  {# '' when user absent; ERROR on a typo #}
-{{ user?.nickname ?? 'anonymous' }}   {# 'anonymous' when user is absent OR nickname missing #}
-{{ settings?:theme ?? 'light' }}      {# array side, same rule #}
-```
-
 Emission differs per side because the operators differ in what they accept:
 
 | Expression | Emits                                                    |
@@ -151,9 +137,7 @@ Emission differs per side because the operators differ in what they accept:
 | `a?.b?.c`  | `(isset($vars['a']) ? $vars['a']->b : null)?->c`         |
 | `a?:b?:c`  | a `=== null` test that binds the receiver to a temporary |
 
-Both sides use the shortest form that tolerates an absent receiver, and neither
-form re-embeds its receiver, so a chain of N optional segments stays a linear
-expression rather than growing exponentially.
+Both sides use the shortest form that tolerates an absent receiver.
 
 > **Array-side note.** The array guard is a ternary, and a branch is evaluated
 > before an outer operator sees it. `items?[9] ?? 'fb'` therefore cannot suppress
@@ -161,15 +145,9 @@ expression rather than growing exponentially.
 > `items[9] ?? 'fb'`. The object side has no such limit, because `?->` composes
 > with a following `??`.
 
-An absent ROOT behaves the same on both sides — `{{ missing?.name }}` renders
-empty — while the strict form reports it:
-
-```twig
-{{ missing?.name }}    {# empty — no error #}
-{{ missing.name }}     {# ERROR: Variable "missing" is not defined #}
-```
-
 #### The dollar sigil
+
+Clarity accepts PHP variable syntax directly within templates. This allows you to use PHP-style property access and array indexing with the `$` sigil.
 
 `->` is PHP-style property access and **requires** the `$` sigil, so raw PHP
 syntax can never be emitted from an unsigiled expression:
@@ -272,14 +250,9 @@ dynamic spelling of an ordinary variable access. `$$name` is the same construct
 {{ ${which}.title }}          {# chained access applies to the looked-up value #}
 ```
 
-`${expr}` follows the same variable model as every other access, so it agrees
-with `{{ name }}` about where a variable lives: it reads the render scope (and
-loop locals) in both sandbox and PHP mode. Absent names throw by default; write
-`?? fallback` to supply a value instead, exactly as for a literal name.
-
-Because the name is an expression, the lookup can reach neither a superglobal
-nor an engine internal — a name such as `_SERVER` or `__c_fn` is simply not in
-the scope, so it behaves as an absent variable.
+``${expr}` reads from the render scope and loop locals in every policy. An absent
+name throws unless you provide a `?? fallback`. Dynamic names cannot access
+superglobals or engine internals.
 
 > Inside a string literal the `$` is literal text: `{{ "${which}" }}` renders
 > `${which}`, not a lookup.
@@ -292,21 +265,15 @@ and `|> reverse` accept a container (array, `Traversable`, `Countable`, or an
 object exposing a public `toArray()`). A value object with no public state and a
 `__toString()` keeps STRING semantics, so `|> length` counts its characters.
 
-**Not allowed (in sandbox mode):** bare `->` without a sigil, method calls
-(`a.b()`, `$a->b()`), and any name that is not in the render scope — PHP
-functions, superglobals and engine internals included, so `strtoupper(x)` and
-`$_SERVER` both fail. PHP mode lifts all of these — see [PHP Mode](#php-mode).
+In the default policy, templates cannot use bare `->`, call methods, or access
+names outside the render scope. This includes PHP functions and superglobals.
+See [PHP Mode](#php-mode) for how a policy can enable PHP access.
 
 ## PHP Mode
 
-A policy that grants PHP (`Policy::open()`, or the individual capability) lifts
-the function allow-list and the method-call restriction, giving templates the
-full power of PHP — **PHP mode**, also called _open mode_. Everything below still
-resolves **registered** filters and functions first; PHP mode only changes what
-happens when a name is _not_ registered.
-
-> See [Advanced Topics → PHP Mode](04-advanced-topics.md#php-mode) for the
-> PHP-developer view of the two modes ("sandbox mode" vs. "PHP mode").
+**PHP mode** is enabled by a policy that grants PHP access. The syntax stays the
+same, and registered filters and functions still take precedence. See
+[Advanced Topics → PHP Mode](04-advanced-topics.md#php-mode) for details.
 
 ### PHP functions as calls
 
@@ -336,17 +303,34 @@ elsewhere `_` keeps its meaning as an ordinary variable.
 
 ### Method calls
 
-Method calls require the `$` sigil (the same sigil that spells `->` in sandbox
-mode), so they stay greppable in a trusted template:
+A method call needs the `methodCalls` capability. The **capability** is the gate,
+not the spelling, so both styles work and compile to the same PHP — a template
+written in dot syntax needs no rewriting when the capability is granted:
 
 ```twig
-{{ $user->name() }}              {# static method #}
+{{ user.name() }}                {# static method, dot syntax #}
+{{ obj{m}() }}                   {# dynamic method name, brace syntax #}
+{{ $user->name() }}              {# PHP-style (equivalent) #}
 {{ $user?->name() }}             {# nullsafe #}
-{{ $user->{$method}() }}         {# dynamic method name #}
+{{ $user->{$method}() }}         {# PHP-style dynamic name (equivalent) #}
 ```
 
-A call on the _root_ value (`$fn()`) is still rejected: a variable-driven
-callable is the function-level equivalent of variable-variable expansion.
+`user.name()`, `$user.name()` and `$user->name()` are the same call. The same
+holds for the dynamic spellings: `obj{m}()`, `$obj{m}()` and `$obj->{$m}()` are
+one construct.
+
+Two calls stay rejected under every policy, because neither is a method call:
+
+```twig
+{{ $fn() }}                      {# ERROR: a call on the root value #}
+{{ arr:greet() }}                {# ERROR: a call on a key read, not a member #}
+```
+
+A variable-driven callable is the function-level equivalent of
+variable-variable expansion, and a call may follow only a **property** — never a
+key (`a:b`) or index (`a[b]`) read. A bare `->` (`obj->name()`) is also still
+refused, because `$` is what distinguishes `->` from the `-` operator; use
+`obj.name()` or `$obj->name()`.
 
 ### Raw PHP tags
 
@@ -386,12 +370,10 @@ echo $total;
 %}
 ```
 
-The body is emitted **verbatim** into the compiled class. Because a body may
-contain text that is not valid PHP in isolation, it is extracted before
-tokenization and each of its lines is mapped one-to-one back to the template, so
-a runtime error inside a tag points at the offending line. Inside a `{% php %}`
-tag a loop local is a genuine PHP variable (`echo $n;`), and it reaches `{{ }}`
-only through the variables array (`$__c_va['n'] = $n;`).
+The body is emitted **verbatim** into the compiled class. It is extracted before
+tokenization, and each line maps to the corresponding template line so runtime
+errors point to the right location. Loop locals inside `{% php %}` are PHP
+variables; copy them to `$__c_va` to expose them to template expressions.
 
 In **PHP mode** template variables are also PHP locals: the render scope is
 seeded with `extract($__c_va, EXTR_SKIP)`, so `{{ title }}` and
@@ -403,17 +385,16 @@ reachable as `$__c_va` when a dynamic name is needed.
 
 ### Function guardrails
 
-**Nothing is blocked by default.** PHP mode means the full power of PHP, so the
-engine does not add a second, weaker sandbox on top of it. If an application
-wants its own guardrails it can add them:
+PHP mode allows PHP function calls from template expressions. Deny specific
+names with `denyFunctions()`; it does not inspect calls inside raw `{% php %}`
+blocks:
 
 ```php
-$engine->setPolicy(Policy::open()->denyFunctions('exec', 'system'));
+$engine->setPolicy(Policy::unrestricted()->denyFunctions('exec', 'system'));
 ```
 
-Changing the list recompiles the templates that need it: a compiled class records
-a digest of the policy it was built under, and the loader recompiles on a
-mismatch.
+Changing the list invalidates compiled templates whose policy digest no longer
+matches.
 
 ## Directives
 
@@ -581,12 +562,11 @@ Use `{% @macroName(arg1, arg2) %}` to invoke a macro:
 
 #### Macro Rules
 
-- Macros are defined with `{% macro @name(param1, param2) %}...{% endmacro %}`
-- Macro names are prefixed with `@` and must not conflict with template variables
-- Macros are expanded **inline at compile time** — zero runtime overhead
-- Parameters can reference any expression available at the call site
-- Macros cannot call themselves recursively (cycle detection throws a compile error)
-- Macros are scoped to the current compile pass: macros defined in the template or in static includes become available after they are encountered, but independently rendered templates do not share macros
+- Define macros with `{% macro @name(param1, param2) %}...{% endmacro %}`.
+- Prefix macro names with `@`; they must not conflict with template variables.
+- Macros expand **at compile time** and accept expressions available at the call site.
+- Recursive calls fail compilation.
+- Macros become available after their definition in the template or a static include. Independently rendered templates do not share them.
 
 > **Note:** Clarity also uses the `@...` notation for some compile-time snippets that are internal macros. The main example is `{% @parent %}` inside overriding child blocks.
 
@@ -690,10 +670,9 @@ If the parent block contains `My Website`, the compiled result is `Admin | My We
 
 Rules:
 
-- `{% @parent %}` is only valid inside a child block that overrides a parent block
-- It is resolved at compile time, so it adds no runtime inheritance lookup
-- You can use it more than once in the same block to repeat the parent content
-- It refers to the **immediate** parent block in multi-level inheritance chains
+- Use `{% @parent %}` only inside a child block that overrides a parent block.
+- It resolves at compile time and may appear more than once in a block.
+- In multi-level inheritance, it refers to the **immediate** parent block.
 
 ### Includes
 
@@ -994,7 +973,9 @@ Comments are removed during compilation and don't appear in output:
 
 ### Context Hints
 
-Special `@context` annotations inside comments instruct the compiler to switch the auto-escaping mode for all output expressions that follow. Clarity also auto-detects context when scanning `<script>` and `<style>` tags, but you can override it explicitly:
+`@context` annotations in comments set the auto-escaping mode for following
+expressions. Clarity also detects context inside `<script>` and `<style>` tags;
+use an annotation to override the detected mode:
 
 ```twig
 {# @context js #}

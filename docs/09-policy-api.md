@@ -2,79 +2,76 @@
 
 A template is compiled against a **policy** that decides what it may reach. A policy is a set of **capabilities** — each one the kind of construct it permits — plus two **allowlists** naming the PHP functions and filters a template may call.
 
-Every decision is made at **compile time**. No policy is consulted while a template renders, so the restrictions cost nothing to enforce. A template that violates its policy does not compile, and the compiler reports the violation with a message that names the grant that would fix it.
+Policies are enforced at **compile time**. A template that violates its policy fails to compile, and the error names the required change. Policies add no render-time checks.
 
 ```php
 use Clarity\Engine\Policy;
 
 // One of the ready-made modes …
-$engine->setPolicy(Policy::sandboxed());   // the default
-$engine->setPolicy(Policy::trusted());     // raw PHP, but no `new` and no `::`
-$engine->setPolicy(Policy::open());        // full PHP
+$engine->setPolicy(Policy::restricted());   // the default
+$engine->setPolicy(Policy::trusted());     // method calls, superglobals and PHP locals — but no raw `{% php %}` and no `new`/`::`
+$engine->setPolicy(Policy::unrestricted());        // full PHP
 
 // … or the default plus the grants you name
-$engine->setPolicy(Policy::custom()
+$engine->setPolicy(Policy::default()
     ->allowCapability('methodCalls')
     ->allowFunctions('strtoupper', 'count')
     ->allowFilters('markdown'));
 ```
 
-A freshly built engine is **sandboxed**: a template reaches its own scope and the filters and functions the host registered, and nothing else.
+A new engine uses the restricted policy: templates can access their render scope and host-registered filters and functions, but nothing else.
 
 ---
 
 ## Presets
 
-Four factory methods build a policy. Three are ready-made modes; the fourth starts from the default so only the changes need naming.
+Use one of three presets or start with `default()` and add specific grants.
 
 ```php
-Policy::sandboxed();   // the default, and the most restrictive
-Policy::trusted();     // raw PHP, method calls and superglobals
-Policy::open();        // every capability
-Policy::custom();      // sandboxed(), plus whatever you grant
+Policy::restricted();     // the default, and the most restrictive
+Policy::trusted();        // method calls and superglobals
+Policy::unrestricted();   // every capability
+Policy::default();        // the default, plus whatever you grant
 ```
 
 ### What each preset contains
 
 The three ready-made modes differ only in their capabilities. This table is the complete difference between them.
 
-| Capability          | `sandboxed()` | `trusted()` | `open()` |
-| ------------------- | ------------- | ----------- | -------- |
-| `rawPhp`            | off           | **on**      | **on**   |
-| `methodCalls`       | off           | **on**      | **on**   |
-| `superglobals`      | off           | **on**      | **on**   |
-| `phpVariables`      | off           | **on**      | **on**   |
-| `variableVariables` | on            | on          | on       |
-| `newExpressions`    | off           | off         | **on**   |
-| `staticCalls`       | off           | off         | **on**   |
+| Capability          | `restricted()` | `trusted()` | `unrestricted()` |
+| ------------------- | -------------- | ----------- | ---------------- |
+| `variableVariables` | ✓              | ✓           | ✓                |
+| `methodCalls`       | -              | **✓**       | **✓**            |
+| `superglobals`      | -              | **✓**       | **✓**            |
+| `phpVariables`      | -              | **✓**       | **✓**            |
+| `rawPhp`            | -              | -           | **✓**            |
+| `newExpressions`    | -              | -           | **✓**            |
+| `staticCalls`       | -              | -           | **✓**            |
 
-Every preset leaves both allowlists empty and denies no function. An empty
-allowlist is unrestricted (see [the one rule](#the-one-rule)), and it only
-constrains anything once the policy can reach PHP at all — so it does not need to
-change between the modes.
+All presets start with empty allowlists and no denied functions. Empty allowlists
+do not restrict names; see [The one rule](#the-one-rule).
 
 ### Choosing a preset
 
-| Preset        | In one line                                                         | Appropriate when                                                                      |
-| ------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `sandboxed()` | The template's own scope, and the registered filters and functions. | The default. Templates a request can choose, or any template you are unsure about.    |
-| `trusted()`   | Sandboxed plus the constructs PHP-authored templates normally use.  | Templates written by you that need inline PHP and object access.                      |
-| `open()`      | Every capability: the full power of PHP.                            | Templates never chosen by a request, as a parity mode with Blade, Stempler or Plates. |
-| `custom()`    | `sandboxed()`, plus the grants you name.                            | Most applications: a narrow, explicit set of allowances.                              |
+| Preset           | In one line                                                         | Appropriate when                                                                      |
+| ---------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `restricted()`   | The template's scope and registered filters and functions.          | The default, especially for templates selected by a request.                          |
+| `trusted()`      | Adds method calls, superglobals and PHP locals.                     | Templates you write that need object access.                                          |
+| `unrestricted()` | Every capability: the full power of PHP.                            | Templates never chosen by a request, as a parity mode with Blade, Stempler or Plates. |
+| `default()`      | `restricted()`, plus the grants you name.                           | Most applications: a narrow, explicit set of allowances.                              |
 
-### `Policy::sandboxed()`
+### `Policy::restricted()`
 
 ```php
-$engine->setPolicy(Policy::sandboxed());
+$engine->setPolicy(Policy::restricted());
 ```
 
-The most restrictive mode: no capability that reaches PHP is on. A template may
-read the scope it was rendered with, use every Clarity tag, and call registered
-filters and functions. It may not open a `{% php %}` tag, call a method, read a
-superglobal, construct a class or reach a static member.
+No capability that reaches PHP is enabled. Templates can read their render scope,
+use Clarity tags and call registered filters and functions. They cannot use
+`{% php %}`, call methods, read superglobals, construct classes or access static
+members.
 
-This is the default — what a bare `new ClarityEngine()` uses — and the mode the
-rest of the documentation describes.
+This is the default for `new ClarityEngine()`.
 
 ### `Policy::trusted()`
 
@@ -82,32 +79,30 @@ rest of the documentation describes.
 $engine->setPolicy(Policy::trusted());
 ```
 
-Enables everything `sandboxed()` omits except the two class-reaching
-capabilities. A template may write `{% php %}` tags, call methods on objects
-from the scope, read superglobals and reach the scope through PHP locals. It may
-not use `new` or `::`.
+Enables `methodCalls`, `superglobals` and `phpVariables`. Templates can call
+methods on scoped objects, read superglobals and access the scope through PHP
+locals. They cannot use `{% php %}`, `new` or `::`.
 
-`newExpressions` and `staticCalls` stay off because constructing a class, or
-calling a static member, reaches code the application never handed the template —
-a different order of trust from calling a method on an object that was passed in.
+`rawPhp`, `newExpressions` and `staticCalls` stay off. Inline PHP, class
+construction and static calls can reach code the application did not pass to the
+template.
 
-### `Policy::open()`
+### `Policy::unrestricted()`
 
 ```php
-$engine->setPolicy(Policy::open());
+$engine->setPolicy(Policy::unrestricted());
 ```
 
-Every capability is on, both allowlists are empty and nothing is denied: no
-construct is refused and a template has the full power of PHP. This is the
-engine's former PHP mode, and the parity mode for template languages that expect
-PHP inline.
+Every capability is enabled; both allowlists are empty and no function is denied.
+Templates have the full power of PHP. This is the engine's former PHP mode and
+supports template languages that expect inline PHP.
 
 Use it only for templates that are never chosen by a request.
 
-### `Policy::custom()`
+### `Policy::default()`
 
 ```php
-$policy = Policy::custom()
+$policy = Policy::default()
     ->allowCapability('methodCalls')
     ->allowFunctions('strtoupper', 'count')
     ->allowFilters('markdown');
@@ -115,9 +110,8 @@ $policy = Policy::custom()
 $engine->setPolicy($policy);
 ```
 
-Starts from `sandboxed()` and returns the same mutable policy every preset
-returns, so grants can be chained. Most applications want this mode: the default
-is nearly right, and one or two named allowances make it exactly right.
+Starts from `restricted()`. Add only the capabilities, functions and filters
+your templates need.
 
 ---
 
@@ -128,7 +122,7 @@ is nearly right, and one or two named allowances make it exactly right.
 | Capability          | Default | What it grants                                                                                          |
 | ------------------- | ------- | ------------------------------------------------------------------------------------------------------- |
 | `rawPhp`            | `false` | `{% php CODE %}` tags                                                                                   |
-| `methodCalls`       | `false` | `$obj->method()` and `$obj->method(arg, …)`                                                             |
+| `methodCalls`       | `false` | `obj.method()` / `$obj->method()`, with arguments and dynamic names                                     |
 | `superglobals`      | `false` | `$_SERVER`, `$_GET`, `$_ENV`, … as chain roots                                                          |
 | `phpVariables`      | `false` | the render scope seeded as PHP locals — what makes `$title` and `{% php echo $title; %}` the same thing |
 | `variableVariables` | `true`  | `$$name` / `${expr}` (see [`variableVariables`](#variablevariables))                                    |
@@ -147,79 +141,59 @@ is nearly right, and one or two named allowances make it exactly right.
 > **An empty allowlist is no restriction. A non-empty allowlist is the complete
 > set: only the listed names resolve, and anything else is a compile-time error.**
 
-That is the whole rule, and there is no "absent means unconfigured" case. It is
-also what makes `Policy::open()` the engine's former PHP mode _exactly_ — every
-capability on, both allowlists empty, therefore nothing denied — rather than a
-mode that happens to deny everything.
-
-`denyFunctions(...)` applies **after** the allowlists and wins. It is the one
-thing an allowlist cannot express, because "everything except `exec`" has no
-positive form:
+`denyFunctions(...)` takes precedence over the function allowlist. It blocks
+PHP function calls resolved from template expressions, but does not inspect raw
+`{% php %}` blocks:
 
 ```php
-$engine->setPolicy(Policy::open()->denyFunctions('exec', 'system', 'proc_open'));
+$engine->setPolicy(Policy::unrestricted()->denyFunctions('exec', 'system', 'proc_open'));
 ```
 
 ### `methodCalls` and `phpVariables` are independent
 
-The capabilities are independent, and the two that look most alike are worth
-spelling out. `methodCalls` lets `$obj->name()` compile. `phpVariables` seeds the
-render scope into PHP locals, which is what makes `{{ title }}` and
-`{% php echo $title; %}` the same variable — and it is only meaningful next to
-`rawPhp`.
-
-Because `$obj->m()` compiles to `$__c_va['obj']->m()` unless `phpVariables` is
-also on, granting `methodCalls` **alone** does not require the scope to be
-seeded, and does not seed it. A policy can therefore hand a template the ability
-to call methods without also handing it a frame of PHP locals to scribble on.
+`methodCalls` permits method calls on objects in the scope. It works with either
+`obj.method()` or `$obj->method()` syntax; both use the same capability. Method
+calls do not require `phpVariables`, which exposes the scope as PHP locals. See
+[Template Syntax → Method calls](01-template-syntax.md#method-calls).
 
 ### `variableVariables`
 
 `$$name` and `${expr}` resolve against the render scope and loop locals under
-every policy, and the engine's own `__c_`-prefixed frame is protected by the
-binding order in the compiled body — so turning the capability off changes
-nothing about what a template can reach. It exists so an application can be
-explicit about the syntax, and it is not counted as "reaching PHP" for
-[inspecting a policy](#inspecting-a-policy).
+every policy. They cannot access the engine's protected `__c_` variables, so
+disabling this capability does not change what a template can reach. It is not
+counted as "reaching PHP" for [policy inspection](#inspecting-a-policy).
 
 ### `superglobals`
 
-Without the capability, a superglobal name is an ordinary scope read of a name
-the scope does not hold, so `{{ _SERVER }}` throws — **even when `phpVariables`
-is granted**, which is the case that matters:
+Without `superglobals`, `{{ _SERVER }}` is a scope read and throws if the scope
+does not contain that name. This remains true when `phpVariables` is enabled:
 
 ```php
 // Refused without 'superglobals': a scope read of an absent name
-$engine->setPolicy(Policy::custom()->allowCapability('phpVariables'));
+$engine->setPolicy(Policy::default()->allowCapability('phpVariables'));
 
 // Granted: the name now means PHP's own variable
-$engine->setPolicy(Policy::custom()->allowCapability('superglobals'));
+$engine->setPolicy(Policy::default()->allowCapability('superglobals'));
 ```
 
-Without a capability of its own, `superglobals` would collapse into
-`phpVariables`, since a template could reach every superglobal through the
-seeded-local form as soon as the scope was seeded.
-
-Only the known names count — `GLOBALS`, `_SERVER`, `_GET`, `_POST`, `_FILES`,
-`_COOKIE`, `_SESSION`, `_REQUEST`, `_ENV`. `_SERVERX` is an ordinary variable.
+The capability recognizes only `GLOBALS`, `_SERVER`, `_GET`, `_POST`, `_FILES`,
+`_COOKIE`, `_SESSION`, `_REQUEST` and `_ENV`. Other names, such as `_SERVERX`,
+are ordinary variables.
 
 ### `newExpressions` and `staticCalls`
 
-Both compile a class name to a **fully qualified** form — `new DateTime()`
-becomes `new \DateTime`. The separator is emitted because a compiled template is
-a plain class in the global namespace with no `use` statements, so an unqualified
-name would resolve according to whatever the file happened to import.
+Both compile class names as fully qualified names; for example,
+`new DateTime()` becomes `new \DateTime`. Compiled templates have no `use`
+statements, so this avoids resolving names based on the importing file.
 
-`instanceof` is the exception among the class-name constructs. It takes a class
-name because that is what the operator means, it reaches nothing the scope did
-not already hold, and it therefore works under **every** policy:
+`instanceof` works under every policy because it checks an object's class without
+constructing or accessing one:
 
 ```twig
 {% if order instanceof App\Order %}…{% endif %}
 ```
 
-A class name in any other position (`{{ Foo\Bar }}`) is reported rather than
-silently compiled.
+Class names in other positions, such as `{{ Foo\Bar }}`, are rejected.
 
 ---
 
@@ -229,7 +203,7 @@ silently compiled.
 
 ```php
 // Fluent — the primary shape
-$policy = Policy::custom()
+$policy = Policy::default()
     ->allowCapability('methodCalls', 'superglobals')
     ->denyCapability('variableVariables')
     ->allowFunctions('strtoupper', 'count')
@@ -245,61 +219,58 @@ $policy = Policy::fromArray([
 ]);
 ```
 
-The array form is what an `env.php` or a framework config can express, and it is
-the same object: `toArray()` round-trips. Every key and every capability name is
-validated, so a typo is refused rather than silently ignored — a policy that drops
-a rule the author wrote is worse than one that refuses to load.
+Use the array form in `env.php` or framework configuration. `toArray()` produces
+a round-trippable representation. Unknown keys and capability names are rejected.
 
-`fromArray()` starts from `sandboxed()`, so a config only has to name what it
+`fromArray()` starts from `restricted()`, so a config only has to name what it
 changes.
 
 ### Engine integration
 
 ```php
-$engine->setPolicy(Policy::sandboxed());   // the default
+$engine->setPolicy(Policy::restricted());   // the default
 $engine->setPolicy(Policy::trusted());
-$engine->setPolicy(Policy::open());
+$engine->setPolicy(Policy::unrestricted());
 $engine->setPolicy(['capabilities' => ['rawPhp' => true]]);   // array form
 $policy = $engine->getPolicy();            // always a real object
 ```
 
-`setPolicy()` accepts either form; `getPolicy()` never returns null, because a
-freshly built engine answers with `Policy::sandboxed()`.
+`setPolicy()` accepts either form. `getPolicy()` always returns a policy; a new
+engine uses `Policy::restricted()`.
 
 ### `allowFunctions()` vs `addFunction()`
 
-They are different statements and both are needed:
+These methods do different things:
 
 - `addFunction('upper', $fn)` registers a **callable** under a name. Existing
   API, unchanged.
 - `allowFunctions('strtoupper')` **permits a PHP function to be called by its own
   name**, without registering anything.
 
-A name that is registered _and_ allowed is a registered callable. A name that is
-allowed and not registered calls the PHP function of that name. A name that is
-neither is a compile-time error. Registered names always win over a PHP function
-of the same name, in every policy.
+If a name is both registered and allowed, the registered callable is used. If it
+is allowed but not registered, the PHP function is called. If neither, compilation
+fails. A registered callable takes precedence over a PHP function with the same
+name.
 
 ### Inspecting a policy
 
-Coarse questions about a policy have their own methods, so a caller never has to
-inspect individual capabilities.
+Use these methods for a summary without inspecting individual capabilities:
 
-| Method                   | True when                                                             |
-| ------------------------ | --------------------------------------------------------------------- |
-| `$policy->isOpen()`      | every capability is on **and** nothing is restricted or denied        |
-| `$policy->isSandboxed()` | no capability that reaches PHP is on                                  |
-| `$policy->allowsPhp()`   | a capability that reaches PHP is on, **or** an allowlist is non-empty |
+| Method                   | True when                                                     |
+| ------------------------ | ------------------------------------------------------------- |
+| `$policy->isUnrestricted()` | every capability is on **and** nothing is restricted or denied |
+| `$policy->isSandboxed()` | no capability that reaches PHP is on                          |
+| `$policy->allowsPhp()`   | a capability that reaches PHP is on                           |
 
-`allowsPhp()` is the answer the compiler asks for most often: it gates a bare
-call to an unregistered name and a filter step falling back to a PHP function. A
-**non-empty allowlist counts as reaching PHP**, because listing names is the
-explicit statement "these PHP functions may be used" — otherwise
-`Policy::sandboxed()->allowFunctions('count')` would be a grant that grants
-nothing.
+`allowsPhp()` controls bare calls to unregistered names and filter steps that
+fall back to PHP functions. An allowlist alone does not enable PHP access; it
+only narrows which functions may be called. For example,
+`Policy::restricted()->allowFunctions('count')` remains sandboxed. Add a
+capability to enable PHP access:
+`->allowCapability('methodCalls')->allowFunctions('count')`.
 
-The engine keeps `isSandboxed()` as a shortcut for `getPolicy()->isSandboxed()`,
-at a call site that only wants the coarse answer.
+The engine also exposes `isSandboxed()` as a shortcut for
+`getPolicy()->isSandboxed()`.
 
 ---
 
@@ -307,18 +278,15 @@ at a call site that only wants the coarse answer.
 
 ### Every rejection is a compile-time `ClarityException`
 
-True for capabilities, allowlists, bare function calls and filter steps. A
-template that violates its policy does not compile, so the failure is reported at
-the compile that introduced it rather than on a request.
-
-Filter steps are checked the same way. An unregistered `|>` name that the policy
-will not resolve to a PHP function is reported at compile time, because such a
-policy leaves _nothing_ for the name to fall back to: "not registered" and
-"cannot ever resolve" are the same statement.
+Capability, allowlist, function-call and filter-step violations raise a
+`ClarityException` during compilation, not rendering. An unregistered filter
+that cannot resolve to a PHP function also fails at compile time.
 
 ### The message names the remedy
 
-Every rejection says what to change.
+Errors name the required change and report the template location through
+`getFile()` / `getLine()` and `templateName` / `templateLine`. See
+[Error Handling](04-advanced-topics.md#error-handling).
 
 | Situation                         | Message                                                                                                                                                                                                                               |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -328,32 +296,18 @@ Every rejection says what to change.
 | an **unlisted filter**            | `Filter 'x' is not registered and is not in the policy's filter allowlist. Add it with allowFilters(), or register it with addFilter().`                                                                                              |
 | a **denied capability**           | `'{% php %}' is not allowed by this policy. Grant the 'rawPhp' capability to allow it.`                                                                                                                                               |
 
-The filter messages name both remedies rather than one, because there genuinely
-are two and which is right depends on whether the author wants a template filter
-or a PHP function.
-
 ### A policy change invalidates the compiled cache
 
-A compiled template records a **digest** of the effective policy, and the loader
-recompiles on a mismatch. This is what makes changing a policy safe: the cache
-keys on template source only, so a class compiled under one policy is never
-served under another.
-
-The digest covers the full identity — every capability and every allowlist entry,
-sorted — so two policies that differ in their last entry cannot collide. That is
-what lets an allowlist change recompile correctly **without** bumping
-`COMPILER_VERSION`.
-
-A **digest**, rather than the policy itself, is what the compiled file carries:
-that file is source code that ships to a server and does not need to hold a
-readable inventory of what a template may call.
+Compiled templates record a digest of the effective policy. The loader recompiles
+when the digest changes, so a template compiled under one policy is not reused
+under another. The digest includes sorted capabilities and allowlist entries.
+Compiled files store the digest, not the policy itself.
 
 ### Registration order does not change the policy
 
-`allowFunctions('a', 'b')` behaves the same whether it is called before or after
-the engine's own registration, because the policy is resolved against the
-registry when the template compiles. The last policy set before a render is the
-one that applies.
+The policy is resolved against the function registry during compilation, so
+`allowFunctions('a', 'b')` works regardless of registration order. The last
+policy set before rendering applies.
 
 ---
 
@@ -361,108 +315,87 @@ one that applies.
 
 ### Strict types
 
-Clarity does not implement strict typing for filter input, and it is a different
-idea from the capability model: not _what a template may reach_, but **what a
-filter may assume about its input**.
+Filter input types are separate from capabilities, which control what a template
+may reach.
 
 ```twig
 {{ 42 |> upper }}    {# an integer reaching a string filter #}
 ```
 
-A compiled template does not declare strict types, so PHP coerces. Clarity's
-built-in filters also cast explicitly: `upper` compiles to
+A compiled template does not declare strict types, so PHP may coerce values.
+Built-in filters can also cast explicitly; for example, `upper` compiles to:
 
 ```php
 \mb_strtoupper((string) {1})
 ```
 
-so a built-in filter coerces a wrong type into a right one rather than throwing. A
-registered or PHP-function filter receives the raw value and is coerced by PHP in
-the same way. Nothing is checked at render time either way — the difference would
-be entirely in what the compiler emits.
+This casts the input to a string. Registered filters and PHP-function filters
+receive the raw value; PHP applies its normal coercion rules.
 
-For comparison, Latte emits `declare(strict_types=1)` and declares its filter
-signatures strictly, so PHP throws a `TypeError` at the call boundary. That is
-also decided entirely at compile time.
+Latte can emit `declare(strict_types=1)` and enforce filter signatures at the call
+boundary.
 
 ### A `tags` allowlist
 
-There is none. Every Clarity tag is the engine's own vocabulary, and none of them
-reaches anything a filter or a function cannot. Restricting them is a linting
-concern — keeping a large template surface small — rather than a security one.
-Latte ships a tag list because its features appear only through tags; Clarity's are
-covered by capabilities.
+There is no tag allowlist. Clarity tags do not expose access beyond the
+capabilities, filters and functions already described. Restricting tags is a
+linting concern, not a security control.
 
 ### Method and property allowlists by class
 
-There are none, and they could not be decided at compile time: whether
-`$order->total()` is permitted depends on an object that does not exist until the
-template renders. `methodCalls` is the whole grant — if a template may call a
-method, it may call a method on anything the scope already holds.
+There are no per-class method or property allowlists. The object is only known at
+render time; `methodCalls` permits calls on any object in the scope.
 
 ### A read-only mode
 
-There is none. Read-only is a property of the _data_, not of the template, so it
-belongs to whatever passes the scope in.
+There is no read-only mode. Make data read-only when building the render scope.
 
 ### Runtime checks
 
-There are none, by design. Every capability and allowlist is resolved while the
-template compiles, which is what keeps the restrictions free at render time.
+Policies are enforced at compile time; the engine does not recheck them while
+rendering.
 
 ---
 
 ## Comparison with other engines
 
-The capability model covers the same ground as the security policies of other
-template engines, with differences in how the axes are drawn.
+Other template engines organize these controls differently:
 
-- **Superglobals.** Latte's `SecurityPolicy` has five axes — tags, filters,
-  functions, methods and properties — and no superglobal one, so `$_SERVER` is an
-  ordinary variable there. Clarity treats a superglobal as a capability of its
-  own. The difference is a matter of framing: Clarity's contract covers a
-  template's scope and nothing ambient.
-- **Includes.** Latte has no path syntax in templates at all, so it has no
-  traversal to guard against. Clarity's `{% include %}` takes a literal name only,
-  and the [view path](#the-view-path-is-a-boundary) is the boundary that keeps it
-  inside the view root.
-- **Variable variables.** Latte rejects `${expr}` outright in its sandbox.
-  Clarity allows the form under every policy and relies on the scope being closed:
-  the syntax reaches nothing a literal name could not. The two guards protect
-  different things — Latte's is about syntax, Clarity's is about what the syntax
-  can name.
-- **Blade** has no policy at all; it is PHP with a different spelling. **Twig** has
-  one (`SecurityPolicy`: allowed tags, filters, methods, properties and
-  functions), and its `is defined` compiles to `array_key_exists` — the same model
-  Clarity's `is defined` uses.
+- **Superglobals.** Latte's `SecurityPolicy` controls tags, filters, functions,
+  methods and properties, but has no superglobal control. Clarity treats
+  superglobals as a separate capability.
+- **Includes.** Clarity's `{% include %}` accepts a literal name; the
+  [view path](#the-view-path-is-a-boundary) keeps it inside the view root.
+- **Variable variables.** Latte rejects `${expr}` in its sandbox. Clarity permits
+  it under every policy because it resolves only names in the render scope.
+- **Blade** has no policy; templates are PHP. **Twig** has a `SecurityPolicy`
+  for tags, filters, methods, properties and functions. Its `is defined`, like
+  Clarity's, uses `array_key_exists`.
 
 ---
 
 ## Migrating from the old API
 
-Earlier versions decided all of this with a single `sandbox` boolean and a
-denied-functions list. The `Policy` object replaces both.
+Earlier versions used a `sandbox` boolean and a denied-functions list. `Policy`
+replaces both.
 
 | Old API                           | Express with                                                                |
 | --------------------------------- | --------------------------------------------------------------------------- |
-| `setSandboxMode(true)`            | `setPolicy(Policy::sandboxed())` — or just the default                      |
-| `setSandboxMode(false)`           | `setPolicy(Policy::open())`                                                 |
-| `['sandbox' => true/false]`       | `['policy' => Policy::sandboxed()/open()]`                                  |
-| `isSandboxed()`                   | kept on the engine; `getPolicy()->isSandboxed()` / `isOpen()` for the parts |
-| `setDeniedFunctions(['exec', …])` | `setPolicy(Policy::open()->denyFunctions('exec', …))`                       |
+| `setSandboxMode(true)`            | `setPolicy(Policy::restricted())` — or just the default                     |
+| `setSandboxMode(false)`           | `setPolicy(Policy::unrestricted())`                                         |
+| `['sandbox' => true/false]`       | `['policy' => Policy::restricted()/unrestricted()]`                         |
+| `isSandboxed()`                   | kept on the engine; `getPolicy()->isSandboxed()` / `isUnrestricted()` for the parts |
+| `setDeniedFunctions(['exec', …])` | `setPolicy(Policy::unrestricted()->denyFunctions('exec', …))`               |
 | `getDeniedFunctions()`            | `getPolicy()->deniedFunctions()`                                            |
 | `['deniedFunctions' => [...]]`    | `['policy' => ['deniedFunctions' => [...]]]`                                |
 
-**Only the removal of `setSandboxMode()` is a breaking change** — a one-line
-change per call site, with no alias: `setPolicy()` covers every case the old
-method did, and a mode and a rule set by the same method cannot drift out of
-sync.
+Removing `setSandboxMode()` is the only breaking change. Replace each call with
+`setPolicy()`; no alias is provided.
 
 ## The view path is a boundary
 
-Not part of the policy and not fixable by it, but documented here because it is
-the other half of "what can a template reach". A template name may not address a
-file outside the view path:
+The policy does not control file access. The loader confines template names to
+the view path:
 
 | Rejected                 | Because                                                                         |
 | ------------------------ | ------------------------------------------------------------------------------- |
@@ -472,20 +405,14 @@ file outside the view path:
 | `admin/../../secret`     | a `..` segment, anywhere in the name                                            |
 | `admin//user`, `''`      | an empty segment — it would collapse on disk while staying a distinct cache key |
 
-The loader splits the name on `/` (with `.` and `\` read as the same separator) and
-requires every segment to be a plain name. Because no surviving segment can be `.`
-or `..`, the path **cannot** climb out, whatever the spelling — the property worth
-having, since it is a check on the outcome rather than a list of dangerous
-spellings somebody has to remember to extend.
+The loader treats `/`, `.` and `\` as separators and requires every segment to be
+a plain name. This prevents `.` or `..` segments from escaping the view path.
 
-**Absolute template names are not accepted.** A template name can be derived from
-a request and a template can be stored in a database, so accepting one would make
-a name an arbitrary file reader. A host that genuinely wants a loader rooted
-elsewhere says so in configuration — `new FileLoader('/their/root')` — where the
-base path is the root and the same rules apply to it.
+Absolute template names are rejected. To use a different root, configure it on
+the host, for example `new FileLoader('/their/root')`. The same path rules apply.
 
-A custom loader therefore has to apply the same rules itself, which is part of
-`TemplateLoader`'s contract rather than something to discover.
+Custom loaders must enforce the same rules as part of the `TemplateLoader`
+contract.
 
 ---
 

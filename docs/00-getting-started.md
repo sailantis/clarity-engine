@@ -76,7 +76,7 @@ $output = $engine->render('hello', [
 echo $output;
 ```
 
-That's it! The template will be compiled to PHP on first render, then served from cache on subsequent requests.
+The first render compiles the template. Later renders use the cached PHP class.
 
 ## Configuration Options
 
@@ -95,24 +95,23 @@ $engine->setLayout('layouts/main');
 // Override file extension (default: .clarity.html)
 $engine->setExtension('.tpl.html');
 
-// What templates may reach (default: Policy::sandboxed()).
+// What templates may reach (default: Policy::restricted()).
 use Clarity\Engine\Policy;
 
-$engine->setPolicy(Policy::open());                // grant templates full PHP
-$engine->setPolicy(Policy::custom()                // or grant one thing at a time
+$engine->setPolicy(Policy::unrestricted());                // grant templates full PHP
+$engine->setPolicy(Policy::default()                // or grant one thing at a time
     ->allowCapability('methodCalls')
     ->allowFunctions('strtoupper', 'count'));
 
-// An open policy denies nothing by default. Exclude specific names to keep
-// guardrails on top of it:
-$engine->setPolicy(Policy::open()->denyFunctions('exec', 'system'));
+// Deny named PHP functions when called from template expressions.
+// This does not inspect calls inside raw `{% php %}` blocks.
+$engine->setPolicy(Policy::unrestricted()->denyFunctions('exec', 'system'));
 ```
 
-> **A grant is not a cosmetic setting.** `Policy::open()` and each capability it
-> turns on are equivalent to executing arbitrary PHP from templates. See
-> [Advanced Topics → Security Model](04-advanced-topics.md#security-model) for
-> what each one reaches. The same policy is accepted in the constructor as
-> `policy`, in either the object or the array form.
+Capabilities grant different levels of PHP access. `rawPhp` and
+`Policy::unrestricted()` allow arbitrary PHP; other capabilities enable specific
+constructs. See [The Policy API](09-policy-api.md) for details. Pass the policy
+in the constructor as an object or array using the `policy` option.
 
 ### Registering Template Namespaces
 
@@ -203,12 +202,15 @@ $engine->use(new TranslationModule([
 
 ### Debug Mode
 
-Enable extra runtime safety checks (range-loop validation, etc.) in development:
+Enable the full debug experience in development — context-aware, masked `dump()`,
+the `dump` filter, runtime range-loop safety checks and a render event bus:
 
 ```php
-$engine->setDebugMode(true); // enable
+$engine->setDebugMode(true);  // enable
 $engine->setDebugMode(false); // disable (default)
 ```
+
+See **[Debug Mode](04-advanced-topics.md#debug-mode)** for what it turns on.
 
 ### Domain Router and Composite Loaders
 
@@ -335,20 +337,21 @@ echo $engine->render('home', [
 **File: `views/home.clarity.html`**
 
 ```twig
-{% extends "layouts/main" %} {% block title %}{{ title }} - My Website{%
-endblock %} {% block content %}
-<h2>Hello, {{ user:name }}!</h2>
-<p>You are logged in as: <strong>{{ user:role }}</strong></p>
+{% extends "layouts/main" %}
+{% block title %}{{ title }} - My Website{%endblock %}
+{% block content %}
+  <h2>Hello, {{ user:name }}!</h2>
+  <p>You are logged in as: <strong>{{ user:role }}</strong></p>
 
-<h3>Recent Articles</h3>
-<ul>
-  {% for article in articles %}
-  <li>
-    <strong>{{ article:title }}</strong>
-    <p>{{ article:body |> excerpt(50) }}</p>
-  </li>
-  {% endfor %}
-</ul>
+  <h3>Recent Articles</h3>
+  <ul>
+    {% for article in articles %}
+    <li>
+      <strong>{{ article:title }}</strong>
+      <p>{{ article:body |> excerpt(50) }}</p>
+    </li>
+    {% endfor %}
+  </ul>
 {% endblock %}
 ```
 
@@ -368,24 +371,33 @@ endblock %} {% block content %}
 
 ### During Development
 
+Enable debug mode while developing to get context-aware `dump()` output and
+runtime safety checks:
+
 ```php
-// Enable cache flushing for every request (in development only)
-if ($_ENV['APP_ENV'] === 'development') {
-    $engine->flushCache();
-}
+$engine->setDebugMode(true);
 ```
 
-### In Production
+Inspect values directly in a template:
 
-1. Ensure cache directory is persistent and writable by the web server
-2. Do NOT call `flushCache()` on every request
-3. Templates are automatically recompiled when source files change
-4. Consider pre-warming the cache after deployment
+```twig
+<pre>{{ dump(user) }}</pre>
+```
+
+Template errors include the template name and line, and are mapped back to the
+template source for tools such as Xdebug. Disable debug mode in production:
 
 ```php
-// Production settings
-$engine->setViewPath('/var/www/views');
-$engine->setCachePath('/var/cache/clarity');  // Persistent, writable
+$engine->setDebugMode(false);
+```
+
+Clarity automatically detects changes to template files and recompiles them,
+including layouts and included partials. You normally do not need to clear the
+cache manually. If you suspect a stale or inconsistent compiled cache while
+debugging, you can clear it explicitly:
+
+```php
+$engine->flushCache();
 ```
 
 ## Next Steps
@@ -397,26 +409,3 @@ Now that you have Clarity up and running, explore these topics:
 - **[Layout Inheritance](03-layout-inheritance.md)** — Build reusable page structures
 - **[Examples](examples/README.md)** — See complete working examples
 
-## Common Questions
-
-### Where are compiled files stored?
-
-By default, compiled templates are stored in `sys_get_temp_dir() . '/clarity'`. You should set a custom cache path in production:
-
-```php
-$engine->setCachePath(__DIR__ . '/cache/clarity');
-```
-
-### Do I need to manually clear the cache?
-
-No. Clarity automatically detects when template files (including extended layouts and included partials) are modified and recompiles them. Only call `flushCache()` during development if you encounter issues.
-
-### Can I use Clarity without a framework?
-
-Yes — Clarity is completely standalone. The examples above show standalone usage without any framework dependencies.
-
-### Is the output cached?
-
-No. Clarity caches the **compiled PHP code**, not the rendered output. Each render call executes the compiled template with fresh data.
-
-For troubleshooting, see the [Troubleshooting Guide](06-troubleshooting.md).

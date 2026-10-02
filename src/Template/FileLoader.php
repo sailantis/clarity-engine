@@ -145,6 +145,7 @@ final class FileLoader implements TemplateLoader
                 }
                 return $code;
             },
+            path: $path,
         );
     }
 

@@ -8,7 +8,7 @@ Architecture
 ------------
 This class holds the public API, the constants and the per-compilation state;
 the behaviour is composed from the traits in `Clarity\Engine\Compiler\`
-(inheritance, control flow, macros, raw-PHP blocks, source map, code builder,
+(inheritance, control flow, macros, raw-PHP tags, source map, code builder,
 …).  See CONTRIBUTING.md for the trait map.
 
 The compilation pipeline
@@ -71,7 +71,7 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ## Public Constants
 
-- **COMPILER_VERSION** = `20`
+- **COMPILER_VERSION** = `21`
 - **INTERNAL_PREFIX** = `'__c_'`
 
 ## Public methods
@@ -87,15 +87,9 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ---
 
-### setRegistry() · <small>[🗎](../../src/Engine/Compiler.php#L267)</small>
+### default() · <small>[🗎](../../src/Engine/Compiler.php#L265)</small>
 
-`public function setRegistry(Clarity\Engine\Registry $registry): static`
-
-**Parameters**
-
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `$registry` | [Registry](Clarity_Engine_Registry.md) | - |  |
+`public static function default(): static`
 
 **Return value**
 
@@ -104,15 +98,15 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ---
 
-### setExtension() · <small>[🗎](../../src/Engine/Compiler.php#L278)</small>
+### setRegistry() · <small>[🗎](../../src/Engine/Compiler.php#L277)</small>
 
-`public function setExtension(string $extension): static`
+`public function setRegistry(Clarity\Engine\Registry $registry): static`
 
 **Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
-| `$extension` | string | - |  |
+| `$registry` | [Registry](Clarity_Engine_Registry.md) | - |  |
 
 **Return value**
 
@@ -138,7 +132,7 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ---
 
-### setPolicy() · <small>[🗎](../../src/Engine/Compiler.php#L308)</small>
+### setPolicy() · <small>[🗎](../../src/Engine/Compiler.php#L310)</small>
 
 `public function setPolicy(Clarity\Engine\Policy $policy): static`
 
@@ -157,17 +151,6 @@ compiler and denied in the other.
 **Return value**
 
 - Type: `static`
-
-
----
-
-### getPolicy() · <small>[🗎](../../src/Engine/Compiler.php#L315)</small>
-
-`public function getPolicy(): Clarity\Engine\Policy`
-
-**Return value**
-
-- Type: [Policy](Clarity_Engine_Policy.md)
 
 
 ---

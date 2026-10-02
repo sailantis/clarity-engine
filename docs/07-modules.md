@@ -1,6 +1,7 @@
 # Modules
 
-Modules are self-contained bundles of filters, functions, block directives, and shared services that are registered into the engine with a single call. Clarity ships with built-in localization modules and fully supports custom modules.
+Modules bundle filters, functions, directives and shared services for one-call
+registration. Clarity includes localization modules and supports custom modules.
 
 ## The Module System
 
@@ -75,7 +76,8 @@ class MyModule implements ModuleInterface
 
 ## Localization Modules
 
-Clarity provides three cooperating localization modules that share a common locale stack so you can switch the active locale at runtime and have all formatting and translation respond immediately.
+Clarity's localization modules share a locale stack, so formatting and
+translations follow locale changes at runtime.
 
 ### Architecture
 
@@ -94,7 +96,8 @@ Both modules auto-bootstrap `LocaleService` if it hasn't been registered yet. Re
 
 `Clarity\Localization\LocaleService`
 
-Manages a locale stack and installs the `{% with_locale %}` / `{% endwith_locale %}` block directives. It is automatically created by `TranslationModule` or `IntlFormatModule` when not already present.
+Manages the locale stack and installs the `{% with_locale %}` /
+`{% endwith_locale %}` directives.
 
 ### Configuration
 
@@ -110,7 +113,8 @@ $engine->use(new LocaleService([
 | -------- | ------ | ------------- | ------------------------------------------ |
 | `locale` | string | auto-detected | Default locale (e.g. `'de_DE'`, `'en_US'`) |
 
-Locale auto-detection order: PHP `intl` extension → `setlocale(LC_ALL, 0)` → `LC_ALL`/`LANG`/`LANGUAGE` env vars → `'en_US'`.
+Locale auto-detection order: PHP `intl`, `setlocale(LC_ALL, 0)`,
+`LC_ALL`/`LANG`/`LANGUAGE`, then `'en_US'`.
 
 ### Template Usage
 

@@ -1,12 +1,10 @@
 <?php
 namespace Clarity;
 
-use Clarity\Debug\CliDumpRenderer;
 use Clarity\Debug\DebugEventBus;
+use Clarity\Debug\DebugRuntime;
 use Clarity\Debug\DumpOptions;
 use Clarity\Debug\HtmlDebugPanel;
-use Clarity\Debug\HtmlDumpRenderer;
-use Clarity\Debug\JsDumpRenderer;
 use Clarity\Engine\Cache;
 use Clarity\Engine\Compiler;
 use Clarity\Engine\Policy;
@@ -26,6 +24,7 @@ trait ClarityEngineTrait
     /** @var string[] */
     protected array $renderStack = [];
     protected bool $debugMode = false;
+    protected ?DebugRuntime $debugRuntime = null;
     protected ?DebugEventBus $debugBus = null;
     protected ?HtmlDebugPanel $debugPanel = null;
 
@@ -36,11 +35,11 @@ trait ClarityEngineTrait
      * one half of the engine and missed in another.  A compiled template records
      * a digest of this policy and is recompiled whenever the digest changes.
      */
-    protected Policy $policy;
+    protected ?Policy $policy = null;
 
     protected function initializeClarityEngine(): void
     {
-        $this->policy   = Policy::sandboxed();
+        //$this->policy   = Policy::restricted();
         $this->registry = new Registry(
             fn(string $view, array $vars = []): string => $this->renderPartial($view, $vars)
         );
@@ -48,20 +47,80 @@ trait ClarityEngineTrait
     }
 
     /**
-     * Enable or disable debug mode (low-level toggle).
+     * Turn debug mode on or off — the single debug switch.
      *
-     * Prefer enableDebug() for the full debug experience (context-aware dump(),
-     * dd(), DebugEventBus, optional HTML panel).  setDebugMode(true) only
-     * activates compiler-level assertions (range-loop safety checks) and makes
-     * dump() resolve at runtime instead of being pruned to ''.
+     * ```php
+     * $engine->setDebugMode(true);                       // full debug, defaults
+     * $engine->setDebugMode(new DumpOptions(maxDepth: 3));
+     * $engine->setDebugMode(false);                      // production
+     * ```
      *
-     * @param bool $debug True to enable, false to disable.
+     * Turning it ON installs the whole debug experience in one step, and
+     * turning it OFF removes all of it:
+     *
+     * - compiler-level runtime assertions (range-loop safety checks);
+     * - `dump()` rendered by the context-aware renderers — an HTML tree in HTML,
+     *   a `/* DEBUG_DUMP *\/` comment in JS — with sensitive keys masked;
+     * - `{{ x |> dump }}`, which dumps the piped value at the pipe position and
+     *   still yields it (`{{ x |> dump |> length }}` measures x);
+     * - a {@see DebugEventBus} emitting `template.resolve`, `template.compile`
+     *   and `template.render`;
+     * - the HTML debug panel, when `DumpOptions::$showPanel` is set.
+     *
+     * Passing {@see DumpOptions} is shorthand for "on, with these options" —
+     * `$debug instanceof DumpOptions` and `$debug === null` both mean "on".
+     * `$debug === false` is exactly {@see disableDebug()}.
+     *
+     * `dd()` is the one exception: it is never pruned, so the registry refuses
+     * it while debug is off instead of dumping raw, unmasked values.
+     *
+     * @param bool|DumpOptions|null $debug True/options to enable, false to disable.
      * @return $this
      */
-    public function setDebugMode(bool $debug): static
+    public function setDebugMode(bool|DumpOptions|null $debug = true): static
     {
-        $this->debugMode = $debug;
-        return $this;
+        if ($debug) {
+            $opts = $debug instanceof DumpOptions ? $debug : new DumpOptions();
+
+            $this->debugMode = true;
+
+            // Every debug capability is installed here and nowhere else, so "debug
+            // is on" and "dump() is formatted" can never disagree.  The registry owns
+            // no debug behaviour of its own; it is handed the runtime's handlers.
+            $this->debugRuntime = new DebugRuntime($opts);
+            $this->debugRuntime->register($this->registry);
+
+            // The pass-through behind `{{ x |> dump }}`.  A SERVICE, not a callable:
+            // the pipe form must EMIT the dump and still yield the value, which the
+            // callable form (a plain return) cannot express.  Only the compile-time
+            // probe wiring ever names this key, and the compiler prunes it in
+            // production, so a production template never resolves it.
+            $this->registry->addService(
+                '__debug_probe',
+                fn(string $ctx, mixed $value, mixed ...$args): mixed =>
+                    $this->debugRuntime->probe($ctx, $value, ...$args)
+            );
+
+            $this->debugBus   = $this->debugRuntime->bus;
+            $this->debugPanel = $this->debugRuntime->panel;
+
+            return $this;
+        } else {
+            $this->debugMode    = false;
+            $this->debugRuntime = null;
+            $this->debugBus     = null;
+            $this->debugPanel   = null;
+
+            // Hand the registry back to its debug-neutral state: dump() becomes a
+            // no-op and dd() refuses, rather than either keeping a stale runtime
+            // (whose DumpOptions no longer reflect anything) or falling back to a
+            // second formatter.  Doing this in the one teardown path is what makes
+            // "off" mean off, whatever order the two methods were called in.
+            $this->registry->setDumpHandler(null);
+            $this->registry->setDdHandler(null);
+
+            return $this;
+        }
     }
 
     /**
@@ -80,8 +139,8 @@ trait ClarityEngineTrait
      * mean to change:
      *
      * ```php
-     * $engine->setPolicy(Policy::open());                 // the old PHP mode
-     * $engine->setPolicy(Policy::custom()
+     * $engine->setPolicy(Policy::unrestricted());
+     * $engine->setPolicy(Policy::default()
      *     ->allowCapability('methodCalls')
      *     ->allowFunctions('strtoupper', 'count'));
      * ```
@@ -91,17 +150,15 @@ trait ClarityEngineTrait
      * templates written by trusted authors only.  Templates compiled under one
      * policy are automatically recompiled under another.
      *
-     * @param Policy|array<string, mixed> $policy A policy, or the array form it
-     *                                           accepts ({@see Policy::fromArray()}).
+     * @param Policy|array $policy A policy.
      * @return $this
      */
     public function setPolicy(Policy|array $policy): static
     {
-        if ($policy instanceof Policy) {
-            $this->policy = $policy;
-        } else {
-            $this->policy = Policy::fromArray($policy);
+        if (\is_array($policy)) {
+            $policy = Policy::fromArray($policy);
         }
+        $this->policy = $policy;
         return $this;
     }
 
@@ -109,13 +166,13 @@ trait ClarityEngineTrait
      * The policy templates are currently compiled under.
      *
      * Always a real object: a freshly built engine answers with
-     * {@see Policy::sandboxed()}.  Use it for coarse questions rather than
-     * keeping a second flag that could disagree with it — `getPolicy()->isOpen()`
+     * {@see Policy::restricted()}.  Use it for coarse questions rather than
+     * keeping a second flag that could disagree with it — `getPolicy()->isSandboxed()`
      * answers what the old `isSandboxed()` answered.
      */
     public function getPolicy(): Policy
     {
-        return $this->policy;
+        return $this->policy ??= Policy::restricted();
     }
 
     /**
@@ -126,15 +183,16 @@ trait ClarityEngineTrait
      */
     public function isSandboxed(): bool
     {
-        return $this->policy->isSandboxed();
+        return $this->getPolicy()->isSandboxed();
     }
 
     /**
-     * Enable full debug mode: context-aware dump()/dd(), DebugEventBus for
-     * loader/compile/render tracing, and optionally an HTML debug panel.
+     * Enable full debug mode.
      *
-     * dump() is pruned to '' at compile time in production (zero overhead).
-     * dd() is always active regardless of debug mode.
+     * @deprecated Use {@see setDebugMode()} — the two debug entry points have
+     *             been unified, and `setDebugMode(true)` (or passing
+     *             {@see DumpOptions}) now installs exactly what this method did.
+     *             Kept as an alias so existing code keeps working.
      *
      * ```php
      * $engine->enableDebug();   // default options
@@ -146,67 +204,20 @@ trait ClarityEngineTrait
      */
     public function enableDebug(?DumpOptions $opts = null): static
     {
-        $opts = $opts ?? new DumpOptions();
-
-        $this->debugMode  = true;
-        $this->debugBus   = new DebugEventBus();
-        $this->debugPanel = null;
-
-        $htmlRenderer = new HtmlDumpRenderer();
-        $cliRenderer  = new CliDumpRenderer();
-        $jsRenderer   = new JsDumpRenderer();
-
-        // Install context-aware dump handler
-        $this->registry->setDumpHandler(
-            static function (string $ctx, mixed ...$args) use ($htmlRenderer, $jsRenderer, $opts): string {
-                $value = \count($args) === 1 ? $args[0] : $args;
-
-                if ($ctx === 'js') {
-                    return $jsRenderer->render($value, $opts);
-                }
-                return $htmlRenderer->render($value, $opts);
-            }
-        );
-
-        // Install dd handler (always active, exits after dump)
-        $this->registry->setDdHandler(
-            static function (string $ctx, mixed ...$args) use ($htmlRenderer, $cliRenderer, $jsRenderer, $opts): never {
-                $value = \count($args) === 1 ? $args[0] : $args;
-                $isCli = \PHP_SAPI === 'cli' || \PHP_SAPI === 'phpdbg';
-
-                if ($isCli) {
-                    $out = $cliRenderer->renderForced($value, $opts);
-                    \fwrite(\STDOUT, $out);
-                    exit(1);
-                }
-                if ($ctx === 'js') {
-                    echo $jsRenderer->render($value, $opts);
-                    exit(1);
-                }
-                echo $htmlRenderer->render($value, $opts);
-                exit(1);
-            }
-        );
-
-        if ($opts->showPanel) {
-            $this->debugPanel = new HtmlDebugPanel();
-            $this->debugBus->subscribe($this->debugPanel);
-        }
-
-        return $this;
+        return $this->setDebugMode($opts ?? true);
     }
 
     /**
-     * Disable debug mode and tear down the event bus and debug panel.
+     * Disable debug mode and tear down everything it installed: the event bus,
+     * the panel, and the registry's dump/dd handlers.
+     *
+     * @deprecated Use {@see setDebugMode(false)} instead.
      *
      * @return $this
      */
     public function disableDebug(): static
     {
-        $this->debugMode  = false;
-        $this->debugBus   = null;
-        $this->debugPanel = null;
-        return $this;
+        return $this->setDebugMode(false);
     }
 
     /**
@@ -703,6 +714,28 @@ trait ClarityEngineTrait
     // -------------------------------------------------------------------------
 
     /**
+     * Build the runtime callable table handed to compiled templates as `$__c_fn`.
+     *
+     * This is the registry's table verbatim. `dump`/`dd` live in it already, so
+     * there is one place a template name can resolve to — `{{ dump(x) }}` and a
+     * quoted filter reference such as `map(items, "dump")` reach the SAME
+     * callable.
+     *
+     * That is deliberate. This method used to rebuild `dump` from the engine's
+     * private `__debug_dump` service on every render, which meant the call form
+     * and the reference form did not agree: with debug off, `map(items, "dump")`
+     * still reached the registry's raw formatter and printed unmasked values
+     * into production output, while `{{ dump(x) }}` was pruned. One table, one
+     * behaviour.
+     *
+     * @return array<string, callable>
+     */
+    private function runtimeCallables(): array
+    {
+        return $this->registry->allCallables();
+    }
+
+    /**
      * Compile (if needed) and render a single template.
      *
      * @param string $templateName Logical template name (e.g. 'home', 'layouts/base').
@@ -728,7 +761,7 @@ trait ClarityEngineTrait
 
             // Instantiate with the callable and service registries
             $template = new $className(
-                $this->registry->allCallables(),
+                $this->runtimeCallables(),
                 $this->registry->allServices()
             );
 
@@ -817,7 +850,7 @@ trait ClarityEngineTrait
                 // COMPILER_VERSION.
                 $compiledDebug  = $className::$debugCompiled ?? false;
                 $compiledDigest = $className::$policyDigest ?? '';
-                if ($compiledDebug !== $this->debugMode || $compiledDigest !== $this->policy->digest()) {
+                if ($compiledDebug !== $this->debugMode || $compiledDigest !== $this->getPolicy()->digest()) {
                     $this->cache->invalidate($templateName);
                 } else {
                     if ($this->debugMode) {
@@ -832,8 +865,8 @@ trait ClarityEngineTrait
         // using plain `require` so the new versioned class is always declared.
         $this->compiler ??= new Compiler();
         $this->compiler
+            ->setPolicy($this->getPolicy())
             ->setRegistry($this->registry)
-            ->setPolicy($this->policy)
             ->setDebugMode($this->debugMode);
         $compileStart = $this->debugMode ? \microtime(true) : 0.0;
         $compiled     = $this->compiler->compile($templateName, $loader);
@@ -861,7 +894,7 @@ trait ClarityEngineTrait
                 'Syntax error in template: ' . $e->getMessage(),
                 $tplFile ?? $templateName,
                 $tplLine,
-                $e
+                previous: $e
             );
         }
     }
@@ -912,8 +945,8 @@ trait ClarityEngineTrait
     {
         // Already describes a template location → nothing to add. A
         // ClarityException raised by the runtime (e.g. Access::iterate() on a
-        // non-iterable) carries NO location, so it still needs mapping.
-        if ($e instanceof ClarityException && ($e->templateFile !== '' || $e->templateLine > 0)) {
+        // non-iterable) carries NO location, so it still needs mapping below.
+        if ($e instanceof ClarityException && ($e->templateName !== '' || $e->templateLine > 0)) {
             return $e;
         }
 
@@ -922,21 +955,39 @@ trait ClarityEngineTrait
             return $e;
         }
 
-        [$tplFile, $tplLine] = $this->matchSourceMapLine(
-            SourceMap::normalise(self::staticPropertyOrDefault($className, 'sourceMap', '')),
-            self::staticPropertyOrDefault($className, 'sourceFiles', []),
-            $line
-        );
+        $sourceMap = SourceMap::normalise(self::staticPropertyOrDefault($className, 'sourceMap', ''));
+        $files     = self::staticPropertyOrDefault($className, 'sourceFiles', []);
+        $paths     = SourceMap::normalisePaths(self::staticPropertyOrDefault($className, 'sourcePaths', []));
+
+        [$tplFile, $tplLine] = $this->matchSourceMapLine($sourceMap, $files, $line);
         if ($tplFile === null) {
             return $e;
         }
 
+        // The physical path is carried PER SOURCE by the class itself, so an
+        // inlined include or a layout gets its own file — no re-resolution
+        // against a loader that may not even be the one that served it.
         return new ClarityException(
             $e->getMessage(),
             $tplFile,
             $tplLine,
+            self::sourcePathOf($files, $paths, $tplFile),
             previous: $e
         );
+    }
+
+    /**
+     * Physical path recorded for a logical name in a compiled class's parallel
+     * `sourceFiles` / `sourcePaths` arrays, or '' when it recorded none.
+     *
+     * @param string[] $files
+     * @param string[] $paths
+     */
+    private static function sourcePathOf(array $files, array $paths, string $templateName): string
+    {
+        $index = \array_search($templateName, $files, true);
+
+        return $index === false ? '' : ($paths[$index] ?? '');
     }
 
     /**
@@ -1051,8 +1102,10 @@ trait ClarityEngineTrait
 
             // Determine template position.  Resolution can fail (e.g. the class
             // was loaded by an older compiler), in which case fall back to the
-            // logical template name so the message is still actionable.
-            [$tplFile, $tplLine] = $this->resolveTemplateLine($templateName, $errline);
+            // logical template name so the message is still actionable.  The
+            // physical path comes from the same class metadata, so an editor can
+            // open the file an included/layout error actually came from.
+            [$tplFile, $tplLine, $tplPath] = $this->resolveTemplateLine($templateName, $errline);
             $tplFile = $tplFile ?? $templateName;
 
             // 1) Undefined array key "foo"
@@ -1068,7 +1121,8 @@ trait ClarityEngineTrait
                 throw new ClarityException(
                     "Variable \"$varName\" is not defined in this context",
                     $tplFile,
-                    $tplLine
+                    $tplLine,
+                    $tplPath
                 );
             }
 
@@ -1077,7 +1131,8 @@ trait ClarityEngineTrait
                 throw new ClarityException(
                     "Trying to access array offset on null – probably a missing variable or null value",
                     $tplFile,
-                    $tplLine
+                    $tplLine,
+                    $tplPath
                 );
             }
 
@@ -1087,7 +1142,8 @@ trait ClarityEngineTrait
                 throw new ClarityException(
                     "Variable \"$varName\" is not defined in this context",
                     $tplFile,
-                    $tplLine
+                    $tplLine,
+                    $tplPath
                 );
             }
 
@@ -1099,7 +1155,8 @@ trait ClarityEngineTrait
                 throw new ClarityException(
                     "Property \"$propName\" is not defined on this object",
                     $tplFile,
-                    $tplLine
+                    $tplLine,
+                    $tplPath
                 );
             }
 
@@ -1112,7 +1169,8 @@ trait ClarityEngineTrait
                 throw new ClarityException(
                     "Cannot read property \"$propName\" on $onType — check the chain before it",
                     $tplFile,
-                    $tplLine
+                    $tplLine,
+                    $tplPath
                 );
             }
 
@@ -1122,7 +1180,8 @@ trait ClarityEngineTrait
                 throw new ClarityException(
                     "Cannot use object of type {$m[1]} as an array — use property access (a.b) instead of a key access (a[b])",
                     $tplFile,
-                    $tplLine
+                    $tplLine,
+                    $tplPath
                 );
             }
 
@@ -1132,7 +1191,8 @@ trait ClarityEngineTrait
                 throw new ClarityException(
                     "Invalid key type for index access — $errstr",
                     $tplFile,
-                    $tplLine
+                    $tplLine,
+                    $tplPath
                 );
             }
 
@@ -1207,37 +1267,41 @@ trait ClarityEngineTrait
      *
      * @param string $templateName Logical name of the entry template.
      * @param int    $phpLine      Line number of the error in the compiled file.
-     * @return array{0: string|null, 1: int}  [templateName|null, templateLine]
+     * @return array{0: string|null, 1: int, 2: string}  [templateName|null, templateLine, templatePath]
      */
     private function resolveTemplateLine(string $templateName, int $phpLine): array
     {
         $className = $this->cache->getLoadedClassName($templateName);
         if ($className === null) {
-            return [null, 0];
+            return [null, 0, ''];
         }
 
         try {
             $packed = $className::$sourceMap;
             $files  = $className::$sourceFiles;
             $body   = $className::$renderBodyLine;
+            // Absent on a class compiled before sourcePaths existed.
+            $paths = $className::$sourcePaths ?? [];
         } catch (\Error) {
-            return [null, 0];
+            return [null, 0, ''];
         }
 
         if (!\is_int($body) || $body <= 0) {
-            return [null, 0];
+            return [null, 0, ''];
         }
 
         $map = SourceMap::normalise($packed);
         if ($map === []) {
-            return [null, 0];
+            return [null, 0, ''];
         }
 
         $bodyLine = $phpLine - $body + 1;
         if ($bodyLine <= 0) {
-            return [null, 0];
+            return [null, 0, ''];
         }
 
-        return $this->matchSourceMapLine($map, $files, $bodyLine);
+        [$file, $line] = $this->matchSourceMapLine($map, $files, $bodyLine);
+
+        return [$file, $line, $file === null ? '' : self::sourcePathOf($files, $paths, $file)];
     }
 }

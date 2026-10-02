@@ -37,8 +37,13 @@ use Clarity\ClarityException;
  *   An EMPTY allowlist means unrestricted.  A NON-EMPTY allowlist means only
  *   the listed names resolve; anything else is a compile-time error.
  *
- * Empty-means-unrestricted is what makes `Policy::open()` the engine's old PHP
- * mode exactly, rather than a mode that happens to deny everything.
+ * An allowlist NARROWS; it never opens a door.  It is consulted only where a
+ * capability has already made a construct reachable, so
+ * `restricted()->allowFunctions('count')` is still sandboxed — pair the grant
+ * with a capability for it to have anything to apply to.
+ *
+ * Empty-means-unrestricted is what makes `Policy::unrestricted()` the engine's
+ * old PHP mode exactly, rather than a mode that happens to deny everything.
  *
  * Why `variableVariables` defaults on
  * -----------------------------------
@@ -101,16 +106,16 @@ final class Policy
      * The default: no template reaches PHP.  Identical to the engine's
      * historical sandbox mode, and what a bare `new ClarityEngine()` uses.
      */
-    public static function sandboxed(): self
+    public static function restricted(): self
     {
         return new self([
-            'rawPhp'            => false,
             'methodCalls'       => false,
-            'superglobals'      => false,
-            'phpVariables'      => false,
-            'variableVariables' => true,
             'newExpressions'    => false,
+            'phpVariables'      => false,
+            'rawPhp'            => false,
             'staticCalls'       => false,
+            'superglobals'      => false,
+            'variableVariables' => true,
         ]);
     }
 
@@ -122,52 +127,54 @@ final class Policy
      * (Blade / Stempler / Plates parity), never for templates a request can
      * choose.
      */
-    public static function open(): self
+    public static function unrestricted(): self
     {
         return new self([
-            'rawPhp'            => true,
             'methodCalls'       => true,
-            'superglobals'      => true,
-            'phpVariables'      => true,
-            'variableVariables' => true,
             'newExpressions'    => true,
+            'phpVariables'      => true,
+            'rawPhp'            => true,
             'staticCalls'       => true,
+            'superglobals'      => true,
+            'variableVariables' => true,
         ]);
     }
 
     /**
-     * For templates that are trusted but should not be able to reach around the
-     * engine: raw PHP, method calls, superglobals and scope-seeded locals.
+     * Trusted templates have access to most of the engine's capabilities, but not everything.
      *
-     * `newExpressions` and `staticCalls` stay off — constructing an arbitrary
-     * class is a different order of trust from calling a method on an object the
-     * application already passed in.
+     * What stays off: `rawPhp`, and the two capabilities that let a template name
+     * a class of its own. Raw `{% php %}` blocks and constructing an arbitrary
+     * class are both a different order of trust from calling a method on an
+     * object the application already passed in.
      */
     public static function trusted(): self
     {
         return new self([
-            'rawPhp'            => true,
             'methodCalls'       => true,
-            'superglobals'      => true,
-            'phpVariables'      => true,
-            'variableVariables' => true,
             'newExpressions'    => false,
+            'phpVariables'      => true,
+            'rawPhp'            => false,
             'staticCalls'       => false,
+            'superglobals'      => true,
+            'variableVariables' => true,
         ]);
     }
 
     /**
-     * Start from {@see sandboxed()} and change what you mean to change.
+     * Start from the engine's default ({@see restricted()}) and change what you
+     * mean to change.  Nothing here is a blank slate: this is the sandboxed
+     * policy, so every capability you do not name stays off.
      *
      * ```
-     * Policy::custom()
+     * Policy::default()
      *     ->allowCapability('methodCalls')
      *     ->allowFunctions('strtoupper', 'count');
      * ```
      */
-    public static function custom(): self
+    public static function default(): self
     {
-        return self::sandboxed();
+        return self::restricted();
     }
 
     // -------------------------------------------------------------------------
@@ -185,7 +192,7 @@ final class Policy
      * ]);
      * ```
      *
-     * An omitted `capabilities` key starts from {@see sandboxed()}, so a config
+     * An omitted `capabilities` key starts from {@see restricted()}, so a config
      * only has to name what it changes.  Every key is validated; an unknown
      * capability or allowlist is refused rather than ignored, because a policy
      * that silently drops a rule is worse than one that refuses to load.
@@ -194,7 +201,7 @@ final class Policy
      */
     public static function fromArray(array $data): self
     {
-        $policy = self::sandboxed();
+        $policy = self::restricted();
 
         foreach ($data as $key => $value) {
             if ($key === 'capabilities') {
@@ -345,7 +352,7 @@ final class Policy
      * Whether the function allowlist restricts anything at all.
      *
      * An EMPTY allowlist is not "nothing allowed" — it is "no filter applied", so
-     * the mode decides.  See the class docblock.
+     * what decides is the capabilities plus this list.  See the class docblock.
      */
     public function restrictsFunctions(): bool
     {
@@ -391,11 +398,10 @@ final class Policy
     }
 
     /**
-     * Refuse names outright, whatever the allowlists say.
+     * Deny PHP function calls resolved from template expressions.
      *
-     * Applied last, so a name that is both allowlisted and denied is denied. The
-     * denial is the more specific statement, and a policy that allows and denies
-     * the same name is a mistake worth resolving in favour of the safer reading.
+     * Raw `{% php %}` blocks are emitted verbatim and are not inspected by this
+     * deny list. Denial takes precedence over the function allowlist.
      */
     public function denyFunctions(string ...$names): self
     {
@@ -425,7 +431,7 @@ final class Policy
      * True when every capability is on and neither allowlist restricts anything:
      * the engine's former PHP mode.
      */
-    public function isOpen(): bool
+    public function isUnrestricted(): bool
     {
         foreach ($this->capabilities as $allowed) {
             if (!$allowed) {
@@ -443,10 +449,11 @@ final class Policy
      * call to an unregistered name, and a filter step falling back to a PHP
      * function.
      *
-     * A NON-EMPTY allowlist counts as reachable too, because listing names is the
-     * explicit statement "these PHP functions may be used" — otherwise
-     * `Policy::sandboxed()->allowFunctions('count')` would be a grant that grants
-     * nothing, which is the opposite of what it says.
+     * An allowlist does NOT count as reachable on its own. It narrows which PHP
+     * functions a construct may call; it does not create a construct to call them
+     * from. `Policy::restricted()->allowFunctions('count')` therefore stays
+     * sandboxed — the grant needs a capability to apply to, so pair it with one
+     * (`->allowCapability('methodCalls')->allowFunctions('count')`).
      *
      * `variableVariables` is deliberately not part of this.  It decides a syntax
      * the engine resolves against its own scope, so turning it off does not make
@@ -454,10 +461,6 @@ final class Policy
      */
     public function allowsPhp(): bool
     {
-        if ($this->restrictsFunctions() || $this->restrictsFilters()) {
-            return true;
-        }
-
         foreach ([
             'rawPhp',
             'methodCalls',

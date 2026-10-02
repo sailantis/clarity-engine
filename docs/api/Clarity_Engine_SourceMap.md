@@ -124,6 +124,31 @@ which keeps compiled files readable and avoids pathological line counts.
 - Description: PHP expression, e.g. "'1,0,1;3,0,3'"
 
 
+---
+
+### normalisePaths() · <small>[🗎](../../src/Engine/SourceMap.php#L163)</small>
+
+`public static function normalisePaths(mixed $paths): array`
+
+Normalise a compiled class's `$sourcePaths` property to `list<string>`.
+
+The compiler emits it as a plain nested array (a path cannot use the
+packed integer form), so this only has to tolerate a class from a compiler
+that predates the property — hence "empty list" rather than an error, for
+the same reason `normalise()` degrades: it runs on the error path,
+where a TypeError would replace the real exception.
+
+**Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$paths` | mixed | - | Value of a compiled class's $sourcePaths property. |
+
+**Return value**
+
+- Type: `array`
+
+
 
 ---
 

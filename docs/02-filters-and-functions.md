@@ -1,6 +1,7 @@
 # Filters and Functions Reference
 
-Filters transform values in templates, while functions perform operations and return results. This guide covers all built-in filters and functions, lambda expressions, and creating custom filters.
+Filters transform values; functions perform operations and return results. This
+guide covers built-ins, lambdas and custom filters.
 
 ## One call model, two signatures
 
@@ -13,8 +14,7 @@ is chosen by **syntax**, not by the name:
 {{ join(', ', items) }}      {# function form — arguments in call order        #}
 ```
 
-For most names the two forms are identical in effect, because the piped value
-simply becomes the first argument:
+For most names, the piped value becomes the first argument:
 
 ```twig
 {{ name | trim }}            ==  {{ trim(name) }}
@@ -30,9 +30,8 @@ function form mirrors the underlying **PHP builtin** rather than the pipe:
 | `date` | `ts \|> date('Y-m-d')`    | `date('Y-m-d', ts)`        | `date($format, $ts)`   |
 | `join` | `items \|> join(', ')`    | `join(', ', items)`        | `implode($glue, $arr)` |
 
-For these two, the function form places the _value_ where PHP places its
-subject — the second argument. `join(items)` therefore fails loudly (there is no
-`array` to join), which is deliberate; write `join(', ', items)`.
+For these two, the value is the second argument, as in the corresponding PHP
+function. For example, use `join(', ', items)`; `join(items)` has no array to join.
 
 ### Shadowing
 
@@ -707,12 +706,30 @@ Encode values as JSON:
 
 ### dump(...values)
 
-Debug output (print_r):
+Debug output, rendered by the context-aware renderer — an HTML tree in HTML, a JS
+comment inside `<script>` — with sensitive keys masked:
 
 ```twig
 <pre>{{ dump(user, settings) }}</pre>
 {# Useful for debugging #}
 ```
+
+`dump` is also a **filter**. It emits the dumped value and passes the piped value
+through unchanged, so it can sit in the middle of a pipeline:
+
+```twig
+{{ items |> filter(i => i:active) |> dump |> slice(0, 5) }}
+```
+
+It also works as a quoted callable reference:
+
+```twig
+{{ map(items, "dump") |> length }}
+```
+
+In production (`debug` off) **every** form is eliminated: the call is pruned to
+`''` and the filter/reference forms collapse to the identity, so nothing is
+dumped and nothing is added.
 
 ### keys(array)
 
@@ -884,13 +901,12 @@ Named arguments can be combined with positional ones:
 
 ## PHP Functions as Filters (PHP Mode)
 
-When a policy grants PHP (`Policy::open()`), any PHP function
-can be used directly as a filter or a function call, so no PHP API needs to be
-re-wrapped as a custom filter. Registered filters and functions always win over a
-PHP function of the same name.
+When a policy allows PHP access, unregistered PHP functions can be used directly
+as filters or function calls, subject to the function allowlist and deny list.
+Registered filters and functions take precedence over same-named PHP functions.
 
 ```php
-$engine->setPolicy(Policy::open());
+$engine->setPolicy(Policy::unrestricted());
 ```
 
 As a filter, the piped value becomes the **first argument**:
@@ -913,8 +929,8 @@ As a call, arguments are passed as written:
 {{ implode(',', items) }}
 ```
 
-Nothing is blocked by default: PHP mode is full PHP access. An application can
-add its own guardrails with `Policy::open()->denyFunctions([...])`.
+Use `denyFunctions()` to block PHP function calls made through template
+expressions. It does not inspect calls inside raw `{% php %}` blocks.
 
 > See [Advanced Topics → PHP Mode](04-advanced-topics.md#php-mode) for the
 > security consequences — PHP mode is equivalent to executing arbitrary PHP.
@@ -972,8 +988,11 @@ Every name above is also callable with parentheses; the value that would be pipe
 becomes the first argument, except `date` and `join`, whose call form mirrors PHP
 (see [One call model](#one-call-model-two-signatures)). The reverse is not true:
 a few names are **call-only** because their first argument is not a piped value —
-`context`, `include`, `dump` and `dd`. Writing `{{ x |> context }}` is a compile
-error; call them instead (`{{ context() }}`).
+`context`, `include` and `dd`. Writing `{{ x |> context }}` is a compile
+error; call them instead (`{{ context() }}`). `dump` is the exception: it is both
+callable and pipeable, because its filter form is a pass-through probe rather
+than a dispatch of the callable. All three `dump` forms — the call, the pipe
+step and the quoted reference — are eliminated in production.
 
 ## Next Steps
 

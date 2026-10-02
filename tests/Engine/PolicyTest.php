@@ -21,24 +21,26 @@ class PolicyTest extends BaseTestCase
     // Presets
     // =========================================================================
 
-    public function testSandboxedIsTheDefaultShape(): void
+    public function testRestrictedIsTheDefaultShape(): void
     {
-        $policy = Policy::sandboxed();
+        // The shape is what matters here: every capability off except
+        // `variableVariables`, which defaults on because denying it would achieve
+        // nothing (see the Policy docblock). Compared order-insensitively — the
+        // preset's insertion order is not part of the contract.
+        $capabilities = Policy::restricted()->capabilities();
 
-        $this->assertSame([
-            'rawPhp'            => false,
-            'methodCalls'       => false,
-            'superglobals'      => false,
-            'phpVariables'      => false,
-            'variableVariables' => true,
-            'newExpressions'    => false,
-            'staticCalls'       => false,
-        ], $policy->capabilities());
+        $expected = \array_fill_keys(Policy::CAPABILITIES, false);
+        $expected['variableVariables'] = true;
+
+        \ksort($expected);
+        \ksort($capabilities);
+
+        $this->assertSame($expected, $capabilities);
     }
 
     public function testOpenGrantsEveryCapabilityAndNoAllowlist(): void
     {
-        $policy = Policy::open();
+        $policy = Policy::unrestricted();
 
         foreach (Policy::CAPABILITIES as $capability) {
             $this->assertTrue($policy->allows($capability), "{$capability} must be on");
@@ -47,17 +49,21 @@ class PolicyTest extends BaseTestCase
         $this->assertFalse($policy->restrictsFilters());
     }
 
-    public function testTrustedGrantsEverythingExceptObjectConstruction(): void
+    public function testTrustedGrantsMethodCallsAndSuperglobalsButNoRawPhpOrConstruction(): void
     {
         $policy = Policy::trusted();
 
-        $this->assertTrue($policy->allows('rawPhp'));
+        // What trusted() keeps: object function access and the constructs PHP
+        // authored templates normally use.
         $this->assertTrue($policy->allows('methodCalls'));
         $this->assertTrue($policy->allows('superglobals'));
         $this->assertTrue($policy->allows('phpVariables'));
 
-        // Constructing an arbitrary class is a different order of trust from
-        // calling a method on an object the application already passed in.
+        // What it withholds: raw php blocks, and the two capabilities that let a
+        // template name a class of its own. Constructing an arbitrary class is a
+        // different order of trust from calling a method on an object the
+        // application already passed in.
+        $this->assertFalse($policy->allows('rawPhp'));
         $this->assertFalse($policy->allows('newExpressions'));
         $this->assertFalse($policy->allows('staticCalls'));
     }
@@ -71,16 +77,16 @@ class PolicyTest extends BaseTestCase
         ]);
 
         $this->assertTrue($engine->isSandboxed());
-        $this->assertSame(Policy::sandboxed()->digest(), $engine->getPolicy()->digest());
+        $this->assertSame(Policy::restricted()->digest(), $engine->getPolicy()->digest());
     }
 
     public function testTheConfiguredPolicyActuallyReachesTheEngine(): void
     {
         // The constructor used to install the default AFTER reading the config,
         // which silently discarded whatever was configured.
-        $engine = TestClarityEngine::withPolicy(Policy::open());
+        $engine = TestClarityEngine::withPolicy(Policy::unrestricted());
 
-        $this->assertTrue($engine->getPolicy()->isOpen());
+        $this->assertTrue($engine->getPolicy()->isUnrestricted());
         $this->assertFalse($engine->isSandboxed());
     }
 
@@ -90,7 +96,7 @@ class PolicyTest extends BaseTestCase
 
     public function testCapabilitiesAreFluentAndAccumulate(): void
     {
-        $policy = Policy::custom()
+        $policy = Policy::default()
             ->allowCapability('methodCalls')
             ->allowCapability('superglobals');
 
@@ -101,7 +107,7 @@ class PolicyTest extends BaseTestCase
 
     public function testDenyWinsOverAllow(): void
     {
-        $policy = Policy::open()->denyCapability('rawPhp');
+        $policy = Policy::unrestricted()->denyCapability('rawPhp');
 
         $this->assertFalse($policy->allows('rawPhp'));
         $this->assertTrue($policy->allows('methodCalls'));
@@ -111,7 +117,7 @@ class PolicyTest extends BaseTestCase
     {
         $this->expectException(ClarityException::class);
         $this->expectExceptionMessageMatches('/Unknown policy capability/');
-        Policy::custom()->allowCapability('teleportation');
+        Policy::default()->allowCapability('teleportation');
     }
 
     // =========================================================================
@@ -120,15 +126,15 @@ class PolicyTest extends BaseTestCase
 
     public function testAnEmptyAllowlistIsNotARestriction(): void
     {
-        // The rule that makes Policy::open() the engine's old PHP mode exactly.
-        $this->assertFalse(Policy::open()->restrictsFunctions());
-        $this->assertTrue(Policy::open()->allowsFunction('anything_at_all'));
-        $this->assertTrue(Policy::sandboxed()->allowsFunction('anything_at_all'));
+        // The rule that makes Policy::unrestricted() the engine's old PHP mode exactly.
+        $this->assertFalse(Policy::unrestricted()->restrictsFunctions());
+        $this->assertTrue(Policy::unrestricted()->allowsFunction('anything_at_all'));
+        $this->assertTrue(Policy::restricted()->allowsFunction('anything_at_all'));
     }
 
     public function testANonEmptyAllowlistIsTheCompleteSet(): void
     {
-        $policy = Policy::sandboxed()->allowFunctions('strtoupper', 'count');
+        $policy = Policy::restricted()->allowFunctions('strtoupper', 'count');
 
         $this->assertTrue($policy->restrictsFunctions());
         $this->assertTrue($policy->allowsFunction('strtoupper'));
@@ -138,7 +144,7 @@ class PolicyTest extends BaseTestCase
 
     public function testFunctionNamesAreCaseInsensitiveAndNamespaceAware(): void
     {
-        $policy = Policy::sandboxed()->allowFunctions('Strtoupper');
+        $policy = Policy::restricted()->allowFunctions('Strtoupper');
 
         $this->assertTrue($policy->allowsFunction('strtoupper'));
         $this->assertTrue($policy->allowsFunction('\\strtoupper'));
@@ -147,7 +153,7 @@ class PolicyTest extends BaseTestCase
 
     public function testFiltersHaveTheirOwnAllowlist(): void
     {
-        $policy = Policy::sandboxed()->allowFilters('markdown');
+        $policy = Policy::restricted()->allowFilters('markdown');
 
         $this->assertTrue($policy->allowsFilter('markdown'));
         $this->assertFalse($policy->allowsFilter('markdown_extra'));
@@ -157,7 +163,7 @@ class PolicyTest extends BaseTestCase
 
     public function testDenyWinsOverAnAllowlistEntry(): void
     {
-        $policy = Policy::sandboxed()
+        $policy = Policy::restricted()
             ->allowFunctions('strrev')
             ->denyFunctions('strrev');
 
@@ -165,12 +171,22 @@ class PolicyTest extends BaseTestCase
         $this->assertSame(['strrev'], $policy->deniedFunctions());
     }
 
-    public function testAListedFunctionCountsAsReachingPhp(): void
+    public function testAnAllowlistDoesNotByItselfMakePhpReachable(): void
     {
-        // Otherwise allowFunctions() would be a grant that grants nothing.
-        $this->assertTrue(Policy::sandboxed()->allowFunctions('count')->allowsPhp());
-        $this->assertTrue(Policy::sandboxed()->allowFilters('markdown')->allowsPhp());
-        $this->assertFalse(Policy::sandboxed()->allowsPhp());
+        // An allowlist narrows what may be called; it does not open a door. PHP
+        // function filtering is only consulted where a construct reaches PHP in
+        // the first place, and `restricted()` has none on, so a lone allowlist
+        // stays sandboxed — the grant needs a capability to apply to.
+        $this->assertFalse(Policy::restricted()->allowFunctions('count')->allowsPhp());
+        $this->assertFalse(Policy::restricted()->allowFilters('markdown')->allowsPhp());
+        $this->assertFalse(Policy::restricted()->allowsPhp());
+
+        // Pair the allowlist with a capability and PHP is reachable, and only
+        // the listed names resolve.
+        $granted = Policy::restricted()->allowCapability('methodCalls')->allowFunctions('count');
+        $this->assertTrue($granted->allowsPhp());
+        $this->assertTrue($granted->allowsFunction('count'));
+        $this->assertFalse($granted->allowsFunction('strrev'));
     }
 
     // =========================================================================
@@ -179,7 +195,7 @@ class PolicyTest extends BaseTestCase
 
     public function testArrayFormRoundTrips(): void
     {
-        $policy = Policy::custom()
+        $policy = Policy::default()
             ->allowCapability('methodCalls')
             ->allowFunctions('strtoupper', 'count')
             ->allowFilters('markdown')
@@ -227,8 +243,8 @@ class PolicyTest extends BaseTestCase
 
     public function testDigestIgnoresInsertionOrder(): void
     {
-        $a = Policy::custom()->allowFunctions('b', 'a', 'c');
-        $b = Policy::custom()->allowFunctions('c', 'a', 'b');
+        $a = Policy::default()->allowFunctions('b', 'a', 'c');
+        $b = Policy::default()->allowFunctions('c', 'a', 'b');
 
         $this->assertSame($a->digest(), $b->digest());
     }
@@ -237,13 +253,13 @@ class PolicyTest extends BaseTestCase
     {
         // The digest is what recompiles a template, so a change it cannot see is
         // a change the cache would serve stale.
-        $base = Policy::custom()->allowFunctions('a', 'b');
+        $base = Policy::default()->allowFunctions('a', 'b');
 
-        $this->assertNotSame($base->digest(), Policy::custom()->allowFunctions('a', 'b', 'c')->digest());
-        $this->assertNotSame($base->digest(), Policy::custom()->allowFunctions('a', 'z')->digest());
-        $this->assertNotSame($base->digest(), Policy::custom()->allowCapability('methodCalls')->digest());
-        $this->assertNotSame($base->digest(), Policy::custom()->allowFunctions('a', 'b')->denyFunctions('a')->digest());
-        $this->assertNotSame($base->digest(), Policy::sandboxed()->digest());
+        $this->assertNotSame($base->digest(), Policy::default()->allowFunctions('a', 'b', 'c')->digest());
+        $this->assertNotSame($base->digest(), Policy::default()->allowFunctions('a', 'z')->digest());
+        $this->assertNotSame($base->digest(), Policy::default()->allowCapability('methodCalls')->digest());
+        $this->assertNotSame($base->digest(), Policy::default()->allowFunctions('a', 'b')->denyFunctions('a')->digest());
+        $this->assertNotSame($base->digest(), Policy::restricted()->digest());
     }
 
     public function testEveryCapabilityContributesToTheDigest(): void
@@ -252,9 +268,9 @@ class PolicyTest extends BaseTestCase
         // here rather than as a stale compiled template in production.
         $seen = [];
         foreach (Policy::CAPABILITIES as $capability) {
-            $flipped = Policy::open()->denyCapability($capability);
+            $flipped = Policy::unrestricted()->denyCapability($capability);
             $this->assertNotSame(
-                Policy::open()->digest(),
+                Policy::unrestricted()->digest(),
                 $flipped->digest(),
                 "flipping '{$capability}' must change the digest"
             );
@@ -265,7 +281,7 @@ class PolicyTest extends BaseTestCase
 
     public function testTheDigestIsShortAndOpaque(): void
     {
-        $digest = Policy::open()->digest();
+        $digest = Policy::unrestricted()->digest();
 
         $this->assertMatchesRegularExpression('/^[0-9a-f]{16}$/', $digest);
     }
@@ -274,32 +290,33 @@ class PolicyTest extends BaseTestCase
     // Coarse questions
     // =========================================================================
 
-    public function testIsOpenAndIsSandboxedAreOppositeCoarseAnswers(): void
+    public function testIsUnrestrictedAndIsSandboxedAreOppositeCoarseAnswers(): void
     {
-        $this->assertTrue(Policy::open()->isOpen());
-        $this->assertFalse(Policy::open()->isSandboxed());
+        $this->assertTrue(Policy::unrestricted()->isUnrestricted());
+        $this->assertFalse(Policy::unrestricted()->isSandboxed());
 
-        $this->assertTrue(Policy::sandboxed()->isSandboxed());
-        $this->assertFalse(Policy::sandboxed()->isOpen());
+        $this->assertTrue(Policy::restricted()->isSandboxed());
+        $this->assertFalse(Policy::restricted()->isUnrestricted());
 
-        $this->assertFalse(Policy::trusted()->isOpen());
+        $this->assertFalse(Policy::trusted()->isUnrestricted());
         $this->assertFalse(Policy::trusted()->isSandboxed());
     }
 
-    public function testAnAllowlistMakesAPolicyNotOpen(): void
+    public function testAnAllowlistOrADenialMakesAPolicyNotUnrestricted(): void
     {
-        // `isOpen()` means "the engine's old PHP mode", so a policy that lists
-        // three functions is not it — even though every capability is on.
-        $this->assertFalse(Policy::open()->allowFunctions('count')->isOpen());
-        $this->assertFalse(Policy::open()->denyFunctions('exec')->isOpen());
+        // `isUnrestricted()` means "the engine's old PHP mode exactly", so a
+        // policy that narrows anything — a function list, or a single denial —
+        // is not it, even though every capability is on.
+        $this->assertFalse(Policy::unrestricted()->allowFunctions('count')->isUnrestricted());
+        $this->assertFalse(Policy::unrestricted()->denyFunctions('exec')->isUnrestricted());
     }
 
     public function testVariableVariablesAloneDoesNotCountAsReachingPhp(): void
     {
         // It resolves against the engine's own scope, so turning it off makes a
         // template no less able to run PHP.
-        $this->assertFalse(Policy::sandboxed()->allowsPhp());
-        $this->assertFalse(Policy::custom()->denyCapability('variableVariables')->allowsPhp());
+        $this->assertFalse(Policy::restricted()->allowsPhp());
+        $this->assertFalse(Policy::default()->denyCapability('variableVariables')->allowsPhp());
     }
 
     // =========================================================================
@@ -309,12 +326,12 @@ class PolicyTest extends BaseTestCase
     public function testTheCompiledTemplateRecordsThePolicyDigest(): void
     {
         self::tpl('policy_mark', '{{ name }}');
-        $engine = TestClarityEngine::withPolicy(Policy::custom()->allowFunctions('count'));
+        $engine = TestClarityEngine::withPolicy(Policy::default()->allowFunctions('count'));
         $engine->renderPartial('policy_mark', ['name' => 'x']);
 
         $className = self::loadedClassName($engine, 'policy_mark');
         $this->assertSame(
-            Policy::custom()->allowFunctions('count')->digest(),
+            Policy::default()->allowFunctions('count')->digest(),
             $className::$policyDigest
         );
     }
@@ -324,13 +341,24 @@ class PolicyTest extends BaseTestCase
         // The cache keys on template SOURCE, so without the digest a policy change
         // would be served the class compiled under the old policy.  An allowlist
         // change is the case a `COMPILER_VERSION` bump cannot express.
+        //
+        // An allowlist only filters the PHP functions a construct may reach, so
+        // it needs a capability to apply to: `methodCalls` is the one that makes
+        // the bare `strrev()` reachable at all.
         self::tpl('policy_allow', "{{ 'abc' |> strrev }}");
 
-        $restricted = TestClarityEngine::withPolicy(Policy::sandboxed()->allowFilters('strrev'));
+        $restricted = TestClarityEngine::withPolicy(
+            Policy::restricted()->allowCapability('methodCalls')->allowFilters('strrev')
+        );
         $this->assertSame('cba', $restricted->renderPartial('policy_allow'));
 
-        // Same cache directory, same template, a policy that no longer allows it.
-        $narrower = TestClarityEngine::withPolicy(Policy::sandboxed());
+        // Same cache directory, same template, a policy that no longer allows it —
+        // the capability stays, and the allowlist names `count` instead of
+        // `strrev`. An empty allowlist would be WIDER (no restriction), which is
+        // why the narrowing has to be another explicit list.
+        $narrower = TestClarityEngine::withPolicy(
+            Policy::restricted()->allowCapability('methodCalls')->allowFilters('count')
+        );
         try {
             $narrower->renderPartial('policy_allow');
             $this->fail('the cached class must not be reused under a different policy');
@@ -339,7 +367,7 @@ class PolicyTest extends BaseTestCase
         }
 
         // And widening it again picks the new policy up too.
-        $wider = TestClarityEngine::withPolicy(Policy::open());
+        $wider = TestClarityEngine::withPolicy(Policy::unrestricted());
         $this->assertSame('cba', $wider->renderPartial('policy_allow'));
     }
 
@@ -354,7 +382,7 @@ class PolicyTest extends BaseTestCase
             }
         };
 
-        $without = TestClarityEngine::withPolicy(Policy::sandboxed());
+        $without = TestClarityEngine::withPolicy(Policy::restricted());
         try {
             $without->renderPartial('policy_cap', ['obj' => $obj]);
             $this->fail('method calls must be refused under the default policy');
@@ -362,7 +390,7 @@ class PolicyTest extends BaseTestCase
             $this->addToAssertionCount(1);
         }
 
-        $with = TestClarityEngine::withPolicy(Policy::custom()->allowCapability('methodCalls'));
+        $with = TestClarityEngine::withPolicy(Policy::default()->allowCapability('methodCalls'));
         $this->assertSame('Alice', $with->renderPartial('policy_cap', ['obj' => $obj]));
     }
 

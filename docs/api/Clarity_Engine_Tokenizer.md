@@ -55,7 +55,7 @@ Named arguments
 
 ## Public methods
 
-### setPrunedFunctions() · <small>[🗎](../../src/Engine/Tokenizer.php#L232)</small>
+### setPrunedFunctions() · <small>[🗎](../../src/Engine/Tokenizer.php#L240)</small>
 
 `public function setPrunedFunctions(array $names): void`
 
@@ -72,7 +72,7 @@ Named arguments
 
 ---
 
-### setContextInjectedFunctions() · <small>[🗎](../../src/Engine/Tokenizer.php#L238)</small>
+### setContextInjectedFunctions() · <small>[🗎](../../src/Engine/Tokenizer.php#L246)</small>
 
 `public function setContextInjectedFunctions(array $names): void`
 
@@ -89,12 +89,37 @@ Named arguments
 
 ---
 
-### __construct() · <small>[🗎](../../src/Engine/Tokenizer.php#L268)</small>
+### setFilterProbes() · <small>[🗎](../../src/Engine/Tokenizer.php#L262)</small>
+
+`public function setFilterProbes(array $names): void`
+
+Declare the names whose FILTER form (`{{ x |> name }}`) is a pass-through
+debug probe: the piped value is dumped to the debug renderer and then
+returned unchanged, so a trailing step still sees the original value.
+
+The compiler emits `$__c_sv['<service>'](...)` for these instead of
+dispatching `$__c_fn['<name>']`, which is why the probe survives a
+user-registered template function of the same name.
+
+**Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$names` | array | - | name => service key |
+
+**Return value**
+
+- Type: `void`
+
+
+---
+
+### __construct() · <small>[🗎](../../src/Engine/Tokenizer.php#L292)</small>
 
 `public function __construct(): mixed`
 
 Built from the engine's policy before any compilation.  A Tokenizer that
-was handed no policy compiles as [`Policy::sandboxed()`](Clarity_Engine_Policy.md#sandboxed), so the default
+was handed no policy compiles as [`Policy::restricted()`](Clarity_Engine_Policy.md#restricted), so the default
 is safe even for a hand-built tokenizer.
 
 **Return value**
@@ -104,7 +129,7 @@ is safe even for a hand-built tokenizer.
 
 ---
 
-### setPolicy() · <small>[🗎](../../src/Engine/Tokenizer.php#L280)</small>
+### setPolicy() · <small>[🗎](../../src/Engine/Tokenizer.php#L304)</small>
 
 `public function setPolicy(Clarity\Engine\Policy $policy): void`
 
@@ -127,7 +152,7 @@ array lookup.
 
 ---
 
-### getPolicy() · <small>[🗎](../../src/Engine/Tokenizer.php#L291)</small>
+### getPolicy() · <small>[🗎](../../src/Engine/Tokenizer.php#L315)</small>
 
 `public function getPolicy(): Clarity\Engine\Policy`
 
@@ -138,7 +163,7 @@ array lookup.
 
 ---
 
-### setLocalRoots() · <small>[🗎](../../src/Engine/Tokenizer.php#L312)</small>
+### setLocalRoots() · <small>[🗎](../../src/Engine/Tokenizer.php#L336)</small>
 
 `public function setLocalRoots(bool $enabled): void`
 
@@ -160,7 +185,7 @@ compiler that seeds no locals never emits a local read.
 
 ---
 
-### setDeniedFunctions() · <small>[🗎](../../src/Engine/Tokenizer.php#L324)</small>
+### setDeniedFunctions() · <small>[🗎](../../src/Engine/Tokenizer.php#L348)</small>
 
 `public function setDeniedFunctions(array $names): void`
 
@@ -180,7 +205,7 @@ names; empty (the default) allows every PHP function.
 
 ---
 
-### setRegistry() · <small>[🗎](../../src/Engine/Tokenizer.php#L343)</small>
+### setRegistry() · <small>[🗎](../../src/Engine/Tokenizer.php#L367)</small>
 
 `public function setRegistry(Clarity\Engine\Registry $registry): void`
 
@@ -197,7 +222,7 @@ names; empty (the default) allows every PHP function.
 
 ---
 
-### setLocalVars() · <small>[🗎](../../src/Engine/Tokenizer.php#L357)</small>
+### setLocalVars() · <small>[🗎](../../src/Engine/Tokenizer.php#L381)</small>
 
 `public function setLocalVars(array $localVars): void`
 
@@ -458,7 +483,7 @@ arguments (`identifier: phpExpr`). PHP validates names and arity at runtime.
 
 ---
 
-### varChainToPhp() · <small>[🗎](../../src/Engine/Tokenizer/VarChainTrait.php#L691)</small>
+### varChainToPhp() · <small>[🗎](../../src/Engine/Tokenizer/VarChainTrait.php#L692)</small>
 
 `public function varChainToPhp(string $chain): string`
 

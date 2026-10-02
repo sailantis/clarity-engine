@@ -182,23 +182,145 @@ class DebugDumpTest extends TestCase
     }
 
     // =========================================================================
-    // Fallback dump (setDebugMode(true) without enableDebug)
+    // setDebugMode() is the one debug switch (enableDebug() is an alias)
     // =========================================================================
 
-    public function testDumpFallbackWithoutEnableDebug(): void
+    public function testSetDebugModeInstallsTheFullDebugExperience(): void
     {
         [$engine, $viewDir] = $this->createIsolatedEngine();
-        $engine->setDebugMode(true); // low-level toggle only — no renderers
+        $engine->setDebugMode(true); // the former "low-level toggle"
 
-        $view = $this->writeTpl($viewDir, 'dump_fallback', '{{ dump(x) }}');
+        $view = $this->writeTpl($viewDir, 'dump_toggle', '{{ dump(x) }}');
         $output = $engine->renderPartial($view, ['x' => 'world']);
 
-        $this->assertStringContainsString(
-            '<pre',
-            $output,
-            'Fallback dump() should output <pre> block'
-        );
+        // The context-aware renderer, not a print_r fallback …
+        $this->assertStringContainsString('clarity-dump', $output);
         $this->assertStringContainsString('world', $output);
+        // … and the debug bus came with it.
+        $this->assertNotNull($engine->getDebugBus());
+    }
+
+    public function testSetDebugModeMasksSecretsLikeEnableDebug(): void
+    {
+        [$engine, $viewDir] = $this->createIsolatedEngine();
+        $engine->setDebugMode(true);
+
+        $view = $this->writeTpl($viewDir, 'dump_toggle_mask', '{{ dump(user) }}');
+        $output = $engine->renderPartial($view, ['user' => ['name' => 'Alice', 'password' => 's3cr3t']]);
+
+        $this->assertStringContainsString('Alice', $output);
+        $this->assertStringNotContainsString('s3cr3t', $output);
+        $this->assertStringContainsString('***', $output);
+    }
+
+    public function testSetDebugModeAcceptsDumpOptions(): void
+    {
+        [$engine, $viewDir] = $this->createIsolatedEngine();
+        $engine->setDebugMode(new DumpOptions(showPanel: true));
+
+        $this->assertNotNull($engine->getDebugPanel());
+    }
+
+    public function testFalseTearsEverythingDown(): void
+    {
+        [$engine, $viewDir] = $this->createIsolatedEngine();
+        $engine->setDebugMode(new DumpOptions(showPanel: true));
+        $engine->setDebugMode(false);
+
+        $this->assertFalse($engine->isDebugMode());
+        $this->assertNull($engine->getDebugBus());
+        $this->assertNull($engine->getDebugPanel());
+
+        $view = $this->writeTpl($viewDir, 'dump_toggle_off', 'before[{{ dump(x) }}]after');
+        $this->assertSame('before[]after', $engine->renderPartial($view, ['x' => 'secret']));
+    }
+
+    public function testTurningDebugOffRemovesTheDebugFormatters(): void
+    {
+        [$engine, $viewDir] = $this->createIsolatedEngine();
+        $engine->enableDebug();           // installs the renderer + dd handler
+        $engine->setDebugMode(false);     // …and this must take both away again
+
+        // dump() must not keep the old renderer alive …
+        $view = $this->writeTpl($viewDir, 'dump_off_dump', 'before[{{ dump(user) }}]after');
+        $this->assertSame(
+            'before[]after',
+            $engine->renderPartial($view, ['user' => ['password' => 's3cr3t']])
+        );
+
+        // … and dd() must refuse rather than still dumping.
+        $dd = $this->writeTpl($viewDir, 'dump_off_dd', '{{ dd(user) }}');
+        $this->expectExceptionMessageMatches('/dd\(\) requires debug mode/');
+        $engine->renderPartial($dd, ['user' => ['password' => 's3cr3t']]);
+    }
+
+    public function testDumpIsANoopWithoutDebugEvenThroughAReference(): void
+    {
+        [$engine, $viewDir] = $this->createIsolatedEngine(); // no debug
+
+        $view = $this->writeTpl($viewDir, 'dump_ref_prod', '{{ map(items, "dump") |> join(",") }}');
+
+        $this->assertSame('a,b', $engine->renderPartial($view, ['items' => ['a', 'b']]));
+    }
+
+    // =========================================================================
+    // dump() as a filter (pass-through probe)
+    // =========================================================================
+
+    public function testDumpFilterPassesTheValueThrough(): void
+    {
+        [$engine, $viewDir] = $this->createIsolatedEngine(new DumpOptions());
+
+        $view = $this->writeTpl($viewDir, 'dump_pipe_through', '{{ items |> dump |> length }}');
+        $output = $engine->renderPartial($view, ['items' => [1, 2, 3]]);
+
+        // The dump is emitted, and the piped value still reaches `length`.
+        $this->assertStringContainsString('clarity-dump', $output);
+        $this->assertStringEndsWith('3', $output, 'the piped value must survive the dump step');
+    }
+
+    public function testDumpFilterRendersTheDumpedValue(): void
+    {
+        [$engine, $viewDir] = $this->createIsolatedEngine(new DumpOptions());
+
+        $view = $this->writeTpl($viewDir, 'dump_pipe_render', '{{ value |> dump |> length }}');
+        $output = $engine->renderPartial($view, ['value' => ['foo' => 'bar']]);
+
+        // The dump is emitted at the pipe position, and the value flows on.
+        $this->assertStringContainsString('<details', $output);
+        $this->assertStringContainsString('foo', $output);
+        $this->assertStringEndsWith('1', $output);
+    }
+
+    public function testDumpFilterIsEliminatedInProduction(): void
+    {
+        [$engine, $viewDir] = $this->createIsolatedEngine(); // no enableDebug()
+
+        $view = $this->writeTpl(
+            $viewDir,
+            'dump_pipe_prod',
+            'before[{{ secret |> dump }}]after'
+        );
+        $output = $engine->renderPartial($view, ['secret' => 'top-secret-value']);
+
+        $this->assertSame('before[top-secret-value]after', $output);
+    }
+
+    public function testDumpFilterEmitsJsCommentInScriptContext(): void
+    {
+        [$engine, $viewDir] = $this->createIsolatedEngine(new DumpOptions());
+
+        $view = $this->writeTpl(
+            $viewDir,
+            'dump_pipe_js',
+            '<script>var n = 1;{{ x |> dump }}var m = 2;</script>'
+        );
+        $output = $engine->renderPartial($view, ['x' => ['k' => 'v']]);
+
+        $this->assertStringContainsString('DEBUG_DUMP', $output);
+        // The value itself is rendered in the JS context (json_encode), not
+        // dropped or string-converted.
+        $this->assertStringContainsString('{"k":"v"}', $output);
     }
 
     // =========================================================================
@@ -243,7 +365,7 @@ class DebugDumpTest extends TestCase
         $this->assertSame('js', $captured, 'dd() in <script> should pass "js" context');
     }
 
-    public function testDdIsAlwaysContextInjectedInProductionMode(): void
+    public function testDdUsesAHandlerInstalledWithoutDebugMode(): void
     {
         [$engine, $viewDir] = $this->createIsolatedEngine(); // production mode
 
@@ -261,6 +383,19 @@ class DebugDumpTest extends TestCase
             // expected
         }
 
-        $this->assertTrue($handlerCalled, 'dd() handler must be called even in production mode');
+        $this->assertTrue($handlerCalled, 'an installed dd handler must be used — dd() is never pruned');
+    }
+
+    public function testDdRefusesWithoutDebugMode(): void
+    {
+        [$engine, $viewDir] = $this->createIsolatedEngine(); // production mode, no handler
+
+        $view = $this->writeTpl($viewDir, 'dd_prod_bare', '{{ dd(x) }}');
+
+        // dd() is never pruned, so production must fail loudly rather than fall
+        // back to an unmasked var_dump.
+        $this->expectExceptionMessageMatches('/dd\(\) requires debug mode/');
+
+        $engine->renderPartial($view, ['x' => 1]);
     }
 }

@@ -15,12 +15,13 @@ Carries two pieces of information:
 ## Public Properties
 
 - `public readonly` string|int `$revision` · <small>[🗎](../../src/Template/TemplateSource.php)</small>
+- `public readonly` string|null `$path` · <small>[🗎](../../src/Template/TemplateSource.php)</small>
 
 ## Public methods
 
-### __construct() · <small>[🗎](../../src/Template/TemplateSource.php#L24)</small>
+### __construct() · <small>[🗎](../../src/Template/TemplateSource.php#L25)</small>
 
-`public function __construct(string|int $revision, Closure $codeLoader): mixed`
+`public function __construct(string|int $revision, Closure $codeLoader, string|null $path = null): mixed`
 
 **Parameters**
 
@@ -28,6 +29,7 @@ Carries two pieces of information:
 |---|---|---|---|
 | `$revision` | string\|int | - | Opaque revision token used for cache invalidation.<br>int  → mtime from a file-based loader.<br>string → hash('fnv1a64', $code) from a memory loader. |
 | `$codeLoader` | Closure | - | Lazy loader; called at most once per compile by the engine.<br>Must return the full raw template source string. |
+| `$path` | string\|null | `null` | Physical file this source was read from, when it was read from one; null for a loader with no file to name ([`ArrayLoader`](Clarity_Template_ArrayLoader.md), [`StringLoader`](Clarity_Template_StringLoader.md), a database loader).  The LOADER is the only layer that knows this, which is why it travels with the source rather than being re-derived: the compiler bakes it into the compiled class so an error can point an editor at the file even after the loader is gone. |
 
 **Return value**
 
@@ -36,7 +38,7 @@ Carries two pieces of information:
 
 ---
 
-### getCode() · <small>[🗎](../../src/Template/TemplateSource.php#L36)</small>
+### getCode() · <small>[🗎](../../src/Template/TemplateSource.php#L38)</small>
 
 `public function getCode(): string`
 

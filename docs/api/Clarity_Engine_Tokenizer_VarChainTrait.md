@@ -6,7 +6,7 @@ Extracted from Clarity\Engine\Tokenizer to keep each file small. See that class 
 
 ## Public methods
 
-### varChainToPhp() · <small>[🗎](../../src/Engine/Tokenizer/VarChainTrait.php#L691)</small>
+### varChainToPhp() · <small>[🗎](../../src/Engine/Tokenizer/VarChainTrait.php#L692)</small>
 
 `public function varChainToPhp(string $chain): string`
 

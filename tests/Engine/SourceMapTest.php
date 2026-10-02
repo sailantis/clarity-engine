@@ -164,4 +164,31 @@ class SourceMapTest extends BaseTestCase
         self::assertSame([], SourceMap::normalise(123));
         self::assertSame([], SourceMap::normalise(''));
     }
+
+    // =========================================================================
+    // normalisePaths(): the parallel source-path list
+    // =========================================================================
+
+    /**
+     * A class from a compiler that predates `$sourcePaths` has no such property,
+     * so the caller passes a default.  Like normalise(), this runs while another
+     * exception is being formatted and must therefore never throw.
+     */
+    public function testNormalisePathsPassesThroughAStringList(): void
+    {
+        $paths = ['/views/a.clarity.html', '', '/views/c.clarity.html'];
+
+        self::assertSame($paths, SourceMap::normalisePaths($paths));
+    }
+
+    public function testNormalisePathsDegradesForUnexpectedValues(): void
+    {
+        self::assertSame([], SourceMap::normalisePaths(null));
+        self::assertSame([], SourceMap::normalisePaths(''));
+        self::assertSame([], SourceMap::normalisePaths(123));
+        // A non-string entry becomes '' rather than corrupting the alignment:
+        // the list is index-parallel to $sourceFiles, so dropping an entry would
+        // silently shift every path after it onto the wrong file.
+        self::assertSame(['', '/views/b.clarity.html'], SourceMap::normalisePaths([null, '/views/b.clarity.html']));
+    }
 }
