@@ -134,7 +134,7 @@ class Registry
      * `Policy::denyFunctions()` is the replacement for the guardrails it used to
      * describe:
      *
-     *     $engine->setPolicy(Policy::open()->denyFunctions('exec', 'system'));
+     *     $engine->setPolicy(Policy::unrestricted()->denyFunctions('exec', 'system'));
      *
      * What remains out of reach in every policy is the engine's own render-frame
      * namespace: a template may not BIND a `__c_`-prefixed name (it would swap an
@@ -252,30 +252,35 @@ class Registry
     private array $services = [];
 
     /**
-     * Optional closure that handles dump() output when enableDebug() is called.
+     * Optional closure that handles dump() output once debug has been enabled.
      * Receives (string $ctx, mixed ...$args): string.
-     * Null = use the built-in print_r fallback.
      */
     private ?\Closure $dumpHandler = null;
 
     /**
-     * Optional closure that handles dd() output (always active, never null-checked
-     * before falling back to var_dump + exit).
+     * Optional closure that handles dd() output.
      * Receives (string $ctx, mixed ...$args): never.
      */
     private ?\Closure $ddHandler = null;
 
     /**
-     * Install context-aware dump/dd handlers produced by enableDebug().
+     * Install context-aware dump/dd handlers, produced by the engine's debug
+     * runtime.  Called internally — not part of the public engine API.
      *
-     * Called internally — not part of the public engine API.
+     * The registry does NOT ship a default for either name.  Debug output is
+     * engine state (it owns the renderers and the DumpOptions), so with no
+     * handler installed `dump()` is a no-op and `dd()` is an explicit error,
+     * rather than a second, renderer-less formatter whose output would ignore
+     * masking.  See {@see \Clarity\Debug\DebugRuntime}.
+     *
+     * Passing null restores that neutral state; it is what disabling debug does.
      */
-    public function setDumpHandler(\Closure $fn): void
+    public function setDumpHandler(?\Closure $fn): void
     {
         $this->dumpHandler = $fn;
     }
 
-    public function setDdHandler(\Closure $fn): void
+    public function setDdHandler(?\Closure $fn): void
     {
         $this->ddHandler = $fn;
     }
@@ -316,9 +321,6 @@ class Registry
                 'defaults' => ['mime' => "'application/octet-stream'"],
             ],
             'date' => [
-                // Params-led template (valueParam): slot order = params order, so
-                // `{1}` is the format and `{2}` is the date value. `date` mirrors
-                // PHP's own `date($format, $timestamp)` signature.
                 'php'        => '\date({1}, ($__c_tmp = {2}) instanceof \DateTimeInterface ? $__c_tmp->getTimestamp() : (\is_int($__c_tmp) ? $__c_tmp : (int) \strtotime((string) $__c_tmp)))',
                 'params'     => ['format', 'date'],
                 'defaults'   => ['format' => "'Y-m-d'", 'date' => '\\time()'],
@@ -337,13 +339,6 @@ class Registry
                 'php'      => '({1} ?: {2})',
                 'params'   => ['fallback'],
                 'defaults' => ['fallback' => '""'],
-            ],
-            // escape family — `e` and `esc` are aliases of `escape`.
-            'e' => [
-                'php' => '\htmlspecialchars((string){1}, \ENT_QUOTES | \ENT_SUBSTITUTE, "UTF-8")',
-            ],
-            'esc' => [
-                'php' => '\htmlspecialchars((string){1}, \ENT_QUOTES | \ENT_SUBSTITUTE, "UTF-8")',
             ],
             'escape' => [
                 'php' => '\htmlspecialchars((string){1}, \ENT_QUOTES | \ENT_SUBSTITUTE, "UTF-8")',
@@ -449,6 +444,10 @@ class Registry
 
         // `format` is an ALIAS of `sprintf`, kept for Twig parity.
         $this->inlineFilters['format'] = $this->inlineFilters['sprintf'];
+
+        // escape family — `e` and `esc` are aliases of `escape`.
+        $this->inlineFilters['esc'] = $this->inlineFilters['escape'];
+        $this->inlineFilters['e']   = $this->inlineFilters['escape'];
 
         // ── Runtime-callable filters (pipeable via $filters, dispatched via $callables) ──
 
@@ -576,37 +575,39 @@ class Registry
             );
         };
 
-        // dump(): only called in debug mode (compiler prunes it to '' in production).
-        // When enableDebug() has been called the dumpHandler does all the work;
-        // otherwise we fall back to a minimal print_r-based HTML block.
-        $this->callables['dump'] = function (string $ctx, mixed ...$args): string {
-            if ($this->dumpHandler !== null) {
-                return ($this->dumpHandler)($ctx, ...$args);
-            }
-            $out = '<pre style="background:#f7f7f9;padding:8px;border:1px solid #ddd;font-family:monospace;font-size:13px;overflow:auto">';
-            foreach ($args as $i => $v) {
-                $out .= \htmlspecialchars(
-                    "[{$i}] " . \print_r($v, true),
-                    \ENT_QUOTES | \ENT_SUBSTITUTE,
-                    'UTF-8'
-                );
-            }
-            return $out . '</pre>';
-        };
+        // ── Debug entries ────────────────────────────────────────────────────
+        // `dump` and `dd` are registered here so the names exist in the ONE
+        // call model from boot; the CONTEXT-AWARE behaviour is installed by
+        // {@see \Clarity\Debug\DebugRuntime} when the engine turns debug on.
+        //
+        // Leaving the behaviour out of the registry is deliberate: debug is
+        // engine state (it owns the renderers and the DumpOptions), so a
+        // formatter that could not see them would be a second implementation
+        // that silently ignores masking.  There is therefore ONE `dump`, both as
+        // a call `dump(x)` and as a filter step `{{ x |> dump }}` — with debug
+        // off it is a no-op, and `dd()` refuses rather than dumping raw values.
+        //
+        // Both are context-injected, so the compile-time escape context arrives
+        // as the first argument.
 
-        // dd(): always active regardless of debug mode — dump and die.
+        // `dump($x)` evaluates its argument (side effects still happen) and
+        // yields '' until the engine installs a handler.  The compiler also
+        // prunes the whole call in production, so this is the belt to that
+        // braces — it is what makes a quoted reference behave identically.
+        $this->callables['dump'] = function (string $ctx, mixed ...$args): string {
+            return $this->dumpHandler !== null ? ($this->dumpHandler)($ctx, ...$args) : '';
+        };
+        $this->filters['dump'] = true;
+
+        // `dd` is a plain call — dd() never has a filter form, since it never
+        // yields a value to chain.
         $this->callables['dd'] = function (string $ctx, mixed ...$args): never {
             if ($this->ddHandler !== null) {
                 ($this->ddHandler)($ctx, ...$args);
-                // ddHandler must exit(); this is a safety net:
             }
-            if (\PHP_SAPI !== 'cli' && \PHP_SAPI !== 'phpdbg' && !\extension_loaded('xdebug')) {
-                \header('Content-Type: text/plain; charset=utf-8');
-            }
-            foreach ($args as $v) {
-                \var_dump($v);
-            }
-            exit(1);
+            throw new \LogicException(
+                'dd() requires debug mode: call $engine->setDebugMode(true) before rendering.'
+            );
         };
 
         $this->filters['keys']   = true;
@@ -745,9 +746,13 @@ class Registry
      * True when the name has a runtime-backed filter declaration in
      * {@see $filters}, or an inline template in {@see $inlineFilters} (which is
      * pipeable by construction). A runtime callable alone is NOT enough:
-     * `context`, `include`, `dump` and `dd` are call-only builtins whose first
-     * argument is not a piped value, so they must not become filterable just by
-     * sharing the callable table.
+     * `context` and `include` are call-only builtins whose first argument is not
+     * a piped value, so they must not become filterable just by sharing the
+     * callable table.
+     *
+     * `dump` is pipeable even though its callable is not value-first: it is
+     * declared in {@see $filters}, and the compiler emits a pass-through probe
+     * for it instead of dispatching the callable with the piped value.
      */
     public function hasFilter(string $name): bool
     {
@@ -875,10 +880,14 @@ class Registry
      * need to re-check it.
      *
      * Every registration that must be dispatched at runtime is present
-     * regardless of filterability, so `context`, `include`, `dump` and `dd`
-     * (call-only) and `json` (both forms) are all included. There is no
+     * regardless of filterability, so `context`, `include` and `dd` (call-only)
+     * and `json`, `dump` (both forms) are all included. There is no
      * filtering or rebuilding step: {@see $callables} IS the table, so this
      * returns it directly and costs nothing.
+     *
+     * The engine rebinds the `dump`/`dd` entries to the debug formatter before
+     * handing the table to a template — see
+     * {@see \Clarity\ClarityEngine::runtimeCallables()}.
      *
      * @return array<string, callable>
      */

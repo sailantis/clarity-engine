@@ -219,6 +219,31 @@ trait FilterCompilerTrait
         $args     = $parsed['args'];
         $trailing = $parsed['trailing'];
 
+        // Debug probe (`dump`): its call syntax is context-injected and its
+        // filter syntax is a PASS-THROUGH. It is emitted here, before argument
+        // compilation, because the piped value is an ARGUMENT to the probe
+        // rather than its dispatch subject — `x |> dump` must yield x so that
+        // `… |> dump |> length` still measures x.
+        //
+        // In production the whole step is eliminated to the identity, exactly as
+        // the call form is pruned to '': that is what keeps a debug chain free of
+        // runtime cost (and of extra arguments' side effects).
+        if (isset($this->filterProbes[$name])) {
+            if (isset($this->prunedFunctions[$name])) {
+                return $trailing !== ''
+                    ? $phpValue . $this->convertVarsAndOps($trailing)
+                    : $phpValue;
+            }
+
+            // Auto-escaping stays ON for the probe: the dump itself is ECHOED by
+            // the probe (never part of the expression value), while the value it
+            // returns is rendered like any other output — escaped for HTML,
+            // JSON-encoded in JS.
+            $probe = "\$__c_sv['" . \addslashes($this->filterProbes[$name]) . "']";
+            $call  = $probe . '(' . $this->probeArgs($this->escapeContext, $phpValue, $args) . ')';
+            return $trailing !== '' ? $call . ', ' . $this->convertVarsAndOps($trailing) : $call;
+        }
+
         if ($name === 'raw') {
             $this->autoEscape = false;
             return $phpValue;
@@ -237,11 +262,11 @@ trait FilterCompilerTrait
             || ($this->registry !== null && ($this->registry->hasInlineFilter($name) || $this->registry->hasFilter($name)));
 
         // A name that is callable but NOT filterable (`context`, `include`,
-        // `dump`, `dd`) was registered for call syntax only; its first parameter
-        // is not a piped value. Rejecting it here turns `{{ x |> context }}`
-        // into a clear compile-time error in BOTH modes — the runtime table no
-        // longer carries these names, so without this guard the failure would
-        // surface as an opaque "call to undefined array key" mid-render.
+        // `dd`) was registered for call syntax only; its first parameter is not
+        // a piped value. Rejecting it here turns `{{ x |> context }}` into a
+        // clear compile-time error in BOTH modes — the runtime table no longer
+        // carries these names, so without this guard the failure would surface
+        // as an opaque "call to undefined array key" mid-render.
         if (
             $this->registry !== null
                 && !$isRegistered
@@ -343,6 +368,26 @@ trait FilterCompilerTrait
     {
         $safeName = "'" . \addslashes($name) . "'";
         return '$__c_fn' . '[' . $safeName . '](' . \implode(', ', $compiledArgs) . ')';
+    }
+
+    /**
+     * Compile the arguments of a debug probe call: the context, the piped value,
+     * then any extra values the writer asked to dump (`{{ x |> dump(y) }}`).
+     *
+     * The piped value is a real value argument here rather than a dispatch
+     * subject, which is what lets the probe return it unchanged.
+     */
+    private function probeArgs(string $context, string $phpValue, string $args): string
+    {
+        $compiled = ["'" . \addslashes($context) . "'", $phpValue];
+
+        if ($args !== '') {
+            foreach ($this->compileArgList($this->splitRespectingStrings($args, ',')) as $extra) {
+                $compiled[] = $extra;
+            }
+        }
+
+        return \implode(', ', $compiled);
     }
 
     /**

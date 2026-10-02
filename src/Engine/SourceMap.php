@@ -147,4 +147,30 @@ final class SourceMap
     {
         return "'" . \addcslashes(self::encode($map), "\\'") . "'";
     }
+
+    /**
+     * Normalise a compiled class's `$sourcePaths` property to `list<string>`.
+     *
+     * The compiler emits it as a plain nested array (a path cannot use the
+     * packed integer form), so this only has to tolerate a class from a compiler
+     * that predates the property — hence "empty list" rather than an error, for
+     * the same reason {@see normalise()} degrades: it runs on the error path,
+     * where a TypeError would replace the real exception.
+     *
+     * @param mixed $paths Value of a compiled class's $sourcePaths property.
+     * @return list<string>
+     */
+    public static function normalisePaths(mixed $paths): array
+    {
+        if (!\is_array($paths)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($paths as $path) {
+            $out[] = \is_string($path) ? $path : '';
+        }
+
+        return $out;
+    }
 }

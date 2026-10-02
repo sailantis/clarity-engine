@@ -3,6 +3,7 @@ namespace Clarity\Tests\Engine;
 
 use Clarity\ClarityException;
 use Clarity\Tests\BaseTestCase;
+use Clarity\Tests\TestClarityEngine;
 use Clarity\Tests\TestEnvironment;
 
 class SecurityErrorMappingTest extends BaseTestCase
@@ -23,7 +24,7 @@ class SecurityErrorMappingTest extends BaseTestCase
         try {
             self::render('warn_undef');
         } catch (ClarityException $e) {
-            $this->assertStringContainsString('warn_undef', $e->getMessage());
+            $this->assertStringContainsString('missing', $e->getMessage());
             throw $e;
         }
     }
@@ -80,7 +81,7 @@ class SecurityErrorMappingTest extends BaseTestCase
             $this->fail('Expected ClarityException was not thrown');
         } catch (ClarityException $e) {
             $this->assertStringContainsString('authenticated1', $e->getMessage());
-            $this->assertSame('pages/ticket', $e->templateFile);
+            $this->assertSame('pages/ticket', $e->templateName);
             $this->assertSame(4, $e->templateLine);
         }
     }
@@ -166,7 +167,7 @@ class SecurityErrorMappingTest extends BaseTestCase
             $this->fail('Expected ClarityException was not thrown');
         } catch (ClarityException $e) {
             $this->assertInstanceOf(ClarityException::class, $e);
-            $this->assertStringContainsString('syntax_err', $e->templateFile);
+            $this->assertStringContainsString('syntax_err', $e->templateName);
             $this->assertStringContainsString('syntax', strtolower($e->getMessage()));
             $this->assertInstanceOf(\ParseError::class, $e->getPrevious());
             $this->assertSame(2, $e->templateLine);
@@ -193,7 +194,7 @@ class SecurityErrorMappingTest extends BaseTestCase
             self::render('filter_throws', ['value' => 'x']);
             $this->fail('Expected ClarityException was not thrown');
         } catch (ClarityException $e) {
-            $this->assertSame('filter_throws', $e->templateFile);
+            $this->assertSame('filter_throws', $e->templateName);
             $this->assertSame(2, $e->templateLine);
             $this->assertInstanceOf(\LogicException::class, $e->getPrevious());
         }
@@ -201,7 +202,7 @@ class SecurityErrorMappingTest extends BaseTestCase
 
     public function testTypeErrorOnFilterArgumentIsMappedToTemplateLine(): void
     {
-        // A typed filter parameter rejects the piped value → TypeError.  This is
+        // A typed filter parameter rejects the piped value â†’ TypeError.  This is
         // an Error (not an E_* diagnostic), so it can only be mapped by catching
         // it around the render call.
         TestEnvironment::engine()->addFilter('wants_string', static fn(string $v): string => $v);
@@ -212,7 +213,7 @@ class SecurityErrorMappingTest extends BaseTestCase
             self::render('filter_type_error', ['value' => ['not', 'a', 'string']]);
             $this->fail('Expected ClarityException was not thrown');
         } catch (ClarityException $e) {
-            $this->assertSame('filter_type_error', $e->templateFile);
+            $this->assertSame('filter_type_error', $e->templateName);
             $this->assertSame(3, $e->templateLine);
             $this->assertInstanceOf(\TypeError::class, $e->getPrevious());
         }
@@ -232,10 +233,88 @@ class SecurityErrorMappingTest extends BaseTestCase
             self::render('inline_throws', ['value' => 'x']);
             $this->fail('Expected ClarityException was not thrown');
         } catch (ClarityException $e) {
-            $this->assertSame('inline_throws', $e->templateFile);
+            $this->assertSame('inline_throws', $e->templateName);
             $this->assertSame(2, $e->templateLine);
             $this->assertInstanceOf(\DomainException::class, $e->getPrevious());
         }
+    }
+
+    /**
+     * A PHP diagnostic (the most common template error) is mapped by the render
+     * error handler, which reads the compiled class's metadata directly.  Both
+     * the file and its physical path must come out of that — the path travels
+     * with the source from the loader, so it is in the class even though the
+     * loader is not consulted here.
+     */
+    public function testMappedDiagnosticCarriesThePhysicalTemplatePath(): void
+    {
+        self::tpl('diag_path', "static\n{% if context.authenticated %}\nvisible\n{% endif %}");
+
+        try {
+            self::render('diag_path', ['context' => []]);
+            $this->fail('Expected ClarityException was not thrown');
+        } catch (ClarityException $e) {
+            $this->assertSame('diag_path', $e->templateName);
+            $this->assertSame(2, $e->templateLine);
+            $this->assertSame(
+                str_replace('\\', '/', self::normalizedSourcePath('diag_path')),
+                str_replace('\\', '/', $e->templatePath)
+            );
+            $this->assertSame($e->templatePath, $e->getFile());
+        }
+    }
+
+    /**
+     * An error inside an INCLUDED template must carry the included file's own
+     * path, not the host's.  This is what the parallel `$sourcePaths` list on the
+     * compiled class buys: the source map names the included template, and the
+     * path is looked up at that same index.
+     */
+    public function testMappedDiagnosticInAnIncludedTemplateUsesTheIncludedPath(): void
+    {
+        self::tpl('inc_path_host', "host\n{% include \"inc_path_part\" %}\nhost end");
+        self::tpl('inc_path_part', "part one\n{% if context.authenticated %}\nvisible\n{% endif %}");
+
+        try {
+            self::render('inc_path_host', ['context' => []]);
+            $this->fail('Expected ClarityException was not thrown');
+        } catch (ClarityException $e) {
+            $this->assertSame('inc_path_part', $e->templateName);
+            $this->assertSame(2, $e->templateLine);
+            $this->assertStringEndsWith(
+                'inc_path_part.clarity.html',
+                str_replace('\\', '/', $e->templatePath)
+            );
+            $this->assertStringNotContainsString('host', $e->templatePath);
+        }
+    }
+
+    /**
+     * The path is baked into the compiled class, so it survives even when the
+     * loader that supplied it has been swapped out — the whole reason it is
+     * carried with the source rather than re-resolved at error time.
+     */
+    public function testCompiledClassCarriesSourcePathsIncludingForNonFileLoaders(): void
+    {
+        $engine = new TestClarityEngine([
+            'viewPath'  => TestEnvironment::viewDir(),
+            'cachePath' => TestEnvironment::cacheDir(),
+            'extension' => 'clarity.html',
+            'policy'    => \Clarity\Engine\Policy::restricted(),
+        ]);
+        $engine->setLoader(new \Clarity\Template\ArrayLoader([
+            'array_paths' => '{{ x }}',
+        ]));
+        $this->assertSame('one', $engine->renderPartial('array_paths', ['x' => 'one']));
+
+        $cache = new \ReflectionProperty($engine, 'cache');
+        $cache->setAccessible(true);
+        $className = $cache->getValue($engine)->getLoadedClassName('array_paths');
+
+        // A non-file loader has no path to report, so the parallel entry is ''
+        // rather than absent — the list stays index-aligned with sourceFiles.
+        $this->assertSame(['array_paths'], $className::$sourceFiles);
+        $this->assertSame([''], $className::$sourcePaths);
     }
 
     public function testApplicationExceptionOutsideTemplateIsNotRewritten(): void

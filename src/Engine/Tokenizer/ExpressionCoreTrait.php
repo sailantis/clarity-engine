@@ -435,14 +435,31 @@ trait ExpressionCoreTrait
                 // (e.g. `$fn()`), not a method call â€” method calls are consumed
                 // into their property segment.  Root invocation stays rejected:
                 // a variable-driven callable is the function-level equivalent of
-                // variable-variable expansion.
+                // variable-variable expansion.  That rule is INDEPENDENT of the
+                // policy, so its message must not name a capability that would not
+                // help.
                 $j = $i;
                 while ($j < $len && \ctype_space($expr[$j])) {
                     $j++;
                 }
                 if ($j < $len && $expr[$j] === '(') {
                     $context = \substr($expr, \max(0, $sigilStart - 10), 70);
-                    throw new ClarityException("Method calls are not allowed in expressions: '\${$token}(...)' in context '{$context}'");
+
+                    // A chain that reached a member (`$obj->m`) is a method call the
+                    // capability can grant, so that message names the grant. Only a
+                    // root-only chain (`$fn`) is the callable-variable case, which no
+                    // grant would fix — the two are told apart by segment count.
+                    if (\count($segments) > 1) {
+                        throw new ClarityException(
+                            "Method calls are not allowed by this policy: '\${$token}(...)' in context '{$context}'. "
+                                . "Grant the 'methodCalls' capability to allow them."
+                        );
+                    }
+
+                    throw new ClarityException(
+                        "A call on the root value is not allowed: '\${$token}(...)' in context '{$context}'. "
+                            . "A variable-driven callable is not a method call; call a property instead ('\$obj->m(...)')."
+                    );
                 }
 
                 if (isset($this->localVars[$segments[0]['value']])) {
@@ -680,7 +697,12 @@ trait ExpressionCoreTrait
                 }
 
                 // Identifier followed by a chain continuation â€” full chain parsing required.
-                $parsed = $this->parseVarChainAt($expr, $start, false, $ternarySeen);
+                // `allowArrow` stays FALSE (a bare `a->b` is rejected below), but the
+                // call flag is the policy's, exactly as on the `$`-sigil path: the
+                // capability, not the sigil, is what decides whether a method may be
+                // called.  A bare `obj.m()` therefore compiles to the same PHP as
+                // `$obj.m()`.
+                $parsed = $this->parseVarChainAt($expr, $start, false, $ternarySeen, $this->allows('methodCalls'));
                 if ($parsed === null) {
                     $out .= $ch;
                     $i++;
@@ -710,14 +732,29 @@ trait ExpressionCoreTrait
                 $i     = $parsed['end'];
                 $token = \substr($expr, $start, $i - $start);
 
-                // Dot/bracket chains cannot be function calls â€” always forbidden.
+                // A call left over here follows the whole chain, so it is a call on a
+                // KEY or INDEX read (`a:b(...)`, `a[b](...)`) â€” a call may attach only
+                // to a property or dynamic-property segment, which the parser consumes
+                // into the segment itself.  When the policy does not grant method
+                // calls, that is the reason to report instead.
                 $j = $i;
                 while ($j < $len && \ctype_space($expr[$j])) {
                     $j++;
                 }
                 if ($j < $len && $expr[$j] === '(') {
                     $context = \substr($expr, \max(0, $start - 10), \min(60, $len - $start + 10));
-                    throw new ClarityException("Method calls are not allowed in expressions: '{$token}(...)' in context '{$context}'");
+
+                    if (!$this->allows('methodCalls')) {
+                        throw new ClarityException(
+                            "Method calls are not allowed by this policy: '{$token}(...)' in context '{$context}'. "
+                                . "Grant the 'methodCalls' capability to allow them."
+                        );
+                    }
+
+                    throw new ClarityException(
+                        "A call must follow a property name, not a key or index read: '{$token}(...)' in context '{$context}'. "
+                            . "Use a property chain ('a.b(...)') instead of a key ('a:b') or index ('a[b]') read."
+                    );
                 }
                 // Check if the chain root is a locally-bound variable (loop var)
                 if (isset($this->localVars[$segments[0]['value']])) {

@@ -14,10 +14,10 @@ use Clarity\Tests\TestEnvironment;
  * byte-identical; these tests pin that the switch is OFF by default and that
  * turning it off only ever ADDS capability.
  *
- * The compiled class records which mode built it ($sandboxCompiled), so the
- * loader recompiles whenever the setting changes. That is load-bearing: without
- * it a template compiled sandboxed would be served in open mode (and vice
- * versa), because the cache keys on template source only.
+ * The compiled class records the policy digest it was built under
+ * ($policyDigest), so the loader recompiles whenever the setting changes. That
+ * is load-bearing: without it a template compiled sandboxed would be served in
+ * open mode (and vice versa), because the cache keys on template source only.
  */
 class OpenModeTest extends BaseTestCase
 {
@@ -28,7 +28,7 @@ class OpenModeTest extends BaseTestCase
             'viewPath'  => TestEnvironment::viewDir(),
             'cachePath' => TestEnvironment::cacheDir(),
             'extension' => 'clarity.html',
-            'policy'    => Policy::open(),
+            'policy'    => Policy::unrestricted(),
         ], $config));
     }
 
@@ -149,7 +149,7 @@ class OpenModeTest extends BaseTestCase
 
         $this->expectException(ClarityException::class);
         $this->expectExceptionMessageMatches('/not allowed by this policy/');
-        self::openEngine(['policy' => Policy::open()->denyFunctions('strrev')])
+        self::openEngine(['policy' => Policy::unrestricted()->denyFunctions('strrev')])
             ->renderPartial('om_deny_filter');
     }
 
@@ -165,7 +165,7 @@ class OpenModeTest extends BaseTestCase
 
         $this->expectException(ClarityException::class);
         $this->expectExceptionMessageMatches('/not allowed by this policy/');
-        self::openEngine(['policy' => Policy::open()->denyFunctions('strrev')])
+        self::openEngine(['policy' => Policy::unrestricted()->denyFunctions('strrev')])
             ->renderPartial('om_deny_case');
     }
 
@@ -260,7 +260,7 @@ class OpenModeTest extends BaseTestCase
         // The engine grants full PHP; an application may still add its own
         // guardrails on top of that decision.
         $engine = self::openEngine([
-            'policy' => Policy::open()->denyFunctions('extract', 'get_defined_vars', 'compact', 'call_user_func'),
+            'policy' => Policy::unrestricted()->denyFunctions('extract', 'get_defined_vars', 'compact', 'call_user_func'),
         ]);
 
         foreach (['extract', 'get_defined_vars', 'compact', 'call_user_func'] as $fn) {
@@ -336,12 +336,106 @@ class OpenModeTest extends BaseTestCase
         self::openEngine()->renderPartial('om_mc_nosigil', ['obj' => self::makeObject()]);
     }
 
+    /**
+     * The capability, not the sigil, is what gates a call — so a bare `obj.m()`
+     * is a method call like any other once `methodCalls` is granted, and emits
+     * the same PHP as `$obj.m()`. A template may therefore stay in dot syntax
+     * after the capability is turned on, with nothing to rewrite.
+     */
+    public function testBareDotMethodCallIsAllowedInOpenMode(): void
+    {
+        self::tpl('om_mc_bare_dot', '{{ obj.name() }}');
+        $this->assertSame('Alice', self::openEngine()->renderPartial('om_mc_bare_dot', ['obj' => self::makeObject()]));
+    }
+
+    public function testBareDotMethodCallTakesArguments(): void
+    {
+        self::tpl('om_mc_bare_dot_args', "{{ obj.greet('Bob') }}");
+        $this->assertSame('Hi Bob', self::openEngine()->renderPartial('om_mc_bare_dot_args', ['obj' => self::makeObject()]));
+    }
+
+    public function testBareDotMethodCallChains(): void
+    {
+        self::tpl('om_mc_bare_dot_chain', '{{ obj.self().name() }}');
+        $this->assertSame('Alice', self::openEngine()->renderPartial('om_mc_bare_dot_chain', ['obj' => self::makeObject()]));
+    }
+
+    public function testBareBraceDynamicMethodCallIsAllowedInOpenMode(): void
+    {
+        self::tpl('om_mc_bare_brace', '{{ obj{m}() }}');
+        $this->assertSame(
+            'Alice',
+            self::openEngine()->renderPartial('om_mc_bare_brace', ['obj' => self::makeObject(), 'm' => 'name'])
+        );
+    }
+
+    /**
+     * The two spellings are interchangeable: they are pinned to the same emitted
+     * expression so a future change cannot make one quietly diverge.
+     */
+    public function testBareAndSigilSpellingsEmitTheSamePhp(): void
+    {
+        self::tpl('om_mc_same_bare', '{{ obj.name() }}');
+        self::tpl('om_mc_same_sigil', '{{ $obj.name() }}');
+
+        $engine = self::openEngine();
+        $engine->renderPartial('om_mc_same_bare', ['obj' => self::makeObject()]);
+        $engine->renderPartial('om_mc_same_sigil', ['obj' => self::makeObject()]);
+
+        $bare  = self::emittedExpression($this->compiledSource('om_mc_same_bare'));
+        $sigil = self::emittedExpression($this->compiledSource('om_mc_same_sigil'));
+
+        $this->assertSame($sigil, $bare);
+        $this->assertStringContainsString('->name()', $bare);
+    }
+
+    /**
+     * A call on a KEY read can never be a method call, whatever the policy, so it
+     * reports its own reason instead of naming a capability that would not help.
+     */
+    public function testBareKeyReadCallIsRejectedWithItsOwnReason(): void
+    {
+        self::tpl('om_mc_key', '{{ arr:greet() }}');
+
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/must follow a property name/');
+        self::openEngine()->renderPartial('om_mc_key', ['arr' => ['greet' => 'x']]);
+    }
+
     public function testRootInvocationRejectedInOpenMode(): void
     {
         self::tpl('om_mc_root', '{{ $fn() }}');
 
         $this->expectException(ClarityException::class);
         self::openEngine()->renderPartial('om_mc_root', ['fn' => static fn(): string => 'x']);
+    }
+
+    /**
+     * Root invocation is refused by a rule of its own, not by the capability —
+     * so no grant would fix it and the message must not claim one would.
+     */
+    public function testRootInvocationMessageDoesNotNameACapability(): void
+    {
+        self::tpl('om_mc_root_msg', '{{ $fn() }}');
+
+        try {
+            self::openEngine()->renderPartial('om_mc_root_msg', ['fn' => static fn(): string => 'x']);
+            $this->fail('the root call must be rejected');
+        } catch (ClarityException $e) {
+            $this->assertStringContainsString('root value', $e->getMessage());
+            $this->assertStringNotContainsString('methodCalls', $e->getMessage());
+        }
+    }
+
+    /** The emitted `echo` expression of a compiled template, normalized. */
+    private static function emittedExpression(string $source): string
+    {
+        foreach (\explode("\n", $source) as $line) {
+            if (\str_contains($line, 'echo \\htmlspecialchars')) {
+                return \preg_replace('/\s+/', ' ', \trim($line));
+            }
+        }
+        return '';
     }
 
     private static function makeObject(): object
@@ -739,7 +833,10 @@ class OpenModeTest extends BaseTestCase
         $engine = self::sandboxedEngine();
         $engine->renderPartial('om_mark_sandbox', ['name' => 'x']);
 
-        $this->assertTrue(self::loadedClassFlag($engine, 'om_mark_sandbox', 'sandboxCompiled'));
+        $this->assertSame(
+            Policy::restricted()->digest(),
+            self::loadedPolicyDigest($engine, 'om_mark_sandbox')
+        );
     }
 
     public function testCompiledMarkerRecordsOpenMode(): void
@@ -748,13 +845,16 @@ class OpenModeTest extends BaseTestCase
         $engine = self::openEngine();
         $engine->renderPartial('om_mark_open', ['name' => 'x']);
 
-        $this->assertFalse(self::loadedClassFlag($engine, 'om_mark_open', 'sandboxCompiled'));
+        $this->assertSame(
+            Policy::unrestricted()->digest(),
+            self::loadedPolicyDigest($engine, 'om_mark_open')
+        );
     }
 
     /**
-     * Read a static flag from the compiled class the engine loaded for $view.
+     * Read the policy digest from the compiled class the engine loaded for $view.
      */
-    private static function loadedClassFlag(TestClarityEngine $engine, string $view, string $flag): bool
+    private static function loadedPolicyDigest(TestClarityEngine $engine, string $view): string
     {
         $prop = new \ReflectionProperty($engine, 'cache');
         $prop->setAccessible(true);
@@ -765,6 +865,6 @@ class OpenModeTest extends BaseTestCase
 
         self::assertIsString($className, 'the template must be compiled and loaded');
 
-        return (bool) $className::$$flag;
+        return $className::$policyDigest;
     }
 }

@@ -66,9 +66,11 @@ trait VarChainTrait
      * @param bool $ternaryOpen  Whether a `?` is waiting for its branch
      *                              separator in the enclosing expression.
      * @param bool $allowCall    Whether a property read may be followed by a
-     *                              method-call argument list (`$obj->m(...)`).
-     *                              True only in open mode, and only on the
-     *                              `$`-sigil path.
+     *                              method-call argument list (`m(...)`).  Driven
+     *                              purely by the `methodCalls` capability, so it
+     *                              holds on the bare path as well as the sigil
+     *                              one — the capability, not the sigil, decides
+     *                              whether a method may be called.
      * @return array{end:int, segments:array<int,array{type:string,value:string,optional:bool,call?:string}>}|null
      */
     private function parseVarChainAt(
@@ -473,7 +475,7 @@ trait VarChainTrait
             throw new ClarityException("Invalid identifier in var chain: {$value}");
         }
 
-        // Method call attached to the property read (open mode only).
+        // Method call attached to the property read (when `methodCalls` is granted).
         $call = isset($seg['call'])
             ? '(' . $this->compileMethodArgs((string) $seg['call']) . ')'
             : '';
@@ -503,9 +505,8 @@ trait VarChainTrait
     /**
      * Compile a method-call argument list to PHP.
      *
-     * Only reachable in open mode: method calls require both the `$` sigil and
-     * the sandbox disabled.  Arguments are full Clarity expressions and named
-     * arguments become PHP named arguments.
+     * Only reachable when the `methodCalls` capability is granted.  Arguments are
+     * full Clarity expressions and named arguments become PHP named arguments.
      */
     private function compileMethodArgs(string $argsRaw): string
     {

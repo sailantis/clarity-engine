@@ -13,6 +13,11 @@ namespace Clarity\Engine;
  * @property-read array    $dependencies Associative array of [logicalName => revision (int|string)]
  *                                       for every template (entry + extends + includes) read
  *                                       during compilation. Used for cache invalidation.
+ * @property-read string[] $sourcePaths  Physical path for each entry in $sourceFiles, parallel
+ *                                       to it (same index); `''` where the loader that served
+ *                                       that template had no file to name. Baked into the
+ *                                       compiled class, so a resolved path survives the
+ *                                       compile that discovered it.
  * @property-read int      $renderBodyLine Line at which the compiled render body starts
  *                                       (1-based, relative to the class code without the
  *                                       leading "<?php"); 0 when it could not be determined.
@@ -26,6 +31,7 @@ class CompiledTemplate
      * @param array<string,int|string> $dependencies [logicalName => revision] for cache invalidation.
      * @param string[]           $sourceFiles  Unique logical template names (parallel to $sourceMap file indices).
      * @param int                $renderBodyLine First line of the compiled render body.
+     * @param string[]           $sourcePaths  Physical path per $sourceFiles entry, or [] when none.
      */
     public function __construct(
         public readonly string $className,
@@ -34,5 +40,6 @@ class CompiledTemplate
         public readonly array $dependencies,
         public readonly array $sourceFiles = [],
         public readonly int $renderBodyLine = 0,
+        public readonly array $sourcePaths = [],
     ) {}
 }

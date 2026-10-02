@@ -60,10 +60,27 @@ trait CallableTrait
                 // dispatched through the ONE runtime table, `$__c_fn`. Whether a
                 // name may be used as a filter at all is decided HERE, at compile
                 // time, so the runtime table stays a plain callable map.
+                //
+                // `dump` has no callable form that can serve as a filter: `map`
+                // calls the reference as a unary FUNCTION and uses its return
+                // value, whereas the filter form `{{ x |> dump }}` must EMIT the
+                // dump and still yield the value (a callable cannot do both).  It
+                // is therefore wrapped in a unary closure over the pass-through
+                // probe service, and — like every other dump form — that closure
+                // is the identity in production, so a debug reference cannot
+                // print into production output.
                 $isRegisteredFilter = $this->registry !== null
                     && ($this->registry->hasFilter($refName) || $this->registry->hasInlineFilter($refName));
 
                 if ($isRegisteredFilter) {
+                    if (isset($this->filterProbes[$refName])) {
+                        if (isset($this->prunedFunctions[$refName])) {
+                            return 'static fn(mixed $__c_value): mixed => $__c_value';
+                        }
+                        return "static fn(mixed \$__c_value): mixed => "
+                            . "\$__c_sv['" . \addslashes($this->filterProbes[$refName]) . "']"
+                            . "('" . \addslashes($this->escapeContext) . "', \$__c_value)";
+                    }
                     return "\$__c_fn['" . \addslashes($refName) . "']";
                 }
 

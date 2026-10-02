@@ -102,7 +102,7 @@ use Clarity\Engine\Policy;
  * What a template may reach is decided by a {@see \Clarity\Engine\Policy}: a set
  * of capabilities plus two allowlists, resolved entirely at compile time.  An
  * application that needs one PHP function grants it without giving up the
- * sandbox (see Policy::custom()); granting the capabilities that reach PHP at
+ * sandbox (see Policy::default()); granting the capabilities that reach PHP at
  * all (rawPhp, phpVariables, methodCalls) is equivalent to executing arbitrary
  * PHP and is intended for templates written by trusted authors only.
  *
@@ -131,8 +131,8 @@ class ClarityEngine
      * - `cachePath`: path to compiled template cache (applied after init)
      * - `debug`: bool to enable debug mode
      * - `policy`: what templates may reach — a {@see \Clarity\Engine\Policy} or
-     *   the array form it accepts. Sandboxed by default; `Policy::open()` is the
-     *   full-power PHP mode.
+     *   the array form it accepts. Sandboxed by default; `Policy::unrestricted()`
+     *   is the full-power PHP mode.
      *
      * @param array $config Configuration options for the engine.
      */
@@ -176,7 +176,7 @@ class ClarityEngine
             $this->setCachePath($config['cachePath']);
         }
         if (!empty($config['debug'])) {
-            $this->enableDebug();
+            $this->setDebugMode($config['debug']);
         }
     }
 

@@ -60,43 +60,26 @@ addFilter(), or grant a capability to let a PHP function of the same name be use
 
 **Cause:** Typo in filter name, or the filter was never registered.
 
-Raised **while compiling**, so it surfaces at the deploy that introduced the
-filter rather than on the first request that renders it.
+The error occurs during compilation, not rendering.
 
-**Fix:** register the filter with `addFilter()`. If the name really is a PHP
-function you want templates to use, grant it — either by naming it in the
-allowlist, or by granting a capability that reaches PHP:
+**Fix:** Register a custom filter with `addFilter()`. To use a PHP function by
+name, enable a PHP-reaching capability and allowlist the function:
 
 ```php
-$engine->setPolicy(Policy::custom()->allowFunctions('strtoupper', 'count'));
+$engine->setPolicy(Policy::default()
+    ->allowCapability('methodCalls')
+    ->allowFunctions('strtoupper', 'count'));
 ```
 
-A non-empty `functions` allowlist is the complete set of names that may be
-called, so it needs no capability alongside it. See the
-[policy reference](09-policy-api.md).
+See the [policy reference](09-policy-api.md) for details.
 
-**Solutions:**
-
-1. **Check filter name spelling:**
+Also check the filter name and available built-ins:
 
 ```twig
-{# Wrong #}
-{{ value |> uppercase }}
-{# Correct #}
 {{ value |> upper }}
 ```
 
-2. **Register custom filter:**
-
-```php
-$engine->addFilter('customFilter', function($value) {
-    return strtoupper($value);
-});
-```
-
-3. **Check available filters:**
-
-See [Filters Reference](02-filters-and-functions.md#built-in-filters) for complete list.
+See [Built-in Filters](02-filters-and-functions.md#built-in-filters).
 
 ---
 
@@ -593,6 +576,25 @@ ini_set('log_errors', '1');
 error_log('Template error: ' . $exception->getMessage());
 ```
 
+### Turn On Debug Mode
+
+`setDebugMode(true)` turns on the full debug experience — context-aware, masked
+`dump()`, the `dump` filter, runtime range-loop safety checks and a render event
+bus:
+
+```php
+$engine->setDebugMode(true);                    // dev
+$engine->isDebugMode();                         // bool
+
+// …or with options (depth, masking, HTML panel)
+use Clarity\Debug\DumpOptions;
+$engine->setDebugMode(new DumpOptions(showPanel: true, maxDepth: 4));
+```
+
+`dump()` displays a masked, context-aware tree only when debug mode is enabled.
+Otherwise it outputs nothing and is safe to leave in templates — see
+[Debug Mode](04-advanced-topics.md#debug-mode).
+
 ### Dump Template Variables
 
 ```twig
@@ -604,6 +606,8 @@ Or specific variable:
 ```twig
 <pre>{{ dump(user) }}</pre>
 ```
+
+Unlike `{{ context() |> json }}`, `dump()` does not expose data in production.
 
 ### Check Compiled Output
 
@@ -644,7 +648,7 @@ try {
 } catch (ClarityException $e) {
     echo "<pre>";
     echo "Error: " . $e->getMessage() . "\n";
-    echo "Template: " . $e->templateFile . "\n";
+    echo "Template: " . $e->templateName . "\n";
     echo "Line: " . $e->templateLine . "\n";
     echo "\nStack Trace:\n" . $e->getTraceAsString();
     echo "</pre>";

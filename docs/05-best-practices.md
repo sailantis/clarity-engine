@@ -154,10 +154,9 @@ $template = $engine->render($_GET['template'] ?? 'home', $data);
 // '../app/config' and '/etc/passwd.clarity.html' are both refused
 ```
 
-That guard is not a substitute for validating input: a name that resolves
-_inside_ the view path can still be one the visitor was never meant to reach, and
-a refused name is a failed request rather than a sensible page. Allowlist it as
-well:
+Path containment prevents traversal, but an in-root template may still be one a
+visitor should not access. Validate the name against an application allowlist to
+avoid unintended templates and failed requests:
 
 **Recommended:**
 
@@ -172,10 +171,8 @@ if (!in_array($template, $allowedTemplates, true)) {
 $engine->render($template, $data);
 ```
 
-> **Custom loaders must apply the same rule.** If you implement
-> `TemplateLoader` yourself, the base-path containment described in
-> [`FileLoader`](../src/Template/FileLoader.php) is yours to enforce — the
-> compiler's character checks are a second layer, not the guarantee.
+> **Custom loaders must enforce path containment.** Compiler checks are only a
+> second layer; see [`FileLoader`](../src/Template/FileLoader.php).
 
 ### Never Trust User Data
 
@@ -446,7 +443,8 @@ public function testProductCard(): void
 
 ### Dump Variables
 
-Use the `dump()` function for debugging:
+Use the `dump()` function for debugging (renders a masked, context-aware tree
+while debug mode is on; outputs nothing in production):
 
 ```twig
 <pre>{{ dump(user) }}</pre>
@@ -471,12 +469,16 @@ Use the `dump()` function for debugging:
 
 ### Inspect Filter Output
 
-Chain `dump` in filter pipeline:
+Chain `dump` in a filter pipeline — it dumps the value and passes it through
+unchanged, so the following steps still see it (and the whole step disappears in
+production):
 
 ```twig
-{# See intermediate result #}
+{# See the intermediate result without changing it #}
 {{ items |> filter(i => i:active) |> dump |> slice(0, 5) }}
 ```
+
+`map(items, "dump")` works too, when you want a dump per element.
 
 ### Enable Error Display (Development)
 

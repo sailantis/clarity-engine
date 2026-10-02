@@ -66,10 +66,10 @@ final class HtmlDumpRenderer implements DumpRenderer
     private function renderArray(array $arr, DumpOptions $opts, int $depth): string
     {
         $isAssoc = \array_keys($arr) !== \range(0, \count($arr) - 1);
-        $count = \count($arr);
-        $open = $isAssoc ? '{' : '[';
-        $close = $isAssoc ? '}' : ']';
-        $label = $isAssoc ? "object ({$count})" : "array ({$count})";
+        $count   = \count($arr);
+        $open    = $isAssoc ? '{' : '[';
+        $close   = $isAssoc ? '}' : ']';
+        $label   = $isAssoc ? "object ({$count})" : "array ({$count})";
 
         if ($count === 0) {
             return '<span class="cd-empty">' . $open . $close . '</span>';
@@ -97,11 +97,13 @@ final class HtmlDumpRenderer implements DumpRenderer
             $shown++;
         }
 
-        $openAttr = $depth === 0 ? ' open' : '';
-        return '<details' . $openAttr . '>'
-            . '<summary class="cd-label">' . $label . '</summary>'
-            . '<ul>' . $items . '</ul>'
-            . '</details>';
+        $openAttr = $depth === 0 ? 'open' : '';
+        return <<<HTML
+            <details {$openAttr}>
+                <summary class="cd-label">{$label}</summary>
+                <ul>{$items}</ul>
+            </details>
+        HTML;
     }
 
     private function isMasked(string $key, DumpOptions $opts): bool
@@ -117,27 +119,27 @@ final class HtmlDumpRenderer implements DumpRenderer
 
     private static function css(): string
     {
-        return '<style>'
-            . '.clarity-dump{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;'
-            . 'color:#1e1e2e;background:#f8f8fc;border:1px solid #d0d0e0;border-radius:6px;'
-            . 'padding:10px 14px;margin:8px 0;max-width:100%;overflow:auto}'
-            . '.clarity-dump details{margin:4px 0;border-left:2px solid #d0d0e0;padding-left:10px}'
-            . '.clarity-dump summary{cursor:pointer;user-select:none;font-weight:600;list-style:none}'
-            . '.clarity-dump summary::before{content:"▶ ";font-size:10px;opacity:.6}'
-            . '.clarity-dump details[open]>summary::before{content:"▼ "}'
-            . '.clarity-dump ul{list-style:none;margin:4px 0 0;padding:0}'
-            . '.clarity-dump li{margin:2px 0;padding-left:4px}'
-            . '.clarity-dump .cd-label{color:#555}'
-            . '.clarity-dump .cd-key{color:#0070c1}'
-            . '.clarity-dump .cd-str{color:#098658}'
-            . '.clarity-dump .cd-num{color:#098658}'
-            . '.clarity-dump .cd-bool{color:#0000ff}'
-            . '.clarity-dump .cd-null{color:#800080}'
-            . '.clarity-dump .cd-masked{color:#999;font-style:italic}'
-            . '.clarity-dump .cd-more{color:#888;font-style:italic}'
-            . '.clarity-dump .cd-truncated{color:#999;font-style:italic}'
-            . '.clarity-dump .cd-empty{color:#999}'
-            . '.clarity-dump .cd-other{color:#555}'
-            . '</style>';
+        return <<<HTML
+            <style>
+            .clarity-dump{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;color: #1e1e2e;background:#f8f8fc;border:1px solid #d0d0e0;border-radius:6px;padding:10px 14px;margin:8px 0;max-width:100%;overflow:auto}
+            .clarity-dump details{margin:4px 0;border-left:2px solid                                    #d0d0e0;padding-left:10px}
+            .clarity-dump summary{cursor:pointer;user-select:none;font-weight:600;list-style:none}
+            .clarity-dump summary::before{content:"▶ ";font-size:10px;opacity:.6}
+            .clarity-dump details[open]>summary::before{content:"▼ "}
+            .clarity-dump ul{list-style:none;margin:4px 0 0;padding:0}
+            .clarity-dump li{margin:2px 0;padding-left:4px}
+            .clarity-dump .cd-label{color:     #555}
+            .clarity-dump .cd-key{color:       #0070c1}
+            .clarity-dump .cd-str{color:       #098658}
+            .clarity-dump .cd-num{color:       #098658}
+            .clarity-dump .cd-bool{color:      #0000ff}
+            .clarity-dump .cd-null{color:      #800080}
+            .clarity-dump .cd-masked{color:    #999;font-style:italic}
+            .clarity-dump .cd-more{color:      #888;font-style:italic}
+            .clarity-dump .cd-truncated{color: #999;font-style:italic}
+            .clarity-dump .cd-empty{color:     #999}
+            .clarity-dump .cd-other{color:     #555}
+            </style>
+            HTML;
     }
 }

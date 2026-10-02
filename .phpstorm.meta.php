@@ -63,6 +63,11 @@ namespace PHPSTORM_META
             'description' => 'Return a fallback value if the piped value is null/undefined.',
             'example'     => "{{ x |> default('N/A') }}",
         ],
+        'dump' => [
+            'return'      => 'mixed',
+            'description' => 'Debug probe: dump the piped value and pass it through unchanged. Renders a masked tree while debug mode is on; eliminated in production.',
+            'example'     => '{{ items |> filter(i => i.active) |> dump |> length }}',
+        ],
         'empty' => [
             'return'      => 'mixed',
             'params'      => [['fallback', '""']],
@@ -285,13 +290,13 @@ namespace PHPSTORM_META
         'dump' => [
             'return'      => 'string',
             'variadic'    => true,
-            'description' => 'Debug dump (only in debug mode, eliminated in production).',
+            'description' => 'Debug dump: renders a masked value tree while debug mode is on (setDebugMode(true)), and outputs nothing at all otherwise.',
             'example'     => '{{ dump(x, y) }}',
         ],
         'dd' => [
             'return'      => 'never',
             'variadic'    => true,
-            'description' => 'Debug dump and die (always active).',
+            'description' => 'Debug dump and die. Never pruned, so it requires debug mode: with debug off it throws instead of dumping raw values.',
             'example'     => '{{ dd(x) }}',
         ],
         'keys' => [

@@ -59,12 +59,11 @@ semantics.
 
 ## Where the code lives
 
-`Clarity\Engine\Tokenizer` and `Clarity\Engine\Compiler` are the public entry
-points, but the bulk of their behaviour lives in **traits** under
-`Clarity\Engine\Tokenizer\` and `Clarity\Engine\Compiler\`. The facades keep the
-constants, the mutable state and the configuration setters, and compose the
-traits with `use`. When changing behaviour, edit the trait that owns it; the
-facade only declares what the traits share.
+`Clarity\Engine\Tokenizer` and `Clarity\Engine\Compiler` are public facades;
+their behavior lives in traits under `Clarity\Engine\Tokenizer\` and
+`Clarity\Engine\Compiler\`. Edit the trait that owns the behavior. The facades
+hold shared constants, state, and configuration, and compose the traits with
+`use`.
 
 Tokenizer (`src/Engine/Tokenizer/`):
 
@@ -91,34 +90,29 @@ Compiler (`src/Engine/Compiler/`):
 | `ControlFlowTrait`      | for / if / else / set / include                                       |
 | `CodeBuilderTrait`      | final class wrapper + text/context helpers                            |
 
-Each trait is a plain `trait`; the facade, the traits and the shared state all
-run against the same `$this`, so the split is transparent. The public constants
-(`Tokenizer::TEXT`, `Compiler::COMPILER_VERSION`, …) stay on the facade and are
-read from the traits as `self::CONST`; trait-local constants are declared in the
-trait that uses them (a trait constant requires **PHP 8.2**, which is why the
-engine's minimum is 8.2 rather than 8.1).
+Traits share the facade's `$this`. Keep public constants (`Tokenizer::TEXT`,
+`Compiler::COMPILER_VERSION`, …) on the facade and reference them in traits as
+`self::CONST`; declare trait-local constants in the trait that uses them. Trait
+constants require **PHP 8.2**, which sets the engine's minimum version.
 
 ### Where the capability checks live
 
-`Clarity\Engine\Policy` is the one object that answers _what may this template
-reach_. Every compile-time check asks it — the Tokenizer keeps a reference and
-the Compiler passes the same instance to it, so a capability cannot be granted in
-one half of the compiler and missed in the other.
+`Clarity\Engine\Policy` is the single source of truth for what a template may
+reach. The Tokenizer and Compiler use the same instance for every compile-time
+check.
 
 When adding a check:
 
-- Ask the POLICY, not a flag. `$this->allows('rawPhp')` in the tokenizer or
-  `$this->policy->allows('rawPhp')` in the compiler. There is no sandbox boolean
-  any more, and a new one would be a second source of truth.
-- Make the message name the grant that would fix it, in the form
+- Check the policy, not a separate flag: use `$this->allows('rawPhp')` in the
+  tokenizer or `$this->policy->allows('rawPhp')` in the compiler.
+- Name the required capability in the error message, for example:
   `… is not allowed by this policy. Grant the 'X' capability to allow it.`
 - If the check decides **emitted code**, the policy digest already covers it — do
   **not** bump `COMPILER_VERSION` for a policy change, and do bump it for a
   grammar change.
-- `Policy` has its own test file; a new capability also needs a case in
-  `PolicyCapabilityTest` that grants it alone and asserts its neighbours are still
-  refused. The point of the split is that a grant is independent, so a test that
-  grants everything proves nothing.
+- Add a `PolicyCapabilityTest` case that grants the new capability alone and
+  confirms related capabilities remain refused. Enabling every capability would
+  not catch accidental coupling.
 
 ## Adding a filter or function
 

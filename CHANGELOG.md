@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   | Capability          | Default | What it grants                                                                                    |
   | ------------------- | ------- | ------------------------------------------------------------------------------------------------- |
   | `rawPhp`            | `false` | `{% php CODE %}`                                                                                  |
-  | `methodCalls`       | `false` | `$obj->method(args)`                                                                              |
+  | `methodCalls`       | `false` | `obj.method(args)` / `$obj->method(args)`, with arguments and dynamic names                        |
   | `superglobals`      | `false` | `$_SERVER`, `$_GET`, `$_ENV`, … as chain roots                                                    |
   | `phpVariables`      | `false` | the render scope seeded as PHP locals — what makes `$title` and `{% php echo $title; %}` one name |
   | `variableVariables` | `true`  | `$$name` / `${expr}`                                                                              |
@@ -32,14 +32,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   **An empty allowlist is no restriction; a non-empty one is the complete set** —
   only the listed names resolve, and anything else is a compile-time error. That
-  is what makes `Policy::open()` the engine's former PHP mode exactly, rather
+  is what makes `Policy::unrestricted()` the engine's former PHP mode exactly, rather
   than a mode that happens to deny everything.
 
   ```php
-  $engine->setPolicy(Policy::sandboxed());   // the default
-  $engine->setPolicy(Policy::open());        // every capability on
-  $engine->setPolicy(Policy::trusted());     // trusted, but no `new`/`::`
-  $engine->setPolicy(Policy::custom()        // the useful one
+  $engine->setPolicy(Policy::restricted());    // the default
+  $engine->setPolicy(Policy::unrestricted());  // every capability on
+  $engine->setPolicy(Policy::trusted());       // trusted, but no `new`/`::`
+  $engine->setPolicy(Policy::default()         // the default plus named grants
       ->allowCapability('methodCalls')
       ->allowFunctions('strtoupper', 'count'));
   $engine->setPolicy(['capabilities' => ['rawPhp' => true]]);   // config form
@@ -65,9 +65,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`x instanceof Foo`** is supported and, unlike the two above, needs no
   capability: it takes a class name because that is what the operator means, and
   it reaches nothing the scope did not already hold.
+- **`dump` is now a filter as well as a function.** `{{ x |> dump }}` emits the
+  dumped value at that point in the pipeline and passes `x` through unchanged, so
+  the documented form `{{ items |> filter(i => i:active) |> dump |> slice(0, 5) }}`
+  compiles and the trailing steps still see the value. In production the step is
+  eliminated to its input, exactly as `dump(x)` is pruned to `''`.
 
 ### Changed
 
+- **A template's physical path now travels with its source, from the loader that
+  knows it.** `TemplateSource` gains a `$path`, which `FileLoader` fills in and a
+  custom loader may fill in for whatever it reads from; `CompiledTemplate` gains
+  the parallel `$sourcePaths`, which the compiler bakes into the compiled class
+  beside `$sourceFiles`. Error reporting therefore reads the path off the class
+  instead of re-deriving it from the active loader, which is both cheaper and
+  correct for an error in an inlined include or a layout — those name their own
+  file. It also survives a swapped-out loader. A loader with no file to name
+  reports `null`, and the entry is `''` rather than absent, so the list stays
+  index-aligned with `$sourceFiles`.
+- **`ClarityException::$templateFile` is renamed `$templateName`, and a
+  `$templatePath` is added for the physical file.** The old name was a misnomer:
+  it held a *logical* name (`pages/home`) and never a file, which is what made
+  `getFile()`'s former uselessness look like a mapping bug rather than the
+  naming problem it was. `$templateName` is the logical name the loader was asked
+  for, `$templatePath` the file it resolved to (`''` when the loader has none —
+  `ArrayLoader`, `StringLoader`, a database loader), and `getFile()` prefers the
+  path because that is the form an editor can open. The constructor gains
+  `$templatePath` as its **fourth** parameter, ahead of `$previous`, so pass the
+  previous throwable by name (`previous: $e`).
+- **The policy presets are named for what they grant.** `restricted()` (the
+  default), `trusted()` and `unrestricted()` each describe a policy's reach
+  rather than borrowing the words "sandbox" and "open", which read as
+  "closed"/"available" rather than "nothing reaches PHP"/"everything does" —
+  `unrestricted()` in particular is the one name that must not be reached for by
+  mistake. `default()` replaces `custom()` because it is not a blank slate: it
+  starts from `restricted()` and every capability you do not name stays off.
+  `isUnrestricted()`/`isSandboxed()` are unchanged, and `Compiler::sandboxed()` keeps its
+  name as the compiler-side constructor.
 - **`setSandboxMode()` and `isSandboxed()` are replaced by
   `setPolicy()`/`getPolicy()`.** This is the **breaking** part: the boolean was
   one way to say what a policy now says precisely, and keeping it as an alias
@@ -75,8 +109,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   disagree. `isSandboxed()` survives on the engine as a coarse convenience
   reading the policy, and `getPolicy()` is always a real object.
   `['sandbox' => false]` in the constructor is replaced by `['policy' => …]`.
-  Migration: `setSandboxMode(false)` → `setPolicy(Policy::open())`.
-  `setDeniedFunctions([...])` → `setPolicy(Policy::open()->denyFunctions(...))` —
+  Migration: `setSandboxMode(false)` → `setPolicy(Policy::unrestricted())`.
+  `setDeniedFunctions([...])` → `setPolicy(Policy::unrestricted()->denyFunctions(...))` —
   the deny-list is now part of the policy, so changing it recompiles correctly.
 - **A policy change invalidates the compiled cache.** A compiled template records
   a **digest** of the effective policy, and the loader recompiles on a mismatch.
@@ -85,10 +119,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cached templates and left stale ones calling now-denied functions. A digest
   rather than the policy itself, because the compiled file ships to a server and
   should not carry a readable inventory of what a template may call.
-- **A non-empty allowlist counts as reaching PHP.** Otherwise
-  `Policy::sandboxed()->allowFunctions('count')` would be a grant that grants
-  nothing, since the allowlist is applied on the PHP-function path. Unlisted
-  names are still refused, by name.
+- **An allowlist NARROWS; it never opens a door.** `allowsPhp()` is now decided by
+  capabilities alone, so `Policy::restricted()->allowFunctions('count')` stays
+  sandboxed: the allowlist filters which PHP functions a construct may call, and
+  with no construct reaching PHP there is nothing for it to filter. Pair a grant
+  with a capability for it to apply to
+  (`Policy::restricted()->allowCapability('methodCalls')->allowFunctions('count')`).
+  Unlisted names are still refused, by name.
 - **`superglobals` is a genuinely independent capability.** Without it, a
   superglobal name is an ordinary scope read, so `{{ _SERVER }}` throws **even
   when `phpVariables` is granted** — previously the two were inseparable, and
@@ -176,6 +213,19 @@ setSandboxMode(false) to let a PHP function of the same name be used.` The
   `new FileLoader('/their/root')`, where the base path is the root. See
   `docs/09-policy-api.md` and `tests/Engine/LoadPathSecurityTest.php`.
 
+- **`dump()` can no longer print unmasked values, in any form.** The registry
+  carried its own fallback debug formatter — `print_r` inside a `<pre>`, with no
+  masking — and two separate paths reached it. Calling `setDebugMode(true)`
+  instead of `enableDebug()` printed secrets that the renderer would have masked,
+  and a quoted callable reference such as `{{ map(items, "dump") }}` reached it
+  **even with debug off**, printing into production output. The registry now owns
+  no debug formatting: the renderers and their masking live in one place
+  (`Clarity\Debug\DebugRuntime`), `dump()` is a no-op until the engine installs
+  them, and `dd()` — the one form that is never pruned — throws with debug off
+  rather than falling back to an unmasked `var_dump`. Every `dump` form (call,
+  filter step, quoted reference) is eliminated in production. See
+  `tests/Engine/DebugDumpTest.php` and `tests/Engine/CallSyntaxTest.php`.
+
 ### Changed
 
 - **Internal architecture: the compiler and tokenizer are composed from
@@ -213,12 +263,46 @@ setSandboxMode(false) to let a PHP function of the same name be used.` The
 
 ### Fixed
 
+- **A compile-time policy refusal now points at the template line that contains
+  the offending construct.** `{% php %}` on a policy that denies `rawPhp` was
+  raised during the pre-scan — the pass that runs *before* the source map cursor
+  starts tracking, and the reason the report claimed the engine file
+  (`Compiler/DirectiveSupportTrait.php:222`) with no template at all. The refusal
+  now resolves its position from the `{# @source … #}` markers the merge already
+  emits, so it is correct even when the tag was reached through `{% extends %}`
+  or `{% include %}` — an included template is named as the included file, not as
+  its host.
+- **`ClarityException` mirrors its location onto `$file` / `$line`.** The
+  uncaught-fatal line, xdebug's develop-mode error page and every error handler
+  read `getFile()` / `getLine()`; they now name the template instead of the engine
+  frame, which is what Smarty does for the same reason. The real call path stays
+  in `getTrace()`.
 - The getting-started guide named the wrong Composer package
   (`clarity/engine`); it now matches the real package name,
   `sailantis/clarity-engine`.
 - The API-reference generator now links a method to the file it is **declared**
   in. A method composed from a trait is declared in the trait's file, so the
   previous class-relative anchor pointed at the wrong line.
+
+- **The two debug modes are one.** `setDebugMode(bool)` (compiler-level
+  assertions plus a bare `dump()`) and `enableDebug(DumpOptions)` (renderers,
+  bus, panel) were introduced four days apart and had drifted into one feature
+  and its degraded subset, with side effects the other did not undo — calling
+  `enableDebug()` and then `setDebugMode(false)` left the bus and panel wired
+  while `isDebugMode()` reported `false`. `setDebugMode()` is now the single
+  switch and does the whole job in both directions:
+
+  ```php
+  $engine->setDebugMode(true);                       // everything on
+  $engine->setDebugMode(new DumpOptions(maxDepth: 3)); // on, with options
+  $engine->setDebugMode(false);                      // everything off
+  ```
+
+  `enableDebug()` is kept as a deprecated alias. `dump()`/`dd()` are declared
+  once in the registry (so there is one name to resolve, whichever syntax is
+  used), and the debug renderers, masking and `DumpOptions` moved into a new
+  `Clarity\Debug\DebugRuntime` that the engine installs — the registry's own
+  `print_r` fallback is gone. See `docs/04-advanced-topics.md`.
 
 ## [0.1.1]
 

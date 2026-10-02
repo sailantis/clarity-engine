@@ -94,7 +94,7 @@ class Compiler
      * A POLICY change needs no bump: the compiled class carries a digest of the
      * effective policy and the loader recompiles on a mismatch.
      */
-    public const COMPILER_VERSION = 20;
+    public const COMPILER_VERSION = 21;
 
     /**
      * Prefix owned by the engine for every PHP variable it binds into the render
@@ -140,6 +140,12 @@ class Compiler
 
     /** @var string[]  de-duplicated list of logical template names, in order of first appearance */
     private array $sourceFiles = [];
+
+    /** @var string[]  physical path per $sourceFiles entry ('' when the loader named none), parallel to it */
+    private array $sourcePaths = [];
+
+    /** @var array<string,string>  logicalName → physical path, as reported by the loader that served it */
+    private array $resolvedPaths = [];
 
     /** @var array<string,int>  logicalName → index in $sourceFiles */
     private array $sourceFileIndex = [];
@@ -256,13 +262,17 @@ class Compiler
         $this->tokenizer = new Tokenizer();
     }
 
-    public static function sandboxed(): self
+    public static function default(): static
     {
-        $compiler = new self();
-        $compiler->setPolicy(Policy::sandboxed());
-        $compiler->setRegistry(new Registry());
-        return $compiler;
+        $c = new static();
+        $c->setRegistry(new Registry());
+        $c->setPolicy(Policy::default());
+        return $c;
     }
+
+    // -------------------------------------------------------------------------
+    // Configuration
+    // -------------------------------------------------------------------------
 
     public function setRegistry(Registry $registry): static
     {
@@ -271,23 +281,21 @@ class Compiler
         return $this;
     }
 
-    // -------------------------------------------------------------------------
-    // Configuration
-    // -------------------------------------------------------------------------
-
     public function setDebugMode(bool $debug): static
     {
         $this->debugMode = $debug;
 
-        // Production: prune dump() to '' (zero runtime overhead).
-        // Debug: inject compile-time context string as first arg to dump() and dd().
-        // dd() always gets the context arg regardless of debug mode (always active).
-        $this->tokenizer->setPrunedFunctions(
-            $debug ? [] : ['dump' => true]
-        );
-        $this->tokenizer->setContextInjectedFunctions(
-            $debug ? ['dump' => true, 'dd' => true] : ['dd' => true]
-        );
+        // All debug COMPILATION is one setting, because there is one debug mode:
+        // dump() is kept and receives the compile-time escape context (with dd()),
+        // and `{{ x |> dump }}` becomes a pass-through probe.  With debug off,
+        // dump() is pruned to '' and the probe collapses to the identity.
+        //
+        // Before unification the probe was wired unconditionally, so `|> dump`
+        // was emitted even in production; it was harmless only because the prune
+        // list happened to cover it.  Both forms now read the same flag.
+        $this->tokenizer->setContextInjectedFunctions(['dump' => true, 'dd' => true]);
+        $this->tokenizer->setPrunedFunctions($debug ? [] : ['dump' => true]);
+        $this->tokenizer->setFilterProbes(['dump' => '__debug_probe']);
 
         return $this;
     }
@@ -306,8 +314,4 @@ class Compiler
         return $this;
     }
 
-    public function getPolicy(): Policy
-    {
-        return $this->policy;
-    }
 }

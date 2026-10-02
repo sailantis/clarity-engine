@@ -8,7 +8,8 @@ Clarity resolves template names through a pluggable loader system. The default `
 
 ### Named Namespaces (`addNamespace`)
 
-The easiest way to organise templates across multiple directories is the `addNamespace()` convenience method. Each namespace is a short alias that maps to a filesystem path; templates reference it with the `namespace::path` syntax.
+Use `addNamespace()` to map a short alias to a template directory. Reference
+templates with `namespace::path`.
 
 ```php
 // Register namespaces individually
@@ -142,7 +143,8 @@ Clarity compiles `.clarity.html` templates into PHP classes and caches them on d
 
 ### Compiler Version
 
-Every compiled class records the `Compiler::COMPILER_VERSION` that produced it. A cached file stamped with a different version — or with no stamp at all — is stale and is recompiled. This covers upgrades that change the compiled PHP **without changing the template file**, so **upgrading Clarity never requires flushing the cache by hand**.
+Each compiled class records the `Compiler::COMPILER_VERSION`. The loader
+recompiles cached files when their version is stale or missing.
 
 The compiled class also records the debug-mode flag and a digest of the [policy](09-policy-api.md#a-policy-change-invalidates-the-compiled-cache) it was built under; a change to either recompiles the template.
 
@@ -240,16 +242,29 @@ try {
     $output = $engine->render('page', $data);
 } catch (ClarityException $e) {
     echo "Template error: " . $e->getMessage();
-    echo "\nTemplate: " . $e->templateFile;
-    echo "\nLine: " . $e->templateLine;
+    echo "\nTemplate: " . $e->templateName;   // logical: "pages/home"
+    echo "\nPath:     " . $e->templatePath;   // physical, or "" for a non-file loader
+    echo "\nLine:     " . $e->templateLine;
 }
 ```
 
-> **Use `$e->templateFile` / `$e->templateLine`, not `$e->getFile()` / `$e->getLine()`.**
-> `getFile()` and `getLine()` report where the exception was _thrown_ — i.e. inside
-> the engine or, for a syntax error, the generated cache file. `templateFile` and
-> `templateLine` point at the originating `.clarity.html` source. When the location
-> could not be resolved, `templateFile` falls back to the logical template name.
+`templateName` is the requested name (for example, `pages/home`), and
+`templatePath` is the resolved file path. It is empty for loaders without a
+filesystem path. Custom loaders can return a path in `TemplateSource`.
+
+`ClarityException` exposes the template location through `templateName` and
+`templateLine`, and mirrors it to `getFile()` and `getLine()`. This lets uncaught
+errors and Xdebug point to the template source:
+>
+> ```
+> Fatal error: Uncaught Clarity\ClarityException: '{% php %}' is not allowed by this policy.
+> Grant the 'rawPhp' capability to allow it. in pages/home on line 4 in
+> /srv/app/views/pages/home.clarity.html on line 4
+> ```
+>
+> `getFile()` prefers the physical path, then the logical name, and falls back
+> to the engine frame if no template location is available. The exception
+> message keeps the logical name, and `getTrace()` retains the PHP call stack.
 
 The original throwable is always available as `$e->getPrevious()`.
 
@@ -315,7 +330,7 @@ if ($_ENV['APP_ENV'] === 'development') {
         echo "<pre>";
         echo "Template Error:\n";
         echo $e->getMessage() . "\n";
-        echo "\nFile: " . $e->templateFile;
+        echo "\nFile: " . ($e->templatePath !== '' ? $e->templatePath : $e->templateName);
         echo "\nLine: " . $e->templateLine;
         echo "\n\nStack Trace:\n" . $e->getTraceAsString();
         echo "</pre>";
@@ -333,7 +348,7 @@ try {
     echo $engine->render('page', $data);
 } catch (ClarityException $e) {
     error_log("Template error: " . $e->getMessage());
-    error_log("File: " . $e->templateFile . ":" . $e->templateLine);
+    error_log("File: " . ($e->templatePath !== '' ? $e->templatePath : $e->templateName) . ":" . $e->templateLine);
 
     http_response_code(500);
     echo "Sorry, something went wrong. Please try again later.";
@@ -401,9 +416,9 @@ $engine->render('page', $data);
 
 ## Security Model
 
-Clarity enforces its security through **compile-time checks** — nothing is checked at render time, so the restrictions cost nothing to enforce.
-
-What a template may reach is decided by a **policy**: a set of capabilities plus two allowlists. The default is `Policy::sandboxed()`, the most restrictive one. See [The Policy API](09-policy-api.md) for the full reference; this page describes what the default policy refuses.
+The policy determines which constructs templates may use. New engines use
+`Policy::restricted()`. Checks run during compilation; see
+[The Policy API](09-policy-api.md) for presets and grants.
 
 ### Compile-Time Restrictions
 
@@ -421,11 +436,14 @@ Under the default policy, the following are rejected at compile time (the templa
 {{ Foo\Bar }}                          {# ERROR: a class name is not a value #}
 ```
 
-`instanceof` is the exception: `x instanceof Foo` takes a class name because that is what the operator means, and it reaches nothing the scope did not already hold. It works under every policy.
+`instanceof` works under every policy; it checks an object's class without
+constructing a new object.
 
 ### Object and Value Handling
 
-The scope passed to `render()` is handed to the template **unchanged** — there is no eager object → array conversion. `a.b` is an **object property read** (`->b`); `a:b` is an **array key read** (`['b']`); PHP's own visibility rules apply:
+`render()` passes scope values to the template unchanged; it does not convert
+objects to arrays. `a.b` reads an object property, while `a:b` reads an array
+key. PHP visibility rules apply:
 
 ```php
 class User {
@@ -443,7 +461,8 @@ $engine->render('page', ['user' => $user]);
 {{ user.getName() }}  {# COMPILE ERROR: method calls not allowed #}
 ```
 
-**Containers read public properties — not `toArray()`.** Container operations — `{% for %}`, `keys`, `values`, `length`, `first`, `last` — read an object's **public properties** (`toArray()` and `JsonSerializable` are not consulted):
+**Container operations read public properties.** Loops and container filters do
+not call `toArray()` or `JsonSerializable`:
 
 ```php
 class User {
@@ -510,7 +529,7 @@ registering anything:
 ```php
 use Clarity\Engine\Policy;
 
-$engine->setPolicy(Policy::custom()->allowFunctions('strtoupper', 'count'));
+$engine->setPolicy(Policy::default()->allowFunctions('strtoupper', 'count'));
 ```
 
 ### Policies
@@ -520,42 +539,54 @@ A policy answers one question: _what is this template allowed to reach?_ It is a
 ```php
 use Clarity\Engine\Policy;
 
-$engine->setPolicy(Policy::sandboxed());   // the default
-$engine->setPolicy(Policy::trusted());     // raw PHP, method calls and superglobals
-$engine->setPolicy(Policy::open());        // every capability
-$engine->setPolicy(Policy::custom()        // the default, plus named grants
+$engine->setPolicy(Policy::restricted());   // the default
+$engine->setPolicy(Policy::trusted());     // method calls, superglobals and PHP locals — but no `{% php %}` and no `new`/`::`
+$engine->setPolicy(Policy::unrestricted());        // every capability
+$engine->setPolicy(Policy::default()        // the default, plus named grants
     ->allowCapability('methodCalls')
     ->allowFunctions('strtoupper', 'count'));
 
-// Guardrails on top of an open policy — "everything except exec" has no allowlist form:
-$engine->setPolicy(Policy::open()->denyFunctions('exec', 'system', 'proc_open'));
+// Deny these function names in template expressions:
+$engine->setPolicy(Policy::unrestricted()->denyFunctions('exec', 'system', 'proc_open'));
 ```
 
-**Every capability that reaches PHP is a real grant.** `rawPhp`, `phpVariables`, `methodCalls`, `newExpressions` and `staticCalls` are equivalent to executing arbitrary PHP from a template, and `Policy::open()` turns all of them on. Use it only for templates written and reviewed by trusted authors.
+`denyFunctions()` does not inspect calls inside raw `{% php %}` blocks.
+
+Capabilities expose different levels of access. `rawPhp` permits template-authored
+PHP; other capabilities enable specific constructs. `Policy::unrestricted()`
+enables them all, so use it only for templates written and reviewed by trusted
+authors.
 
 Two things hold in every policy:
 
-- **The engine's render frame stays out of reach.** A template cannot bind a `__c_`-prefixed name (the compiler rejects it), and `$$name` / `${expr}` variable-variable expansion resolves against the render scope, so it can never reach an engine internal.
-- **`superglobals` is a separate grant.** Without it, `{{ _SERVER }}` is an ordinary scope read of an absent name and throws — even when `phpVariables` is on. With it, the name means PHP's own variable.
+- **The engine's render frame stays out of reach.** Templates cannot bind `__c_` names; dynamic variables resolve against the render scope and loop locals.
+- **Superglobals require a separate grant.** Without it, `{{ _SERVER }}` is a scope read and throws if that name is absent, even when `phpVariables` is enabled.
 
-Every compiled template records a **digest** of the policy it was built under, and the loader recompiles when that differs from the current one — so a policy change never leaves a template compiled under an old policy in the cache. See [The Policy API](09-policy-api.md) for the capability and allowlist tables, presets, error messages, and what the policy deliberately does not cover.
+See [The Policy API](09-policy-api.md) for the capability and allowlist
+reference.
 
 ## PHP Mode
 
-A policy that grants PHP turns the engine into a template engine with the full power of PHP — **PHP mode**, also called _open mode_. It is not a different language: the syntax is identical and every registered filter and function still resolves first. What changes is what an _unregistered_ name or a refused construct may reach.
+**PHP mode** means using a policy that grants access to PHP constructs. The
+syntax stays the same, and registered filters and functions still take
+precedence. The available constructs depend on the policy; only
+`Policy::unrestricted()` enables them all.
 
 ```php
 use Clarity\Engine\Policy;
 
-$engine->setPolicy(Policy::trusted());   // raw PHP, method calls, superglobals — but no `new`/`::`
-$engine->setPolicy(Policy::open());      // the full-power mode
+$engine->setPolicy(Policy::trusted());   // method calls, superglobals, PHP locals — but no `{% php %}`/`new`/`::`
+$engine->setPolicy(Policy::unrestricted());      // the full-power mode
 ```
 
-`Policy::trusted()` is PHP mode minus the two capabilities that let a template name a class of its own — `newExpressions` and `staticCalls` reach code the application never handed the template.
+`Policy::trusted()` enables method calls, superglobals and PHP locals, but not
+`new`, static calls or raw `{% php %}` blocks.
 
-**PHP mode is a strict superset of the sandbox syntax.** Every template that compiles under `sandboxed()` compiles identically under `open()`; only a construct the policy refused becomes available. A template is therefore never written _against_ a mode — the same `{{ name }}` reads the render scope in both. See [Template Syntax → PHP Mode](01-template-syntax.md#php-mode) for the template author's view of what each capability adds.
+Policies control which constructs compile; they do not change the syntax. See
+[Template Syntax → PHP Mode](01-template-syntax.md#php-mode) for examples.
 
-> **`Policy::open()` is equivalent to executing arbitrary PHP.** Use it only for templates written and reviewed by trusted authors, never for a template a request can choose.
+Use `Policy::unrestricted()` only for trusted templates, never for templates
+selected by a request.
 
 ## Performance Optimization
 
@@ -693,24 +724,51 @@ Custom modules implement `Clarity\ModuleInterface` with a single `register(Clari
 
 ## Debug Mode
 
-Enable debug mode to add runtime safety checks in compiled templates:
+There is **one** debug switch. `setDebugMode(true)` turns on the whole debug
+experience in a single step, and `setDebugMode(false)` removes all of it:
 
 ```php
-$engine->setDebugMode(true);
+$engine->setDebugMode(true);                              // full debug, defaults
+$engine->setDebugMode(new DumpOptions(maxDepth: 3));      // …with options
+$engine->setDebugMode(false);                             // production
 ```
 
 When active:
 
-- Range loop steps are validated at runtime: a step of `0` throws a `RuntimeException`
-- A step that moves away from the end (which would produce an infinite loop) also throws
-- The compiled class records `$debugCompiled = true` so that cache files compiled under debug mode are automatically recompiled when the flag changes
+- **`dump()` is rendered context-aware** — an HTML tree in HTML, a
+  `;/* DEBUG_DUMP: … */` comment inside `<script>` — with the keys listed in
+  `DumpOptions::$maskKeys` masked (`password`, `token`, `secret`, …).
+- **`{{ x |> dump }}`** dumps the piped value at the pipe position and still
+  yields it, so `{{ items |> dump |> length }}` measures `items`.
+- **`{{ map(items, "dump") }}`** works as a callable reference too.
+- **Range-loop safety checks** run at runtime: a step of `0`, or a step moving
+  away from the end (which would loop forever), throws a `RuntimeException`.
+- A **`DebugEventBus`** emits `template.resolve`, `template.compile` and
+  `template.render`; pass `new DumpOptions(showPanel: true)` to also render the
+  floating HTML panel.
+- The compiled class records `$debugCompiled` and a policy digest, so a cache
+  file compiled under different settings is recompiled automatically.
 
 ```php
 // Check whether debug mode is currently on
 $engine->isDebugMode(); // bool
 ```
 
-> **Tip:** Enable debug mode in development and disable it in production to keep generated code lean.
+Everything debug is **compile-time or zero-cost in production**: `dump()` is
+pruned to `''` — including the filter and reference forms, which collapse to the
+identity — so a debug chain left in a template costs nothing and prints nothing.
+
+> **Tip:** Enable debug mode in development and disable it in production to keep
+> generated code lean. `dd()` is the one exception: it is never pruned, so with
+> debug off it throws rather than dumping raw, unmasked values.
+
+Debug dump example:
+
+![](./images/debug-dump.png)
+
+Debug panel example:
+
+![](./images/debug-panel.png)
 
 ## Inline Filters
 

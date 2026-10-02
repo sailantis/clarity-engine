@@ -12,12 +12,13 @@ Value object produced by the Clarity Compiler for a single template.
 - `public readonly` array `$dependencies` · <small>[🗎](../../src/Engine/CompiledTemplate.php)</small>
 - `public readonly` array `$sourceFiles` · <small>[🗎](../../src/Engine/CompiledTemplate.php)</small>
 - `public readonly` int `$renderBodyLine` · <small>[🗎](../../src/Engine/CompiledTemplate.php)</small>
+- `public readonly` array `$sourcePaths` · <small>[🗎](../../src/Engine/CompiledTemplate.php)</small>
 
 ## Public methods
 
-### __construct() · <small>[🗎](../../src/Engine/CompiledTemplate.php#L30)</small>
+### __construct() · <small>[🗎](../../src/Engine/CompiledTemplate.php#L36)</small>
 
-`public function __construct(string $className, string $code, array $sourceMap, array $dependencies, array $sourceFiles = [], int $renderBodyLine = 0): mixed`
+`public function __construct(string $className, string $code, array $sourceMap, array $dependencies, array $sourceFiles = [], int $renderBodyLine = 0, array $sourcePaths = []): mixed`
 
 **Parameters**
 
@@ -29,6 +30,7 @@ Value object produced by the Clarity Compiler for a single template.
 | `$dependencies` | array | - | [logicalName => revision] for cache invalidation. |
 | `$sourceFiles` | array | `[]` | Unique logical template names (parallel to $sourceMap file indices). |
 | `$renderBodyLine` | int | `0` | First line of the compiled render body. |
+| `$sourcePaths` | array | `[]` | Physical path per $sourceFiles entry, or [] when none. |
 
 **Return value**
 

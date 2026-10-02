@@ -20,10 +20,12 @@ final class TemplateSource
      *                               string → hash('fnv1a64', $code) from a memory loader.
      * @param \Closure   $codeLoader Lazy loader; called at most once per compile by the engine.
      *                               Must return the full raw template source string.
+     * @param string|null $path      Physical file this source was read from, when it was read from one; null for a loader with no file to name ({@see ArrayLoader}, {@see StringLoader}, a database loader).  The LOADER is the only layer that knows this, which is why it travels with the source rather than being re-derived: the compiler bakes it into the compiled class so an error can point an editor at the file even after the loader is gone.
      */
     public function __construct(
         public readonly int|string $revision,
         private readonly \Closure $codeLoader,
+        public readonly ?string $path = null,
     ) {
     }
 

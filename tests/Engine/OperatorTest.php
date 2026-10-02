@@ -133,7 +133,7 @@ class OperatorTest extends BaseTestCase
             'viewPath'  => TestEnvironment::viewDir(),
             'cachePath' => TestEnvironment::cacheDir(),
             'extension' => 'clarity.html',
-            'policy'    => Policy::open(),
+            'policy'    => Policy::unrestricted(),
         ]);
 
         $this->assertSame('N', $engine->renderPartial('op_defined_null_open', ['user' => null]));

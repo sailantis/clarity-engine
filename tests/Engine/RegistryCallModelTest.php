@@ -40,7 +40,7 @@ class RegistryCallModelTest extends BaseTestCase
     {
         $registry = TestEnvironment::registry();
 
-        foreach (['context', 'include', 'dump', 'dd'] as $name) {
+        foreach (['context', 'include', 'dd'] as $name) {
             $this->assertFalse(
                 $registry->hasFilter($name),
                 "'{$name}' is call-only; it must not be filterable"
@@ -52,6 +52,20 @@ class RegistryCallModelTest extends BaseTestCase
         }
     }
 
+    /**
+     * `dump` is the ONE debug name that is also filterable: its filter form is a
+     * pass-through probe rather than a dispatch of the callable, which is why it
+     * can accept a piped value at all.
+     */
+    public function testDumpIsBothFilterableAndCallable(): void
+    {
+        $registry = TestEnvironment::registry();
+
+        $this->assertTrue($registry->hasFilter('dump'), "'dump' must be filterable");
+        $this->assertTrue($registry->hasCallable('dump'), "'dump' must be callable");
+        $this->assertTrue($registry->hasFunction('dump'), "'dump' must be callable via call syntax");
+    }
+
     public function testRuntimeTableCarriesEveryCallable(): void
     {
         // ONE table, so call-only names and both-form names are all present.
@@ -60,9 +74,9 @@ class RegistryCallModelTest extends BaseTestCase
         foreach ([
             // both filter and call form
             'length', 'len', 'json', 'keys', 'values', 'first', 'last',
-            'map', 'filter', 'reduce', 'sort',
+            'map', 'filter', 'reduce', 'sort', 'dump',
             // call-only
-            'context', 'include', 'dump', 'dd',
+            'context', 'include', 'dd',
         ] as $name) {
             $this->assertArrayHasKey($name, $callables, "'{$name}' must be in the runtime callable table");
         }
@@ -179,9 +193,13 @@ class RegistryCallModelTest extends BaseTestCase
         $registry = new Registry();
 
         // The call-only builtins are dispatchable but not usable as filters.
-        foreach (['context', 'include', 'dump', 'dd'] as $name) {
+        foreach (['context', 'include', 'dd'] as $name) {
             $this->assertNotNull($registry->getCallable($name), "'{$name}' must be dispatchable");
             $this->assertFalse($registry->hasFilter($name), "'{$name}' must not be filterable");
         }
+
+        // `dump` is the exception: it is dispatchable AND filterable.
+        $this->assertNotNull($registry->getCallable('dump'));
+        $this->assertTrue($registry->hasFilter('dump'));
     }
 }

@@ -149,7 +149,7 @@ The revision ({@see \TemplateSource::$revision}) must be available immediately w
 
 ---
 
-### resolveName() · <small>[🗎](../../src/Template/FileLoader.php#L160)</small>
+### resolveName() · <small>[🗎](../../src/Template/FileLoader.php#L161)</small>
 
 `public function resolveName(string $name): string`
 
@@ -176,7 +176,7 @@ base path.
 
 ---
 
-### getSubLoaders() · <small>[🗎](../../src/Template/FileLoader.php#L249)</small>
+### getSubLoaders() · <small>[🗎](../../src/Template/FileLoader.php#L250)</small>
 
 `public function getSubLoaders(): array`
 

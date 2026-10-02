@@ -1,6 +1,7 @@
 # Layout Inheritance
 
-Template inheritance is one of Clarity's most powerful features. It allows you to define reusable page structures (layouts) and override specific sections (blocks) in child templates.
+Template inheritance lets child templates reuse a layout and override its named
+blocks.
 
 ## Core Concepts
 
@@ -592,9 +593,9 @@ An e-commerce site: a base layout, a shop layout that extends it, and pages that
 
 ## Troubleshooting
 
-- **Child block doesn't replace the parent's** — block names must match exactly (case-sensitive); check for typos, and make sure `{% extends %}` is the first directive.
-- **Content in a child template doesn't appear** — rendered content must be inside a block. Leading `{% set %}` directives after `{% extends %}` are the exception (see [above](#leading-set-directives-are-preserved)); HTML/text outside blocks is ignored.
-- **Template renders without the layout** — `{% extends %}` overrides `setLayout()`; use one or the other, not both.
+- **Child block doesn't replace the parent's:** block names are case-sensitive; check spelling and put `{% extends %}` first.
+- **Child content is missing:** place rendered content inside a block. Leading `{% set %}` directives after `{% extends %}` are preserved; other content outside blocks is ignored.
+- **Layout isn't applied:** `{% extends %}` overrides `setLayout()`; use one, not both.
 
 See the [Troubleshooting Guide](06-troubleshooting.md) for errors outside inheritance.
 

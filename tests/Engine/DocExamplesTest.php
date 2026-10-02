@@ -2,6 +2,7 @@
 namespace Clarity\Tests\Engine;
 
 use Clarity\Engine\Compiler;
+use Clarity\Engine\Policy;
 use Clarity\Engine\Registry;
 use Clarity\Template\FileLoader;
 use PHPUnit\Framework\TestCase;
@@ -59,7 +60,7 @@ class DocExamplesTest extends TestCase
         $root   = \dirname(__DIR__, 2) . '/docs/examples';
         $loader = new FileLoader($root, '.clarity.html');
 
-        Compiler::sandboxed()->compile($view, $loader);
+        Compiler::default()->compile($view, $loader);
 
         $this->addToAssertionCount(1);
     }

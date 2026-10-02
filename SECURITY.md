@@ -24,31 +24,27 @@ We will acknowledge the report and keep you informed while we work on a fix.
 
 What a template may reach is decided by a **policy**: a set of capabilities plus
 two allowlists, resolved entirely at compile time. The default,
-`Policy::sandboxed()`, lets a template reach nothing but its own scope and the
+`Policy::restricted()`, lets a template reach nothing but its own scope and the
 filters and functions the host registered.
 
-The grants that reach PHP — `rawPhp`, `phpVariables`, `methodCalls`,
-`newExpressions`, `staticCalls`, `superglobals` — are deliberate escape hatches,
-and none of them is a bug:
+Capabilities that expose PHP features are explicit trust decisions:
 
-- **`Policy::open()`** grants every one of them, which is equivalent to
+- **`Policy::unrestricted()`** grants every one of them, which is equivalent to
   executing arbitrary PHP. It must only be enabled for templates written by
   trusted authors.
-- **A single capability** is the same kind of decision at a smaller scale.
-  `methodCalls` lets a template call a method on an object the host passed in;
-  `newExpressions` lets it construct anything it can name. Treat each grant as a
-  security decision, not a convenience.
+- **Individual capabilities differ in scope.** `rawPhp` allows template-authored
+  PHP; `methodCalls` allows calls on objects passed by the host. Grant only what
+  trusted templates need.
 - **Custom filters and functions** (`addFilter()`, `addFunction()`) run whatever
   the host application registers. Validate and escape their input there.
-- **A non-empty `functions`/`filters` allowlist** is a grant of exactly the names
-  it lists, and nothing else.
+- **Allowlists narrow PHP-function fallbacks; they do not enable PHP access.**
+  Registered filters and functions remain governed by registration.
 
-If you believe you can escape the default policy **without** granting a
-capability, that is a vulnerability and we want to hear about it.
+If a template can escape the default policy without a relevant capability, that
+is a vulnerability. Please report it privately.
 
 ### Changing a policy recompiles what it affects
 
-Every compiled template records a **digest** of the policy it was built under,
-and the loader recompiles when the digest differs from the current policy —
-including when a single allowlist entry is added or removed. A compiled class can
-therefore never be served under a policy other than the one it was built with.
+Every compiled template records a **digest** of its policy. The loader recompiles
+when that policy changes, including when an allowlist entry is added or removed,
+so it cannot reuse a compiled class under a different policy.

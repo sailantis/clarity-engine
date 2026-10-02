@@ -164,6 +164,14 @@ class Tokenizer
     private array $contextInjectedFunctions = [];
 
     /**
+     * Names whose FILTER form is a pass-through debug probe, mapped to the
+     * service key that implements it. `{{ x |> dump }}` dumps x and yields x.
+     *
+     * @var array<string, string>
+     */
+    private array $filterProbes = [];
+
+    /**
      * What this template is allowed to reach.  Every decision it makes is made
      * while compiling; nothing about it is consulted at render time.
      *
@@ -241,6 +249,22 @@ class Tokenizer
     }
 
     /**
+     * Declare the names whose FILTER form (`{{ x |> name }}`) is a pass-through
+     * debug probe: the piped value is dumped to the debug renderer and then
+     * returned unchanged, so a trailing step still sees the original value.
+     *
+     * The compiler emits `$__c_sv['<service>'](...)` for these instead of
+     * dispatching `$__c_fn['<name>']`, which is why the probe survives a
+     * user-registered template function of the same name.
+     *
+     * @param array<string, string> $names name => service key
+     */
+    public function setFilterProbes(array $names): void
+    {
+        $this->filterProbes = $names;
+    }
+
+    /**
      * PHP's own superglobals, as chain roots.  A read of one of these names emits
      * the PHP variable directly when the `superglobals` capability is granted, so
      * `$_SERVER` means PHP's `$_SERVER` rather than a scope entry that happens to
@@ -262,12 +286,12 @@ class Tokenizer
 
     /**
      * Built from the engine's policy before any compilation.  A Tokenizer that
-     * was handed no policy compiles as {@see Policy::sandboxed()}, so the default
+     * was handed no policy compiles as {@see Policy::restricted()}, so the default
      * is safe even for a hand-built tokenizer.
      */
     public function __construct()
     {
-        $this->policy = Policy::sandboxed();
+        $this->policy = Policy::restricted();
     }
 
     /**
