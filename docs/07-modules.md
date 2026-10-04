@@ -55,9 +55,10 @@ class MyModule implements ModuleInterface
             'debug_if',
             function (string $rest, string $path, int $line, callable $processExpr): string {
                 return 'if (' . $processExpr($rest) . ' && $__c_sv["checkDebug"]()) {';
-            }
+            },
+            ['debug_endif' => 'required']   // pair the closer so the compiler checks it
         );
-        $engine->addDirective('debug_endif', fn() => '}');
+        $engine->addDirective('debug_endif', fn() => '}', ['debug_if' => 'owner']);
     }
 }
 ```
@@ -68,9 +69,15 @@ class MyModule implements ModuleInterface
 | ----------------------------------- | ------------------------------------------------------------------------------- |
 | `addFilter(name, callable)`         | Named filter callable invoked at render time                                    |
 | `addInlineFilter(name, definition)` | Filter expression compiled directly into the template PHP                       |
-| `addFunction(name, callable)`       | Function callable available in template expressions                             |
+| `addFunction(name, callable)`       | Function callable available in template expressions                              |
 | `addDirective(keyword, handler)`    | Custom `{% keyword %}` directive processed at compile time                      |
+| `addDirective(keyword, handler, pairing)` | The same, with declared close/branch tags the compiler validates        |
 | `addService(key, object)`           | Shared value/object, read in template PHP and directive PHP as `$__c_sv['key']` |
+
+> **Block directives:** when a directive wraps a body, declare its members on the opener
+> (e.g. `['endmyblock' => 'required']`) so the compiler rejects an unclosed block, a
+> stray closer, or a closer that crosses another construct — with the template line named.
+> See [Paired Directives](04-advanced-topics.md#paired-directives).
 
 ---
 

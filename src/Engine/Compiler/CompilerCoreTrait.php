@@ -48,6 +48,7 @@ trait CompilerCoreTrait
         $this->tokenizer->setEscapeContext('html');
         $this->extendsStack         = [];
         $this->compileStack         = [];
+        $this->resetDirectiveStack();
         $this->mappedSourcePath     = null;
         $this->mappedSourceLineBase = 1;
         $this->mappedMergedLineBase = 1;
@@ -63,6 +64,11 @@ trait CompilerCoreTrait
         // chain root.
         $this->seedsScope = $this->policy->allows('phpVariables');
         $this->tokenizer->setLocalRoots($this->seedsScope);
+
+        // Directive tables are mutable and registration order is not fixed, so the
+        // pairing declarations can only be cross-checked once per compile.  This
+        // catches a close without its opener (or vice versa) before any template runs.
+        $this->registry->assertPairingConsistency();
 
         try {
             $source = $this->readWithDep($templateName);
@@ -83,6 +89,11 @@ trait CompilerCoreTrait
 
         // Compile the render body
         $body = $this->compileSource($source, $templateName);
+
+        // A construct left open at the end of the merged body can never be closed
+        // later: the close would have to live in an include, which is a separate
+        // unit.  Reported here at the opener's own line.
+        $this->assertDirectiveStackClosed();
 
         // Build the complete class code (no leading <?php – Cache adds it)
         $code = $this->buildClass($className, $body);

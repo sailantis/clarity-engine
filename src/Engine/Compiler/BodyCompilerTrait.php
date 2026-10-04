@@ -227,7 +227,7 @@ trait BodyCompilerTrait
             'if'     => $this->compileIf($rest, $sourcePath, $tplLine),
             'elseif' => $this->compileElseIf($rest, $sourcePath, $tplLine),
             'else'   => $this->compileElse($sourcePath, $tplLine, $lines),
-            'endif'  => $this->compileEndIf(),
+            'endif'  => $this->compileEndIf($sourcePath, $tplLine),
             'endfor' => $this->compileEndFor($sourcePath, $tplLine),
             'for'    => $this->compileFor($rest, $sourcePath, $tplLine),
             'set'    => $this->compileSet($rest, $sourcePath, $tplLine),
@@ -261,18 +261,7 @@ trait BodyCompilerTrait
                 $this->templatePath($sourcePath)
             ),
             default                        => $this->registry->hasDirective($keyword)
-            ? $this->registry->compileDirective(
-                $keyword,
-                $rest,
-                $sourcePath,
-                $tplLine,
-                fn(string $e) => $this->withLocation(
-                    fn() => $this->tokenizer->processCondition($e),
-                    $sourcePath,
-                    $tplLine
-                ),
-                $this
-            )
+            ? $this->compileRegistryDirective($keyword, $rest, $sourcePath, $tplLine, $lines)
             : throw new ClarityException(
                 $this->macroCallSyntaxHint($content) ?? "Unknown directive '{$keyword}'",
                 $sourcePath,

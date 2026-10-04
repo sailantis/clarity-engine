@@ -135,14 +135,16 @@ class TranslationModule implements ModuleInterface
                 }
                 $param = $processExpr($rest);
                 return "\$__c_sv['t']->pushDomain({$param});";
-            }
+            },
+            ['endwith_t_domain' => 'required']
         );
 
         $engine->addDirective(
             'endwith_t_domain',
             static function (string $rest, string $sourcePath, int $tplLine, callable $processExpr): string {
                 return "\$__c_sv['t']->popDomain();";
-            }
+            },
+            ['with_t_domain' => 'owner']
         );
 
     }

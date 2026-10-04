@@ -128,14 +128,16 @@ class LocaleService
                 }
                 $param = $processExpr($rest);
                 return "\$__c_sv['locale']->push({$param});";
-            }
+            },
+            ['endwith_locale' => 'required']
         );
 
         $engine->addDirective(
             'endwith_locale',
             static function (string $rest, string $sourcePath, int $tplLine, callable $processExpr): string {
                 return "\$__c_sv['locale']->pop();";
-            }
+            },
+            ['with_locale' => 'owner']
         );
     }
 

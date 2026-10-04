@@ -759,19 +759,19 @@ $cache = new class {
     private array $items = [];
     private array $keyStack = [];
 
-    public function has(string $key): bool
+    public function has(): bool
     {
-        return array_key_exists($key, $this->items);
+        return array_key_exists($this->currentKey(), $this->items);
     }
 
-    public function get(string $key): string
+    public function get(): string
     {
-        return $this->items[$key];
+        return $this->items[$this->currentKey()];
     }
 
-    public function set(string $key, string $value): void
+    public function set(string $value): void
     {
-        $this->items[$key] = $value;
+        $this->items[$this->currentKey()] = $value;
     }
 
     public function pushKey(string $key): void
@@ -798,32 +798,33 @@ $cache = new class {
     }
 };
 
+// Register the cache service with the engine.
+// It is accessible via $__c_sv['cache'] in directives
 $engine->addService('cache', $cache);
 
 $engine->addDirective('cache', function(string $rest, string $path, int $line, callable $processExpr): string {
     $param = $processExpr(trim($rest));
     return <<<PHP
-        \$__cacheKey = {$param};
-        \$__c_sv['cache']->pushKey(\$__cacheKey);
+        \$__c_sv['cache']->pushKey({$param});
         try {
-            if (\$__c_sv['cache']->has(\$__cacheKey)) {
-                echo \$__c_sv['cache']->get(\$__cacheKey);
+            if (\$__c_sv['cache']->has()) {
+                echo \$__c_sv['cache']->get();
             } else {
                 ob_start();
     PHP;
-});
+}, ['endcache' => 'required']);
 
 $engine->addDirective('endcache', function(string $rest, string $path, int $line, callable $expr): string {
     return <<<PHP
-            \$__cached = ob_get_clean();
-            \$__c_sv['cache']->set(\$__c_sv['cache']->currentKey(), \$__cached);
-            echo \$__cached;
+                \$__cached = ob_get_clean();
+                \$__c_sv['cache']->set(\$__cached);
+                echo \$__cached;
             }
         } finally {
             \$__c_sv['cache']->popKey();
         }
     PHP;
-});
+}, ['cache' => 'owner']);
 ```
 
 The service is registered under `cache`, matching the `$__c_sv['cache']` lookups emitted by the directives. The cache hit check happens before the template block, so the block is skipped entirely on a hit. The `try/finally` always pops the active key, including when rendering the block throws, and the service-owned stack supports nested cache blocks. The in-memory example keeps values only while this service instance lives; use a persistent cache implementation with the same `has()`, `get()`, `set()`, `pushKey()`, `currentKey()`, and `popKey()` methods to share cached values across requests.
@@ -837,6 +838,38 @@ Use the directives in a template like this:
 ```
 
 The `$processExpr` callable converts the cache-key expression (a variable or literal) to a PHP expression string.
+
+### Paired Directives
+
+A directive that wraps a body — anything with an `{% end… %}` counterpart — should
+declare its members on the opening tag. The declaration is a `keyword => role` map:
+
+| Role | Where | Meaning |
+| ---- | ----- | ------- |
+| `'required'` | opener | The closing tag. Exactly one per construct. |
+| `'allowed'` | opener | An optional branch tag, usable at most once between open and close. |
+| `'owner'` | member | Assertion that this tag belongs to the named opener (checked; changes nothing else). |
+
+```php
+$engine->addDirective('cache', $openHandler, [
+    'endcache'  => 'required',   // the closing tag
+    'cacheelse' => 'allowed',    // optional branch tag
+]);
+
+$engine->addDirective('endcache',  $closeHandler);                       // no metadata needed
+$engine->addDirective('cacheelse', $branchHandler, ['cache' => 'owner']); // …or assert the owner
+```
+
+The opener's declaration is the single source of truth; a member's `'owner'` entry only
+asserts agreement with it, catching the "registered the close but forgot the opener"
+mistake at the start of every compile.
+
+Once declared, the compiler rejects — with the template name and line — an unclosed
+`{% cache %}` (`Unclosed '{% cache %}' tag (opened on line 3): add '{% endcache %}'`), a
+stray `{% endcache %}`, a close that crosses a nested `{% if %}`/`{% for %}` or another
+construct, a branch tag used outside its construct, and a construct that spans an
+`{% include %}`. Directives registered WITHOUT a pairing keep behaving exactly as before,
+so this is opt-in per construct.
 
 ### Handler Signature
 

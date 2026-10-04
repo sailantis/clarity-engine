@@ -409,13 +409,35 @@ trait ClarityEngineTrait
      * $engine->addDirective('endwith_locale', fn(...) => "\$__c_sv['locale']->pop();");
      * ```
      *
-     * @param string   $keyword The directive keyword in lowercase (e.g. 'with_locale').
-     * @param callable $handler See {@see Registry} for the expected signature.
+     * Paired directives
+     * -----------------
+     * A directive that wraps a body declares its members on the OPENER, using the
+     * same `keyword => role` shape:
+     * ```php
+     * $engine->addDirective('cache', $openHandler, [
+     *     'endcache'  => 'required',   // the closing tag
+     *     'cacheelse' => 'allowed',    // optional branch tag
+     * ]);
+     * $engine->addDirective('endcache', $closeHandler);
+     * ```
+     * The compiler then rejects an unclosed `{% cache %}`, a stray `{% endcache %}`,
+     * a close that crosses another construct, and a branch tag used outside its
+     * construct — all at compile time, naming the template and line.
+     *
+     * A member may assert its owner instead, in the same direction:
+     * `$engine->addDirective('endcache', $closeHandler, ['cache' => 'owner'])`.
+     * That is checked at the start of every compile; it changes nothing else.
+     *
+     * @param string        $keyword The directive keyword in lowercase (e.g. 'with_locale').
+     * @param callable      $handler See {@see Registry} for the expected signature.
+     * @param array<string, string>|null $pairing
+     *   Opener: member keyword → 'required' (one) or 'allowed'.
+     *   Member: ['owner' => '<opener keyword>'].
      * @return $this
      */
-    public function addDirective(string $keyword, callable $handler): static
+    public function addDirective(string $keyword, callable $handler, ?array $pairing = null): static
     {
-        $this->registry->addDirective($keyword, $handler);
+        $this->registry->addDirective($keyword, $handler, $pairing);
         return $this;
     }
 

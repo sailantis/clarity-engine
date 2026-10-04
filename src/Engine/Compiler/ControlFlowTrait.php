@@ -172,6 +172,8 @@ trait ControlFlowTrait
             );
         }
 
+        $this->assertNoCustomConstructOpen('elseif', $sourcePath, $tplLine);
+
         return 'elseif (' . $this->withLocation(fn() => $this->tokenizer->processCondition($rest), $sourcePath, $tplLine) . '):';
     }
 
@@ -196,6 +198,8 @@ trait ControlFlowTrait
     {
         $index = $this->innermostLoopAtCurrentDepth();
         if ($index === null) {
+            $this->assertNoCustomConstructOpen('else', $sourcePath, $tplLine);
+
             return 'else:';
         }
 
@@ -240,8 +244,12 @@ trait ControlFlowTrait
     /**
      * Compile `{% endif %}` and forget the matching if.
      */
-    private function compileEndIf(): string
+    private function compileEndIf(string $sourcePath, int $tplLine): string
     {
+        if ($this->ifDepth === 0) {
+            $this->assertNoCustomConstructOpen('endif', $sourcePath, $tplLine);
+        }
+
         if ($this->ifDepth > 0) {
             $this->ifDepth--;
         }

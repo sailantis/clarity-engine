@@ -9,6 +9,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Paired custom directives are validated at compile time.** A directive that wraps
+  a body can now declare its member tags on the opening registration, using a
+  `keyword => role` map — `'required'` for the closing tag, `'allowed'` for an optional
+  branch tag:
+
+  ```php
+  $engine->addDirective('cache', $openHandler, [
+      'endcache'  => 'required',
+      'cacheelse' => 'allowed',
+  ]);
+  $engine->addDirective('endcache',  $closeHandler);
+  $engine->addDirective('cacheelse', $branchHandler, ['cache' => 'owner']); // optional assertion
+  ```
+
+  The compiler then refuses to emit the broken PHP that used to compile silently:
+  an unclosed `{% cache %}` (which leaked an output buffer into the next render in the
+  same request), a stray `{% endcache %}` (which swallowed the engine's own render
+  buffer), a close that crosses an inner `{% if %}`/`{% for %}` or another construct, a
+  branch tag used outside its construct, and a construct that spans an `{% include %}`.
+  Errors name the template and line, and an unclosed construct is reported at its own
+  opening line. A member's optional `['owner' => '<opener>']` entry is an assertion, not a
+  second declaration: it is checked at the start of every compile, which catches
+  "registered the close but forgot the opener". Directives registered without a pairing
+  behave exactly as before, so the feature is opt-in per construct. The built-in
+  `{% else %}`/`{% elseif %}`/`{% endif %}` now also report a clear error when used
+  directly inside an open custom construct instead of emitting an unbalanced built-in
+  tag. `COMPILER_VERSION` moves 25 → 26 so previously-cached templates are recompiled and
+  now fail loudly.
+
 - **The policy API: a template's reach is now a set of rules, not one
   boolean.** A `Clarity\Engine\Policy` is a set of rules plus two
   allowlists, and every decision it makes is made **at compile time** — there is

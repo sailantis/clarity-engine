@@ -8,6 +8,7 @@ use Clarity\Engine\Compiler\CompilerCoreTrait;
 use Clarity\Engine\Compiler\ControlFlowTrait;
 use Clarity\Engine\Compiler\DirectiveSupportTrait;
 use Clarity\Engine\Compiler\InheritanceTrait;
+use Clarity\Engine\Compiler\PairedDirectiveTrait;
 use Clarity\Template\TemplateLoader;
 use Clarity\Engine\Registry;
 
@@ -87,6 +88,7 @@ class Compiler
     use BodyCompilerTrait;
     use ControlFlowTrait;
     use CodeBuilderTrait;
+    use PairedDirectiveTrait;
 
     /**
      * Bump this whenever a change alters the PHP that a template compiles to.
@@ -97,7 +99,7 @@ class Compiler
      * filter, say — is what the version is for, because it is not a policy
      * difference and no digest can express it.
      */
-    public const COMPILER_VERSION = 25;
+    public const COMPILER_VERSION = 26;
 
     /**
      * Prefix owned by the engine for every PHP variable it binds into the render
