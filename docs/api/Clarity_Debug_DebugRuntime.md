@@ -99,8 +99,8 @@ step still sees the original value.
 
 The dump is emitted (not returned) because the filter RESULT is the
 value: `{{ x |> dump |> length }}` must measure x. Emitting keeps the
-debug output visible in the page and in JS contexts (where the renderer
-produces a comment), exactly where `dump(x)` puts it.
+debug output visible at the pipe position, including as comments in JS
+and CSS contexts, exactly where `dump(x)` puts it.
 
 **Parameters**
 

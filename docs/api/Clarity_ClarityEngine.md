@@ -248,7 +248,8 @@ turning it OFF removes all of it:
 
 - compiler-level runtime assertions (range-loop safety checks);
 - `dump()` rendered by the context-aware renderers — an HTML tree in HTML,
-  a `/* DEBUG_DUMP *\/` comment in JS — with sensitive keys masked;
+  a `;/* DEBUG_DUMP *\/` comment in JS, and a `/* DEBUG_DUMP *\/` comment in CSS —
+  with sensitive keys masked;
 - `{{ x |> dump }}`, which dumps the piped value at the pipe position and
   still yields it (`{{ x |> dump |> length }}` measures x);
 - a [`DebugEventBus`](Clarity_Debug_DebugEventBus.md) emitting `template.resolve`, `template.compile`

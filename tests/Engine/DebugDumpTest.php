@@ -136,6 +136,23 @@ class DebugDumpTest extends TestCase
         );
     }
 
+    public function testDumpTruncatesNestedValuesAtMaxDepthInJsContext(): void
+    {
+        [$engine, $viewDir] = $this->createIsolatedEngine(new DumpOptions(maxDepth: 1));
+
+        $view = $this->writeTpl(
+            $viewDir,
+            'dump_js_max_depth',
+            '<script>{{ dump(data) }}</script>'
+        );
+        $output = $engine->renderPartial($view, [
+            'data' => ['nested' => ['password' => 'must-not-appear']],
+        ]);
+
+        $this->assertStringContainsString('{"nested":"…"}', $output);
+        $this->assertStringNotContainsString('must-not-appear', $output);
+    }
+
     public function testDumpEscapesCommentClosingInJsContext(): void
     {
         [$engine, $viewDir] = $this->createIsolatedEngine(new DumpOptions());
@@ -153,6 +170,44 @@ class DebugDumpTest extends TestCase
             $output,
             'dump() must escape */ in JS comment output'
         );
+    }
+
+    // =========================================================================
+    // dump() in CSS context
+    // =========================================================================
+
+    public function testDumpRendersCssCommentInStyleContext(): void
+    {
+        [$engine, $viewDir] = $this->createIsolatedEngine(new DumpOptions());
+
+        $view = $this->writeTpl(
+            $viewDir,
+            'dump_css',
+            '<style>{{ dump(data) }} .target { color: red; }</style>'
+        );
+        $output = $engine->renderPartial($view, [
+            'data' => ['password' => 'must-be-masked'],
+        ]);
+
+        $this->assertStringContainsString('/* DEBUG_DUMP: {"password":"***"} */', $output);
+        $this->assertStringNotContainsString(';/* DEBUG_DUMP:', $output);
+        $this->assertStringNotContainsString('must-be-masked', $output);
+        $this->assertStringNotContainsString('<div class="clarity-dump">', $output);
+    }
+
+    public function testDumpEscapesCommentClosingInCssContext(): void
+    {
+        [$engine, $viewDir] = $this->createIsolatedEngine(new DumpOptions());
+
+        $view = $this->writeTpl($viewDir, 'dump_css_escape', '<style>{{ dump(data) }}</style>');
+        $output = $engine->renderPartial($view, [
+            'data' => 'inject */ style </style><script>alert(1)</script>',
+        ]);
+
+        $this->assertStringContainsString('/* DEBUG_DUMP:', $output);
+        $this->assertStringNotContainsString('*/ style', $output);
+        $this->assertStringNotContainsString('</style><script>', $output);
+        $this->assertStringContainsString('\u003C/style\u003E\u003Cscript\u003E', $output);
     }
 
     // =========================================================================

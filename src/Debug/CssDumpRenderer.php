@@ -5,27 +5,27 @@ declare(strict_types=1);
 namespace Clarity\Debug;
 
 /**
- * Renders debug values as a JS comment: ;/* DEBUG_DUMP: {json} *\/
+ * Renders debug values as a CSS comment: /* DEBUG_DUMP: {json} *\/
  *
- * The output is valid JavaScript in any statement position and does not
- * interfere with surrounding script logic.  Sensitive keys are masked in the
- * JSON payload.  Any '*\/' sequence inside the JSON is escaped to '*\\\/' to
- * prevent comment injection.
+ * Closing comment sequences in the JSON are escaped, and tag delimiters are
+ * encoded to protect the surrounding <style> element.
  */
-final class JsDumpRenderer implements DumpRenderer
+final class CssDumpRenderer implements DumpRenderer
 {
     public function render(mixed $value, DumpOptions $opts): string
     {
         $masked = $this->maskValue($value, $opts, 0);
         $json = (string) \json_encode(
             $masked,
-            \JSON_UNESCAPED_UNICODE | \JSON_UNESCAPED_SLASHES | \JSON_PARTIAL_OUTPUT_ON_ERROR
+            \JSON_UNESCAPED_UNICODE
+                | \JSON_UNESCAPED_SLASHES
+                | \JSON_PARTIAL_OUTPUT_ON_ERROR
+                | \JSON_HEX_TAG
         );
 
-        // Escape any '*/' to prevent closing the JS comment early
         $json = \str_replace('*/', '*\\/', $json);
 
-        return ';/* DEBUG_DUMP: ' . $json . ' */';
+        return '/* DEBUG_DUMP: ' . $json . ' */';
     }
 
     private function maskValue(mixed $value, DumpOptions $opts, int $depth): mixed

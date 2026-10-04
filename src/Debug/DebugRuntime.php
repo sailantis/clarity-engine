@@ -30,6 +30,7 @@ final class DebugRuntime
     private HtmlDumpRenderer $html;
     private CliDumpRenderer $cli;
     private JsDumpRenderer $js;
+    private CssDumpRenderer $css;
 
     /** The event bus, present whenever debug is on. */
     public readonly DebugEventBus $bus;
@@ -42,6 +43,7 @@ final class DebugRuntime
         $this->html = new HtmlDumpRenderer();
         $this->cli  = new CliDumpRenderer();
         $this->js   = new JsDumpRenderer();
+        $this->css  = new CssDumpRenderer();
         $this->bus  = new DebugEventBus();
 
         $this->panel = $options->showPanel ? new HtmlDebugPanel() : null;
@@ -53,9 +55,8 @@ final class DebugRuntime
     /**
      * Install this runtime's formatters on a registry.
      *
-     * `dump` goes through exactly one formatter, which renders HTML or a JS
-     * comment according to the compile-time context, and masks the keys listed
-     * in {@see DumpOptions::$maskKeys}.
+     * `dump` goes through exactly one formatter, which renders according to the
+     * compile-time context and masks the keys listed in {@see DumpOptions::$maskKeys}.
      */
     public function register(Registry $registry): void
     {
@@ -68,8 +69,7 @@ final class DebugRuntime
     }
 
     /**
-     * The body of `dump(…)` and of the `{{ x |> dump }}` probe: the rendered
-     * markup, as a string.
+     * The body of `dump(…)` and of the `{{ x |> dump }}` probe: rendered output.
      *
      * @param list<mixed> $args
      */
@@ -77,9 +77,11 @@ final class DebugRuntime
     {
         $value = \count($args) === 1 ? $args[0] : $args;
 
-        return $ctx === 'js'
-            ? $this->js->render($value, $this->options)
-            : $this->html->render($value, $this->options);
+        return match ($ctx) {
+            'js'   => $this->js->render($value, $this->options),
+            'css'  => $this->css->render($value, $this->options),
+            default => $this->html->render($value, $this->options),
+        };
     }
 
     /**
@@ -89,8 +91,8 @@ final class DebugRuntime
      *
      * The dump is emitted (not returned) because the filter RESULT is the
      * value: `{{ x |> dump |> length }}` must measure x. Emitting keeps the
-     * debug output visible in the page and in JS contexts (where the renderer
-     * produces a comment), exactly where `dump(x)` puts it.
+     * debug output visible at the pipe position, including as comments in JS
+     * and CSS contexts, exactly where `dump(x)` puts it.
      */
     public function probe(string $ctx, mixed $value, mixed ...$args): mixed
     {
@@ -115,6 +117,8 @@ final class DebugRuntime
             \fwrite(\STDOUT, $this->cli->renderForced($value, $this->options));
         } elseif ($ctx === 'js') {
             echo $this->js->render($value, $this->options);
+        } elseif ($ctx === 'css') {
+            echo $this->css->render($value, $this->options);
         } else {
             echo $this->html->render($value, $this->options);
         }

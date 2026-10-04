@@ -12,6 +12,7 @@
 ### `Clarity\Debug`
 
 - [CliDumpRenderer](Clarity_Debug_CliDumpRenderer.md) `Clarity\Debug\CliDumpRenderer`
+- [CssDumpRenderer](Clarity_Debug_CssDumpRenderer.md) `Clarity\Debug\CssDumpRenderer`
 - [DebugEvent](Clarity_Debug_DebugEvent.md) `Clarity\Debug\DebugEvent`
 - [DebugEventBus](Clarity_Debug_DebugEventBus.md) `Clarity\Debug\DebugEventBus`
 - [DebugListener](Clarity_Debug_DebugListener.md) `Clarity\Debug\DebugListener`
