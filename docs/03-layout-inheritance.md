@@ -41,23 +41,23 @@ A child template **extends** a parent layout using the `{% extends %}` directive
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{% block title %}My Website{% endblock %}</title>
     {% block styles %}
-    <link rel="stylesheet" href="/css/main.css" />
+      <link rel="stylesheet" href="/css/main.css" />
     {% endblock %}
   </head>
   <body>
     <header>
       {% block header %}
-      <h1>My Website</h1>
-      <nav>
-        <a href="/">Home</a>
-        <a href="/about">About</a>
-      </nav>
+        <h1>My Website</h1>
+        <nav>
+          <a href="/">Home</a>
+          <a href="/about">About</a>
+        </nav>
       {% endblock %}
     </header>
 
     <main>
       {% block content %}
-      <p>Default content</p>
+        <p>Default content</p>
       {% endblock %}
     </main>
 
@@ -65,12 +65,12 @@ A child template **extends** a parent layout using the `{% extends %}` directive
 
     <footer>
       {% block footer %}
-      <p>&copy; 2026 My Website</p>
+        <p>&copy; 2026 My Website</p>
       {% endblock %}
     </footer>
 
     {% block scripts %}
-    <script src="/js/main.js"></script>
+      <script src="/js/main.js"></script>
     {% endblock %}
   </body>
 </html>
@@ -81,19 +81,21 @@ A child template **extends** a parent layout using the `{% extends %}` directive
 **File: `views/pages/about.clarity.html`**
 
 ```twig
-{% extends "layouts/main" %} {% block title %}About Us - My Website{% endblock
-%} {% block content %}
-<h2>About Our Company</h2>
-<p>We build amazing products.</p>
+{% extends "layouts/main" %}
+{% block title %}About Us - My Website{% endblock %}
+{% block content %}
+  <h2>About Our Company</h2>
+  <p>We build amazing products.</p>
 
-<h3>Our Mission</h3>
-<p>Making the web a better place.</p>
-{% endblock %} {% block sidebar %}
-<h3>Quick Links</h3>
-<ul>
-  <li><a href="/team">Our Team</a></li>
-  <li><a href="/history">Our History</a></li>
-</ul>
+  <h3>Our Mission</h3>
+  <p>Making the web a better place.</p>
+{% endblock %}
+{% block sidebar %}
+  <h3>Quick Links</h3>
+  <ul>
+    <li><a href="/team">Our Team</a></li>
+    <li><a href="/history">Our History</a></li>
+  </ul>
 {% endblock %}
 ```
 
@@ -107,7 +109,7 @@ Blocks with content in the parent serve as defaults:
 
 ```twig
 {% block sidebar %}
-<p>Default sidebar content</p>
+  <p>Default sidebar content</p>
 {% endblock %}
 ```
 
@@ -115,12 +117,12 @@ If the child doesn't override this block, the default is used.
 
 ### Parent Block Fallback
 
-Child blocks can include the parent block's content with `{% @parent %}`:
+Child blocks can include the parent block's content with `{% parent %}`:
 
 ```twig
 {% block scripts %}
-{% @parent %}
-<script src="/js/user-management.js"></script>
+  {% parent %}
+  <script src="/js/user-management.js"></script>
 {% endblock %}
 ```
 
@@ -130,13 +132,13 @@ You can also wrap the parent content:
 
 ```twig
 {% block title %}
-Admin | {% @parent %}
+Admin | {% parent %}
 {% endblock %}
 ```
 
 Rules:
 
-- `{% @parent %}` only works inside an overriding child block
+- `{% parent %}` only works inside an overriding child block
 - It can appear more than once in the same block
 - In multi-level inheritance, it expands to the immediate parent block content
 
@@ -200,11 +202,11 @@ Layouts can extend other layouts, creating a hierarchy.
   <div class="admin-layout">
     <aside class="admin-sidebar">
       {% block sidebar %}
-      <nav>
-        <a href="/admin">Dashboard</a>
-        <a href="/admin/users">Users</a>
-        <a href="/admin/settings">Settings</a>
-      </nav>
+        <nav>
+          <a href="/admin">Dashboard</a>
+          <a href="/admin/users">Users</a>
+          <a href="/admin/settings">Settings</a>
+        </nav>
       {% endblock %}
     </aside>
 
@@ -228,10 +230,10 @@ Layouts can extend other layouts, creating a hierarchy.
   <h1>Users</h1>
   <table>
     {% for user in users %}
-    <tr>
-      <td>{{ user:name }}</td>
-      <td>{{ user:email }}</td>
-    </tr>
+      <tr>
+        <td>{{ user:name }}</td>
+        <td>{{ user:email }}</td>
+      </tr>
     {% endfor %}
   </table>
 {% endblock %}
@@ -269,21 +271,25 @@ Layouts can extend other layouts, creating a hierarchy.
 **Layout:**
 
 ```twig
-    {% block scripts %}
-        <script src="/js/main.js"></script>
-    {% endblock %}
+<body>
+  {% block scripts %}
+    <script src="/js/main.js"></script>
+  {% endblock %}
 </body>
 ```
 
 **Page:**
 
+The layout's `main.js` is default content, so the page pulls it in with
+`{% parent %}` and appends its own scripts:
+
 ```twig
 {% block scripts %}
-<script src="/js/main.js"></script>
-<script src="/js/maps.js"></script>
-<script>
-  initializeMap({{ coordinates |> json |> raw }});
-</script>
+  {% parent %}
+  <script src="/js/maps.js"></script>
+  <script>
+    initializeMap({{ coordinates |> json |> raw }});
+  </script>
 {% endblock %}
 ```
 
@@ -366,19 +372,21 @@ Blocks can be defined within blocks for fine-grained control:
 
 ```twig
 {% block content %}
-<article>
-  {% block articleHeader %}
-  <h1>{% block articleTitle %}{% endblock %}</h1>
-  {% endblock %} {% block articleBody %}{% endblock %}
-</article>
+  <article>
+    {% block articleHeader %}
+      <h1>{% block articleTitle %}{% endblock %}</h1>
+    {% endblock %}
+    {% block articleBody %}{% endblock %}
+  </article>
 {% endblock %}
 ```
 
 **Child:**
 
 ```twig
-{% block articleTitle %}My Article{% endblock %} {% block articleBody %}
-<p>Article content here.</p>
+{% block articleTitle %}My Article{% endblock %}
+{% block articleBody %}
+  <p>Article content here.</p>
 {% endblock %}
 ```
 
@@ -387,12 +395,14 @@ Blocks can be defined within blocks for fine-grained control:
 Blocks can contain variables and expressions:
 
 ```twig
-{% block title %}{{ pageTitle ?? 'My Website' }}{% endblock %} {% block content
-%}
-<h1>{{ heading }}</h1>
-{% if showIntro %}
-<p>{{ intro }}</p>
-{% endif %} {{ mainContent |> raw }} {% endblock %}
+{% block title %}{{ pageTitle ?? 'My Website' }}{% endblock %}
+{% block content %}
+  <h1>{{ heading }}</h1>
+  {% if showIntro %}
+    <p>{{ intro }}</p>
+  {% endif %}
+  {{ mainContent |> raw }}
+{% endblock %}
 ```
 
 ## Extends Rules and Limitations
@@ -404,7 +414,8 @@ Blocks can contain variables and expressions:
 **Correct:**
 
 ```twig
-{% extends "layouts/main" %} {% block content %} ... {% endblock %}
+{% extends "layouts/main" %}
+{% block content %} ... {% endblock %}
 ```
 
 **Incorrect:**
@@ -439,7 +450,7 @@ parent blocks can use them for page-level metadata:
 
 {% block title %}{{ sectionTitle }} - Admin{% endblock %}
 {% block content %}
-<h1>Dashboard</h1>
+  <h1>Dashboard</h1>
 {% endblock %}
 ```
 
@@ -580,12 +591,12 @@ An e-commerce site: a base layout, a shop layout that extends it, and pages that
 
   <div class="product-grid">
     {% for product in products %}
-    <div class="product-card">
-      <img src="{{ product:image }}" alt="{{ product:name }}" />
-      <h3>{{ product:name }}</h3>
-      <p class="price">{{ product:price |> number(2) }}</p>
-      <a href="/products/{{ product:id }}" class="btn">View Details</a>
-    </div>
+      <div class="product-card">
+        <img src="{{ product:image }}" alt="{{ product:name }}" />
+        <h3>{{ product:name }}</h3>
+        <p class="price">{{ product:price |> number(2) }}</p>
+        <a href="/products/{{ product:id }}" class="btn">View Details</a>
+      </div>
     {% endfor %}
   </div>
 {% endblock %}
@@ -595,7 +606,6 @@ An e-commerce site: a base layout, a shop layout that extends it, and pages that
 
 - **Child block doesn't replace the parent's:** block names are case-sensitive; check spelling and put `{% extends %}` first.
 - **Child content is missing:** place rendered content inside a block. Leading `{% set %}` directives after `{% extends %}` are preserved; other content outside blocks is ignored.
-- **Layout isn't applied:** `{% extends %}` overrides `setLayout()`; use one, not both.
 
 See the [Troubleshooting Guide](06-troubleshooting.md) for errors outside inheritance.
 

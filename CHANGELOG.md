@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   | Rule          | Default | What it grants                                                                                    |
   | ------------------- | ------- | ------------------------------------------------------------------------------------------------- |
+  | `phpFunctions`      | `false` | bare calls (`strtoupper(name)`) and filter steps that resolve to a PHP function                   |
   | `rawPhp`            | `false` | `{% php CODE %}`                                                                                  |
   | `methodCalls`       | `false` | `obj.method(args)` / `$obj->method(args)`, with arguments and dynamic names                        |
   | `superglobals`      | `false` | `$_SERVER`, `$_GET`, `$_ENV`, … as chain roots                                                    |
@@ -28,13 +29,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   | Allowlist   | Default | What it governs                                            |
   | ----------- | ------- | ---------------------------------------------------------- |
-  | `functions` | `[]`    | bare calls and filter steps that resolve to a PHP function |
+  | `functions` | `[]`    | names the `phpFunctions` rule may resolve to a PHP function   |
   | `filters`   | `[]`    | names accepted after `\|>`, which need not be functions    |
 
   **An empty allowlist is no restriction; a non-empty one is the complete set** —
   only the listed names resolve, and anything else is a compile-time error. That
   is what makes `Policy::unrestricted()` the engine's former PHP mode exactly, rather
-  than a mode that happens to deny everything.
+  than a mode that happens to deny everything. A filter allowlist only narrows;
+  `allowFunctions()`, by contrast, turns the `phpFunctions` rule on as it grants,
+  so `default()->allowFunctions('count')` reaches the sandbox on its own. An
+  empty `allowFunctions()` call is a no-op, so it cannot become an accidental
+  grant of every function.
 
   ```php
   $engine->setPolicy(Policy::restricted());    // the default
@@ -88,7 +93,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and the cast changes alter the emitted file for every template, and a policy
   digest cannot express either.
 
+- **`{% parent %}` is the canonical spelling for inlining a parent block.** The
+  placeholder that a child override uses to include its parent's block content was
+  only spellable as `{% @parent %}`. The bare form is now the documented spelling;
+  the `@`-prefixed one was kept as a synonym in the release that introduced it and
+  is **removed** by the macro-sigil change below.
+
+  Clarity's answer to Twig's `{{ parent() }}`, with the same rules: valid only in
+  an overriding child block, repeatable, and scoped to the **immediate** parent
+  block. The difference is *when* it resolves: Twig calls a function at render
+  time, while Clarity splices the parent fragment in during compilation, so there
+  is no render-time dispatch — and a compile error raised inside the parent's own
+  content points at the parent template and line rather than the child.
+
 ### Changed
+
+- **`context()` is renamed `vars()`, and it now reports the whole scope.** The old
+  name collided with two other things in the engine: the output-escaping mode
+  (`{# @context js #}`, `setEscapeContext()`) and the surrounding source quoted in
+  a compile error ("… in context 'foo()'"). What the function actually returns is
+  the template's variables — the same thing the engine otherwise calls `$vars` —
+  so `vars()` is the name that says so.
+
+  `context()` still compiles as a **deprecated alias**; nothing has to change to
+  keep working. Prefer `vars()` in new templates.
+
+  The rename also fixes a real omission. A `{% for %}` variable and a macro
+  parameter are binding **PHP locals**, not entries of the scope array, and a
+  `{% set %}` or `{% php %}` assignment in open mode writes a local too — so a
+  snapshot that read only `$__c_va` silently left them out:
+
+  | Template (inside `{% for user in users %}`) | Before           | Now                        |
+  | ------------------------------------------- | ---------------- | -------------------------- |
+  | `{{ vars() \|> json \|> raw }}`              | `{"users":[…]}`  | `{"users":[…],"user":"a"}` |
+
+  The snapshot is now compile-time scoped — a variable is visible exactly where a
+  read of it would resolve — and engine internals (`__c_…`) are filtered out.
+  `COMPILER_VERSION` moves 23 → 24, because the emitted call changes for every
+  template that uses it.
 
 - **Strict types are on by default, and coercion is now something you opt out
   of.** `strictTypes` is enabled in every preset, `restricted()` included, so an
@@ -263,7 +305,77 @@ setSandboxMode(false) to let a PHP function of the same name be used.` The
   an unregistered name to fall back to — the open-mode branch is the only other
   resolution path, and it is unreachable while the sandbox is on.
 
+### Fixed
+
+- **A deprecation raised by a template no longer vanishes, and it is reported at
+  the template rather than the cache file.** The render error handler was
+  installed with the habitual `E_ALL & ~E_DEPRECATED & ~E_USER_DEPRECATED` mask,
+  which kept Clarity's handler from ever being *entered* for a deprecation —
+  making both of its branches unreachable. The diagnostic therefore bypassed the
+  application's handler entirely and was reported by PHP's built-in handler
+  against the compiled cache file, an internal path that leaked into the
+  response whenever `display_errors` was on (development setups, and the
+  engine's own "Development Error Handling" recipe). Under weak mode this was
+  the common case, not an edge one: `{{ null |> upper }}` is the CHANGELOG's own
+  example of a deprecation, and it produced output naming
+  `…\cache\82\8277e0910d750195b448797616e091ad.php`. The mask is now `E_ALL`, and
+  a template deprecation is annotated like any other template diagnostic.
+
+  The level translation is also faithful rather than lossy. It was
+  `match ($errno) { E_NOTICE => E_USER_NOTICE, default => E_USER_WARNING }`, so
+  everything but a native `E_NOTICE` — including a template's own
+  `E_USER_NOTICE` — arrived as `E_USER_WARNING`, and a handler that promotes
+  warnings to exceptions would abort a render over a notice. The level now keeps
+  its kind: notice → `E_USER_NOTICE`, deprecation → `E_USER_DEPRECATED`,
+  everything else (including a native `E_WARNING`, which is how PHP 8 reports an
+  undefined variable or array key) → `E_USER_WARNING`.
+
+  A forwarded diagnostic that originated in the template is now handed to the
+  application handler at the **template's** file and line instead of the
+  compiled cache file's, preferring the physical path when the loader supplied
+  one — matching `ClarityException` and the `… in <template>:<line>` text already
+  in the message. Diagnostics raised outside the template are untouched. See
+  `tests/Engine/SecurityErrorMappingTest.php`.
+
 ### Removed
+
+- **Macro definitions and calls no longer use the `@` sigil.** A macro is now
+  defined with `{% macro name(params) %}…{% endmacro %}` and called with
+  `{% call name(args) %}`; the old `{% macro @name %}`, `{% @name(args) %}` and
+  `{% @parent %}` spellings are removed. `COMPILER_VERSION` 24 → 25.
+
+  There is no shim that recognises the old spellings and rewrites them: an old
+  `{% @name(args) %}` or `{% @parent %}` now fails as an unknown directive, and
+  only a `{% macro @name %}` — which is still a `macro` tag — is refused with a
+  message naming the replacement.
+
+  The `@` was doing one job: keeping a macro name out of the directive-keyword and
+  template-variable namespaces. `{% call %}` does that job structurally — the tag
+  is two keywords, and the name is parsed as an identifier — so the sigil bought
+  nothing but a spelling Twig tooling cannot colour. Now the definition tag is
+  byte-identical to Twig's, and the call's arguments parse as an ordinary
+  expression. (The call tag itself is still Clarity's own: Twig invokes a macro as
+  `{{ name(args) }}`, which here would have to become a runtime closure and give
+  up compile-time inlining.)
+
+  ```twig
+  {# before #}                                 {# after #}
+  {% macro @card(t, b) %}…{% endmacro %}       {% macro card(t, b) %}…{% endmacro %}
+  {% @card("Hi", intro) %}                     {% call card("Hi", intro) %}
+  {% @parent %}                                {% parent %}
+  ```
+
+  Macro names are identifiers, so they are case-sensitive and a name that is a
+  directive keyword (`if`, `for`, `set`, `block`, `include`, …) is rejected at
+  definition time. A bare `{% card(x) %}` suggests `{% call card(x) %}` instead of
+  reporting an unknown directive, and a `{% macro %}` that is left unclosed, or
+  written empty, is named as such rather than as a missing directive.
+
+  A macro may not be defined inside another macro's body: macro names are not
+  scoped, so it would be callable from anywhere despite looking private. The scan
+  pairs `macro` against `endmacro`, which is also what lets a definition that is
+  missing its own `{% endmacro %}` report THAT rather than blaming the file for a
+  stray `{% endmacro %}`.
 
 - **The `{% php %}…{% endphp %}` block spelling is gone; `{% php <code> %}` is
   now the only raw-PHP form.** The two spellings compiled through the same
@@ -374,6 +486,25 @@ setSandboxMode(false) to let a PHP function of the same name be used.` The
   read `getFile()` / `getLine()`; they now name the template instead of the engine
   frame, which is what Smarty does for the same reason. The real call path stays
   in `getTrace()`.
+- **A failure raised by the tokenizer now names the template and line.** The two
+  fixes above both depend on the exception *carrying* a location — and the
+  tokenizer never did. It is constructed without a template (it has no
+  `sourcePath` property), so it could not fill in the name, line or path, and
+  every one of its 90 throws — an unregistered filter, a malformed expression —
+  surfaced as a `ClarityException` naming the engine's own file
+  (`Tokenizer/FilterCompilerTrait.php:295`) with an empty `templateName`. Those
+  are the author's mistakes, and the ones that most need to point at the author's
+  line, so the compiler now attaches the location at the boundary: the calls that
+  cross into the tokenizer, and the loader read of an inlined template, go through
+  a new `withLocation()` helper, which fills in only the fields that are missing.
+  An exception that already names a template came from a nested compile (an
+  inlined macro or include) whose location is the more precise one, and is
+  rethrown untouched; the original throw is kept as `$previous`.
+
+  The scanner's unclosed-tag errors were a special case of the same bug: they
+  passed the correct line but an empty name, so `relocate()` discarded the line
+  and the position survived only as prose inside the message ("opened on template
+  line 3"). Those now carry the line, and the compiler fills in just the name.
 - The getting-started guide named the wrong Composer package
   (`clarity/engine`); it now matches the real package name,
   `sailantis/clarity-engine`.

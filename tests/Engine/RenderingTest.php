@@ -167,7 +167,7 @@ class RenderingTest extends BaseTestCase
     {
         $this->expectException(ClarityException::class);
         $this->expectExceptionMessageMatches('/Spread operator is only allowed inside array and object literals/');
-        self::tpl('invalid_spread', '{{ include("x", ...context()) }}');
+        self::tpl('invalid_spread', '{{ include("x", ...vars()) }}');
         self::render('invalid_spread');
     }
 
@@ -312,7 +312,7 @@ class RenderingTest extends BaseTestCase
     public function testDynamicIncludeFunctionRendersTemplateWithContext(): void
     {
         self::tpl('partials/card', '<b>{{ foo }}</b> {{ name }}');
-        self::tpl('dynamic_include', '{{ include("partials/card", { foo: "bar", ...context() }) }}');
+        self::tpl('dynamic_include', '{{ include("partials/card", { foo: "bar", ...vars() }) }}');
 
         $result = self::render('dynamic_include', ['name' => 'Bob']);
         $this->assertSame('<b>bar</b> Bob', $result);
@@ -574,7 +574,7 @@ class RenderingTest extends BaseTestCase
     public function testDynamicIncludeAssignedViaSetRemainsUnescaped(): void
     {
         self::tpl('partials/inline_html', '<em>{{ name }}</em>');
-        self::tpl('dynamic_include_set', '{% set content = include("partials/inline_html", context()) %}{{ content |> raw }}');
+        self::tpl('dynamic_include_set', '{% set content = include("partials/inline_html", vars()) %}{{ content |> raw }}');
 
         $result = self::render('dynamic_include_set', ['name' => 'Bob']);
         $this->assertSame('<em>Bob</em>', $result);
@@ -586,7 +586,7 @@ class RenderingTest extends BaseTestCase
         self::tpl('partials/outer_html', '{{ snippet |> raw }}');
         self::tpl(
             'dynamic_include_nested_context',
-            '{% set snippet = include("partials/inner_html", context()) %}{{ include("partials/outer_html", context()) }}'
+            '{% set snippet = include("partials/inner_html", vars()) %}{{ include("partials/outer_html", vars()) }}'
         );
 
         $result = self::render('dynamic_include_nested_context', ['name' => 'Bob']);
@@ -617,7 +617,7 @@ class RenderingTest extends BaseTestCase
 
     public function testDynamicIncludeRecursionThrows(): void
     {
-        self::tpl('dynamic_loop', '{{ include("dynamic_loop", context()) }}');
+        self::tpl('dynamic_loop', '{{ include("dynamic_loop", vars()) }}');
 
         $this->expectException(ClarityException::class);
         $this->expectExceptionMessageMatches('/Recursive template rendering detected/');

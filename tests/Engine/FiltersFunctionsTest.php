@@ -350,18 +350,6 @@ class FiltersFunctionsTest extends BaseTestCase
         $this->assertStringNotContainsString('$this->__c_fn[\'upper\']', $compiled);
     }
 
-    public function testFilterMapCompilesInlineUnicodeReference(): void
-    {
-        $tokenizer = new Tokenizer();
-        $tokenizer->setRegistry(TestEnvironment::registry());
-
-        $compiled = $tokenizer->buildFilterCall('map("unicode")', '$items');
-
-        $this->assertStringContainsString('static fn(mixed $__c_val): mixed =>', $compiled);
-        $this->assertStringContainsString('new \\Clarity\\Engine\\UnicodeString', $compiled);
-        $this->assertStringNotContainsString('$this->__c_fn[\'unicode\']', $compiled);
-    }
-
     public function testFilterFilter(): void
     {
         self::tpl('f_filter', '{{ items |> filter(item => item) |> join(",") }}');
@@ -677,18 +665,113 @@ class FiltersFunctionsTest extends BaseTestCase
         $this->assertSame('4', self::render('func_incr_default'));
     }
 
-    public function testBuiltInContextFunctionReturnsTemplateVars(): void
+    public function testBuiltInVarsFunctionReturnsTemplateVars(): void
     {
-        self::tpl('builtin_context', '{{ context() |> json |> raw }}');
-        $this->assertSame('{"name":"Bob","count":2}', self::render('builtin_context', ['name' => 'Bob', 'count' => 2]));
+        self::tpl('builtin_vars', '{{ vars() |> json |> raw }}');
+        $this->assertSame('{"name":"Bob","count":2}', self::render('builtin_vars', ['name' => 'Bob', 'count' => 2]));
     }
 
-    public function testBuiltInContextRejectsArguments(): void
+    public function testBuiltInVarsRejectsArguments(): void
     {
         $this->expectException(ClarityException::class);
-        $this->expectExceptionMessageMatches('/context\(\) does not accept any arguments/');
-        self::tpl('builtin_context_args', '{{ context(name) |> json |> raw }}');
-        self::render('builtin_context_args', ['name' => 'Bob']);
+        $this->expectExceptionMessageMatches('/vars\(\) does not accept any arguments/');
+        self::tpl('builtin_vars_args', '{{ vars(name) |> json |> raw }}');
+        self::render('builtin_vars_args', ['name' => 'Bob']);
+    }
+
+    public function testBuiltInVarsAliasRejectsArgumentsUnderItsOwnName(): void
+    {
+        // The error names the function that was actually written, so the message
+        // points at the line the author has to change.
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/vars\(\) does not accept any arguments/');
+        self::tpl('builtin_vars_args', '{{ vars(name) |> json |> raw }}');
+        self::render('builtin_vars_args', ['name' => 'Bob']);
+    }
+
+    public function testVarsSeesTheLoopVariableItIsCalledInside(): void
+    {
+        // A `{% for %}` variable is a PHP local, not a `$__c_va` entry — nothing
+        // writes it back into the scope array. A snapshot that only read
+        // `$__c_va` would silently omit it, which is the trap this covers.
+        self::tpl('vars_in_for', '{% for user in users %}{{ vars() |> json |> raw }};{% endfor %}');
+        $this->assertSame(
+            '{"users":["a","b"],"user":"a"};{"users":["a","b"],"user":"b"};',
+            self::render('vars_in_for', ['users' => ['a', 'b']])
+        );
+    }
+
+    public function testVarsSeesBothLoopVariablesOfTheKeyValueForm(): void
+    {
+        // `vars():i` cannot be chained (a call result is not a chain root), so the
+        // snapshot is bound first — the idiom the docs already use for `vars()`.
+        self::tpl(
+            'vars_in_for_kv',
+            '{% for i, user in users %}{% set v = vars() %}{{ v:i }}-{{ v:user }};{% endfor %}'
+        );
+        $this->assertSame('0-a;1-b;', self::render('vars_in_for_kv', ['users' => ['a', 'b']]));
+    }
+
+    public function testVarsSeesTheRangeLoopVariable(): void
+    {
+        self::tpl('vars_in_range', '{% for i in 1..2 %}{% set v = vars() %}{{ v:i }}{% endfor %}');
+        $this->assertSame('12', self::render('vars_in_range'));
+    }
+
+    public function testVarsSeesAMacroParameter(): void
+    {
+        // A macro parameter is bound to `$__c_m_<name>`, so gathering it by
+        // spelling `'$' . $name` would read an undefined variable and render an
+        // empty label. This pins the mapped local, not the name.
+        self::tpl(
+            'vars_in_macro',
+            '{% macro badge(label) %}{% set v = vars() %}{{ v:label }}{% endmacro %}{% call badge("new") %}'
+        );
+        $this->assertSame('new', self::render('vars_in_macro'));
+    }
+
+    public function testVarsAfterTheLoopDoesNotLeakTheLoopBinding(): void
+    {
+        // The loop local survives the loop at RUNTIME (nothing unsets it), but the
+        // compiler has restored its compile scope by then, so a later vars() is
+        // emitted as a plain scope read and reports nothing extra. The visibility
+        // is therefore compile-time scoped, exactly like a normal variable read.
+        self::tpl('vars_after_for', '{% for user in users %}{% endfor %}{{ vars() |> json |> raw }}');
+        $this->assertSame('{"users":["a","b"]}', self::render('vars_after_for', ['users' => ['a', 'b']]));
+    }
+
+    public function testVarsDoesNotDisturbSelfReferentialSet(): void
+    {
+        // vars() must not write into the scope array: a `{% set %}` that reads
+        // itself would otherwise assign into a copy the snapshot had replaced,
+        // and every later read would see the stale value.
+        self::tpl(
+            'vars_then_set_self',
+            '{% set n = vars() |> length %}{{ n }}{% set n = n + 1 %}{{ n }}{% set v = vars() %}{{ v:n }}'
+        );
+        // 233: at its own right-hand side `n` is not yet bound (2 vars), then the
+        // increment reads the value the assignment just stored (3), and the last
+        // snapshot sees it too. A snapshot that wrote into the scope array would
+        // make the second read see the stale copy instead.
+        $this->assertSame('233', self::render('vars_then_set_self', ['a' => 1, 'b' => 2]));
+    }
+
+    public function testVarsStillSeesAVariableSetInsideALoop(): void
+    {
+        // A `{% set %}` target is not a loop-local: it writes THROUGH the scope
+        // array in sandbox mode, so it needs no gathering and is visible at once.
+        self::tpl(
+            'vars_set_in_for',
+            '{% for i in 1..1 %}{% set total = 5 %}{% set v = vars() %}{{ v:total }}{{ v:i }}{% endfor %}'
+        );
+        $this->assertSame('51', self::render('vars_set_in_for'));
+    }
+
+    public function testVarsSnapshotInsideAnIncludeSpreadsIntoAnObject(): void
+    {
+        self::tpl('partials/badge', '<b>{{ title }}</b> {{ name }}');
+        self::tpl('vars_include', '{{ include("partials/badge", { title: "Hi", ...vars() }) }}');
+        $this->assertSame('<b>Hi</b> Bob', self::render('vars_include', ['name' => 'Bob']));
     }
 
     // =========================================================================

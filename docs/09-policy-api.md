@@ -9,7 +9,7 @@ use Clarity\Engine\Policy;
 
 // One of the ready-made modes …
 $engine->setPolicy(Policy::restricted());   // the default
-$engine->setPolicy(Policy::trusted());     // method calls, superglobals and PHP locals — but no raw `{% php %}` and no `new`/`::`
+$engine->setPolicy(Policy::trusted());     // PHP function calls, method calls, superglobals and PHP locals — but no raw `{% php %}` and no `new`/`::`
 $engine->setPolicy(Policy::unrestricted());        // full PHP
 
 // … or the default plus the grants you name
@@ -29,7 +29,7 @@ Use one of three presets or start with `default()` and add specific grants.
 
 ```php
 Policy::restricted();     // the default, and the most restrictive
-Policy::trusted();        // method calls and superglobals
+Policy::trusted();        // PHP function calls, method calls and superglobals
 Policy::unrestricted();   // every rule
 Policy::default();        // the default, plus whatever you grant
 ```
@@ -42,6 +42,7 @@ The three ready-made modes differ only in their rules. This table is the complet
 | ------------------- | -------------- | ----------- | ---------------- |
 | `variableVariables` | ✓              | ✓           | ✓                |
 | `strictTypes`       | ✓              | ✓           | ✓                |
+| `phpFunctions`      | -              | **✓**       | **✓**            |
 | `methodCalls`       | -              | **✓**       | **✓**            |
 | `superglobals`      | -              | **✓**       | **✓**            |
 | `phpVariables`      | -              | **✓**       | **✓**            |
@@ -57,7 +58,7 @@ do not restrict names; see [The rule for allowlists](#the-rule-for-allowlists).
 | Preset           | In one line                                                         | Appropriate when                                                                      |
 | ---------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | `restricted()`   | The template's scope and registered filters and functions.          | The default, especially for templates selected by a request.                          |
-| `trusted()`      | Adds method calls, superglobals and PHP locals.                     | Templates you write that need object access.                                          |
+| `trusted()`      | Adds PHP function calls, method calls, superglobals and PHP locals.                     | Templates you write that need object access.                                          |
 | `unrestricted()` | Every rule: the full power of PHP.                            | Templates never chosen by a request, as a parity mode with Blade, Stempler or Plates. |
 | `default()`      | `restricted()`, plus the grants you name.                           | Most applications: a narrow, explicit set of allowances.                              |
 
@@ -84,9 +85,9 @@ This is the default for `new ClarityEngine()`.
 $engine->setPolicy(Policy::trusted());
 ```
 
-Enables `methodCalls`, `superglobals` and `phpVariables`. Templates can call
-methods on scoped objects, read superglobals and access the scope through PHP
-locals. They cannot use `{% php %}`, `new` or `::`.
+Enables `phpFunctions`, `methodCalls`, `superglobals` and `phpVariables`. Templates can call
+PHP functions and methods on scoped objects, read superglobals and access the
+scope through PHP locals. They cannot use `{% php %}`, `new` or `::`.
 
 `rawPhp`, `newExpressions` and `staticCalls` stay off. Inline PHP, class
 construction and static calls can reach code the application did not pass to the
@@ -126,6 +127,7 @@ your templates need.
 
 | Rule          | Default | What it grants                                                                                          |
 | ------------------- | ------- | ------------------------------------------------------------------------------------------------------- |
+| `phpFunctions`      | `false` | bare calls (`strtoupper(name)`) and filter steps that resolve to a PHP function                         |
 | `rawPhp`            | `false` | `{% php CODE %}` tags                                                                                   |
 | `methodCalls`       | `false` | `obj.method()` / `$obj->method()`, with arguments and dynamic names                                     |
 | `superglobals`      | `false` | `$_SERVER`, `$_GET`, `$_ENV`, … as chain roots                                                          |
@@ -141,13 +143,23 @@ Deny `strictTypes` to opt a template back into PHP's weak-mode coercion.
 
 | Allowlist   | Default | What it governs                                                                 |
 | ----------- | ------- | ------------------------------------------------------------------------------- |
-| `functions` | `[]`    | bare calls (`strtoupper(name)`) and filter steps that resolve to a PHP function |
+| `functions` | `[]`    | names the `phpFunctions` rule may resolve to a PHP function                     |
 | `filters`   | `[]`    | names accepted after `\|>`, which need not be functions                         |
 
 ### The rule for allowlists
 
 > **An empty allowlist is no restriction. A non-empty allowlist is the complete
 > set: only the listed names resolve, and anything else is a compile-time error.**
+
+A filter allowlist only narrows: it is consulted where a filter step is already
+being resolved, so `Policy::restricted()->allowFilters('markdown')` stays
+sandboxed. A **function** allowlist is different in one respect: a PHP function
+call is the construct the `phpFunctions` rule names, so `allowFunctions()` turns
+that rule on as it grants. `Policy::restricted()->allowFunctions('count')` is
+therefore enough on its own — no second, unrelated rule to carry it. Only a
+non-empty call does so: `allowFunctions()` with no names is a no-op, since an
+empty allowlist is unrestricted and a no-argument call must not grant every
+function.
 
 `denyFunctions(...)` takes precedence over the function allowlist. It blocks
 PHP function calls resolved from template expressions, but does not inspect raw
@@ -156,6 +168,10 @@ PHP function calls resolved from template expressions, but does not inspect raw
 ```php
 $engine->setPolicy(Policy::unrestricted()->denyFunctions('exec', 'system', 'proc_open'));
 ```
+
+`denyFunctions()` only narrows. It never turns the `phpFunctions` rule on, so
+`Policy::restricted()->denyFunctions('exec')` remains sandboxed — the denial only
+means something where another rule has already made a PHP function reachable.
 
 ### `methodCalls` and `phpVariables` are independent
 
@@ -356,12 +372,13 @@ Use these methods for a summary without inspecting individual rules:
 | `$policy->isSandboxed()` | no rule that reaches PHP is on                          |
 | `$policy->allowsPhp()`   | a rule that reaches PHP is on                           |
 
-`allowsPhp()` controls bare calls to unregistered names and filter steps that
-fall back to PHP functions. An allowlist alone does not enable PHP access; it
-only narrows which functions may be called. For example,
-`Policy::restricted()->allowFunctions('count')` remains sandboxed. Add a
-rule to enable PHP access:
-`->allowRule('methodCalls')->allowFunctions('count')`.
+`allowsPhp()` is on when the `phpFunctions` rule is on, or when a rule that makes
+another PHP construct reachable is on. A **filter** allowlist alone does not
+enable PHP access; it only narrows which names may be used. For example,
+`Policy::restricted()->allowFilters('markdown')` remains sandboxed. A **function**
+allowlist does turn the `phpFunctions` rule on as it grants, so
+`Policy::restricted()->allowFunctions('count')` reaches PHP and resolves only
+`count`.
 
 The engine also exposes `isSandboxed()` as a shortcut for
 `getPolicy()->isSandboxed()`.
@@ -384,8 +401,8 @@ Errors name the required change and report the template location through
 
 | Situation                         | Message                                                                                                                                                                                                                               |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| unregistered **function**         | `Call to unregistered function in context '…'. Register it via addFunction() first.`                                                                                                                                                  |
-| unregistered **filter step**      | `Filter 'x' is not registered, and this policy does not allow a template to reach PHP, so there is nothing for it to resolve to. Register it with addFilter(), or grant a rule to let a PHP function of the same name be used.` |
+| unregistered **function**         | `Call to unregistered function 'x()' in context '…'. Grant the 'phpFunctions' rule to allow PHP function calls, then add the name with allowFunctions().`                                                                              |
+| unregistered **filter step**      | `Filter 'x' is not registered, and this policy does not allow PHP function calls, so there is nothing for it to resolve to. Register it with addFilter(), or grant the 'phpFunctions' rule and add the name with allowFunctions().` |
 | a **denied or unlisted** function | `Function 'x' is not allowed by this policy: it is not in the function allowlist, or it is denied. Add it with allowFunctions().`                                                                                                     |
 | an **unlisted filter**            | `Filter 'x' is not registered and is not in the policy's filter allowlist. Add it with allowFilters(), or register it with addFilter().`                                                                                              |
 | a **denied rule**           | `'{% php %}' is not allowed by this policy. Grant the 'rawPhp' rule to allow it.`                                                                                                                                               |

@@ -291,12 +291,11 @@ trait FilterCompilerTrait
         // rule. So "not registered" and "cannot ever resolve" are the same
         // statement, and the message can say what to do about it instead of
         // describing the runtime table it would have consulted.
-        if (!$isRegistered && !$this->policy->allowsPhp()) {
+        if (!$isRegistered && !$this->policy->allows('phpFunctions')) {
             throw new ClarityException(
-                "Filter '{$name}' is not registered, and this policy does not allow a template to "
-                    . 'reach PHP, so there is nothing for it to resolve to. Register it with '
-                    . 'addFilter(), or grant a rule to let a PHP function of the same name '
-                    . 'be used.'
+                "Filter '{$name}' is not registered, and this policy does not allow PHP function "
+                    . 'calls, so there is nothing for it to resolve to. Register it with '
+                    . "addFilter(), or grant the 'phpFunctions' rule and add the name with allowFunctions()."
             );
         }
 

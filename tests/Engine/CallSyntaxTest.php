@@ -117,7 +117,6 @@ class CallSyntaxTest extends BaseTestCase
             ['truncate', "'abcdefghij'", '5, "..."', ''],
             ['url_encode', "'a b'", '', ''],
             ['striptags', "'<b>hi</b>'", "''", ''],
-            ['unicode', "'abcde'", '1, 3', ''],
             ['sprintf', "'%s-%d'", "'x', 5", ''],
         ];
         $vars = ['a' => [1, 2], 'b' => [3], 'items' => [1, 2, 3]];
@@ -457,7 +456,7 @@ class CallSyntaxTest extends BaseTestCase
     public static function callOnlyNames(): array
     {
         return [
-            'context' => ['context'],
+            'vars'    => ['vars'],
             'include' => ['include'],
             'dd'      => ['dd'],
         ];
@@ -474,7 +473,7 @@ class CallSyntaxTest extends BaseTestCase
      */
     public function testCallOnlyNameRejectedAsFilterReference(): void
     {
-        self::tpl('cs_ref_callonly', '{{ map(items, "context") }}');
+        self::tpl('cs_ref_callonly', '{{ map(items, "vars") }}');
 
         $this->expectException(ClarityException::class);
         $this->expectExceptionMessageMatches('/is not a filter; it is a function/');

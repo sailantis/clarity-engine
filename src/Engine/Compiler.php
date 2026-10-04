@@ -97,7 +97,7 @@ class Compiler
      * filter, say — is what the version is for, because it is not a policy
      * difference and no digest can express it.
      */
-    public const COMPILER_VERSION = 23;
+    public const COMPILER_VERSION = 25;
 
     /**
      * Prefix owned by the engine for every PHP variable it binds into the render
@@ -131,7 +131,13 @@ class Compiler
      */
     private const BODY_LINE_TOKEN = '/* @@CLARITY_BODY_LINE@@ */';
 
-    private const PARENT_PLACEHOLDER_RE = '/\{%-?\s*@parent\s*-?%\}/s';
+    /**
+     * `{% parent %}` inlines the parent block's content in a child override.
+     *
+     * The `@`-prefixed spelling this engine once accepted is gone, and `@` now
+     * marks nothing: a stray `{% @parent %}` fails as an unknown directive.
+     */
+    private const PARENT_PLACEHOLDER_RE = '/\{%-?\s*parent\s*-?%\}/s';
 
     private Tokenizer $tokenizer;
 
@@ -198,6 +204,15 @@ class Compiler
      * Simple mapping: 'item' → '$item', 'key' → '$key', etc.
      */
     private array $localVars = [];
+
+    /**
+     * Names bound to a PHP local that is NOT a `$__c_va` entry — the loop
+     * variables and macro parameters that a `vars()` snapshot has to gather
+     * explicitly. See {@see Tokenizer::setDynamicBindings()}.
+     *
+     * @var array<string, true>
+     */
+    private array $dynamicBindings = [];
 
     /**
      * Macros defined during the current compile pass (after pre-scan).

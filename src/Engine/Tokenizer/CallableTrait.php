@@ -85,9 +85,8 @@ trait CallableTrait
                 }
 
                 // A quoted name that is not a registered filter may name a PHP
-                // function, but only where the policy lets a template reach PHP
-                // (Blade parity).
-                if ($this->policy->allowsPhp() && $this->registry !== null) {
+                // function, but only where the `phpFunctions` rule is on.
+                if ($this->policy->allows('phpFunctions') && $this->registry !== null) {
                     if (!$this->isFunctionCallAllowed($refName)) {
                         throw new ClarityException(
                             "Function '{$refName}' is not allowed by this policy: it is not in the "

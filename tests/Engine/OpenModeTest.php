@@ -255,6 +255,81 @@ class OpenModeTest extends BaseTestCase
         self::openEngine()->renderPartial('om_dd_super', ['name' => '_SERVER']);
     }
 
+    /**
+     * In open mode a `{% set %}` lands in a PHP LOCAL — that is the whole point
+     * of the mode — so the dynamic lookup has to read the render frame's locals
+     * rather than the stale `$__c_va` seed.  Otherwise `${'x'}` would disagree
+     * with the literal `{{ x }}` for the very same name.
+     */
+    public function testDynamicLookupSeesASetBindingInOpenMode(): void
+    {
+        self::tpl('om_dd_set', "{% set x = 'set' %}{{ \${'x'} }}");
+
+        $this->assertSame('set', self::openEngine()->renderPartial('om_dd_set'));
+    }
+
+    public function testDynamicLookupSeesARawPhpBindingInOpenMode(): void
+    {
+        self::tpl('om_dd_php', "{% php \$x = 'php'; %}{{ \${'x'} }}");
+
+        $this->assertSame('php', self::openEngine()->renderPartial('om_dd_php'));
+    }
+
+    public function testDynamicLookupAgreesWithALiteralReadInOpenMode(): void
+    {
+        self::tpl('om_dd_same', "{% set x = 'set' %}{{ \${'x'} }}|{{ x }}");
+
+        $this->assertSame('set|set', self::openEngine()->renderPartial('om_dd_same'));
+    }
+
+    public function testDynamicLookupCannotReachTheCallableRegistryInOpenMode(): void
+    {
+        // `$__c_fn` IS a real local in the render frame once a filter use unpacks
+        // it (`$__c_fn = $this->__c_fn;`), so the local read has to filter engine
+        // internals out.  The filter step is what forces the unpack.
+        self::tpl('om_dd_registry', "{{ 'a' |> upper }}{{ \${'__c_fn'} }}");
+
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/Undefined variable: __c_fn/');
+        self::openEngine()->renderPartial('om_dd_registry');
+    }
+
+    public function testDynamicLookupCannotReachAScopeInternalInOpenMode(): void
+    {
+        self::tpl('om_dd_scope', "{{ \${'__c_va'} }}");
+
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/Undefined variable: __c_va/');
+        self::openEngine()->renderPartial('om_dd_scope');
+    }
+
+    /**
+     * A macro parameter is the one binding site that spells a plain PHP local
+     * itself, so it used to bypass `assertBindableName()`'s reserved-prefix rule.
+     * Claiming `__c_fn` made the callable registry readable through the parameter
+     * in BOTH modes — in sandbox mode a filter use is enough to unpack it.
+     */
+    public function testMacroParameterCannotClaimAReservedName(): void
+    {
+        self::tpl('om_macro_reserved', "{% macro m(__c_fn) %}x{% endmacro %}{% call m('a') %}");
+
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/reserved for internal use/');
+        self::render('om_macro_reserved');
+    }
+
+    public function testMacroParameterCannotExposeTheCallableRegistry(): void
+    {
+        self::tpl(
+            'om_macro_leak',
+            "{% macro m(__c_fn) %}{{ \${'__c_fn'} }}{% endmacro %}{{ 'a' |> upper }}{% call m('a') %}"
+        );
+
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/reserved for internal use/');
+        self::render('om_macro_leak');
+    }
+
     public function testExplicitGuardrailBlocksScopeIndirectionSinks(): void
     {
         // The engine grants full PHP; an application may still add its own
@@ -507,9 +582,46 @@ class OpenModeTest extends BaseTestCase
 
     public function testPhpTagCanStillReadTheVarArray(): void
     {
-        // $__c_va survives as the explicit escape hatch (dynamic names, context()).
+        // $__c_va survives as the explicit escape hatch (dynamic names, vars()).
         self::tpl('om_php_va', "{% php echo \$__c_va['title']; %}");
         $this->assertSame('T', self::openEngine()->renderPartial('om_php_va', ['title' => 'T']));
+    }
+
+    /**
+     * Open mode needs its own vars() coverage: it seeds the scope into locals and
+     * then every write lands in a LOCAL, so `$__c_va` goes stale. A snapshot that
+     * read only `$__c_va` would report the variables as they were at render time.
+     */
+    public function testVarsInOpenModeSeesVariablesSetAfterTheSeed(): void
+    {
+        self::tpl('om_vars_set', "{% set t = 'foo' %}{{ vars() |> json |> raw }}");
+        $this->assertSame('{"t":"foo"}', self::openEngine()->renderPartial('om_vars_set'));
+    }
+
+    public function testVarsInOpenModeSeesAValueWrittenByAPhpTag(): void
+    {
+        self::tpl('om_vars_php', "{% php \$x = 7; %}{{ vars() |> json |> raw }}");
+        $this->assertSame('{"x":7}', self::openEngine()->renderPartial('om_vars_php'));
+    }
+
+    public function testVarsInOpenModeSeesTheLoopVariable(): void
+    {
+        self::tpl('om_vars_loop', '{% for f in items %}{{ vars() |> json |> raw }};{% endfor %}');
+        $this->assertSame(
+            '{"items":["a","b"],"f":"a"};{"items":["a","b"],"f":"b"};',
+            self::openEngine()->renderPartial('om_vars_loop', ['items' => ['a', 'b']])
+        );
+    }
+
+    public function testVarsInOpenModeHidesEngineInternals(): void
+    {
+        // The render frame holds `__c_va`, `__c_fn`, `__c_sv`, `__c_dyn` and more.
+        // None of them is a template variable, and a template may never bind a
+        // `__c_`-prefixed name, so the snapshot filters the whole reserved prefix
+        // out rather than leaking the engine's frame into a debug dump.
+        self::tpl('om_vars_internals', '{{ vars() |> json |> raw }}');
+        $out = self::openEngine()->renderPartial('om_vars_internals', ['title' => 'T']);
+        $this->assertSame('{"title":"T"}', $out);
     }
 
     public function testUndefinedRootStillCausesAnErrorInOpenMode(): void

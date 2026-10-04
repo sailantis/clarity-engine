@@ -71,12 +71,12 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ## Public Constants
 
-- **COMPILER_VERSION** = `23`
+- **COMPILER_VERSION** = `25`
 - **INTERNAL_PREFIX** = `'__c_'`
 
 ## Public methods
 
-### __construct() · <small>[🗎](../../src/Engine/Compiler.php#L263)</small>
+### __construct() · <small>[🗎](../../src/Engine/Compiler.php#L278)</small>
 
 `public function __construct(): mixed`
 
@@ -87,7 +87,7 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ---
 
-### default() · <small>[🗎](../../src/Engine/Compiler.php#L268)</small>
+### default() · <small>[🗎](../../src/Engine/Compiler.php#L283)</small>
 
 `public static function default(): static`
 
@@ -98,7 +98,7 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ---
 
-### setRegistry() · <small>[🗎](../../src/Engine/Compiler.php#L280)</small>
+### setRegistry() · <small>[🗎](../../src/Engine/Compiler.php#L295)</small>
 
 `public function setRegistry(Clarity\Engine\Registry $registry): static`
 
@@ -115,7 +115,7 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ---
 
-### setDebugMode() · <small>[🗎](../../src/Engine/Compiler.php#L287)</small>
+### setDebugMode() · <small>[🗎](../../src/Engine/Compiler.php#L302)</small>
 
 `public function setDebugMode(bool $debug): static`
 
@@ -132,7 +132,7 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ---
 
-### setPolicy() · <small>[🗎](../../src/Engine/Compiler.php#L313)</small>
+### setPolicy() · <small>[🗎](../../src/Engine/Compiler.php#L328)</small>
 
 `public function setPolicy(Clarity\Engine\Policy $policy): static`
 
@@ -179,11 +179,18 @@ Compile a template and return a CompiledTemplate value object.
 
 ---
 
-### registerVar() · <small>[🗎](../../src/Engine/Compiler/DirectiveSupportTrait.php#L77)</small>
+### registerVar() · <small>[🗎](../../src/Engine/Compiler/DirectiveSupportTrait.php#L84)</small>
 
 `public function registerVar(string $name, int|null $tplLine = null): mixed`
 
 Register a local variable in the compile-time context.
+
+This is the extension point a custom directive uses to bind a variable it
+emits itself — so the name is a PHP LOCAL that nothing writes back into the
+scope array, exactly like a loop variable. It is therefore also recorded as
+a dynamic binding, which is what lets a `vars()` snapshot inside the
+directive's scope include it. A directive that binds a name it also stores
+in `$__c_va` will simply see that entry win in the snapshot.
 
 **Parameters**
 
@@ -199,7 +206,7 @@ Register a local variable in the compile-time context.
 
 ---
 
-### unregisterVar() · <small>[🗎](../../src/Engine/Compiler/DirectiveSupportTrait.php#L110)</small>
+### unregisterVar() · <small>[🗎](../../src/Engine/Compiler/DirectiveSupportTrait.php#L119)</small>
 
 `public function unregisterVar(string $name): mixed`
 
@@ -218,7 +225,7 @@ Unregister a local variable from the compile-time context.
 
 ---
 
-### getVars() · <small>[🗎](../../src/Engine/Compiler/DirectiveSupportTrait.php#L121)</small>
+### getVars() · <small>[🗎](../../src/Engine/Compiler/DirectiveSupportTrait.php#L131)</small>
 
 `public function getVars(): array`
 

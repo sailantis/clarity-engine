@@ -181,12 +181,12 @@ Integration and advanced topics:
 ### Macros
 
 ```twig
-{% macro @card(title, body) %}
+{% macro card(title, body) %}
 <div class="card"><h3>{{ title }}</h3><p>{{ body }}</p></div>
 {% endmacro %}
 
-{% @card("Welcome", intro) %}
-{% @card(article.title, article.excerpt) %}
+{% call card("Welcome", intro) %}
+{% call card(article.title, article.excerpt) %}
 ```
 
 ### Filters

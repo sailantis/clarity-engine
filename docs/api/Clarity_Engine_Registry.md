@@ -91,7 +91,8 @@ syntax (see docs); it is not a filter.
 
 Built-in Functions
 ------------------
-- `context()`: Returns current template variables array
+- `vars()`: Returns current template variables array
+- `context()`: Deprecated alias of `vars()`
 - `include($view [, $context])`: Render another template dynamically
 
 Custom Filter Examples
@@ -123,7 +124,7 @@ Template usage:
 
 ## Public methods
 
-### setDumpHandler() · <small>[🗎](../../src/Engine/Registry.php#L279)</small>
+### setDumpHandler() · <small>[🗎](../../src/Engine/Registry.php#L280)</small>
 
 `public function setDumpHandler(Closure|null $fn): void`
 
@@ -151,7 +152,7 @@ Passing null restores that neutral state; it is what disabling debug does.
 
 ---
 
-### setDdHandler() · <small>[🗎](../../src/Engine/Registry.php#L284)</small>
+### setDdHandler() · <small>[🗎](../../src/Engine/Registry.php#L285)</small>
 
 `public function setDdHandler(Closure|null $fn): void`
 
@@ -168,7 +169,7 @@ Passing null restores that neutral state; it is what disabling debug does.
 
 ---
 
-### __construct() · <small>[🗎](../../src/Engine/Registry.php#L289)</small>
+### __construct() · <small>[🗎](../../src/Engine/Registry.php#L290)</small>
 
 `public function __construct(callable|null $includeRenderer = null): mixed`
 

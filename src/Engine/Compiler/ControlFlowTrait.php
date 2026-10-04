@@ -44,17 +44,19 @@ trait ControlFlowTrait
         // Range syntax: varName in startExpr(..|...)endExpr [step stepExpr]
         if (isset($m[4]) && $m[4] !== '') {
             // Evaluate bounds in the current (outer) scope before registering the loop var
-            $start     = $this->tokenizer->processCondition(trim($m[3]));
+            $start     = $this->withLocation(fn() => $this->tokenizer->processCondition(trim($m[3])), $sourcePath, $tplLine);
             $inclusive = ($m[4] === '..');
-            $end       = $this->tokenizer->processCondition(trim($m[5]));
-            $step      = isset($m[6]) && $m[6] !== '' ? $this->tokenizer->processCondition(trim($m[6])) : '1';
+            $end       = $this->withLocation(fn() => $this->tokenizer->processCondition(trim($m[5])), $sourcePath, $tplLine);
+            $step      = isset($m[6]) && $m[6] !== ''
+                ? $this->withLocation(fn() => $this->tokenizer->processCondition(trim($m[6])), $sourcePath, $tplLine)
+                : '1';
             $cmp       = $inclusive ? '<=' : '<';
 
             // Allocate a local PHP variable for the iteration variable (same name as template var)
             $itemTplName = trim($m[1]);
             $itemPhpVar  = '$' . $itemTplName;
-            $restore     = [$itemTplName => $this->localVars[$itemTplName] ?? null];
-            $this->registerVar($itemTplName, $tplLine);
+            $restore     = [];
+            $this->bindDynamicVar($itemTplName, $restore, $tplLine);
 
             $this->forStack[] = [
                 'type'       => 'for',
@@ -79,7 +81,11 @@ trait ControlFlowTrait
         }
 
         // Standard foreach — evaluate list in the current (outer) scope first
-        $listExpr = $this->tokenizer->processCondition(trim($m[3]));
+        $listExpr = $this->withLocation(
+            fn() => $this->tokenizer->processCondition(trim($m[3])),
+            $sourcePath,
+            $tplLine
+        );
 
         $firstName = trim($m[1]);
         $hasSecond = isset($m[2]) && $m[2] !== '';
@@ -90,14 +96,13 @@ trait ControlFlowTrait
         $keyTplName  = $hasSecond ? $firstName : null;
         $itemTplName = $hasSecond ? trim($m[2]) : $firstName;
 
-        /** @var array<string, string|null> $restore */
+        /** @var array<string, array{var: string|null, dyn: bool}> $restore */
         $restore = [];
         foreach ([$keyTplName, $itemTplName] as $tplName) {
             if ($tplName === null || isset($restore[$tplName])) {
                 continue;
             }
-            $restore[$tplName] = $this->localVars[$tplName] ?? null;
-            $this->registerVar($tplName);
+            $this->bindDynamicVar($tplName, $restore);
         }
 
         $this->forStack[] = [
@@ -147,7 +152,7 @@ trait ControlFlowTrait
     private function compileIf(string $rest, string $sourcePath, int $tplLine): string
     {
         $this->ifDepth++;
-        return 'if (' . $this->tokenizer->processCondition($rest) . '):';
+        return 'if (' . $this->withLocation(fn() => $this->tokenizer->processCondition($rest), $sourcePath, $tplLine) . '):';
     }
 
     /**
@@ -167,7 +172,7 @@ trait ControlFlowTrait
             );
         }
 
-        return 'elseif (' . $this->tokenizer->processCondition($rest) . '):';
+        return 'elseif (' . $this->withLocation(fn() => $this->tokenizer->processCondition($rest), $sourcePath, $tplLine) . '):';
     }
 
     /**
@@ -272,19 +277,57 @@ trait ControlFlowTrait
      * Undo the compile-scope bindings a loop introduced, so code after the loop
      * resolves those names through the render scope again.
      *
-     * @param array<string, string|null> $restore name → previous PHP variable string, or null if unbound
+     * @param array<string, array{var: string|null, dyn: bool}> $restore name → previous binding
      */
     private function restoreLoopVars(array $restore): void
     {
-        foreach ($restore as $name => $oldValue) {
-            if ($oldValue === null) {
+        foreach ($restore as $name => $old) {
+            if ($old['var'] === null) {
                 unset($this->localVars[$name]);
             } else {
-                $this->localVars[$name] = $oldValue;
+                $this->localVars[$name] = $old['var'];
+            }
+
+            if ($old['dyn']) {
+                $this->dynamicBindings[$name] = true;
+            } else {
+                unset($this->dynamicBindings[$name]);
             }
         }
 
         $this->tokenizer->setLocalVars($this->localVars);
+        $this->tokenizer->setDynamicBindings($this->dynamicBindings);
+    }
+
+    /**
+     * Bind one name to a PHP local that is NOT a `$__c_va` entry — a loop
+     * variable or a macro parameter.  Those are the names a `vars()` snapshot has
+     * to gather explicitly (see {@see Compiler::$dynamicBindings}).
+     *
+     * `$restore` collects what to put back when the binding ends — the previous
+     * local binding, and whether the name was a dynamic binding before — so a
+     * nested loop over the same name restores the outer one rather than dropping
+     * it.
+     *
+     * @param array<string, array{var: string|null, dyn: bool}> $restore
+     * @param int|null $tplLine Line of the directive, passed through to the
+     *                          name validation so a bad name points at it.
+     */
+    private function bindDynamicVar(string $name, array &$restore, ?int $tplLine = null): void
+    {
+        // Same validation a `{% set %}` target gets: the name must be a real
+        // identifier, must not be `__c_`-prefixed, and must not be `$this`.
+        $this->assertBindableName($name, $name, $tplLine);
+
+        $restore[$name] = [
+            'var' => $this->localVars[$name] ?? null,
+            'dyn' => isset($this->dynamicBindings[$name]),
+        ];
+
+        $this->localVars[$name]        = '$' . $name;
+        $this->dynamicBindings[$name] = true;
+        $this->tokenizer->setLocalVars($this->localVars);
+        $this->tokenizer->setDynamicBindings($this->dynamicBindings);
     }
 
     /**
@@ -321,8 +364,8 @@ trait ControlFlowTrait
         }
         $this->assertBindableName($rootMatch[1], $rootMatch[1], $tplLine);
 
-        $lvalue = $this->tokenizer->processLvalue($m[1]);
-        $rvalue = $this->tokenizer->processCondition(trim($m[2]));
+        $lvalue = $this->withLocation(fn() => $this->tokenizer->processLvalue($m[1]), $sourcePath, $tplLine);
+        $rvalue = $this->withLocation(fn() => $this->tokenizer->processCondition(trim($m[2])), $sourcePath, $tplLine);
 
         return "{$lvalue} = {$rvalue};";
     }
@@ -356,9 +399,13 @@ trait ControlFlowTrait
             );
         }
 
-        $includeSource = $this->readWithDep($includeName);
+        $includeSource = $this->withLocation(
+            fn() => $this->readWithDep($includeName),
+            $currentName,
+            $tplLine
+        );
         $includeSource = $this->resolveExtends($includeSource, $includeName);
-        $this->extractMacros($includeSource);
+        $this->extractMacros($includeSource, $includeName);
 
         // Inline directly into the caller's accumulator so PHP line counts remain
         // contiguous and each line is attributed to the correct source file.

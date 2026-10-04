@@ -32,7 +32,6 @@
 - [Registry](Clarity_Engine_Registry.md) `Clarity\Engine\Registry`
 - [SourceMap](Clarity_Engine_SourceMap.md) `Clarity\Engine\SourceMap`
 - [Tokenizer](Clarity_Engine_Tokenizer.md) `Clarity\Engine\Tokenizer`
-- [UnicodeString](Clarity_Engine_UnicodeString.md) `Clarity\Engine\UnicodeString`
 
 ### `Clarity\Engine\Compiler`
 
@@ -75,4 +74,3 @@
 - [StringLoader](Clarity_Template_StringLoader.md) `Clarity\Template\StringLoader`
 - [TemplateLoader](Clarity_Template_TemplateLoader.md) `Clarity\Template\TemplateLoader`
 - [TemplateSource](Clarity_Template_TemplateSource.md) `Clarity\Template\TemplateSource`
-

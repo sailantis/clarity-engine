@@ -778,10 +778,20 @@ trait ClarityEngineTrait
             // $previousHandler is passed BY REFERENCE into buildErrorHandler():
             // its value only exists once set_error_handler() returns, so the
             // closure must observe the variable rather than a snapshot of it.
+            // The mask is E_ALL rather than the habitual
+            // `E_ALL & ~E_DEPRECATED & ~E_USER_DEPRECATED`: that mask would keep
+            // this handler from ever being *entered* for a deprecation, which
+            // makes both of its branches unreachable.  A deprecation raised by a
+            // template would then bypass the application's handler entirely and
+            // be reported by PHP's built-in handler against the compiled cache
+            // file — an internal path — which leaks into the response when
+            // display_errors is on.  Deprecations raised by a template are
+            // ordinary template diagnostics (a filter handed `null` under weak
+            // mode is the common one), so they get annotated like any other.
             $previousHandler = null;
             $previousHandler = set_error_handler(
                 $this->buildErrorHandler($templateName, $previousHandler),
-                E_ALL & ~E_DEPRECATED & ~E_USER_DEPRECATED
+                E_ALL
             );
 
             $renderStart = $this->debugMode ? \microtime(true) : 0.0;
@@ -1205,10 +1215,17 @@ trait ClarityEngineTrait
             //
             // The level is converted to its E_USER_* counterpart because
             // trigger_error() — and therefore a handler receiving a user-level
-            // diagnostic — accepts *only* user-level constants.
+            // diagnostic — accepts *only* user-level constants.  The conversion
+            // keeps the *kind* of diagnostic intact (a notice stays a notice, a
+            // deprecation stays a deprecation) rather than collapsing everything
+            // to a warning: a handler that promotes warnings to exceptions must
+            // not abort a render over a notice.  A native E_WARNING (which is
+            // how PHP 8 reports an undefined variable or array key) is the
+            // default, and so is a user-level warning.
             $userLevel = match ($errno) {
-                E_NOTICE => E_USER_NOTICE,
-                default  => E_USER_WARNING
+                E_NOTICE, E_USER_NOTICE         => E_USER_NOTICE,
+                E_DEPRECATED, E_USER_DEPRECATED => E_USER_DEPRECATED,
+                default                         => E_USER_WARNING,
             };
 
             $annotated = "$errstr in $tplFile:$tplLine";
@@ -1217,13 +1234,20 @@ trait ClarityEngineTrait
             // directly: re-emitting it with trigger_error() would be dropped,
             // because PHP does not invoke a handler for a user-level error raised
             // *while an error handler is executing*.
+            //
+            // A diagnostic that originated in the template is reported at the
+            // TEMPLATE's file and line, not the compiled cache file's: the
+            // caller asked about a template, and the cache path is an
+            // implementation detail that must not leak into logs or the
+            // response.  The physical path is preferred over the logical name
+            // when the loader supplied one, matching ClarityException.
             if ($previousHandler !== null) {
                 return self::dispatchToPreviousHandler(
                     $previousHandler,
                     $userLevel,
                     $annotated,
-                    $cacheFile,
-                    $errline
+                    $tplPath !== '' ? $tplPath : $tplFile,
+                    $tplLine
                 );
             }
 

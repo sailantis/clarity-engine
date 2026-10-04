@@ -5,21 +5,21 @@ guide covers built-ins, lambdas and custom filters.
 
 ## One call model, two signatures
 
-Filters and functions are **one namespace**: every registered name can be used
-as a **filter** (piped) _or_ as a **function** (called). Which signature applies
-is chosen by **syntax**, not by the name:
+Registered filters can be used as a **filter** (piped) _or_ as a **function**
+(called). Which signature applies is chosen by **syntax**. Functions registered
+with `addFunction()` are call-only and cannot be used as filters:
 
 ```twig
-{{ items | join(', ') }}     {# filter form — the piped value is the subject #}
+{{ items |> join(', ') }}    {# filter form — the piped value is the subject #}
 {{ join(', ', items) }}      {# function form — arguments in call order        #}
 ```
 
 For most names, the piped value becomes the first argument:
 
 ```twig
-{{ name | trim }}            ==  {{ trim(name) }}
-{{ price | number(2) }}      ==  {{ number(price, 2) }}
-{{ 3.14159 | round(2) }}     ==  {{ round(3.14159, 2) }}
+{{ name |> trim }}            ==  {{ trim(name) }}
+{{ price |> number(2) }}      ==  {{ number(price, 2) }}
+{{ 3.14159 |> round(2) }}     ==  {{ round(3.14159, 2) }}
 ```
 
 Two names have a **different argument order** in the two forms, because their
@@ -35,26 +35,24 @@ function. For example, use `join(', ', items)`; `join(items)` has no array to jo
 
 ### Shadowing
 
-A registered name **wins over a same-named PHP builtin in both modes**. In PHP
-mode `{{ trim(x) }}` compiles to Clarity's `trim` filter, not to `\trim()`.
-Unregistered names still reach PHP directly in PHP mode (`{{ substr(s, 1, 3) }}`).
+A registered name **wins over a same-named PHP builtin in both modes**. With PHP access enabled, `{{ trim(x) }}` compiles to Clarity's `trim` filter, not to `\trim()`. Unregistered names reach PHP directly, if enabled (`{{ substr(s, 1, 3) }}`).
 
 The notable case is `sort`/`shuffle`: PHP's `\sort` sorts in place and returns a
 bool, neither of which is usable in a template. Clarity's `sort` returns the
 sorted **copy**, for both syntaxes:
 
 ```twig
-{% set sorted = items | sort %}
+{% set sorted = items |> sort %}
 {{ sort(items) | join(', ') }}
 ```
 
 ## Filter Pipeline
 
-Filters transform a value before output. Both `|` and `|>` work as the filter pipe — they are completely interchangeable:
+Filters transform a value before output. Both `|` and `|>` work as the filter pipe — they are interchangeable:
 
 ```twig
 {{ userName | upper }}        {# Twig / Svelte style #}
-{{ userName |> upper }}       {# Clarity fat-pipe style #}
+{{ userName |> upper }}       {# PHP / Clarity fat-pipe style #}
 {{ price | number(2) }}
 {{ createdAt |> date('d.m.Y H:i') }}
 ```
@@ -148,7 +146,7 @@ Title-case every word:
 {{ "hello world" |> title }} {# Output: "Hello World" #}
 ```
 
-#### escape (alias: esc)
+#### escape (alias: esc, e)
 
 HTML-escape the value (same as auto-escaping):
 
@@ -241,8 +239,7 @@ arguments (it is the format string):
 ```
 
 **`format` is an alias.** Twig spells this filter `format` and also takes the
-value first, so the two names are interchangeable — use whichever your team
-prefers:
+value first, so the two names are interchangeable:
 
 ```twig
 {{ "Hello, %s!" |> format(name) }}     {# Twig spelling #}
@@ -306,7 +303,7 @@ Common format patterns:
 
 #### format_datetime(dateStyle?, timeStyle?, locale?, timezone?)
 
-Format dates using `IntlDateFormatter` (requires the PHP `intl` extension):
+Format dates using `IntlDateFormatter`:
 
 ```twig
 {{ timestamp |> format_datetime('long', 'short') }}
@@ -416,16 +413,20 @@ Split array into chunks:
 Transform each element (see [Lambda Expressions](#lambda-expressions)):
 
 ```twig
-{{ users |> map(u => u:name) |> join(', ') }} {# Extract names: "Alice, Bob, Charlie" #}
-{{ numbers |> map(n => n * 2) |> join(', ') }} {# Double each: "2, 4, 6" #}
-{{ tags |> map("upper") |> join(', ') }} {# Using filter reference #}
+{# Extract names: "Alice, Bob, Charlie" #}
+{{ users |> map(u => u:name) |> join(', ') }}
+{# Double each: "2, 4, 6" #}
+{{ numbers |> map(n => n * 2) |> join(', ') }}
+{# Using filter reference #}
+{{ tags |> map("upper") |> join(', ') }}
 ```
 
 **Keys are preserved.** Mapping over an associative array keeps the original
 keys; it does not flatten the array into a list.
 
 ```twig
-{{ {a: 'x', b: 'y'} |> map("upper") |> json }}   {# {"a":"X","b":"Y"} #}
+{# {"a":"X","b":"Y"} #}
+{{ {a: 'x', b: 'y'} |> map("upper") |> json }}
 ```
 
 #### filter(callable?)
@@ -433,10 +434,13 @@ keys; it does not flatten the array into a list.
 Filter elements (see [Lambda Expressions](#lambda-expressions)):
 
 ```twig
-{{ users |> filter(u => u:isActive) |> map(u => u:name) |> join(', ') }} {# Only active users #}
-{{ numbers |> filter(n => n > 10) |> join(', ') }} {# Numbers greater than 10 #}
+{# Only active users #}
+{{ users |> filter(u => u:isActive) |> map(u => u:name) |> join(', ') }}
+{# Numbers greater than 10 #}
+{{ numbers |> filter(n => n > 10) |> join(', ') }}
 {# Without callable: remove falsy values #}
-{{ [0, 1, false, 2, '', 3] |> filter |> join(', ') }} {# Output: "1, 2, 3" #}
+{{ [0, 1, false, 2, '', 3] |> filter |> join(', ') }}
+{# Output: "1, 2, 3" #}
 ```
 
 **Keys are preserved, and the array is NOT re-indexed.** Values that fail the
@@ -444,8 +448,10 @@ predicate are removed; the surviving elements keep their original keys. Follow
 with `|> values` when you want a zero-based list:
 
 ```twig
-{{ {a: 'x', b: '', c: 'yy'} |> filter("length") |> json }}          {# {"a":"x","c":"yy"} #}
-{{ {a: 'x', b: '', c: 'yy'} |> filter("length") |> values |> json }} {# ["x","yy"]         #}
+{{ {a: 'x', b: '', c: 'yy'} |> filter("length") |> json }}
+{# Output: {"a":"x","c":"yy"} #}
+{{ {a: 'x', b: '', c: 'yy'} |> filter("length") |> values |> json }}
+{# Output: ["x","yy"] #}
 ```
 
 The callable is a **predicate**: its return value is tested for truthiness and
@@ -457,13 +463,15 @@ predicate's result. `|> map` is the transforming counterpart.
 Reduce array to single value (see [Lambda Expressions](#lambda-expressions)):
 
 ```twig
-{{ [1, 2, 3, 4] |> reduce(sum, value => sum + value, 0) }} {# Output: 10 #}
-{{ words |> reduce(acc, word => acc ~ ' ' ~ word) }} {# Join with spaces #}
+{{ [1, 2, 3, 4] |> reduce(sum, value => sum + value, 0) }}
+{# Output: 10 #}
+{{ words |> reduce(acc, word => acc ~ ' ' ~ word) }}
+{# Join with spaces #}
 ```
 
 ### General Purpose Filters
 
-#### length
+#### length / len
 
 Count array elements or string length:
 
@@ -481,29 +489,37 @@ Count array elements or string length:
 Extract portion of array or string:
 
 ```twig
-{{ [1, 2, 3, 4, 5] |> slice(1, 3) |> join(', ') }} {# Output: "2, 3, 4" #}
-{{ "Hello World" |> slice(0, 5) }} {# Output: "Hello" #}
-{{ items |> slice(0, 10) }} {# First 10 items #}
+{{ [1, 2, 3, 4, 5] |> slice(1, 3) |> join(', ') }}
+{# Output: "2, 3, 4" #}
+{{ "Hello World" |> slice(0, 5) }}
+{# Output: "Hello" #}
+{{ items |> slice(0, 10) }}
+{# First 10 items #}
 ```
 
 #### default(fallback)
 
-Return fallback if value is `null` or not set (uses `??`):
+Return fallback if value is `null` or not set:
 
 ```twig
-{{ userName |> default('Guest') }} {# Returns 'Guest' if userName is null/unset #}
+{{ userName |> default('Guest') }}
+{# Returns 'Guest' if userName is null/unset #}
 {{ count |> default(0) }}
+{# Returns 0 if count is null/unset #}
 ```
+
+> **Note:** `default` uses `??` (null coalescing) and only triggers for `null` or missing keys.
 
 #### empty(fallback)
 
-Return fallback if value is empty or falsy (uses `?:`):
+Return fallback if value is empty or falsy:
 
 ```twig
-{{ userName |> empty('Anonymous') }} {# Returns 'Anonymous' if userName is "", 0, null, false #}
+{{ userName |> empty('Anonymous') }}
+{# Returns 'Anonymous' if userName is "", 0, null, false #}
 ```
 
-> **Note:** `default` uses `??` (null coalescing) and only triggers for `null` or missing keys. `empty` uses `?:` and triggers for any falsy value including empty strings and zero.
+> **Note:** `empty` uses `?:` and triggers for any falsy value including empty strings and zero.
 
 #### json
 
@@ -532,14 +548,6 @@ Convert to base64 data URI:
 
 ```twig
 <img src="{{ imageData |> data_uri('image/png') }}" />
-```
-
-#### unicode(start?, length?)
-
-Wrap in UnicodeString for Unicode operations:
-
-```twig
-{{ text |> unicode |> reverse }} {# Unicode-aware string reverse #}
 ```
 
 ## Lambda Expressions
@@ -575,13 +583,16 @@ Transform values:
 Complex expressions:
 
 ```twig
-{{ products |> map(p => p:name ~ ' ($' ~ (p:price |> number(2)) ~ ')') |> join(', ') }}
+{{ products
+    |> map(p => p:name ~ ' ($' ~ (p:price |> number(2)) ~ ')')
+    |> join(', ') }}
 ```
 
 Access outer variables:
 
 ```twig
-{% set prefix = 'Item: ' %} {{ items |> map(item => prefix ~ item:name) |> join(', ') }}
+{% set prefix = 'Item: ' %}
+{{ items |> map(item => prefix ~ item:name) |> join(', ') }}
 ```
 
 ### Filter Examples
@@ -617,7 +628,9 @@ Build a string:
 Calculate total price:
 
 ```twig
-{{ cart:items |> reduce(total, item => total + (item:price * item:quantity), 0) |> number(2) }}
+{{ cart:items
+    |> reduce(total, item => total + (item:price * item:quantity), 0)
+    |> number(2) }}
 ```
 
 ### Filter References
@@ -625,30 +638,25 @@ Calculate total price:
 Use registered filter names as callbacks:
 
 ```twig
-{{ tags |> map("upper") |> join(', ') }} {# Apply 'upper' filter to each tag #}
-{{ names |> map("trim") |> join(', ') }} {# Trim each name #}
+{# Apply 'upper' filter to each tag #}
+{{ tags |> map("upper") |> join(', ') }}
+{# Trim each name #}
+{{ names |> map("trim") |> join(', ') }}
 {# Works with custom filters too #}
 {{ prices |> map("currency") |> join(', ') }}
 ```
-
-> **Security:** Only registered Clarity filters can be referenced. Arbitrary PHP function names are rejected at compile time.
-
-A reference is compiled according to what it names:
-
-| Referenced filter                  | Compiles to                      | Why                                                                                 |
-| ---------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------- |
-| Inline (`upper`, `trim`, `length`) | a closure (`static fn($v) => …`) | inline filters are codegen, so there is nothing in the runtime table to look up     |
-| Callable (`slug`, `currency`)      | `$__c_fn['slug']`                | the filter already _is_ a runtime callable; re-emitting it would duplicate the code |
 
 Both `map` and `filter` accept a reference, but each expects a different kind of
 callable — `map` a transformer, `filter` a **predicate**:
 
 ```twig
 {# map: the return value REPLACES each element #}
-{{ tags |> map("upper") |> join(', ') }}          {# ['a','b'] -> 'A, B' #}
+{{ tags |> map("upper") |> join(', ') }}
+{# ['a','b'] -> 'A, B' #}
 
 {# filter: the return value is TESTED; the original element passes through #}
-{{ items |> filter("length") |> join(', ') }}     {# ['a','','bb'] -> 'a,bb' ('' is falsy) #}
+{{ items |> filter("length") |> join(', ') }}
+{# ['a','','bb'] -> 'a,bb' ('' is falsy) #}
 ```
 
 `reduce` requires a **binary** callback (accumulator, then element), which a
@@ -666,20 +674,24 @@ Functions are called directly in expressions. Because filters and functions are
 [one namespace](#one-call-model-two-signatures), every filter can also be called
 this way; the names below are simply the ones whose _canonical_ use is a call.
 
-### context()
+### vars()
 
 Get all current template variables:
 
 ```twig
-{% set allVars = context() %}
+{% set allVars = vars() %}
 {{ allVars |> json |> raw }}
 ```
 
 Useful for debugging or passing all context to an include:
 
 ```twig
-{{ include("partial", context()) }}
+{{ include("partial", vars()) }}
 ```
+
+It reports what is actually in scope, not just the variables the view was
+rendered with: inside a `{% for %}` or a macro body the loop variable or
+parameter appears too, and a `{% set %}` is visible from the moment it runs.
 
 ### include(template, context?)
 
@@ -700,7 +712,7 @@ With dynamic template name:
 Merge current context:
 
 ```twig
-{{ include("partials/user", { ..:context(), showEmail: true }) }}
+{{ include("partials/user", { ..:vars(), showEmail: true }) }}
 ```
 
 ### json(...values)
@@ -714,8 +726,9 @@ Encode values as JSON:
 
 ### dump(...values)
 
-Debug output, rendered by the context-aware renderer — an HTML tree in HTML, a JS
-comment inside `<script>` — with sensitive keys masked:
+Debug output, rendered by the context-aware renderer — an HTML tree in HTML, a
+JS comment inside `<script>`, or a CSS comment inside `<style>` — with sensitive
+array keys masked:
 
 ```twig
 <pre>{{ dump(user, settings) }}</pre>
@@ -814,6 +827,7 @@ Use in template:
 ```twig
 {{ price |> currency }} {# Output: € 12.50 #}
 {{ price |> currency('$') }} {# Output: $ 12.50 #}
+{{ currency(price, '$') }} {# Output: $ 12.50 #}
 ```
 
 ### Filter with Multiple Arguments
@@ -843,6 +857,8 @@ $engine->addFilter('formatDate', function($timestamp) use ($config) {
     return date($config['dateFormat'], $timestamp);
 });
 ```
+
+> **Note:** A registered filter can also be called as a function. The piped value becomes the first argument, so `currency(price, '$')` is equivalent to `price |> currency('$')`. This applies to filters registered with `addFilter()`; functions registered with `addFunction()` cannot be used with filter syntax.
 
 ## Custom Functions
 
@@ -885,9 +901,11 @@ Use in template:
 
 ```twig
 {% for i in range(1, 10) %}
-<li>Item {{ i }}</li>
+    <li>Item {{ i }}</li>
 {% endfor %}
 ```
+
+> **Note:** Functions registered with `addFunction()` cannot be used as filters.
 
 ## Named Arguments
 
@@ -905,11 +923,13 @@ Named arguments can be combined with positional ones:
 {{ text |> truncate(100, ellipsis:"...") }}
 ```
 
-> **Note:** Named arguments use `:` in Clarity syntax and are emitted as PHP 8 named arguments. PHP validates parameter names and arity at runtime. Positional arguments must come before named ones.
+> **Note:** For inline filters, Clarity resolves and validates arguments while compiling the template. 
+> For runtime callables and PHP functions, named arguments are emitted as PHP 8 named arguments, so PHP applies its usual argument validation at runtime. 
+> Positional arguments must come before named ones.
 
-## PHP Functions as Filters (PHP Mode)
+## PHP Functions as Filters
 
-When a policy allows PHP access, unregistered PHP functions can be used directly
+When the `phpFunctions` rule is on, unregistered PHP functions can be used directly
 as filters or function calls, subject to the function allowlist and deny list.
 Registered filters and functions take precedence over same-named PHP functions.
 
@@ -938,10 +958,8 @@ As a call, arguments are passed as written:
 ```
 
 Use `denyFunctions()` to block PHP function calls made through template
-expressions. It does not inspect calls inside raw `{% php %}` blocks.
-
-> See [Advanced Topics → PHP Mode](04-advanced-topics.md#php-mode) for the
-> security consequences — PHP mode is equivalent to executing arbitrary PHP.
+expressions. It does not inspect calls inside raw `{% php %}` blocks, which are
+governed by the `rawPhp` rule. See [The Policy API](09-policy-api.md) for details.
 
 ## Filter Reference Quick Table
 
@@ -992,15 +1010,10 @@ expressions. It does not inspect calls inside raw `{% php %}` blocks.
 | `escape` / `esc`   | HTML escape            | `{{ html \|> escape }}`                                  |
 | `raw`              | Disable auto-escaping  | `{{ html \|> raw }}`                                     |
 
-Every name above is also callable with parentheses; the value that would be piped
-becomes the first argument, except `date` and `join`, whose call form mirrors PHP
-(see [One call model](#one-call-model-two-signatures)). The reverse is not true:
-a few names are **call-only** because their first argument is not a piped value —
-`context`, `include` and `dd`. Writing `{{ x |> context }}` is a compile
-error; call them instead (`{{ context() }}`). `dump` is the exception: it is both
-callable and pipeable, because its filter form is a pass-through probe rather
-than a dispatch of the callable. All three `dump` forms — the call, the pipe
-step and the quoted reference — are eliminated in production.
+> **Note:** Every name above is also callable with parentheses; the value that would be piped becomes the first argument, except `date` and `join`, whose call form mirrors PHP (see [One call model](#one-call-model-two-signatures)).  
+> The opposite is not true: a few names are **call-only** because their first argument is not a piped value — `vars`, `include` and `dd`.  
+> Writing `{{ x |> vars }}` is a compile error; call them instead (`{{ vars() }}`).  
+> `dump` is an exception: it is both callable and pipeable, because its filter form is a pass-through probe rather than a dispatch of the callable. All three `dump` forms — the call, the pipe step and the quoted reference — are eliminated in production.
 
 ## Next Steps
 

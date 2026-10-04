@@ -55,8 +55,9 @@ class PolicyTest extends BaseTestCase
     {
         $policy = Policy::trusted();
 
-        // What trusted() keeps: object function access and the constructs PHP
-        // authored templates normally use.
+        // What trusted() keeps: object function access, bare PHP function calls
+        // and the constructs PHP authored templates normally use.
+        $this->assertTrue($policy->allows('phpFunctions'));
         $this->assertTrue($policy->allows('methodCalls'));
         $this->assertTrue($policy->allows('superglobals'));
         $this->assertTrue($policy->allows('phpVariables'));
@@ -178,19 +179,47 @@ class PolicyTest extends BaseTestCase
         $this->assertSame(['strrev'], $policy->deniedFunctions());
     }
 
+    public function testDenyFunctionsDoesNotGrantPhpAccess(): void
+    {
+        // `denyFunctions()` is a NARROWING grant: it removes names from what is
+        // reachable, so it cannot be the thing that makes PHP reachable. A
+        // sandbox plus a deny list is still a sandbox — otherwise the API would
+        // read as if denying a function granted every other one.
+        $policy = Policy::restricted()->denyFunctions('exec', 'system');
+
+        $this->assertFalse($policy->allows('phpFunctions'));
+        $this->assertFalse($policy->allowsPhp());
+        $this->assertTrue($policy->isSandboxed());
+    }
+
+    public function testAnEmptyAllowFunctionsCallIsANoOp(): void
+    {
+        // `allowFunctions()` turns the `phpFunctions` rule on as it grants, so an
+        // EMPTY call has to do nothing: an empty allowlist is UNRESTRICTED, and a
+        // no-argument call turning the rule on would grant every PHP function.
+        $policy = Policy::restricted()->allowFunctions();
+
+        $this->assertFalse($policy->allows('phpFunctions'));
+        $this->assertFalse($policy->allowsPhp());
+        $this->assertTrue($policy->isSandboxed());
+        $this->assertFalse($policy->restrictsFunctions());
+    }
+
     public function testAnAllowlistDoesNotByItselfMakePhpReachable(): void
     {
-        // An allowlist narrows what may be called; it does not open a door. PHP
-        // function filtering is only consulted where a construct reaches PHP in
-        // the first place, and `restricted()` has none on, so a lone allowlist
-        // stays sandboxed — the grant needs a rule to apply to.
-        $this->assertFalse(Policy::restricted()->allowFunctions('count')->allowsPhp());
+        // A FILTER allowlist narrows what may be called; it does not open a door.
+        // Function filtering is only consulted where a construct reaches PHP in
+        // the first place, and `restricted()` has none on, so a lone filter
+        // allowlist stays sandboxed.
         $this->assertFalse(Policy::restricted()->allowFilters('markdown')->allowsPhp());
         $this->assertFalse(Policy::restricted()->allowsPhp());
 
-        // Pair the allowlist with a rule and PHP is reachable, and only
-        // the listed names resolve.
-        $granted = Policy::restricted()->allowRule('methodCalls')->allowFunctions('count');
+        // A FUNCTION allowlist is the exception: a PHP function call is the
+        // construct the `phpFunctions` rule names, so granting the name turns the
+        // rule on as well. It is still an allowlist, so only the listed names
+        // resolve.
+        $granted = Policy::restricted()->allowFunctions('count');
+        $this->assertTrue($granted->allows('phpFunctions'));
         $this->assertTrue($granted->allowsPhp());
         $this->assertTrue($granted->allowsFunction('count'));
         $this->assertFalse($granted->allowsFunction('strrev'));
@@ -385,13 +414,13 @@ class PolicyTest extends BaseTestCase
         // would be served the class compiled under the old policy.  An allowlist
         // change is the case a `COMPILER_VERSION` bump cannot express.
         //
-        // An allowlist only filters the PHP functions a construct may reach, so
-        // it needs a rule to apply to: `methodCalls` is the one that makes
-        // the bare `strrev()` reachable at all.
+        // An unregistered filter name resolves to a PHP function of that name, so
+        // `allowFunctions()` — which turns the `phpFunctions` rule on as it grants —
+        // is what makes a bare `strrev` reachable at all.
         self::tpl('policy_allow', "{{ 'abc' |> strrev }}");
 
         $restricted = TestClarityEngine::withPolicy(
-            Policy::restricted()->allowRule('methodCalls')->allowFilters('strrev')
+            Policy::restricted()->allowFunctions('strrev')
         );
         $this->assertSame('cba', $restricted->renderPartial('policy_allow'));
 
@@ -400,13 +429,13 @@ class PolicyTest extends BaseTestCase
         // `strrev`. An empty allowlist would be WIDER (no restriction), which is
         // why the narrowing has to be another explicit list.
         $narrower = TestClarityEngine::withPolicy(
-            Policy::restricted()->allowRule('methodCalls')->allowFilters('count')
+            Policy::restricted()->allowFunctions('count')
         );
         try {
             $narrower->renderPartial('policy_allow');
             $this->fail('the cached class must not be reused under a different policy');
         } catch (ClarityException $e) {
-            $this->assertStringContainsString('not registered', $e->getMessage());
+            $this->assertStringContainsString('not allowed by this policy', $e->getMessage());
         }
 
         // And widening it again picks the new policy up too.

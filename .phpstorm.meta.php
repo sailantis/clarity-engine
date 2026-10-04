@@ -84,6 +84,11 @@ namespace PHPSTORM_META
             'description' => 'Alias of escape.',
             'example'     => '{{ x |> esc }}',
         ],
+        'e' => [
+            'return'      => 'string',
+            'description' => 'Alias of escape.',
+            'example'     => '{{ x |> e }}',
+        ],
         'first' => [
             'return'      => 'mixed',
             'description' => 'Get the first element of an array or first character of a string.',
@@ -249,12 +254,6 @@ namespace PHPSTORM_META
             'description' => 'Truncate a string to the given length.',
             'example'     => '{{ s |> truncate(100) }}',
         ],
-        'unicode' => [
-            'return'      => 'string',
-            'params'      => [['start', '0'], ['length', 'null']],
-            'description' => 'Wrap in UnicodeString for advanced operations.',
-            'example'     => '{{ s |> unicode }}',
-        ],
         'upper' => [
             'return'      => 'string',
             'description' => 'Convert to uppercase (mb_strtoupper).',
@@ -275,11 +274,11 @@ namespace PHPSTORM_META
     // ── Functions ───────────────────────────────────────────────────────
 
     override(\Clarity::function(0), map([
-        'context' => [
+        'vars' => [
             'return'      => 'array',
             'params'      => [['vars', '[]']],
             'description' => 'Returns the current template variables array.',
-            'example'     => '{{ context() }}',
+            'example'     => '{{ vars() }}',
         ],
         'include' => [
             'return'      => 'string',

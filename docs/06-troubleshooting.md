@@ -91,9 +91,9 @@ $engine->render('page', [
 **Error:**
 
 ```
-Filter 'filterName' is not registered, and this policy does not allow a template
-to reach PHP, so there is nothing for it to resolve to. Register it with
-addFilter(), or grant a rule to let a PHP function of the same name be used.
+Filter 'filterName' is not registered, and this policy does not allow PHP function
+calls, so there is nothing for it to resolve to. Register it with
+addFilter(), or grant the 'phpFunctions' rule and add the name with allowFunctions().
 ```
 
 **Cause:** Typo in filter name, or the filter was never registered.
@@ -101,7 +101,8 @@ addFilter(), or grant a rule to let a PHP function of the same name be used.
 The error occurs during compilation, not rendering.
 
 **Fix:** Register a custom filter with `addFilter()`. To use a PHP function by
-name, enable a PHP-reaching rule and allowlist the function:
+name, grant the `phpFunctions` rule and allowlist the function (which
+`allowFunctions()` does in one step):
 
 ```php
 $engine->setPolicy(Policy::default()
@@ -636,7 +637,7 @@ Otherwise it outputs nothing and is safe to leave in templates — see
 ### Dump Template Variables
 
 ```twig
-<pre>{{ context() |> json |> raw }}</pre>
+<pre>{{ vars() |> json |> raw }}</pre>
 ```
 
 Or specific variable:
@@ -645,7 +646,7 @@ Or specific variable:
 <pre>{{ dump(user) }}</pre>
 ```
 
-Unlike `{{ context() |> json }}`, `dump()` does not expose data in production.
+Unlike `{{ vars() |> json }}`, `dump()` does not expose data in production.
 
 ### Check Compiled Output
 

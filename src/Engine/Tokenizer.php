@@ -119,6 +119,22 @@ class Tokenizer
      * @var array<string, string>
      */
     private array $localVars = [];
+
+    /**
+     * Compile-time names bound to a PHP local that is NOT an entry of
+     * `$__c_va`: a `{% for %}` variable, or a macro parameter.
+     *
+     * Deliberately NOT the keys of {@see $localVars}.  A `{% set %}` root is in
+     * that map too, but it writes THROUGH `$__c_va` (`$__c_va['a'] = 1`, or `$a`
+     * in open mode, which is the render scope seeded by `extract()`), so its
+     * value IS in `$__c_va` and already appears in a scope snapshot.  These names
+     * are different: nothing puts a loop variable or a macro parameter into
+     * `$__c_va`, so `vars()` has to read them off the local to see them at all.
+     *
+     * @var array<string, true>
+     */
+    private array $dynamicBindings = [];
+
     /**
      * PHP's variable-name grammar, byte-wise:
      *
@@ -384,5 +400,16 @@ class Tokenizer
         // Invalidate the cache: cached chain strings may reference identifiers
         // whose resolution changes when the local-var context changes.
         $this->varChainCache = [];
+    }
+
+    /**
+     * Update the set of names bound to a PHP local that is not a `$__c_va`
+     * entry — loop variables and macro parameters.  See {@see $dynamicBindings}.
+     *
+     * @param array<string, true> $names
+     */
+    public function setDynamicBindings(array $names): void
+    {
+        $this->dynamicBindings = $names;
     }
 }

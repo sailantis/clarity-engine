@@ -40,7 +40,7 @@ class RegistryCallModelTest extends BaseTestCase
     {
         $registry = TestEnvironment::registry();
 
-        foreach (['context', 'include', 'dd'] as $name) {
+        foreach (['vars', 'include', 'dd'] as $name) {
             $this->assertFalse(
                 $registry->hasFilter($name),
                 "'{$name}' is call-only; it must not be filterable"
@@ -76,7 +76,7 @@ class RegistryCallModelTest extends BaseTestCase
             'length', 'len', 'json', 'keys', 'values', 'first', 'last',
             'map', 'filter', 'reduce', 'sort', 'dump',
             // call-only
-            'context', 'include', 'dd',
+            'vars', 'include', 'dd',
         ] as $name) {
             $this->assertArrayHasKey($name, $callables, "'{$name}' must be in the runtime callable table");
         }
@@ -193,7 +193,7 @@ class RegistryCallModelTest extends BaseTestCase
         $registry = new Registry();
 
         // The call-only builtins are dispatchable but not usable as filters.
-        foreach (['context', 'include', 'dd'] as $name) {
+        foreach (['vars', 'include', 'dd'] as $name) {
             $this->assertNotNull($registry->getCallable($name), "'{$name}' must be dispatchable");
             $this->assertFalse($registry->hasFilter($name), "'{$name}' must not be filterable");
         }

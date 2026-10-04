@@ -6,11 +6,18 @@ Extracted from Clarity\Engine\Compiler to keep each file small. See that class f
 
 ## Public methods
 
-### registerVar() · <small>[🗎](../../src/Engine/Compiler/DirectiveSupportTrait.php#L77)</small>
+### registerVar() · <small>[🗎](../../src/Engine/Compiler/DirectiveSupportTrait.php#L84)</small>
 
 `public function registerVar(string $name, int|null $tplLine = null): mixed`
 
 Register a local variable in the compile-time context.
+
+This is the extension point a custom directive uses to bind a variable it
+emits itself — so the name is a PHP LOCAL that nothing writes back into the
+scope array, exactly like a loop variable. It is therefore also recorded as
+a dynamic binding, which is what lets a `vars()` snapshot inside the
+directive's scope include it. A directive that binds a name it also stores
+in `$__c_va` will simply see that entry win in the snapshot.
 
 **Parameters**
 
@@ -26,7 +33,7 @@ Register a local variable in the compile-time context.
 
 ---
 
-### unregisterVar() · <small>[🗎](../../src/Engine/Compiler/DirectiveSupportTrait.php#L110)</small>
+### unregisterVar() · <small>[🗎](../../src/Engine/Compiler/DirectiveSupportTrait.php#L119)</small>
 
 `public function unregisterVar(string $name): mixed`
 
@@ -45,7 +52,7 @@ Unregister a local variable from the compile-time context.
 
 ---
 
-### getVars() · <small>[🗎](../../src/Engine/Compiler/DirectiveSupportTrait.php#L121)</small>
+### getVars() · <small>[🗎](../../src/Engine/Compiler/DirectiveSupportTrait.php#L131)</small>
 
 `public function getVars(): array`
 

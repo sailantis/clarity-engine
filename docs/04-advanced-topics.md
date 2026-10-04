@@ -6,16 +6,17 @@ This guide covers advanced Clarity features including template loaders, caching,
 
 Clarity resolves template names through a pluggable loader system. The default `FileLoader` handles straightforward file-based resolution. Two additional loaders cover more advanced scenarios.
 
-### Named Namespaces (`addNamespace`)
+### Namespaces
 
 Use `addNamespace()` to map a short alias to a template directory. Reference
 templates with `namespace::path`.
 
 ```php
 // Register namespaces individually
-$engine->addNamespace('admin',      __DIR__ . '/views/admin');
-$engine->addNamespace('emails',     __DIR__ . '/views/emails');
-$engine->addNamespace('components', __DIR__ . '/views/components');
+$engine
+    ->addNamespace('admin',      __DIR__ . '/views/admin')
+    ->addNamespace('emails',     __DIR__ . '/views/emails')
+    ->addNamespace('components', __DIR__ . '/views/components');
 
 // Or pass them all at once in the constructor
 $engine = new ClarityEngine([
@@ -38,7 +39,7 @@ Use the namespace prefix inside templates:
 {% extends "layouts/main" %}
 ```
 
-`addNamespace()` returns `$this` and is fully chainable. Internally it sets up a `DomainRouterLoader` with the base `viewPath` as the fallback, so unprefixed template names continue to work as before.
+`addNamespace()` sets up a **`DomainRouterLoader`** with the base `viewPath` as the fallback, so unprefixed template names continue to work.
 
 To inspect registered namespaces at runtime:
 
@@ -48,7 +49,7 @@ $map = $engine->getNamespaces(); // ['admin' => '/path/to/views/admin', ...]
 
 ### DomainRouterLoader
 
-`DomainRouterLoader` dispatches template resolution based on a `domain::localName` prefix. This is the recommended way to organise templates across multiple directories or packages.
+`DomainRouterLoader` dispatches template resolution based on a `domain::localName` prefix. Namespaces use this mechanism under the hood, mapping each namespace to a corresponding domain.
 
 ```php
 use Clarity\Template\DomainRouterLoader;
@@ -80,7 +81,7 @@ Dots and slashes are interchangeable as path separators within the local name:
 {# Both are equivalent #}
 ```
 
-If no `::` prefix is present and a fallback loader is configured, the name is passed to the fallback unchanged. If no fallback is configured, `load()` returns `null` (template not found).
+If no `::` prefix is present and a fallback loader is configured, the name is passed to the fallback unchanged.
 
 #### Example Structure
 
@@ -109,7 +110,7 @@ views/
 
 ### CompositeLoader
 
-`CompositeLoader` chains multiple loaders and returns the first non-`null` result. It is useful for overlaying a dynamic source (e.g. database or array) on top of a file-based one:
+`CompositeLoader` chains multiple loaders and returns the first successful result. It is useful for overlaying a dynamic source (e.g. database or array) on top of a file-based one:
 
 ```php
 use Clarity\Template\CompositeLoader;
@@ -122,7 +123,7 @@ $engine->setLoader(new CompositeLoader(
 ));
 ```
 
-The loaders are tried in the order they are passed to the constructor. The first loader that returns a non-`null` `TemplateSource` wins.
+The loaders are tried in the order they are passed to the constructor. The first loader that returns a successful result wins.
 
 ### setExtension() and Loaders
 
@@ -143,7 +144,7 @@ Clarity compiles `.clarity.html` templates into PHP classes and caches them on d
 
 ### Compiler Version
 
-Each compiled class records the `Compiler::COMPILER_VERSION`. The loader
+Each compiled class records the compiler version. The loader
 recompiles cached files when their version is stale or missing.
 
 The compiled class also records the debug-mode flag and a digest of the [policy](09-policy-api.md#a-policy-change-invalidates-the-compiled-cache) it was built under; a change to either recompiles the template.
@@ -157,24 +158,14 @@ $cachePath = $engine->getCachePath();              // default: sys_get_temp_dir(
 $engine->flushCache(); // delete all cached files
 ```
 
-**Development:** optionally flush on every request:
-
-```php
-if ($_ENV['APP_ENV'] === 'development') {
-    $engine->flushCache();
-}
-```
-
-**Production:** use a persistent directory and let automatic invalidation handle updates — do **not** call `flushCache()` on every request.
-
 ### Cache Directory Structure
 
 Cached files are organized by hash:
 
 ```
 cache/clarity/
-├── a1b2c3d4e5f6...php  (compiled: views/home.clarity.html)
-├── b2c3d4e5f6a1...php  (compiled: layouts/main.clarity.html)
+├── a1/a1b2c3d4e5f6...php  (compiled: views/home.clarity.html)
+├── b1/b2c3d4e5f6a1...php  (compiled: layouts/main.clarity.html)
 └── ...
 ```
 
@@ -186,7 +177,7 @@ Clarity automatically escapes all output for security by default.
 
 ### How Auto-Escaping Works
 
-Every output expression is wrapped with `htmlspecialchars()`:
+Expressions are wrapped with `htmlspecialchars()` to prevent XSS attacks:
 
 ```twig
 {{ userInput }}
@@ -254,10 +245,10 @@ filesystem path. Custom loaders can return a path in `TemplateSource`.
 
 `ClarityException` exposes the template location through `templateName` and
 `templateLine`, and mirrors it to `getFile()` and `getLine()`. This lets uncaught
-errors and Xdebug point to the template source:
+errors point to the template source:
 >
 > ```
-> Fatal error: Uncaught Clarity\ClarityException: '{% php %}' is not allowed by this policy.
+> Fatal error: Uncaught Clarity\ClarityException: '{% php %}' is not allowed by this policy.  
 > Grant the 'rawPhp' rule to allow it. in pages/home on line 4 in
 > /srv/app/views/pages/home.clarity.html on line 4
 > ```
@@ -266,7 +257,7 @@ errors and Xdebug point to the template source:
 > to the engine frame if no template location is available. The exception
 > message keeps the logical name, and `getTrace()` retains the PHP call stack.
 
-The original throwable is always available as `$e->getPrevious()`.
+The original throwable is available as `$e->getPrevious()`.
 
 ### What gets mapped
 
@@ -276,7 +267,7 @@ The original throwable is always available as `$e->getPrevious()`.
 | Syntax error in a template expression                                  | `ClarityException` wrapping the `ParseError`, pointing at the template line                                                      |
 | Exception thrown by a filter, function, or inline-filter PHP           | `ClarityException` wrapping the original, pointing at the template line that invoked it                                          |
 | `TypeError` / `Error` (e.g. a typed filter argument rejects the value) | `ClarityException` wrapping the original, pointing at the template line                                                          |
-| Other PHP diagnostics (e.g. `foreach()` over `null`)                   | Handed to your own error handler, annotated `… in <template>:<line>`; **rendering continues** and the partial output is returned |
+| Other PHP diagnostics (e.g. `foreach()` over `null`, or a deprecation) | Handed to your own error handler, annotated `… in <template>:<line>`; **rendering continues** and the partial output is returned |
 | Exception raised entirely outside the render path                      | Passed through unchanged, keeping its original type                                                                              |
 
 ### Interoperating with your own error handler
@@ -292,18 +283,20 @@ set_error_handler(function (int $no, string $msg, string $file, int $line): bool
 
 // Diagnostics raised inside a template arrive here annotated with the template
 // location, e.g. "foreach() argument must be of type array|object, null given
-// in pages/list on line 4".
+// in pages/list on line 4".  $file and $line are the TEMPLATE's file and line.
 $engine->render('pages/list', $data);
 ```
 
-Two consequences follow:
+These details have three implications:
 
-- **Clarity does not impose a severity policy.** Non-variable diagnostics are handed to you
-  with their level translated to the matching `E_USER_*` constant (`E_WARNING` →
-  `E_USER_WARNING`, `E_NOTICE` → `E_USER_NOTICE`). If your handler promotes warnings to
-  exceptions, template warnings will abort the render — your choice, not Clarity's.
-- **Diagnostics raised outside the template** are passed straight through to your handler
-  unannotated.
+- **Clarity does not set a severity policy.** Forwarded diagnostics can be logged, ignored, or converted to exceptions by the configured handler. Clarity itself does not log, suppress, or throw them. If the handler converts warnings to exceptions, a template warning will stop the render.
+- **The `E_USER_*` level is a translation, not a 1:1 mapping.** A handler invoked from PHP's own
+  machinery may receive only a user-level constant, while the level still indicates the diagnostic
+  *kind*: a notice arrives as `E_USER_NOTICE`, a deprecation as `E_USER_DEPRECATED`, and a native
+  `E_WARNING` such as an undefined variable arrives as `E_USER_WARNING`. A handler that converts
+  warnings to exceptions will not stop the render for a notice.
+- **Diagnostics raised outside the template** are passed to the handler without template-location
+  annotations.
 
 ### Error Messages
 
@@ -314,48 +307,6 @@ Syntax error in template: unexpected token '}' in views/products/show.clarity.ht
 ```
 
 For a catalogue of common errors and their fixes, see the [Troubleshooting Guide](06-troubleshooting.md).
-
-### Development Error Handling
-
-Show detailed errors during development:
-
-```php
-if ($_ENV['APP_ENV'] === 'development') {
-    ini_set('display_errors', '1');
-    error_reporting(E_ALL);
-
-    try {
-        echo $engine->render('page', $data);
-    } catch (ClarityException $e) {
-        echo "<pre>";
-        echo "Template Error:\n";
-        echo $e->getMessage() . "\n";
-        echo "\nFile: " . ($e->templatePath !== '' ? $e->templatePath : $e->templateName);
-        echo "\nLine: " . $e->templateLine;
-        echo "\n\nStack Trace:\n" . $e->getTraceAsString();
-        echo "</pre>";
-        exit;
-    }
-}
-```
-
-### Production Error Handling
-
-Log errors but show user-friendly messages:
-
-```php
-try {
-    echo $engine->render('page', $data);
-} catch (ClarityException $e) {
-    error_log("Template error: " . $e->getMessage());
-    error_log("File: " . ($e->templatePath !== '' ? $e->templatePath : $e->templateName) . ":" . $e->templateLine);
-
-    http_response_code(500);
-    echo "Sorry, something went wrong. Please try again later.";
-}
-```
-
-For more errors and fixes, see the [Troubleshooting Guide](06-troubleshooting.md).
 
 ## Unicode Support
 
@@ -369,23 +320,6 @@ String filters use multibyte functions:
 {{ "Ä Ö Ü ß" |> upper }} {# Output: "Ä Ö Ü SS" (Unicode-aware) #}
 {{ "ПРИВЕТМИР" |> lower }} {# Output: "привет мир" #}
 {{ "你好世界" |> length }} {# Output: 4 (characters, not bytes) #}
-```
-
-### UnicodeString Class
-
-For advanced Unicode operations, use the `unicode` filter:
-
-```twig
-{{ text |> unicode |> reverse }} {# Unicode-aware string reversal #}
-```
-
-**UnicodeString API:**
-
-```php
-$ustr = new UnicodeString("Hello 世界", 0, 5);
-$ustr->length();       // Character count
-$ustr->slice(0, 5);    // Substring (character positions)
-$ustr->reverse();      // Reverse string
 ```
 
 ### Emoji Support
@@ -416,8 +350,8 @@ $engine->render('page', $data);
 
 ## Security Model
 
-The policy determines which constructs templates may use. New engines use
-`Policy::restricted()`. Checks run during compilation; see
+The policy determines which constructs templates may use. The engine uses
+`Policy::restricted()` by default. Checks run during compilation; see
 [The Policy API](09-policy-api.md) for presets and grants.
 
 ### Compile-Time Restrictions
@@ -425,25 +359,18 @@ The policy determines which constructs templates may use. New engines use
 Under the default policy, the following are rejected at compile time (the template won't compile):
 
 ```twig
-{{ $variable }}                        {# ERROR: direct PHP variables #}
 {{ strtoupper(name) }}                 {# ERROR: unregistered function calls #}
 {{ file_get_contents('/etc/passwd') }} {# ERROR #}
 {{ user.getName() }}                   {# ERROR: method calls #}
-{{ $x = 5; }}                          {# ERROR: PHP statements #}
 {{ `ls -la` }}                         {# ERROR: backticks, heredocs, PHP tags #}
 {{ new DateTime() }}                   {# ERROR: needs the 'newExpressions' rule #}
 {{ Foo::create() }}                    {# ERROR: needs the 'staticCalls' rule #}
 {{ Foo\Bar }}                          {# ERROR: a class name is not a value #}
 ```
 
-`instanceof` works under every policy; it checks an object's class without
-constructing a new object.
-
 ### Object and Value Handling
 
-`render()` passes scope values to the template unchanged; it does not convert
-objects to arrays. `a.b` reads an object property, while `a:b` reads an array
-key. PHP visibility rules apply:
+`render()` passes scope values to the template as-is; it does not convert objects to arrays or other template-specific values. `a.b` reads an object property, while `a:b` reads an array key. PHP visibility rules apply:
 
 ```php
 class User {
@@ -461,9 +388,6 @@ $engine->render('page', ['user' => $user]);
 {{ user.getName() }}  {# COMPILE ERROR: method calls not allowed #}
 ```
 
-**Container operations read public properties.** Loops and container filters do
-not call `toArray()` or `JsonSerializable`:
-
 ```php
 class User {
     public string $name = 'Jane';
@@ -472,21 +396,17 @@ class User {
 ```
 
 ```twig
-{% for key, value in user %}[{{ key }}={{ value }}]{% endfor %}
-{# [name=Jane] — private state never leaks #}
+{% for key, value in user %}
+    [{{ key }}={{ value }}]
+{% endfor %}
+{# [name=Jane] — iteration includes public properties only #}
 ```
 
-`Traversable` objects are iterated instead. A value object with no public properties that implements `Stringable` keeps its string form, which is why `length` of a `Money` object counts the characters of its `__toString()`.
-
-**Value handling** for a value passed to `render()`:
-
-| Value                                                     | Behaviour                                                     |
-| --------------------------------------------------------- | ------------------------------------------------------------- |
-| `DateTimeInterface`                                       | Kept as an object; the `date` filter accepts it directly      |
-| object with public properties                             | Read as properties (`a.b`); iterated by its public properties |
-| `Traversable`                                             | Iterated for container operations                             |
-| object with **no** public properties that is `Stringable` | Output via its `__toString()` value                           |
-| scalar / `null`                                           | passed through                                                |
+`Traversable` objects are iterated as containers. A value object with no public
+properties that implements `Stringable` retains its string form, so `length` of
+a `Money` object counts the characters returned by `__toString()`. A
+`DateTimeInterface` value remains an object for the `date` filter; scalars and
+`null` pass through unchanged.
 
 ### Lambda Security
 
@@ -495,15 +415,7 @@ Lambdas in `map`, `filter`, `reduce` only accept:
 1. **Lambda expressions** (parsed at compile time)
 2. **Filter references** (validated at compile time)
 
-**NOT allowed:**
-
-```twig
-{# Cannot pass callable via variable #}
-{% set callback = someCallable %}
-{{ items |> map(callback) }} {# ERROR #}
-```
-
-**Allowed:**
+**Example:**
 
 ```twig
 {{ items |> map(i => i:name) }} {# Lambda: safe #}
@@ -523,8 +435,10 @@ $engine->addFilter('customFilter', $callable);
 {{ value |> notRegistered }} {# ERROR: not registered #}
 ```
 
-A policy can also allow a PHP function to be called **by its own name**, without
-registering anything:
+A policy can also allow PHP functions to be called **by their own name**, without
+registering them. Granting a name turns the `phpFunctions` rule on as it grants, so
+one call is enough — and because the allowlist is non-empty, only the names you
+list resolve:
 
 ```php
 use Clarity\Engine\Policy;
@@ -539,54 +453,43 @@ A policy answers one question: _what is this template allowed to reach?_ It is a
 ```php
 use Clarity\Engine\Policy;
 
-$engine->setPolicy(Policy::restricted());   // the default
-$engine->setPolicy(Policy::trusted());     // method calls, superglobals and PHP locals — but no `{% php %}` and no `new`/`::`
-$engine->setPolicy(Policy::unrestricted());        // every rule
-$engine->setPolicy(Policy::default()        // the default, plus named grants
-    ->allowRule('methodCalls')
-    ->allowFunctions('strtoupper', 'count'));
-
-// Deny these function names in template expressions:
-$engine->setPolicy(Policy::unrestricted()->denyFunctions('exec', 'system', 'proc_open'));
+$engine->setPolicy(Policy::restricted());    // the default
+$engine->setPolicy(Policy::trusted());       // PHP function calls, method calls, superglobals, PHP locals
+$engine->setPolicy(Policy::unrestricted());  // every rule
+$engine->setPolicy(
+    Policy::default()
+        ->allowFunctions('strtoupper', 'count')
+);
 ```
 
-`denyFunctions()` does not inspect calls inside raw `{% php %}` blocks.
+Rules expose different levels of access, and each names one construct.  
 
-Rules expose different levels of access. `rawPhp` permits template-authored
-PHP; other rules enable specific constructs. `Policy::unrestricted()`
-enables them all, so use it only for templates written and reviewed by trusted
-authors.
+PHP function calls in template expressions need the `phpFunctions` rule — granted on its own, or automatically by `allowFunctions()`.
 
-Two things hold in every policy:
+Raw `{% php %}` blocks need the separate `rawPhp` rule.  
 
-- **The engine's render frame stays out of reach.** Templates cannot bind `__c_` names; dynamic variables resolve against the render scope and loop locals.
+`Policy::unrestricted()` allows every rule, so use it only for templates written and reviewed by trusted authors.
+
+Use `denyFunctions()` to reject named PHP functions in template expressions, when
+the policy otherwise allows them:
+
+```php
+$engine->setPolicy(
+    Policy::trusted()
+        ->denyFunctions('exec', 'system', 'proc_open')
+);
+```
+
+It does not inspect calls inside raw `{% php %}` blocks; those are emitted as PHP
+and are governed by `rawPhp` alone.
+
+Two details apply across policies:
+
+- **Clarity reserves `__c_` names for its own bindings.** Template-level variable bindings cannot shadow them; dynamic-variable reads resolve against the render scope and loop locals.
 - **Superglobals require a separate grant.** Without it, `{{ _SERVER }}` is a scope read and throws if that name is absent, even when `phpVariables` is enabled.
 
 See [The Policy API](09-policy-api.md) for the rule and allowlist
 reference.
-
-## PHP Mode
-
-**PHP mode** means using a policy that grants access to PHP constructs. The
-syntax stays the same, and registered filters and functions still take
-precedence. The available constructs depend on the policy; only
-`Policy::unrestricted()` enables them all.
-
-```php
-use Clarity\Engine\Policy;
-
-$engine->setPolicy(Policy::trusted());   // method calls, superglobals, PHP locals — but no `{% php %}`/`new`/`::`
-$engine->setPolicy(Policy::unrestricted());      // the full-power mode
-```
-
-`Policy::trusted()` enables method calls, superglobals and PHP locals, but not
-`new`, static calls or raw `{% php %}` blocks.
-
-Policies control which constructs compile; they do not change the syntax. See
-[Template Syntax → PHP Mode](01-template-syntax.md#php-mode) for examples.
-
-Use `Policy::unrestricted()` only for trusted templates, never for templates
-selected by a request.
 
 ## Performance Optimization
 
@@ -639,7 +542,7 @@ opcache.revalidate_freq=2
 
 ## Configuration Reference
 
-### All Configuration Methods
+### Configuration Methods
 
 | Method                                      | Description                                        |
 | ------------------------------------------- | -------------------------------------------------- |
@@ -724,8 +627,7 @@ Custom modules implement `Clarity\ModuleInterface` with a single `register(Clari
 
 ## Debug Mode
 
-There is **one** debug switch. `setDebugMode(true)` turns on the whole debug
-experience in a single step, and `setDebugMode(false)` removes all of it:
+Use `setDebugMode()` to control debug mode.
 
 ```php
 $engine->setDebugMode(true);                              // full debug, defaults
@@ -735,31 +637,69 @@ $engine->setDebugMode(false);                             // production
 
 When active:
 
-- **`dump()` is rendered context-aware** — an HTML tree in HTML, a
-  `;/* DEBUG_DUMP: … */` comment inside `<script>` — with the keys listed in
-  `DumpOptions::$maskKeys` masked (`password`, `token`, `secret`, …).
+- **`dump()` is rendered context-aware**
+    - an HTML tree in HTML
+    - a JavaScript `;/* DEBUG_DUMP: … */` comment inside `<script>`
+    - a CSS `/* DEBUG_DUMP: … */` comment inside `<style>`
+    - with the keys listed in
+      `DumpOptions::$maskKeys` masked (`password`, `token`, `secret`, …).
 - **`{{ x |> dump }}`** dumps the piped value at the pipe position and still
   yields it, so `{{ items |> dump |> length }}` measures `items`.
 - **`{{ map(items, "dump") }}`** works as a callable reference too.
 - **Range-loop safety checks** run at runtime: a step of `0`, or a step moving
   away from the end (which would loop forever), throws a `RuntimeException`.
-- A **`DebugEventBus`** emits `template.resolve`, `template.compile` and
-  `template.render`; pass `new DumpOptions(showPanel: true)` to also render the
-  floating HTML panel.
-- The compiled class records `$debugCompiled` and a policy digest, so a cache
-  file compiled under different settings is recompiled automatically.
+- A **`DebugEventBus`** reports template resolution, compilation, cache hits
+  and rendering; see below for event details and subscriptions.
 
 ```php
 // Check whether debug mode is currently on
 $engine->isDebugMode(); // bool
 ```
 
+### Debug events
+
+`getDebugBus()` returns the active bus (or `null` when debug mode is off).
+Subscribe either a callable or a `DebugListener`; listeners run synchronously
+when an event is emitted. Every event is also retained in `getEvents()` until
+the bus is discarded. A `DebugEvent` has a `type`, a metadata `payload`, and a
+Unix timestamp:
+
+| Event              | Payload                                           |
+| ------------------ | ------------------------------------------------- |
+| `template.resolve` | `template`, `loader` class                        |
+| `template.compile` | `template`, `duration_ms`                         |
+| `template.cached`  | `template` (compiled template served from cache)  |
+| `template.render`  | `template`, `duration_ms`                         |
+
+The bus reports template lifecycle metadata, not template variables or dump
+values. `new DumpOptions(showPanel: true)` automatically subscribes the
+floating HTML panel to the same events and appends it to the rendered output.
+
+### Dump renderers
+
+For ordinary `dump()` calls, the template's output context selects the renderer;
+running PHP from the CLI does not by itself switch a template dump to the CLI
+format.
+
+| Renderer | Output |
+| -------- | ------ |
+| HTML | A collapsible `<details>` tree, with escaped scalar text and inline CSS injected on the first HTML dump in the process. |
+| JavaScript | JSON inside a `;/* DEBUG_DUMP: … */` comment, safe to place between script statements; closing `*/` sequences in values are escaped. |
+| CSS | JSON inside a `/* DEBUG_DUMP: … */` comment; closing `*/` is escaped and tag delimiters are JSON-hex-encoded to protect the surrounding `<style>` element. |
+| CLI | A nested text tree, ANSI-colored when writing to a terminal and plain otherwise. `dd()` uses this renderer under CLI/phpdbg, writes to standard output, and exits; `CliDumpRenderer::render()` writes to standard error by default, or returns the string when `forceToTemplate` is enabled. |
+
+HTML and CLI output truncate nested values at `maxDepth` and limit each array
+to `maxItems`. JavaScript output also truncates at `maxDepth`, but serializes
+all array items. CSS comments also truncate at `maxDepth` and serialize all
+array items. Matching `maskKeys` are case-insensitive string keys in arrays;
+this is not general redaction for arbitrary object properties.
+
 Everything debug is **compile-time or zero-cost in production**: `dump()` is
 pruned to `''` — including the filter and reference forms, which collapse to the
 identity — so a debug chain left in a template costs nothing and prints nothing.
 
 > **Tip:** Enable debug mode in development and disable it in production to keep
-> generated code lean. `dd()` is the one exception: it is never pruned, so with
+> generated code lean. `dd()` is an exception: it is never pruned, so with
 > debug off it throws rather than dumping raw, unmasked values.
 
 Debug dump example:
@@ -778,7 +718,7 @@ Inline filters are compiled **directly into the generated PHP expression** — n
 
 ```php
 $engine->addInlineFilter('dollars', [
-    'php'     => '\number_format((float) {1}, 2, ".", ",") . " USD"',
+    'php'     => '\number_format({1}, 2, ".", ",") . " USD"',
 ]);
 ```
 
@@ -786,7 +726,7 @@ $engine->addInlineFilter('dollars', [
 
 ```php
 $engine->addInlineFilter('pad', [
-    'php'      => '\str_pad((string) {1}, {2}, {3}, \STR_PAD_LEFT)',
+    'php'      => '\str_pad({1}, {2}, {3}, \STR_PAD_LEFT)',
     'params'   => ['length', 'char'],
     'defaults' => ['char' => "' '"],
 ]);
@@ -798,7 +738,7 @@ The template:
 {{ invoiceNumber |> pad(8, '0') }}
 ```
 
-Compiles to: `\str_pad((string) $vars['invoiceNumber'], 8, '0', \STR_PAD_LEFT)` — no function lookup at runtime.
+Compiles to: `\str_pad($vars['invoiceNumber'], 8, '0', \STR_PAD_LEFT)` — no function lookup at runtime.
 
 ### Template Syntax
 
@@ -815,20 +755,88 @@ Directives extend the template compiler with custom `{% keyword %}` tags. They a
 ### Registering Directives
 
 ```php
-$engine->addDirective('cache', function(string $rest, string $path, int $line, callable $expr): string {
-    // Always open the buffer, and remember the cache key for endcache.
-    return "\$__cacheKey = {$expr(trim($rest))}; ob_start();";
+$cache = new class {
+    private array $items = [];
+    private array $keyStack = [];
+
+    public function has(string $key): bool
+    {
+        return array_key_exists($key, $this->items);
+    }
+
+    public function get(string $key): string
+    {
+        return $this->items[$key];
+    }
+
+    public function set(string $key, string $value): void
+    {
+        $this->items[$key] = $value;
+    }
+
+    public function pushKey(string $key): void
+    {
+        $this->keyStack[] = $key;
+    }
+
+    public function currentKey(): string
+    {
+        if ($this->keyStack === []) {
+            throw new \LogicException('No cache key is active.');
+        }
+
+        return $this->keyStack[array_key_last($this->keyStack)];
+    }
+
+    public function popKey(): void
+    {
+        if ($this->keyStack === []) {
+            throw new \LogicException('No cache key is active.');
+        }
+
+        array_pop($this->keyStack);
+    }
+};
+
+$engine->addService('cache', $cache);
+
+$engine->addDirective('cache', function(string $rest, string $path, int $line, callable $processExpr): string {
+    $param = $processExpr(trim($rest));
+    return <<<PHP
+        \$__cacheKey = {$param};
+        \$__c_sv['cache']->pushKey(\$__cacheKey);
+        try {
+            if (\$__c_sv['cache']->has(\$__cacheKey)) {
+                echo \$__c_sv['cache']->get(\$__cacheKey);
+            } else {
+                ob_start();
+    PHP;
 });
 
 $engine->addDirective('endcache', function(string $rest, string $path, int $line, callable $expr): string {
-    // Close the buffer on BOTH branches: a hit discards it, a miss stores AND
-    // emits it (storing alone would swallow the block's output).
-    return "if (\$__c_sv['cache']->has(\$__cacheKey)) { ob_end_clean(); echo \$__c_sv['cache']->get(\$__cacheKey); } "
-         . "else { \$__cached = ob_get_clean(); \$__c_sv['cache']->set(\$__cacheKey, \$__cached); echo \$__cached; }";
+    return <<<PHP
+            \$__cached = ob_get_clean();
+            \$__c_sv['cache']->set(\$__c_sv['cache']->currentKey(), \$__cached);
+            echo \$__cached;
+            }
+        } finally {
+            \$__c_sv['cache']->popKey();
+        }
+    PHP;
 });
 ```
 
-Use the `$expr` callable to convert any Clarity expression (variable or literal) to a PHP expression string.
+The service is registered under `cache`, matching the `$__c_sv['cache']` lookups emitted by the directives. The cache hit check happens before the template block, so the block is skipped entirely on a hit. The `try/finally` always pops the active key, including when rendering the block throws, and the service-owned stack supports nested cache blocks. The in-memory example keeps values only while this service instance lives; use a persistent cache implementation with the same `has()`, `get()`, `set()`, `pushKey()`, `currentKey()`, and `popKey()` methods to share cached values across requests.
+
+Use the directives in a template like this:
+
+```twig
+{% cache 'homepage:featured' %}
+    <h2>{{ featuredTitle }}</h2>
+{% endcache %}
+```
+
+The `$processExpr` callable converts the cache-key expression (a variable or literal) to a PHP expression string.
 
 ### Handler Signature
 

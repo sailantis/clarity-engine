@@ -52,7 +52,13 @@ trait BodyCompilerTrait
 
         $this->compileStack[] = $sourcePath;
         $this->extractPhpBlocks($source);
-        $segments = $this->tokenizer->tokenize($source);
+        // 0, not 1: the scanner knows the real line for an unclosed tag and
+        // carries it on the exception. Passing a line here would overwrite it.
+        $segments = $this->withLocation(
+            fn() => $this->tokenizer->tokenize($source),
+            $sourcePath,
+            0
+        );
 
         // Type of the segment immediately PRECEDING the current one, in source
         // order. Only the TEXT case reads it, to apply the post-tag rule below.
@@ -97,8 +103,12 @@ trait BodyCompilerTrait
                         break;
 
                     case Tokenizer::OUTPUT:
-                        $phpExpr = $this->tokenizer->processExpression(
-                            $seg[Tokenizer::KEY_CONTENT]
+                        $phpExpr = $this->withLocation(
+                            fn() => $this->tokenizer->processExpression(
+                                $seg[Tokenizer::KEY_CONTENT]
+                            ),
+                            $mappedSourcePath,
+                            $mappedTplLine
                         );
                         $this->addPhpLines(
                             $lines,
@@ -185,7 +195,7 @@ trait BodyCompilerTrait
     /**
      * Compile a single {% … %} directive to PHP.
      *
-     * @param string $content    Inner text of the {% … %} tag (trimmed).
+     * @param string $content    Inner text of the {% … %} tag (trimmed), original case.
      * @param string $sourcePath Source file path for error messages.
      * @param int    $tplLine    Template line number for error messages.
      * @param array  $lines      Accumulator for generated PHP code lines (mutated).
@@ -196,21 +206,12 @@ trait BodyCompilerTrait
         int $tplLine,
         array &$lines
     ): string {
-        if (\preg_match('/^@parent\s*$/i', $content)) {
+        if (\preg_match('/^parent\s*$/i', $content)) {
             throw new ClarityException(
-                "'{% @parent %}' is only valid inside an overriding child block.",
+                "'{% parent %}' is only valid inside an overriding child block.",
                 $sourcePath,
                 $tplLine
             );
-        }
-
-        // Macro call: {% @name(arg1, arg2) %}
-        if ($content !== '' && $content[0] === '@') {
-            if (!\preg_match('/^@([a-zA-Z_][a-zA-Z0-9_]*)\s*\((.*)\)\s*$/s', $content, $mc)) {
-                throw new ClarityException("Invalid macro call syntax: '{$content}'", $sourcePath, $tplLine);
-            }
-            $this->compileMacroCall($mc[1], $mc[2], $sourcePath, $tplLine, $lines);
-            return '';
         }
 
         // Split on first whitespace to get the keyword
@@ -230,6 +231,18 @@ trait BodyCompilerTrait
             'endfor' => $this->compileEndFor($sourcePath, $tplLine),
             'for'    => $this->compileFor($rest, $sourcePath, $tplLine),
             'set'    => $this->compileSet($rest, $sourcePath, $tplLine),
+            // A well-formed definition never gets here: extractMacros() removes it
+            // before tokenizing. What does is an unclosed one, or the removed
+            // `@`-prefixed spelling.
+            'macro'  => throw new ClarityException(
+                $this->macroDefinitionError($rest),
+                $sourcePath,
+                $tplLine,
+                $this->templatePath($sourcePath)
+            ),
+            // A macro call is dispatched here, not through the registry, so
+            // `{% call name() %}` can never be captured by a registered directive.
+            'call'   => $this->compileMacroCallTag($rest, $sourcePath, $tplLine, $lines),
             // extends/block/endblock/include are handled before this stage; if seen here → ignore
             'extends', 'block', 'endblock' => '',
             'include'                      => $this->compileInclude($rest, $sourcePath, $tplLine, $lines),
@@ -253,11 +266,15 @@ trait BodyCompilerTrait
                 $rest,
                 $sourcePath,
                 $tplLine,
-                fn(string $e) => $this->tokenizer->processCondition($e),
+                fn(string $e) => $this->withLocation(
+                    fn() => $this->tokenizer->processCondition($e),
+                    $sourcePath,
+                    $tplLine
+                ),
                 $this
             )
             : throw new ClarityException(
-                "Unknown directive '{$keyword}'",
+                $this->macroCallSyntaxHint($content) ?? "Unknown directive '{$keyword}'",
                 $sourcePath,
                 $tplLine
             ),

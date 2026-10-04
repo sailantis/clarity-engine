@@ -186,6 +186,18 @@ trait CodeBuilderTrait
             $unpacks .= "                \$__c_sv = \$this->__c_sv;\n";
         }
 
+        // A `vars()` call inside a `{% for %}` or a macro body gathers the
+        // variables the compiler bound to PHP LOCALS, which are not `$__c_va`
+        // entries — see {@see \Clarity\Engine\Tokenizer::setDynamicBindings()}.
+        // Whether the body does that is a property of the TEMPLATE, not the
+        // policy, so it is detected from the compiled body (which is also how the
+        // registries above are detected) rather than from $this->dynamicBindings,
+        // which is only the scope left over at the END of the compile.
+        $usesBindings = \str_contains($body, '$__c_dyn');
+        if ($usesBindings) {
+            $unpacks .= "                \$__c_dyn = true;\n";
+        }
+
         // A policy that grants `phpVariables` seeds the render scope into PHP
         // locals, so a template variable is the same thing in `{{ title }}` and
         // `{% php echo $title; %}`.

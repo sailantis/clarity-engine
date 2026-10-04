@@ -259,7 +259,7 @@ trait InheritanceTrait
     }
 
     /**
-     * Resolve `{% @parent %}` placeholders inside a child block override.
+     * Resolve `{% parent %}` placeholders inside a child block override.
      *
      * Child and parent fragments are emitted with their own source markers so
      * mapped compile errors keep pointing at the correct template and line.

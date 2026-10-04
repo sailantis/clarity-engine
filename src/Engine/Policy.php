@@ -18,6 +18,8 @@ use Clarity\ClarityException;
  *
  * Rules
  * -----
+ *   phpFunctions       bare calls (`strtoupper(name)`) and filter steps that
+ *                      resolve to a PHP function
  *   rawPhp             `{% php CODE %}`
  *   methodCalls        `$obj->method(args)` on a `$`-sigil chain
  *   superglobals       `$_SERVER`, `$_GET`, … as chain roots
@@ -32,7 +34,7 @@ use Clarity\ClarityException;
  *
  * Allowlists
  * ----------
- *   functions  bare calls and filter steps that resolve to a PHP function
+ *   functions  names the `phpFunctions` rule may resolve to a PHP function
  *   filters    names accepted after `|>`
  *
  * The rule for both allowlists is the same:
@@ -40,10 +42,11 @@ use Clarity\ClarityException;
  *   An EMPTY allowlist means unrestricted.  A NON-EMPTY allowlist means only
  *   the listed names resolve; anything else is a compile-time error.
  *
- * An allowlist NARROWS; it never opens a door.  It is consulted only where a
- * rule has already made a construct reachable, so
- * `restricted()->allowFunctions('count')` is still sandboxed — pair the grant
- * with a rule for it to have anything to apply to.
+ * `allowFilters()` narrows only: it is consulted where a filter step is already
+ * being resolved, so a lone filter allowlist stays sandboxed.  `allowFunctions()`
+ * is different in one respect: PHP function calls ARE the construct it names, so
+ * granting one turns the `phpFunctions` rule on as well — `default()->allowFunctions('count')`
+ * reaches the sandbox without needing a second, unrelated rule to carry it.
  *
  * Empty-means-unrestricted is what makes `Policy::unrestricted()` the engine's
  * old PHP mode exactly, rather than a mode that happens to deny everything.
@@ -70,7 +73,7 @@ use Clarity\ClarityException;
  * alternative is not safety but invisibility — so the strict behaviour is what a
  * template gets unless its application opts out with `denyRule('strictTypes')`.
  *
- * It is not a `allowsPhp()` rule: it grants no construct, and it decides
+ * It is not an `allowsPhp()` rule: it grants no construct, and it decides
  * nothing about what a template can name.  What it changes is the *contract at a
  * call boundary*, which is why it is deliberately absent from
  * {@see allowsPhp()} — a strict template is no less sandboxed than a weak one.
@@ -90,6 +93,7 @@ final class Policy
     public const RULES = [
         'methodCalls',
         'newExpressions',
+        'phpFunctions',
         'phpVariables',
         'rawPhp',
         'staticCalls',
@@ -148,6 +152,7 @@ final class Policy
         return new self([
             'methodCalls'       => false,
             'newExpressions'    => false,
+            'phpFunctions'      => false,
             'phpVariables'      => false,
             'rawPhp'            => false,
             'staticCalls'       => false,
@@ -170,6 +175,7 @@ final class Policy
         return new self([
             'methodCalls'       => true,
             'newExpressions'    => true,
+            'phpFunctions'      => true,
             'phpVariables'      => true,
             'rawPhp'            => true,
             'staticCalls'       => true,
@@ -187,8 +193,12 @@ final class Policy
      * class are both a different order of trust from calling a method on an
      * object the application already passed in.
      *
+     * `phpFunctions` is on, so bare PHP function calls in template expressions
+     * are available; that is the counterpart of the object access the other
+     * rules grant.  `denyFunctions()` narrows it.
+     *
      * `strictTypes` is on. It is not a reach rule — it grants no construct
-     * and names no class — so it is not one of the two things this preset
+     * and names no class — so it is not one of the things this preset
      * withholds; a trusted template is simply held to the types it declares.
      */
     public static function trusted(): self
@@ -196,6 +206,7 @@ final class Policy
         return new self([
             'methodCalls'       => true,
             'newExpressions'    => false,
+            'phpFunctions'      => true,
             'phpVariables'      => true,
             'rawPhp'            => false,
             'staticCalls'       => false,
@@ -210,7 +221,7 @@ final class Policy
      * mean to change.  Nothing here is a blank slate: this is the sandboxed
      * policy, so every rule you do not name stays off.
      *
-     * ```
+     * ```php
      * Policy::default()
      *     ->allowRule('methodCalls')
      *     ->allowFunctions('strtoupper', 'count');
@@ -366,15 +377,26 @@ final class Policy
      * Permit PHP functions to be called by their own name, without registering
      * them.  A non-empty list becomes the complete set that may be called.
      *
+     * Turns the `phpFunctions` rule on as it grants, because a PHP function call
+     * IS the construct the rule names: `default()->allowFunctions('count')` is
+     * enough to reach the sandbox, with no second rule to carry it.  Only a
+     * non-empty list does so: with no names it is a no-op rather than an
+     * accidental grant of every PHP function, since an EMPTY allowlist is
+     * unrestricted.
+     *
      * Distinct from `addFunction()`, which registers a CALLABLE under a name:
      * a name that is registered and allowed stays the registered callable, a name
      * that is allowed and not registered calls the PHP function of that name.
      */
     public function allowFunctions(string ...$names): self
     {
+        if ($names === []) {
+            return $this;
+        }
         foreach ($names as $name) {
             $this->functions[self::normalizeName($name)] = true;
         }
+        $this->rules['phpFunctions'] = true;
         return $this;
     }
 
@@ -493,11 +515,12 @@ final class Policy
      * call to an unregistered name, and a filter step falling back to a PHP
      * function.
      *
-     * An allowlist does NOT count as reachable on its own. It narrows which PHP
-     * functions a construct may call; it does not create a construct to call them
-     * from. `Policy::restricted()->allowFunctions('count')` therefore stays
-     * sandboxed — the grant needs a rule to apply to, so pair it with one
-     * (`->allowRule('methodCalls')->allowFunctions('count')`).
+     * The `phpFunctions` rule decides the first of those directly; the rest decide
+     * whether the constructs that carry a call exist at all.  The allowlists do
+     * NOT count as reachable on their own — they narrow which PHP functions a
+     * construct may call, they do not create a construct to call them from.
+     * `allowFunctions()` is the exception in one direction: it turns the
+     * `phpFunctions` rule on as it grants, so it IS sufficient on its own.
      *
      * `variableVariables` is deliberately not part of this.  It decides a syntax
      * the engine resolves against its own scope, so turning it off does not make
@@ -506,6 +529,7 @@ final class Policy
     public function allowsPhp(): bool
     {
         foreach ([
+            'phpFunctions',
             'rawPhp',
             'methodCalls',
             'superglobals',

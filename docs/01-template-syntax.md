@@ -265,13 +265,15 @@ and `|> reverse` accept a container (array, `Traversable`, `Countable`, or an
 object exposing a public `toArray()`). A value object with no public state and a
 `__toString()` keeps STRING semantics, so `|> length` counts its characters.
 
-## PHP Mode
+## Policy-Controlled PHP Access
 
-**PHP mode** is enabled by a policy that grants PHP access. The syntax stays the
-same, and registered filters and functions still take precedence. See
-[Advanced Topics → PHP Mode](04-advanced-topics.md#php-mode) for details.
+Policies determine which PHP constructs templates can use; they do not change
+the template syntax. Registered filters and functions still take precedence.
+See [The Policy API](09-policy-api.md) for the available rules and presets.
 
 ### PHP functions as calls
+
+These require the `phpFunctions` rule:
 
 ```twig
 {{ strtoupper('ab') }}          {# \strtoupper('ab') #}
@@ -280,8 +282,8 @@ same, and registered filters and functions still take precedence. See
 
 ### PHP functions as filters
 
-An unregistered pipe step resolves to a PHP function of the same name. The
-piped value becomes the **first argument**:
+When the `phpFunctions` rule is on, an unregistered pipe step resolves to a PHP
+function of the same name. The piped value becomes the **first argument**:
 
 ```twig
 {{ 'ab' |> strtoupper }}              {# \strtoupper($value) #}
@@ -294,8 +296,9 @@ When the value does not belong first, a single `_` placeholder positions it:
 {{ 'k' |> array_key_exists(_, m) }}   {# \array_key_exists($value, $m) #}
 ```
 
-`_` may appear at most once, and only in PHP mode as filter argument;
-elsewhere `_` keeps its meaning as an ordinary variable.
+`_` may appear at most once as an argument in a PHP-function filter call when
+the `phpFunctions` rule is on; elsewhere `_` keeps its meaning as an ordinary
+variable.
 
 ### Method calls
 
@@ -363,9 +366,9 @@ echo $total;
 
 ### Function guardrails
 
-PHP mode allows PHP function calls from template expressions. Deny specific
-names with `denyFunctions()`; it does not inspect calls inside raw `{% php %}`
-blocks:
+When the policy allows PHP access, PHP function calls from template expressions
+are available. Deny specific names with `denyFunctions()`; it does not inspect
+calls inside raw `{% php %}` blocks:
 
 ```php
 $engine->setPolicy(Policy::unrestricted()->denyFunctions('exec', 'system'));
@@ -521,7 +524,7 @@ Macros are reusable template fragments defined once and called multiple times wi
 #### Defining a Macro
 
 ```twig
-{% macro @card(title, body) %}
+{% macro card(title, body) %}
 <div class="card">
   <h3>{{ title }}</h3>
   <p>{{ body }}</p>
@@ -531,34 +534,47 @@ Macros are reusable template fragments defined once and called multiple times wi
 
 #### Calling a Macro
 
-Use `{% @macroName(arg1, arg2) %}` to invoke a macro:
+Use `{% call macroName(arg1, arg2) %}` to invoke a macro:
 
 ```twig
-{% @card("Welcome", "Hello from Clarity!") %}
-{% @card(article.title, article.excerpt) %}
+{% call card("Welcome", "Hello from Clarity!") %}
+{% call card(article.title, article.excerpt) %}
 ```
 
 #### Macro Rules
 
-- Define macros with `{% macro @name(param1, param2) %}...{% endmacro %}`.
-- Prefix macro names with `@`; they must not conflict with template variables.
+- Define macros with `{% macro name(param1, param2) %}...{% endmacro %}`.
+- Call macros with `{% call name(arg1, arg2) %}`.
+- The definition itself renders nothing; the call expands at its own position.
 - Macros expand **at compile time** and accept expressions available at the call site.
+- Macro names are identifiers, so they are case-sensitive and may not be a
+  directive keyword (`if`, `for`, `set`, `block`, `include`, …).
 - Recursive calls fail compilation.
 - Macros become available after their definition in the template or a static include. Independently rendered templates do not share them.
+- A macro may **not** be defined inside another macro's body. Macro names are not
+  scoped, so a nested definition would be callable from anywhere in the template
+  despite looking private — define it at the top level, or in an included macro
+  library, instead.
 
-> **Note:** Clarity also uses the `@...` notation for some compile-time snippets that are internal macros. The main example is `{% @parent %}` inside overriding child blocks.
+> **Note:** `{% parent %}`, which inlines a parent block's content in an overriding child block ([Layout Inheritance](./03-layout-inheritance.md#parent-block-fallback)), is a **directive**, not a macro — it takes no arguments and is not defined with `{% macro %}`.
+
+> **Note:** Macros used to be defined as `{% macro @name %}` and called as
+> `{% @name(args) %}`, and `{% parent %}` used to accept an `{% @parent %}`
+> spelling. Those forms are removed. A `{% macro @name %}` is refused with a
+> message naming the replacement; an `{% @name(args) %}` or `{% @parent %}` tag is
+> simply an unknown directive.
 
 #### Multi-Parameter Example
 
 ```twig
-{% macro @avatar(name, size, href) %}
+{% macro avatar(name, size, href) %}
 <a href="{{ href }}" class="avatar avatar--{{ size }}">
   <span>{{ name |> upper |> slice(0, 2) }}</span>
 </a>
 {% endmacro %}
 
 {% for user in team %}
-  {% @avatar(user.name, "md", "/users/" ~ user.id) %}
+  {% call avatar(user.name, "md", "/users/" ~ user.id) %}
 {% endfor %}
 ```
 
@@ -567,8 +583,9 @@ Use `{% @macroName(arg1, arg2) %}` to invoke a macro:
 Set variables for reuse:
 
 ```twig
-{% set total = items.length %} {% set fullName = user.firstName ~ ' ' ~
-user.lastName %} {% set discount = price * 0.1 %}
+{% set total = items.length %}
+{% set fullName = user.firstName ~ ' ' ~ user.lastName %}
+{% set discount = price * 0.1 %}
 
 <p>Total items: {{ total }}</p>
 <p>Customer: {{ fullName }}</p>
@@ -623,10 +640,12 @@ Define overridable sections:
 **Child template** (`pages/about.clarity.html`):
 
 ```twig
-{% extends "layouts/main" %} {% block title %}About Us{% endblock %} {% block
-content %}
-<h2>About Our Company</h2>
-<p>We are awesome!</p>
+{% extends "layouts/main" %}
+
+{% block title %}About Us{% endblock %}
+{% block content %}
+  <h2>About Our Company</h2>
+  <p>We are awesome!</p>
 {% endblock %}
 ```
 
@@ -634,13 +653,13 @@ Blocks not overridden in the child will use the parent's default content.
 
 #### Parent Block Fallback
 
-Inside an overriding child block, use `{% @parent %}` to inline the parent block's content at that exact position during compilation:
+Inside an overriding child block, use `{% parent %}` to inline the parent block's content at that exact position during compilation:
 
 ```twig
 {% extends "layouts/main" %}
 
 {% block title %}
-Admin | {% @parent %}
+  Admin | {% parent %}
 {% endblock %}
 ```
 
@@ -648,7 +667,7 @@ If the parent block contains `My Website`, the compiled result is `Admin | My We
 
 Rules:
 
-- Use `{% @parent %}` only inside a child block that overrides a parent block.
+- Use `{% parent %}` only inside a child block that overrides a parent block.
 - It resolves at compile time and may appear more than once in a block.
 - In multi-level inheritance, it refers to the **immediate** parent block.
 
@@ -675,7 +694,8 @@ Included templates are inlined at compile time.
 #### Include with Namespaces
 
 ```twig
-{% include "admin::sidebar" %} {% include "emails::header" %}
+{% include "admin::sidebar" %}
+{% include "emails::header" %}
 ```
 
 See [Advanced Topics](04-advanced-topics.md#named-namespaces-addnamespace) for namespace configuration.
@@ -721,8 +741,7 @@ See [Advanced Topics](04-advanced-topics.md#named-namespaces-addnamespace) for n
 ### Tests
 
 Twig-style tests read as words and compile to registered callables, so they work
-identically in sandbox and PHP mode. They can be used anywhere a boolean is
-expected.
+under every policy. They can be used anywhere a boolean is expected.
 
 ```twig
 {# membership — value in a list, substring in a string, key in a mapping #}
@@ -787,14 +806,18 @@ Use the keyword forms to avoid conflict with the `|` filter-pipe operator:
 {{ flags band mask }}   {# bitwise AND — flags & mask  #}
 {{ flags bxor mask }}   {# bitwise XOR — flags ^ mask  #}
 {{ bnot flags }}        {# bitwise NOT — ~flags        #}
+{{ flags blsh 2 }}      {# bitwise left shift — flags << 2  #}
+{{ flags brsh 2 }}      {# bitwise right shift — flags >> 2  #}
 ```
 
-| Operator | PHP equivalent | Description |
-| -------- | -------------- | ----------- |
-| `bor`    | `\|`           | Bitwise OR  |
-| `band`   | `&`            | Bitwise AND |
-| `bxor`   | `^`            | Bitwise XOR |
-| `bnot`   | `~`            | Bitwise NOT |
+| Operator | PHP equivalent | Description         |
+| -------- | -------------- | ------------------- |
+| `bor`    | `\|`           | Bitwise OR          |
+| `band`   | `&`            | Bitwise AND         |
+| `bxor`   | `^`            | Bitwise XOR         |
+| `bnot`   | `~`            | Bitwise NOT         |
+| `blsh`   | `<<`           | Bitwise left shift  |
+| `brsh`   | `>>`           | Bitwise right shift |
 
 ### Arithmetic Operators
 
@@ -904,12 +927,12 @@ Returns the right value if the left is null or undefined.
 
 ### Built-in Functions
 
-#### context()
+#### vars()
 
 Returns all current template variables:
 
 ```twig
-{% set allVars = context() %} {{ allVars |> json |> raw }}
+{% set allVars = vars() %} {{ allVars |> json }}
 ```
 
 #### include()
@@ -917,13 +940,13 @@ Returns all current template variables:
 Dynamically render another template at runtime:
 
 ```twig
-{{ include("partials/card", { title: "Hello", ...context() }) }}
+{{ include("partials/card", { title: "Hello", ...vars() }) }}
 {{ include(templateName, variables) }}
 ```
 
 Unlike the `{% include %}` directive, this function:
 
-- Renders at runtime (not compile time)
+- Renders at runtime
 - Can use dynamic template names
 - Returns the rendered markup directly
 - Accepts custom context variables
@@ -997,13 +1020,13 @@ Available contexts:
 
 ```twig
 {% if users.length > 0 %}
-<ul>
-  {% for user in users %} {% if user.isActive %}
-  <li class="active">{{ user.name }}</li>
-  {% endif %} {% endfor %}
-</ul>
+  <ul>
+    {% for user in users %} {% if user.isActive %}
+    <li class="active">{{ user.name }}</li>
+    {% endif %} {% endfor %}
+  </ul>
 {% else %}
-<p>No active users found.</p>
+  <p>No active users found.</p>
 {% endif %}
 ```
 
@@ -1018,69 +1041,17 @@ Available contexts:
 
 <p>Name: {{ userData.fullName }}</p>
 {% if userData.isAdult %}
-<p>Age: {{ userData.age }}</p>
+  <p>Age: {{ userData.age }}</p>
 {% endif %}
 ```
 
 ### Dynamic Includes
 
 ```twig
-{% for widget in dashboard.widgets %} {{ include("widgets/" ~ widget.type, {
-title: widget.title, data: widget.data, config: widget.config }) }} {% endfor %}
-```
-
-## What's Not Allowed
-
-Clarity is sandboxed by default. In that mode the following are **not
-permitted** (each becomes available in [PHP mode](#php-mode)):
-
-Direct PHP variables:
-
-```twig
-{{ $variable }} {# ERROR #}
-```
-
-Arbitrary PHP function calls:
-
-```twig
-{{ strtoupper(name) }} {# ERROR — strtoupper is not registered #}
-```
-
-Calling a **registered** name is allowed in both modes: every filter can also be
-called (`{{ trim(name) }}`, `{{ round(n, 2) }}`). See
-[Filters and Functions → One call model](02-filters-and-functions.md#one-call-model-two-signatures).
-
-Method calls on objects:
-
-```twig
-{{ user.getName() }} {# ERROR #}
-```
-
-Instead, use filters:
-
-```twig
-{{ name |> upper }} {# CORRECT #}
-```
-
-PHP statements or semicolons:
-
-```twig
-{{ $x = 5; }} {# ERROR — instead, use {% set %}: #}
-```
-
-```twig
-{% set x = 5 %} {# CORRECT #}
-```
-
-Dynamic variable access (`${expr}` / `$$name`) is **allowed** in both modes and
-reads the variable whose NAME is an expression. The lookup resolves against the
-render scope and loop locals, so it can reach neither a superglobal nor an engine
-internal:
-
-```twig
-{{ $$name }}          {# reads the variable named by {{ name }}, in both modes #}
-{{ ${which} }}        {# the same construct, spelled with braces #}
-{{ ${ref} ?? 'none' }}{# absent name: fall back instead of throwing #}
+{% for widget in dashboard.widgets %}
+  {{ include("widgets/" ~ widget.type, {
+    title: widget.title, data: widget.data, config: widget.config }) }}
+{% endfor %}
 ```
 
 ## Next Steps
@@ -1109,9 +1080,9 @@ internal:
 | `{% extends "template" %}`                   | Inherit from layout         |
 | `{% block name %}...{% endblock %}`          | Define/override block       |
 | `{% include "template" %}`                   | Include another template    |
-| `{% macro @name(params) %}...{% endmacro %}` | Define a reusable macro     |
-| `{% @name(args) %}`                          | Call a macro                |
-| `{% @parent %}`                              | Inline parent block content |
+| `{% macro name(params) %}...{% endmacro %}` | Define a reusable macro     |
+| `{% call name(args) %}`                      | Call a macro                |
+| `{% parent %}`                              | Inline parent block content |
 | `{# comment #}`                              | Template comment            |
 | `{# @context js\|css\|html #}`               | Switch escaping context     |
 

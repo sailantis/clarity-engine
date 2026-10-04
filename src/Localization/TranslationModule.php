@@ -135,7 +135,6 @@ class TranslationModule implements ModuleInterface
                 }
                 $param = $processExpr($rest);
                 return "\$__c_sv['t']->pushDomain({$param});";
-                ;
             }
         );
 

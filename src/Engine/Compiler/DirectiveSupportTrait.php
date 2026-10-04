@@ -68,6 +68,13 @@ trait DirectiveSupportTrait
     /**
      * Register a local variable in the compile-time context.
      *
+     * This is the extension point a custom directive uses to bind a variable it
+     * emits itself — so the name is a PHP LOCAL that nothing writes back into the
+     * scope array, exactly like a loop variable. It is therefore also recorded as
+     * a dynamic binding, which is what lets a `vars()` snapshot inside the
+     * directive's scope include it. A directive that binds a name it also stores
+     * in `$__c_va` will simply see that entry win in the snapshot.
+     *
      * @param string   $name    The name of the variable to register.
      * @param int|null $tplLine Line of the directive that requested the
      *                          registration, when known.  It is only used to
@@ -92,8 +99,10 @@ trait DirectiveSupportTrait
 
         $this->assertBindableName($name, $raw, $tplLine);
 
-        $this->localVars[$name] = '$' . $name;
+        $this->localVars[$name]       = '$' . $name;
+        $this->dynamicBindings[$name] = true;
         $this->tokenizer->setLocalVars($this->localVars);
+        $this->tokenizer->setDynamicBindings($this->dynamicBindings);
     }
 
     private function rejectVar(string $message, ?int $tplLine): void
@@ -109,8 +118,9 @@ trait DirectiveSupportTrait
      */
     public function unregisterVar(string $name)
     {
-        unset($this->localVars[$name]);
+        unset($this->localVars[$name], $this->dynamicBindings[$name]);
         $this->tokenizer->setLocalVars($this->localVars);
+        $this->tokenizer->setDynamicBindings($this->dynamicBindings);
     }
 
     /**
@@ -123,23 +133,281 @@ trait DirectiveSupportTrait
         return $this->localVars;
     }
 
+    /**
+     * Directive keywords a macro may not be named after.
+     *
+     * `{% call name() %}` puts the macro name in the keyword namespace, so a name
+     * that is itself a tag keyword would make `{% call if(…) %}` ambiguous —
+     * {@see BodyCompilerTrait::compileBlock()} dispatches on the first keyword and
+     * never reaches `call`. The registry is checked for its own keywords
+     * (`hasDirective()`) rather than mirrored here, so a module-added directive
+     * cannot be shadowed — except by a built-in keyword, which this list is.
+     *
+     * `extends`, `block` and `endblock` are included even though they are consumed
+     * before that dispatch: a macro body is spliced inside a layout's structure,
+     * never able to provide one, so naming a macro after them reads as a promise
+     * the engine cannot keep.
+     */
+    private const RESERVED_MACRO_NAMES = [
+        'if', 'elseif', 'else', 'endif',
+        'for', 'endfor',
+        'set', 'extends', 'block', 'endblock',
+        'include', 'php', 'call', 'parent',
+    ];
+
+    /**
+     * A macro tag: the opening `{% macro NAME(params) %}` form, and the closing
+     * `{% endmacro %}`.
+     *
+     * The opening form's name and parameter list are optional in the pattern so
+     * that a bare `{% macro %}` is SEEN and refused, rather than skipped and left
+     * to fail later as something else. The `@` is matched for the same reason:
+     * `{% macro @name %}` is the removed spelling, and recognising it here is what
+     * lets the scan refuse it with a message naming the replacement.
+     *
+     * The tag is matched by named group rather than by number, because whichever
+     * alternative matched leaves the other's groups unset.
+     */
+    private const MACRO_TAG_RE = '/\{%-?\s*(?:(?P<end>endmacro)\s*-?%\}|macro(?:\s+(?P<at>@)?(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*\((?P<params>[^)]*)\))?\s*-?%\})/s';
+
     // -------------------------------------------------------------------------
     // Macros
     // -------------------------------------------------------------------------
 
     /**
-     * Scan $source for {% macro @name(params) %}...{% endmacro %} definitions,
+     * Scan $source for `{% macro NAME(params) %}...{% endmacro %}` definitions,
      * store them in $this->macros, and strip the definitions from the source.
+     *
+     * The definitions are matched textually rather than lexed. A macro body is
+     * spliced inline at each call site ({@see compileMacroCall()}), so it is never
+     * compiled where it is written; holding the body aside as text and leaving
+     * nothing behind is what makes the definition cost nothing at the point it is
+     * declared.
+     *
+     * Removing the definition has to reproduce what the tokenizer would have done
+     * with it, because the tokenizer never sees it; the trim rules are on
+     * {@see scanMacros()}.
+     *
+     * @param string $source       Merged template source (mutated in place).
+     * @param string $templateName Logical name, for the location of a bad definition.
      */
-    private function extractMacros(string &$source): void
+    private function extractMacros(string &$source, string $templateName = ''): void
     {
-        $pattern = '/\{%-?\s*macro\s+@([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*-?%\}(.*?)\{%-?\s*endmacro\s*-?%\}/s';
-        $source  = (string) \preg_replace_callback($pattern, function (array $m): string {
-            $name   = $m[1];
-            $params = $m[2] !== '' ? \array_map('trim', \explode(',', $m[2])) : [];
-            $this->macros[$name] = ['params' => $params, 'body' => $m[3]];
-            return '';
-        }, $source);
+        if (!\str_contains($source, 'macro')) {
+            return;
+        }
+
+        $body = '';
+        $after = 0;
+        // Whitespace control carried from the last removed definition's closing
+        // tag to the text that follows it; one of the two is always pending once
+        // a definition has been removed.
+        $trimTail = false;
+        $this->scanMacros($source, 0, $templateName, $body, $after, $trimTail);
+
+        if ($after === 0) {
+            return;
+        }
+
+        $tail = \substr($source, $after);
+        $source = $body . ($trimTail
+            ? \ltrim($tail, " \t\r\n")
+            : self::stripOneLineBreakAfterTag($tail));
+    }
+
+    /**
+     * Walk $source from $from for macro definitions and splice them out of it.
+     *
+     * The scan pairs `macro` against `endmacro` rather than taking the next
+     * `{% endmacro %}` it sees. Pairing is what makes a definition missing its own
+     * `{% endmacro %}` report THAT, instead of silently swallowing the next
+     * definition's closing tag and blaming the file for a stray one.
+     *
+     * A definition inside another definition's body is refused. It would read as a
+     * private helper, but the scan is textual and flat, so the name would be
+     * registered exactly like a top-level one and callable from anywhere — the
+     * nesting would promise a scope that does not exist.
+     *
+     * A definition at this level is removed from the text: its body is recorded as
+     * a macro, and nothing is left where it stood. The text before it is appended
+     * to $body with the trims that apply to it — a definition is an ordinary
+     * `{% %}` tag, so it eats nothing before it, and only the `-%}` that closes
+     * `{% endmacro %}` reaches forward. The one exception is the closing tag's own
+     * `{%`, a tag boundary, so a definition whose `{% endmacro %}` is the last
+     * thing in the source still eats the break after it.
+     *
+     * The body's leading line break is kept: it belongs to the body, and the body
+     * is spliced in at the call site, so it lands between the call's own two tags
+     * rather than at the end of the output.
+     *
+     * @param int    $from     Offset to start scanning from.
+     * @param string $body     The text this level keeps, with definitions removed (appended to).
+     * @param int    $after    Offset just past the last definition removed.
+     * @param bool   $trimTail Out: whether the last removed definition's closing
+     *                         tag reaches forward into the text after it.
+     */
+    private function scanMacros(
+        string $source,
+        int $from,
+        string $templateName,
+        string &$body,
+        int &$after,
+        bool &$trimTail
+    ): void {
+        $regex = self::MACRO_TAG_RE;
+        $pos   = $from;
+
+        /** @var null|array{start:int,end:int,name:string,params:list<string>} */
+        $open = null;
+
+        while (\preg_match($regex, $source, $m, PREG_OFFSET_CAPTURE, $pos)) {
+            $tagStart = $m[0][1];
+            $tagEnd   = $tagStart + \strlen($m[0][0]);
+
+            if (($m['end'][0] ?? '') !== '') {
+                if ($open === null) {
+                    throw new ClarityException(
+                        "'{% endmacro %}' without a matching '{% macro %}'.",
+                        $templateName,
+                        $this->sourceLineAtOffset($source, $tagStart)
+                    );
+                }
+
+                $this->registerMacro(
+                    $open['name'],
+                    $open['params'],
+                    \substr($source, $open['end'], $tagStart - $open['end']),
+                    $templateName,
+                    $source,
+                    $open['start']
+                );
+
+                $open     = null;
+                $pos      = $tagEnd;
+                $after    = $tagEnd;
+                $trimTail = \str_ends_with(\rtrim($m[0][0]), '-%}');
+                continue;
+            }
+
+            if (($m['at'][0] ?? '') === '@') {
+                throw new ClarityException(
+                    "Macro definitions are spelled '{% macro name(params) %}': drop the '@'.",
+                    $templateName,
+                    $this->sourceLineAtOffset($source, $tagStart)
+                );
+            }
+
+            if (($m['name'][0] ?? '') === '') {
+                throw new ClarityException(
+                    "Empty '{% macro %}' tag: it needs a name, as in '{% macro card(title) %}'.",
+                    $templateName,
+                    $this->sourceLineAtOffset($source, $tagStart)
+                );
+            }
+
+            if ($open !== null) {
+                throw new ClarityException(
+                    "Nested macro definitions are not supported: define '{$m['name'][0]}' at the "
+                        . 'top level, or in an included macro library.',
+                    $templateName,
+                    $this->sourceLineAtOffset($source, $tagStart)
+                );
+            }
+
+            $chunk = \substr($source, $pos, $tagStart - $pos);
+            if ($tagStart + 2 <= \strlen($source) && $source[$tagStart + 2] === '-') {
+                $chunk = \rtrim($chunk, " \t\r\n");
+            }
+            $body .= $trimTail ? \ltrim($chunk, " \t\r\n") : $chunk;
+
+            $open = [
+                'start'  => $tagStart,
+                'end'    => $tagEnd,
+                'name'   => $m['name'][0],
+                'params' => \trim($m['params'][0]) !== '' ? \array_map('trim', \explode(',', $m['params'][0])) : [],
+            ];
+            $pos = $tagEnd;
+        }
+
+        if ($open !== null) {
+            throw new ClarityException(
+                "Unclosed '{% macro %}' tag: add '{% endmacro %}'.",
+                $templateName,
+                $this->sourceLineAtOffset($source, $open['start'])
+            );
+        }
+    }
+
+    /**
+     * Validate one `{% macro %}` definition and record it.
+     *
+     * @param list<string> $params
+     */
+    private function registerMacro(
+        string $name,
+        array $params,
+        string $body,
+        string $templateName,
+        string $source,
+        int $tagStart
+    ): void {
+        foreach ($params as $param) {
+            $this->validateLocalName($param, 'macro parameter', $templateName, $source, $tagStart);
+        }
+        if (\in_array($name, self::RESERVED_MACRO_NAMES, true)) {
+            throw new ClarityException(
+                "Macro name '{$name}' is a directive keyword. Choose another name.",
+                $templateName,
+                $this->sourceLineAtOffset($source, $tagStart)
+            );
+        }
+
+        $this->macros[$name] = ['params' => $params, 'body' => $body];
+    }
+
+    /**
+     * Reject a name a template binds as a PHP LOCAL of its own, where the name
+     * is one the render frame already uses for something else.
+     *
+     * A macro parameter is the one binding site that spells a plain PHP local
+     * directly (`$p = …`) instead of going through {@see assertBindableName()},
+     * so the reserved-prefix rule has to be repeated here.  Without it a macro
+     * parameter could claim `__c_fn`, and in sandbox mode — where a filter use
+     * forces `$__c_fn = $this->__c_fn;` to be unpacked — the body could then read
+     * the callable registry through it.
+     *
+     * @param int $offsetIn Where to measure the reported line from, when the
+     *                      binding tag is not the text `$name` appears in.
+     */
+    private function validateLocalName(
+        string $name,
+        string $what,
+        string $templateName,
+        string $source,
+        int $offsetIn = -1
+    ): void {
+        // The reservation is collision avoidance and, for `__c_fn`/`__c_sv`,
+        // reachability: those two are the registries a sandboxed template must
+        // never name.  `assertBindableName()` enforces the same rule for every
+        // other binder, so the wording is shared rather than duplicated.
+        if (\str_starts_with($name, self::INTERNAL_PREFIX)) {
+            throw new ClarityException(
+                "Invalid {$what} name '{$name}': names starting with '"
+                    . self::INTERNAL_PREFIX . "' are reserved for internal use.",
+                $templateName,
+                $offsetIn < 0 ? 0 : $this->sourceLineAtOffset($source, $offsetIn)
+            );
+        }
+
+        if (!\in_array($name, self::RESERVED_NAMES, true)) {
+            return;
+        }
+
+        throw new ClarityException(
+            "Invalid {$what} name '{$name}': PHP cannot bind it.",
+            $templateName,
+            $offsetIn < 0 ? 0 : $this->sourceLineAtOffset($source, $offsetIn)
+        );
     }
 
     /**
@@ -257,9 +525,9 @@ trait DirectiveSupportTrait
 
         // A macro body is compiled as its own unit and carries no `{# @source #}`
         // marker of its own, so the markers (or the unit name) would otherwise be
-        // returned with the internal `#macro@` suffix — the same reason
+        // returned with the internal `#macro#` suffix — the same reason
         // {@see resolveCurrentLocation()} strips it.
-        $macroAt = \strpos($sourceName, '#macro@');
+        $macroAt = \strpos($sourceName, '#macro#');
         if ($macroAt !== false) {
             return [\substr($sourceName, 0, $macroAt), $this->sourceLineAtOffset($source, $offset)];
         }
@@ -280,7 +548,7 @@ trait DirectiveSupportTrait
      * by {@see readWithDep()}, so this is a lookup rather than a re-derivation —
      * the compiler has no loader of its own and must not grow one.
      *
-     * @param string $templateName Logical name, or a `<name>#macro@<macro>` unit.
+     * @param string $templateName Logical name, or a `<name>#macro#<macro>` unit.
      */
     private function templatePath(string $templateName): string
     {
@@ -288,11 +556,11 @@ trait DirectiveSupportTrait
     }
 
     /**
-     * Strip the internal `#macro@…` suffix a macro body carries as its unit name.
+     * Strip the internal `#macro#…` suffix a macro body carries as its unit name.
      */
     private static function baseTemplateName(string $unitName): string
     {
-        $macroAt = \strpos($unitName, '#macro@');
+        $macroAt = \strpos($unitName, '#macro#');
 
         return $macroAt === false ? $unitName : \substr($unitName, 0, $macroAt);
     }
@@ -338,8 +606,81 @@ trait DirectiveSupportTrait
     }
 
     /**
-     * Inline a macro call into the current output.
-     * Params become PHP locals ($__c_m_paramName) scoped to the macro body.
+     * Compile `{% call name(args) %}`: the tag form of a macro call.
+     *
+     * `call` is dispatched here rather than through the registry, so a call is
+     * never routed to a registered directive of the same name. The parse is
+     * deliberately loose about the closing parenthesis — {@see splitArgList()}
+     * understands nesting and quotes, so a trailing `)` is the only thing that
+     * can actually be wrong, and the hint handles that case.
+     */
+    private function compileMacroCallTag(
+        string $rest,
+        string $sourcePath,
+        int $tplLine,
+        array &$lines
+    ): string {
+        if (!\preg_match('/^([a-zA-Z_][a-zA-Z0-9_]*)\s*\((.*)\)\s*$/s', \trim($rest), $m)) {
+            throw new ClarityException(
+                "Invalid macro call syntax: '{$rest}'. Write {% call name(args) %}.",
+                $sourcePath,
+                $tplLine,
+                $this->templatePath($sourcePath)
+            );
+        }
+
+        $this->compileMacroCall($m[1], $m[2], $sourcePath, $tplLine, $lines);
+
+        return '';
+    }
+
+    /**
+     * Explain a bare `{% name(args) %}` that names a macro, suggesting `call`.
+     *
+     * Without this the tag dies as "Unknown directive 'card'", which sends the
+     * author looking for a directive that was never meant to exist. Returns null
+     * when $keyword names no macro, so the caller keeps the ordinary error.
+     */
+    /**
+     * Explain a bare `{% name(args) %}` that names a macro, suggesting `call`.
+     *
+     * Without this the tag dies as "Unknown directive 'card'", which sends the
+     * author looking for a directive that was never meant to exist. Returns null
+     * when the tag names no macro, so the caller keeps the ordinary error.
+     *
+     * The name is read from the raw tag, not from the lowercased keyword: a macro
+     * name is an identifier, so `Card` and `card` are different macros.
+     *
+     * A tag whose name is glued to its parenthesis (`{% card(x) %}`) has no
+     * separating space, so `$content` is used rather than the keyword the caller
+     * split off — which for such a tag is the whole call.
+     */
+    private function macroCallSyntaxHint(string $content): ?string
+    {
+        if (!\preg_match('/^([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/', $content, $m) || !isset($this->macros[$m[1]])) {
+            return null;
+        }
+
+        return "Unknown directive '{$m[1]}'. Did you mean {% call {$content} %}?";
+    }
+
+    /**
+     * Explain a `{% macro … %}` tag that reached directive dispatch — either a
+     * definition with no `{% endmacro %}`, or the removed `@`-prefixed spelling.
+     * The pre-scan handles the well-formed case, so neither shape can be parsed
+     * here; this only has to say which mistake it was.
+     */
+    /** A macro definition that reached directive dispatch: unclosed, or legacy. */
+    private function macroDefinitionError(string $content): string
+    {
+        return \str_contains($content, '@')
+            ? "Macro definitions are spelled '{% macro name(params) %}': drop the '@'."
+            : "Unclosed '{% macro %}' tag: add '{% endmacro %}'.";
+    }
+
+    /**
+     * Inline a macro call into the current output. Params become
+     * PHP locals ($__c_m_paramName) scoped to the macro body.
      */
     private function compileMacroCall(
         string $name,
@@ -349,14 +690,14 @@ trait DirectiveSupportTrait
         array &$lines
     ): void {
         if (!isset($this->macros[$name])) {
-            throw new ClarityException("Call to undefined macro '@{$name}'", $sourcePath, $tplLine);
+            throw new ClarityException("Call to undefined macro '{$name}'", $sourcePath, $tplLine);
         }
 
         // Cycle detection: if this macro is already on the expansion stack, we have a cycle.
         if (\in_array($name, $this->macroExpansionStack, true)) {
             $cycle = [...$this->macroExpansionStack, $name];
             throw new ClarityException(
-                'Macro cycle detected: @' . \implode(' → @', $cycle),
+                'Macro cycle detected: ' . \implode(' → ', $cycle),
                 $sourcePath,
                 $tplLine
             );
@@ -368,7 +709,7 @@ trait DirectiveSupportTrait
 
         if (\count($args) !== \count($params)) {
             throw new ClarityException(
-                "Macro '@{$name}' expects " . \count($params) . " argument(s), got " . \count($args),
+                "Macro '{$name}' expects " . \count($params) . " argument(s), got " . \count($args),
                 $sourcePath,
                 $tplLine
             );
@@ -378,30 +719,46 @@ trait DirectiveSupportTrait
         $restore = [];
         foreach ($params as $idx => $param) {
             $phpVar  = '$__c_m_' . $param;
-            $phpExpr = $this->tokenizer->processCondition(\trim($args[$idx]));
+            $phpExpr = $this->withLocation(
+                fn() => $this->tokenizer->processCondition(\trim($args[$idx])),
+                $sourcePath,
+                $tplLine
+            );
             $this->addPhpLines($lines, $phpVar . ' = ' . $phpExpr . ';', $tplLine, $sourcePath);
-            $restore[$param] = $this->localVars[$param] ?? null;
-            $this->localVars[$param] = $phpVar;
+            $restore[$param] = [
+                'var' => $this->localVars[$param] ?? null,
+                'dyn' => isset($this->dynamicBindings[$param]),
+            ];
+            $this->localVars[$param]        = $phpVar;
+            $this->dynamicBindings[$param] = true;
         }
         $this->tokenizer->setLocalVars($this->localVars);
+        $this->tokenizer->setDynamicBindings($this->dynamicBindings);
 
         // Push to expansion stack, compile the macro body inline, then pop.
         $this->macroExpansionStack[] = $name;
         try {
-            $this->compileSourceInto($macro['body'], $sourcePath . '#macro@' . $name, $lines);
+            $this->compileSourceInto($macro['body'], $sourcePath . '#macro#' . $name, $lines);
         } finally {
             \array_pop($this->macroExpansionStack);
         }
 
         // Restore compile-scope.
         foreach ($restore as $param => $old) {
-            if ($old === null) {
+            if ($old['var'] === null) {
                 unset($this->localVars[$param]);
             } else {
-                $this->localVars[$param] = $old;
+                $this->localVars[$param] = $old['var'];
+            }
+
+            if ($old['dyn']) {
+                $this->dynamicBindings[$param] = true;
+            } else {
+                unset($this->dynamicBindings[$param]);
             }
         }
         $this->tokenizer->setLocalVars($this->localVars);
+        $this->tokenizer->setDynamicBindings($this->dynamicBindings);
     }
 
     /**

@@ -656,10 +656,10 @@ trait ExpressionCoreTrait
                             $out .= $call;
                             continue;
                         }
-                        // A bare call resolves to PHP only when the policy lets a
-                        // template reach PHP at all.  Registered names bypass
+                        // A bare call resolves to PHP only when the
+                        // `phpFunctions` rule is on.  Registered names bypass
                         // this entirely — they are the engine's own vocabulary.
-                        if ($this->policy->allowsPhp()) {
+                        if ($this->policy->allows('phpFunctions')) {
                             if (!$this->isFunctionCallAllowed($token)) {
                                 throw new ClarityException(
                                     "Function '{$token}()' is not allowed by this policy: it is not in the "
@@ -671,7 +671,11 @@ trait ExpressionCoreTrait
                             continue;
                         }
                         $context = \substr($expr, \max(0, $start - 10), \min(60, $len - $start + 10));
-                        throw new ClarityException("Call to unregistered function in context '{$context}'. Register it via addFunction() first.");
+                        throw new ClarityException(
+                            "Call to unregistered function '{$token}()' in context '{$context}'. "
+                                . "Grant the 'phpFunctions' rule to allow PHP function calls, then add the name "
+                                . 'with allowFunctions().'
+                        );
                     }
 
                     // Check local vars (loop variables) before the cache: a locally-bound
@@ -857,11 +861,12 @@ trait ExpressionCoreTrait
         }
 
         switch ($name) {
-            case 'context':
+            case 'vars':
+            case 'context': // deprecated alias of vars(), kept so existing templates compile
                 if (\trim($argsRaw) !== '') {
-                    throw new ClarityException('context() does not accept any arguments.');
+                    throw new ClarityException("{$name}() does not accept any arguments.");
                 }
-                return ['$__c_va', $i];
+                return [$this->buildVarsCall(), $i];
             case 'include':
                 $this->autoEscape = false;
                 break;
@@ -893,7 +898,7 @@ trait ExpressionCoreTrait
             return [$this->buildCall($name, $compiledArgs), $i];
         }
 
-        // A registered callable (context, include, json at runtime, user
+        // A registered callable (vars, include, json at runtime, user
         // addFunction) dispatches through $__c_fn.
         if ($this->registry->getCallable($name) !== null) {
             // map/filter/reduce take a lambda/filter-ref as their SECOND argument
@@ -934,27 +939,108 @@ trait ExpressionCoreTrait
     }
 
     /**
+     * Emit `vars()`: a snapshot of the template variables visible at this point.
+     *
+     * The two modes store variables differently, so the snapshot is built
+     * differently — and both forms are chosen at COMPILE time:
+     *
+     *  • Sandbox — `$__c_va` IS the variable store. A `{% set %}` writes through
+     *    it (even inside a loop), so the scope array is returned untouched.
+     *
+     *  • Open mode (`phpVariables`) — the scope is seeded into PHP locals with
+     *    `extract()`, and every later write (a `{% set %}`, a `{% php %}`
+     *    assignment, a loop variable) lands in a LOCAL. `$__c_va` is a snapshot of
+     *    the seed, so it goes stale the moment anything is assigned; the locals
+     *    are the store. `get_defined_vars()` is precisely "what is in scope
+     *    here", which is what a variable dump should show — and it is exactly
+     *    what a `{% php %}` block sees. `__c_`-prefixed names are engine internals
+     *    and are filtered out.
+     *
+     * In BOTH modes a `{% for %}` variable and a macro parameter live only in a
+     * PHP local (see {@see $dynamicBindings}) — nothing puts them into
+     * `$__c_va`, so `{{ vars().v }}` inside `{% for v in … %}` would be absent
+     * without gathering them. They are merged over the base scope, so a name that
+     * is genuinely in the scope array keeps precedence: the snapshot must never
+     * disagree with what printing the name reads.
+     *
+     * The merged array is a fresh COPY (`array_replace`), never assigned back into
+     * the scope, so a `{% set %}` after this point writes the array every later
+     * read sees. Assigning the merge back into `$__c_va` would break a
+     * self-referential `{% set n = vars()|length %}`: the later `$__c_va['n'] = …`
+     * would land in the copy the merge had already replaced.
+     *
+     * The locals are staged in `$__c_dyn` — a reserved name the render body
+     * declares only when the template actually contains such a call, so the
+     * `str_contains(…, '$__c_dyn')` probe in the emitter is a reliable signal.
+     * That write is safe when the result is only read: a template may never bind a
+     * `__c_`-prefixed name, and only one `vars()` call is in flight at a time.
+     *
+     * A plain scope read stays the bare `$__c_va` in sandbox mode — that case pays
+     * nothing, exactly as a plain scope read does.
+     */
+    private function buildVarsCall(): string
+    {
+        // Open mode seeds the scope into PHP locals (`extract()`), and every later
+        // write — a `{% set %}`, a `{% php %}` assignment, a loop variable — lands
+        // in a LOCAL, so `$__c_va` stops being the variable store once anything is
+        // assigned. There the locals ARE the scope, and `get_defined_vars()` is
+        // exactly "what is in scope at this point". A `__c_`-prefixed name is an
+        // engine internal and never a template variable, so those are dropped.
+        //
+        // Sandbox mode seeds nothing, so `$__c_va` IS the scope and is returned
+        // untouched — the cheap path, and the behaviour a scope read always had.
+        $scope = $this->localRoots
+            ? '(\array_filter(\get_defined_vars(), static fn($k): bool => !\str_starts_with((string) $k, \'__c_\'), \ARRAY_FILTER_USE_KEY))'
+            : '$__c_va';
+
+        if ($this->dynamicBindings === []) {
+            return $scope;
+        }
+
+        $entries = [];
+        foreach (\array_keys($this->dynamicBindings) as $name) {
+            // The mapped PHP local, not `'$' . $name`: a macro parameter is bound
+            // to `$__c_m_<param>` (a namespaced local so it cannot collide with a
+            // loop variable of the same name), while a loop variable is `$name`.
+            $entries[] = \var_export($name, true) . ' => ' . ($this->localVars[$name] ?? '$' . $name);
+        }
+
+        return '(\array_replace(' . $scope . ', $__c_dyn = [' . \implode(', ', $entries) . ']))';
+    }
+
+    /**
      * Emit the lookup for `${expr}` / `$$name`: read the variable whose NAME is
      * produced by a runtime expression.
      *
      * The lookup uses the SAME variable model as a literal `{{ name }}`:
      *
-     *  â€¢ outside a loop  â†’ `$__c_va[$name]`
-     *  â€¢ inside a loop   â†’ loop locals first (they are real PHP locals, not
-     *                      scope entries), then `$__c_va[$name]`
+     *  • sandbox mode     → `$__c_va[$name]`
+     *  • open mode        → the render-frame LOCALS (`extract()` seeded the
+     *                       scope into them), then a macro parameter's local
+     *  • inside a loop    → loop locals first (they are real PHP locals, not
+     *                       scope entries), then the above
+     *
+     * Open mode needs the locals because that is where a `{% set %}` and a
+     * `{% php %}` assignment actually land: `$__c_va` is then only the seed
+     * snapshot.  Reading `$__c_va` alone would make `${'x'}` disagree with a
+     * literal `{{ x }}` whenever `x` was assigned rather than passed in.
      *
      * Presence is tested with `array_key_exists`, NOT `isset`: a NULL value is
      * PRESENT, exactly as a literal `{{ name }}` treats it (isset would report it
      * absent and trigger the strict throw).
      *
-     * Security: the name only ever indexes `$__c_va` or selects among the
-     * compile-time known loop locals (the map literal).  It is never emitted as
-     * a PHP dynamic variable, so it can reach neither a superglobal nor an engine
-     * internal.  `__c_`-prefixed names are simply absent from the scope.
+     * Security: the name only ever indexes `$__c_va` or the filtered locals /
+     * compile-time known locals map.  It is never emitted as a PHP dynamic
+     * variable, so it can reach neither a superglobal nor an engine internal.
+     * The open-mode locals are filtered through the SAME predicate
+     * {@see buildVarsCall()} uses for `vars()` — every `__c_`-prefixed key is
+     * dropped — and a template can never bind such a name
+     * (see Compiler::assertBindableName()), so `__c_fn` / `$this` stay
+     * unreachable.  `get_defined_vars()` contains no superglobals.
      *
      * Absent names are STRICT (a line-numbered ClarityException) unless a `??`
      * follows the lookup, in which case the absent branch is `null` so the
-     * operator supplies the fallback â€” mirroring a literal `{{ name ?? 'x' }}`.
+     * operator supplies the fallback — mirroring a literal `{{ name ?? 'x' }}`.
      *
      * @param bool $coalesces Whether the character after the lookup is `??`.
      */
@@ -975,6 +1061,28 @@ trait ExpressionCoreTrait
         $miss = $coalesces
             ? 'null'
             : 'throw new \\Clarity\\ClarityException("Undefined variable: " . $__c_tmp)';
+
+        if ($this->localRoots) {
+            // Open mode: the store is the render frame's locals, so the lookup
+            // has to read them — filtered exactly as `vars()` is, so an engine
+            // internal can never be named.  A name PHP keeps under a
+            // `__c_`-prefixed local (a macro parameter, `$__c_m_p`) is necessarily
+            // dropped by that filter, so the compile-time map supplies it.
+            $scope = '(\array_filter(\get_defined_vars(), static fn($k): bool => '
+                . '!\str_starts_with((string) $k, \'__c_\'), \ARRAY_FILTER_USE_KEY))';
+
+            if ($this->localVars !== []) {
+                $entries = [];
+                foreach ($this->localVars as $tplName => $phpVar) {
+                    $entries[] = \var_export($tplName, true) . ' => ' . $phpVar;
+                }
+                $scope = '(\array_replace(' . $scope . ', [' . \implode(', ', $entries) . ']))';
+            }
+
+            return '((array_key_exists($__c_tmp = ' . $nameExpr . ', $__c_loc = ' . $scope . ')'
+                . ' ? $__c_loc[$__c_tmp]'
+                . ' : (' . $miss . ')))';
+        }
 
         if (!empty($this->localVars)) {
             $entries = [];

@@ -178,6 +178,60 @@ class SecurityErrorMappingTest extends BaseTestCase
         }
     }
 
+    public function testUnregisteredFilterIsMappedToTemplateLine(): void
+    {
+        self::tpl('filter_missing', "static line\n{{ value |> nosuchfilter_at_all }}\nstatic line");
+
+        try {
+            self::render('filter_missing', ['value' => 'x']);
+            $this->fail('Expected ClarityException was not thrown');
+        } catch (ClarityException $e) {
+            // The tokenizer raises this without a location (it is constructed
+            // without a template); the compiler attaches one. Before it did, the
+            // message pointed at the engine frame that threw.
+            $this->assertSame('filter_missing', $e->templateName);
+            $this->assertSame(2, $e->templateLine);
+            $this->assertStringContainsString('filter_missing', $e->getFile());
+        }
+    }
+
+    public function testErrorInsideParentBlockIsMappedToParentTemplate(): void
+    {
+        self::tpl('errmap_layout', "[{% block title %}\n{{ title |> nosuchfilter_at_all }}\n{% endblock %}]");
+        self::tpl(
+            'errmap_child',
+            '{% extends "errmap_layout" %}{% block title %}{% parent %}{% endblock %}'
+        );
+
+        try {
+            self::render('errmap_child', ['title' => 'x']);
+            $this->fail('Expected ClarityException was not thrown');
+        } catch (ClarityException $e) {
+            // `{% parent %}` compiles the PARENT's fragment, so the failure is the
+            // parent's — it must name the parent template and line, not the child
+            // that spliced it in, and not the engine frame.
+            $this->assertSame('errmap_layout', $e->templateName);
+            $this->assertSame(2, $e->templateLine);
+            $this->assertStringContainsString('errmap_layout', $e->getFile());
+        }
+    }
+
+    public function testUnclosedOutputTagKeepsTheScannersOwnLine(): void
+    {
+        self::tpl('unclosed_out', "line one\nline two\n{{ value \n");
+
+        try {
+            self::render('unclosed_out', ['value' => 'x']);
+            $this->fail('Expected ClarityException was not thrown');
+        } catch (ClarityException $e) {
+            // The scanner knows which line the tag OPENED on and carries it. The
+            // compiler must fill in only the missing name, leaving that line alone.
+            $this->assertSame('unclosed_out', $e->templateName);
+            $this->assertSame(3, $e->templateLine);
+            $this->assertStringContainsString('unclosed_out', $e->getFile());
+        }
+    }
+
     // =========================================================================
     // Exceptions raised while the template runs
     // =========================================================================
@@ -394,5 +448,127 @@ class SecurityErrorMappingTest extends BaseTestCase
             $messages,
             'a diagnostic from filter code must reach the application handler'
         );
+    }
+
+    /**
+     * A deprecation raised by a template is an ordinary template diagnostic: it
+     * must reach the application handler.  Excluding E_DEPRECATED from the
+     * handler mask would keep Clarity's handler from ever being entered, so PHP
+     * would report it against the compiled cache file — an internal path — and
+     * the application would neither see nor be able to suppress it.
+     */
+    public function testDeprecationInsideTemplateReachesApplicationHandler(): void
+    {
+        $seen = [];
+        set_error_handler(static function (int $no, string $msg, string $file, int $line) use (&$seen): bool {
+            $seen[] = [$no, $msg, $file, $line];
+            return true;
+        });
+
+        try {
+            // `upper` hands null to mb_strtoupper(): a deprecation in weak mode,
+            // and the case the CHANGELOG advertises as replacing a silent ''.
+            $engine = TestClarityEngine::withPolicy(
+                \Clarity\Engine\Policy::default()->denyRule('strictTypes')
+            );
+            self::tpl('dep_from_filter', "TOP\n{{ null |> upper }}\nBOTTOM");
+
+            ob_start();
+            try {
+                $output = $engine->renderPartial('dep_from_filter');
+            } finally {
+                $stray = ob_get_clean();
+            }
+        } finally {
+            restore_error_handler();
+        }
+
+        $this->assertSame("TOP\n\nBOTTOM", $output, 'rendering continues past a deprecation');
+        $this->assertSame('', trim((string) $stray), 'the diagnostic must not leak to the client');
+
+        $deprecations = array_values(array_filter(
+            $seen,
+            static fn(array $e): bool => in_array($e[0], [E_DEPRECATED, E_USER_DEPRECATED], true)
+        ));
+        $this->assertCount(1, $deprecations, 'the template deprecation must reach the application handler once');
+
+        [$no, $msg, $file, $line] = $deprecations[0];
+        $this->assertSame(E_USER_DEPRECATED, $no, 'a deprecation must stay a deprecation');
+        $this->assertStringContainsString('mb_strtoupper()', $msg);
+        $this->assertStringContainsString('in dep_from_filter:2', $msg, 'the message carries the template location');
+        $this->assertStringEndsWith(
+            'dep_from_filter.clarity.html',
+            str_replace('\\', '/', $file),
+            'the reported file is the template, never the compiled cache file'
+        );
+        $this->assertSame(2, $line, 'the reported line is the template line');
+    }
+
+    /**
+     * The level is a faithful translation, not a collapse to a warning: a
+     * handler that promotes warnings to exceptions must not abort the render
+     * over a notice.
+     */
+    public function testNoticeLevelSurvivesTranslation(): void
+    {
+        $seen = [];
+        set_error_handler(static function (int $no, string $msg) use (&$seen): bool {
+            $seen[] = [$no, $msg];
+            return true;
+        });
+
+        try {
+            $engine = TestClarityEngine::withPolicy(\Clarity\Engine\Policy::unrestricted());
+            self::tpl('notice_in_body', "{% php trigger_error('a template notice', E_USER_NOTICE); %}");
+
+            $output = $engine->renderPartial('notice_in_body');
+        } finally {
+            restore_error_handler();
+        }
+
+        $this->assertSame('', $output);
+        $this->assertSame(
+            [E_USER_NOTICE],
+            array_column($seen, 0),
+            'a template notice must arrive as E_USER_NOTICE, not E_USER_WARNING'
+        );
+        $this->assertStringContainsString('a template notice', $seen[0][1]);
+    }
+
+    /**
+     * A diagnostic that originated in the template is reported at the template's
+     * file and line, not the compiled cache file's: the cache path is an
+     * implementation detail and must not leak into logs or the response.
+     */
+    public function testForwardedDiagnosticIsReportedAtTheTemplateLocation(): void
+    {
+        $seen = [];
+        set_error_handler(static function (int $no, string $msg, string $file, int $line) use (&$seen): bool {
+            $seen[] = [$no, $msg, $file, $line];
+            return true;
+        });
+
+        try {
+            // `items` is present but not iterable, so the loop diagnostic is
+            // forwarded rather than mapped to a ClarityException.
+            self::tpl('forward_loc', "one\n{% for item in items %}{{ item }}{% endfor %}\ntwo");
+            $output = self::render('forward_loc', ['items' => null]);
+        } finally {
+            restore_error_handler();
+        }
+
+        $this->assertSame("one\ntwo", $output);
+        $this->assertCount(1, $seen);
+
+        [$no, $msg, $file, $line] = $seen[0];
+        $this->assertSame(E_USER_WARNING, $no);
+        $this->assertStringContainsString('in forward_loc:2', $msg);
+        $this->assertStringNotContainsString(
+            'cache',
+            str_replace('\\', '/', $file),
+            'the compiled cache path must not be reported'
+        );
+        $this->assertStringEndsWith('forward_loc.clarity.html', str_replace('\\', '/', $file));
+        $this->assertSame(2, $line);
     }
 }

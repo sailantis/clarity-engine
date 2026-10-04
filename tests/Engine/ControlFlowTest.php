@@ -132,11 +132,11 @@ class ControlFlowTest extends BaseTestCase
     {
         self::tpl(
             'macro_library',
-            '{% macro @badge(text) %}<span class="badge">{{ text }}</span>{% endmacro %}'
+            '{% macro badge(text) %}<span class="badge">{{ text }}</span>{% endmacro %}'
         );
         self::tpl(
             'include_macro_library',
-            '{% include "macro_library" %}{% @badge(label) %}'
+            '{% include "macro_library" %}{% call badge(label) %}'
         );
 
         $this->assertSame(
@@ -219,7 +219,7 @@ class ControlFlowTest extends BaseTestCase
         self::tpl('layout_parent_append', '[{% block title %}Base{% endblock %}]');
         self::tpl(
             'page_parent_append',
-            '{% extends "layout_parent_append" %}{% block title %}{% @parent %} / Child{% endblock %}'
+            '{% extends "layout_parent_append" %}{% block title %}{% parent %} / Child{% endblock %}'
         );
 
         $this->assertSame('[Base / Child]', self::render('page_parent_append'));
@@ -230,7 +230,7 @@ class ControlFlowTest extends BaseTestCase
         self::tpl('layout_parent_wrap', '[{% block body %}core{% endblock %}]');
         self::tpl(
             'page_parent_wrap',
-            '{% extends "layout_parent_wrap" %}{% block body %}<before>{% @parent %}|{% @parent %}</before>{% endblock %}'
+            '{% extends "layout_parent_wrap" %}{% block body %}<before>{% parent %}|{% parent %}</before>{% endblock %}'
         );
 
         $this->assertSame('[<before>core|core</before>]', self::render('page_parent_wrap'));
@@ -245,7 +245,7 @@ class ControlFlowTest extends BaseTestCase
         );
         self::tpl(
             'page_parent_chain',
-            '{% extends "section_parent_chain" %}{% block page %}Page[{% @parent %}]{% endblock %}'
+            '{% extends "section_parent_chain" %}{% block page %}Page[{% parent %}]{% endblock %}'
         );
 
         $this->assertSame('[Page[Section]]', self::render('page_parent_chain'));
@@ -255,8 +255,38 @@ class ControlFlowTest extends BaseTestCase
     {
         $this->expectException(ClarityException::class);
         $this->expectExceptionMessageMatches('/only valid inside an overriding child block/i');
-        self::tpl('invalid_parent_placeholder', '{% block title %}{% @parent %}{% endblock %}');
+        self::tpl('invalid_parent_placeholder', '{% block title %}{% parent %}{% endblock %}');
         self::render('invalid_parent_placeholder');
+    }
+
+    public function testBareParentPlaceholderAppendsParentContent(): void
+    {
+        self::tpl('layout_bare_parent', '[{% block title %}Base{% endblock %}]');
+        self::tpl(
+            'page_bare_parent',
+            '{% extends "layout_bare_parent" %}{% block title %}{% parent %} / Child{% endblock %}'
+        );
+
+        $this->assertSame('[Base / Child]', self::render('page_bare_parent'));
+    }
+
+    public function testBareParentPlaceholderSupportsMultipleUses(): void
+    {
+        self::tpl('layout_bare_wrap', '[{% block body %}core{% endblock %}]');
+        self::tpl(
+            'page_bare_wrap',
+            '{% extends "layout_bare_wrap" %}{% block body %}<b>{% parent %}|{% parent %}</b>{% endblock %}'
+        );
+
+        $this->assertSame('[<b>core|core</b>]', self::render('page_bare_wrap'));
+    }
+
+    public function testBareParentPlaceholderOutsideOverrideThrows(): void
+    {
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/only valid inside an overriding child block/i');
+        self::tpl('invalid_bare_parent_placeholder', '{% block title %}{% parent %}{% endblock %}');
+        self::render('invalid_bare_parent_placeholder');
     }
 
     public function testThreeLevelExtendsChildOverridesBlockDefinedInMid(): void
@@ -387,6 +417,26 @@ class ControlFlowTest extends BaseTestCase
     {
         self::tpl('bnot', '{{ bnot a }}');
         $this->assertSame('-6', self::render('bnot', ['a' => 5]));
+    }
+
+    public function testBitwiseShiftLeft(): void
+    {
+        self::tpl('blsh', '{{ a blsh b }}');
+        $this->assertSame('20', self::render('blsh', ['a' => 5, 'b' => 2]));
+    }
+
+    public function testBitwiseShiftRight(): void
+    {
+        self::tpl('brsh', '{{ a brsh b }}');
+        $this->assertSame('5', self::render('brsh', ['a' => 20, 'b' => 2]));
+    }
+
+    public function testBitwiseShiftBindsAgainstOtherBitwiseKeywords(): void
+    {
+        // The shift keywords are operand boundaries too, so `blsh` must not be
+        // swallowed by the adjacent `band`: this is (flags << 2) & 255.
+        self::tpl('blsh_band', '{{ flags blsh 2 band 255 }}');
+        $this->assertSame('224', self::render('blsh_band', ['flags' => 0x12345678]));
     }
 
     // =========================================================================
@@ -650,8 +700,8 @@ class ControlFlowTest extends BaseTestCase
     {
         self::tpl(
             'macro_basic',
-            '{% macro @greet(name) %}Hello {{ name }}!{% endmacro %}' .
-                '{% @greet(user) %}'
+            '{% macro greet(name) %}Hello {{ name }}!{% endmacro %}' .
+                '{% call greet(user) %}'
         );
         $this->assertSame('Hello World!', self::render('macro_basic', ['user' => 'World']));
     }
@@ -660,8 +710,8 @@ class ControlFlowTest extends BaseTestCase
     {
         self::tpl(
             'macro_multi',
-            '{% macro @field(label, value) %}<label>{{ label }}: {{ value }}</label>{% endmacro %}' .
-                '{% @field(name, email) %}'
+            '{% macro field(label, value) %}<label>{{ label }}: {{ value }}</label>{% endmacro %}' .
+                '{% call field(name, email) %}'
         );
         $result = self::render('macro_multi', ['name' => 'Name', 'email' => 'test@example.com']);
         $this->assertSame('<label>Name: test@example.com</label>', $result);
@@ -671,8 +721,8 @@ class ControlFlowTest extends BaseTestCase
     {
         self::tpl(
             'macro_repeat',
-            '{% macro @item(label) %}<li>{{ label }}</li>{% endmacro %}' .
-                '{% @item(a) %}{% @item(b) %}'
+            '{% macro item(label) %}<li>{{ label }}</li>{% endmacro %}' .
+                '{% call item(a) %}{% call item(b) %}'
         );
         $result = self::render('macro_repeat', ['a' => 'First', 'b' => 'Second']);
         $this->assertSame('<li>First</li><li>Second</li>', $result);
@@ -684,8 +734,8 @@ class ControlFlowTest extends BaseTestCase
         // After the macro call, {{ x }} should resolve from $__c_va['x'].
         self::tpl(
             'macro_isolate',
-            '{% macro @show(x) %}[{{ x }}]{% endmacro %}' .
-                '{% @show(a) %}{{ x }}'
+            '{% macro show(x) %}[{{ x }}]{% endmacro %}' .
+                '{% call show(a) %}{{ x }}'
         );
         $result = self::render('macro_isolate', ['a' => 'macro', 'x' => 'outer']);
         $this->assertSame('[macro]outer', $result);
@@ -695,8 +745,8 @@ class ControlFlowTest extends BaseTestCase
     {
         self::tpl(
             'macro_loop',
-            '{% macro @row(item) %}<tr>{{ item }}</tr>{% endmacro %}' .
-                '{% for row in rows %}{% @row(row) %}{% endfor %}'
+            '{% macro row(item) %}<tr>{{ item }}</tr>{% endmacro %}' .
+                '{% for row in rows %}{% call row(row) %}{% endfor %}'
         );
         $result = self::render('macro_loop', ['rows' => ['a', 'b', 'c']]);
         $this->assertSame('<tr>a</tr><tr>b</tr><tr>c</tr>', $result);
@@ -706,7 +756,7 @@ class ControlFlowTest extends BaseTestCase
     {
         $this->expectException(ClarityException::class);
         $this->expectExceptionMessageMatches('/undefined macro/i');
-        self::tpl('macro_undef', '{% @missing(x) %}');
+        self::tpl('macro_undef', '{% call missing(x) %}');
         self::render('macro_undef', ['x' => 'v']);
     }
 
@@ -716,8 +766,8 @@ class ControlFlowTest extends BaseTestCase
         $this->expectExceptionMessageMatches('/expects 2 argument/i');
         self::tpl(
             'macro_arity',
-            '{% macro @field(label, value) %}{{ label }}{{ value }}{% endmacro %}' .
-                '{% @field(only_one) %}'
+            '{% macro field(label, value) %}{{ label }}{{ value }}{% endmacro %}' .
+                '{% call field(only_one) %}'
         );
         self::render('macro_arity', ['only_one' => 'x']);
     }
@@ -726,9 +776,9 @@ class ControlFlowTest extends BaseTestCase
     {
         self::tpl(
             'macro_chain',
-            '{% macro @a(x) %}<div>{% @b(x) %}</div>{% endmacro %}' .
-                '{% macro @b(y) %}<span>{{ y }}</span>{% endmacro %}' .
-                '{% @a(val) %}'
+            '{% macro a(x) %}<div>{% call b(x) %}</div>{% endmacro %}' .
+                '{% macro b(y) %}<span>{{ y }}</span>{% endmacro %}' .
+                '{% call a(val) %}'
         );
         $this->assertSame('<div><span>hello</span></div>', self::render('macro_chain', ['val' => 'hello']));
     }
@@ -739,8 +789,8 @@ class ControlFlowTest extends BaseTestCase
         $this->expectExceptionMessageMatches('/cycle/i');
         self::tpl(
             'macro_self_recurse',
-            '{% macro @loop(x) %}{% @loop(x) %}{% endmacro %}' .
-                '{% @loop(val) %}'
+            '{% macro loop(x) %}{% call loop(x) %}{% endmacro %}' .
+                '{% call loop(val) %}'
         );
         self::render('macro_self_recurse', ['val' => 1]);
     }
@@ -751,10 +801,163 @@ class ControlFlowTest extends BaseTestCase
         $this->expectExceptionMessageMatches('/cycle/i');
         self::tpl(
             'macro_indirect_recurse',
-            '{% macro @a(x) %}{% @b(x) %}{% endmacro %}' .
-                '{% macro @b(y) %}{% @a(y) %}{% endmacro %}' .
-                '{% @a(val) %}'
+            '{% macro a(x) %}{% call b(x) %}{% endmacro %}' .
+                '{% macro b(y) %}{% call a(y) %}{% endmacro %}' .
+                '{% call a(val) %}'
         );
         self::render('macro_indirect_recurse', ['val' => 1]);
+    }
+
+    public function testMacroDefinitionIsStrippedAndTheCallTagLeavesNoWhitespace(): void
+    {
+        // The definition is removed from the source, so it must not emit the
+        // whitespace around itself -- which is what keeps a library of
+        // definitions from opening a page with a run of blank lines.
+        self::tpl(
+            'macro_strip',
+            "a\n{% macro card(t) %}<i>{{ t }}</i>{% endmacro %}\n{% call card('x') %}\nb"
+        );
+
+        $this->assertSame("a\n<i>x</i>b", self::render('macro_strip'));
+    }
+
+    public function testMacroDefinitionAcceptsWhitespaceControl(): void
+    {
+        self::tpl(
+            'macro_trim',
+            "x {%- macro tag(v) -%}<b>{{ v }}</b>{%- endmacro -%} {% call tag('t') %}"
+        );
+
+        $this->assertSame('x<b>t</b>', self::render('macro_trim'));
+    }
+
+    public function testMacroDefinitionAndCallAreCaseSensitive(): void
+    {
+        // Keyword dispatch lowercases, but a MACRO NAME is an identifier: `Card`
+        // and `card` are two different macros, so a call must not fold.
+        self::tpl(
+            'macro_case',
+            '{% macro Card(t) %}<big>{{ t }}</big>{% endmacro %}{% call Card("v") %}'
+        );
+
+        $this->assertSame('<big>v</big>', self::render('macro_case'));
+    }
+
+    public function testBareMacroNameWithoutCallSuggestsTheCallTag(): void
+    {
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/did you mean \{% call card\(/i');
+        self::tpl(
+            'macro_bare_call',
+            '{% macro card(t) %}{{ t }}{% endmacro %}{% card("v") %}'
+        );
+        self::render('macro_bare_call');
+    }
+
+    public function testMacroNameThatIsADirectiveKeywordIsRejected(): void
+    {
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/is a directive keyword/i');
+        self::tpl('macro_reserved_name', '{% macro if(x) %}{{ x }}{% endmacro %}{% call if(1) %}');
+        self::render('macro_reserved_name');
+    }
+
+    public function testMacroParameterThatPhpCannotBindIsRejected(): void
+    {
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches("/macro parameter name 'this'/i");
+        self::tpl('macro_reserved_param', '{% macro m(this) %}{{ this }}{% endmacro %}{% call m(1) %}');
+        self::render('macro_reserved_param');
+    }
+
+    public function testUnclosedMacroDefinitionIsRejected(): void
+    {
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches("/unclosed '\{% macro %\}'/i");
+        self::tpl('macro_unclosed', '{% macro m(x) %}{{ x }}');
+        self::render('macro_unclosed');
+    }
+
+    public function testMalformedCallTagIsRejected(): void
+    {
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/invalid macro call syntax/i');
+        self::tpl('macro_malformed_call', '{% macro m() %}x{% endmacro %}{% call m( %}');
+        self::render('macro_malformed_call');
+    }
+
+
+    public function testMacroWithNoParameters(): void
+    {
+        self::tpl(
+            'macro_no_params',
+            '{% macro spacer() %}<hr>{% endmacro %}|{% call spacer() %}|'
+        );
+
+        $this->assertSame('|<hr>|', self::render('macro_no_params'));
+    }
+
+    public function testMacroCalledInsideAnIfBranch(): void
+    {
+        self::tpl(
+            'macro_in_if',
+            '{% macro chip(t) %}<span>{{ t }}</span>{% endmacro %}' .
+                '{% if show %}{% call chip(label) %}{% endif %}'
+        );
+
+        $this->assertSame('<span>yes</span>', self::render('macro_in_if', ['show' => true, 'label' => 'yes']));
+        $this->assertSame('', self::render('macro_in_if', ['show' => false, 'label' => 'yes']));
+    }
+    public function testNestedMacroDefinitionIsRejected(): void
+    {
+        // A definition inside another definition's body would read as a private
+        // helper, but macro names are not scoped: it would be registered and
+        // callable exactly like a top-level one.
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches("/Nested macro definitions are not supported: define 'inner'/i");
+        self::tpl(
+            'macro_nested',
+            '{% macro outer() %}{% macro inner() %}<i>{% endmacro %}{% call outer() %}'
+        );
+        self::render('macro_nested');
+    }
+
+    public function testUnclosedMacroTagIsReportedWhenNothingClosesIt(): void
+    {
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches("/unclosed '\{% macro %\}'/i");
+        self::tpl('macro_unclosed_only', '{% macro a(x) %}{{ x }}');
+        self::render('macro_unclosed_only');
+    }    public function testEmptyMacroTagIsRejected(): void
+    {
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/empty .*macro.*it needs a name/i');
+        self::tpl('macro_empty', '{% macro %}x{% endmacro %}');
+        self::render('macro_empty');
+    }
+
+    public function testStrayEndmacroIsRejected(): void
+    {
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/without a matching/i');
+        self::tpl('macro_stray_end', 'hi{% endmacro %}');
+        self::render('macro_stray_end');
+    }
+    public function testAtPrefixedMacroDefinitionIsRejectedWithARewriteHint(): void
+    {
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches("/spelled '\{% macro name\(params\) %\}'/i");
+        self::tpl('legacy_macro_def', '{% macro @greet(name) %}Hi {{ name }}{% endmacro %}');
+        self::render('legacy_macro_def');
+    }
+
+    public function testAtPrefixedMacroCallIsAnUnknownDirective(): void
+    {
+        // The `@`-call scanner is gone: a macro is invoked with `{% call %}`, so
+        // there is no longer a dedicated message for this spelling.
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/unknown directive/i');
+        self::tpl('legacy_macro_call', '{% @greet("x") %}');
+        self::render('legacy_macro_call');
     }
 }

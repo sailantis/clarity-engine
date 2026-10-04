@@ -40,6 +40,8 @@ trait CompilerCoreTrait
         $this->forHeaderPending = false;
         $this->localVars        = [];
         $this->tokenizer->setLocalVars([]);
+        $this->dynamicBindings  = [];
+        $this->tokenizer->setDynamicBindings([]);
         $this->macros              = [];
         $this->macroExpansionStack = [];
         $this->context             = 'html';
@@ -72,7 +74,7 @@ trait CompilerCoreTrait
         $source = $this->resolveExtends($source, $templateName);
 
         // Pre-scan: extract macro definitions and strip them from source.
-        $this->extractMacros($source);
+        $this->extractMacros($source, $templateName);
 
         // Unique class name prevents redeclaration collisions in long-running
         // processes (Swoole, RoadRunner, etc.) when a template is recompiled
@@ -174,6 +176,48 @@ trait CompilerCoreTrait
         }
     }
 
+    /**
+     * Run a compile step and fill in any template location it failed to attach.
+     *
+     * A {@see ClarityException} carries three fields — name, line and path — and
+     * `getFile()` / `getLine()` are relocated onto them so a compile failure names
+     * the template instead of the engine frame that raised it. The tokenizer is
+     * constructed without a template: it has no `sourcePath`, so it cannot supply
+     * any of the three, and it throws on the author's own mistakes (an unregistered
+     * filter, a malformed expression) — precisely the failures that must point at
+     * the author's line. The compiler is the only layer that knows where the
+     * fragment came from, so calls that cross into the tokenizer, and the loader
+     * read of an inlined template, go through here.
+     *
+     * Only MISSING fields are filled: an exception that already names a template
+     * came from a nested compile (an inlined macro or include) whose location is
+     * the more precise one, and is rethrown untouched.
+     *
+     * The original throw is kept as `$previous`, so a rethrow loses no detail.
+     *
+     * @template T
+     * @param callable():T $step
+     * @return T
+     */
+    private function withLocation(callable $step, string $sourcePath, int $tplLine)
+    {
+        try {
+            return $step();
+        } catch (ClarityException $e) {
+            if ($e->templateName !== '' || $e->templatePath !== '') {
+                throw $e;
+            }
+
+            throw new ClarityException(
+                $e->getMessage(),
+                $sourcePath,
+                $tplLine ?: $e->templateLine,
+                $this->templatePath($sourcePath),
+                $e
+            );
+        }
+    }
+
     private function annotateSourceRegion(string $source, string $sourceName, int $startLine): string
     {
         if ($source === '') {
@@ -230,7 +274,7 @@ trait CompilerCoreTrait
      * point at, for the compilation unit currently being processed.
      *
      * The current unit is the top of $compileStack: the root template, an
-     * included template, or `<owner>#macro@<name>` for a macro body.
+     * included template, or `<owner>#macro#<name>` for a macro body.
      *
      * The mapping cursor ($mappedSourcePath and its companions) only describes
      * the merged top-level source.  A macro body is compiled as its own unit and
@@ -243,7 +287,7 @@ trait CompilerCoreTrait
     private function resolveCurrentLocation(?int $tplLine): array
     {
         $sourceName = $this->compileStack === [] ? '' : \end($this->compileStack);
-        $macroAt    = \strpos($sourceName, '#macro@');
+        $macroAt    = \strpos($sourceName, '#macro#');
 
         if ($macroAt !== false) {
             return [\substr($sourceName, 0, $macroAt), $tplLine ?? 0];

@@ -95,7 +95,8 @@ use Stringable;
  *
  * Built-in Functions
  * ------------------
- * - `context()`: Returns current template variables array
+ * - `vars()`: Returns current template variables array
+ * - `context()`: Deprecated alias of `vars()`
  * - `include($view [, $context])`: Render another template dynamically
  *
  * Custom Filter Examples
@@ -182,7 +183,7 @@ class Registry
      *
      * Aliases (`format` = `sprintf`, `e`/`esc` = `escape`) are separate keys
      * that point at the same definition. The `raw` filter, `dump()`/`dd()`
-     * context injection, and the `context()` / `include()` special forms stay
+     * context injection, and the `vars()` / `include()` special forms stay
      * compiler-intercepted; they are not data here.
      *
      * Populated by {@see registerBuiltins()} in the constructor (closures are
@@ -436,11 +437,6 @@ class Registry
                 // literal characters.
                 'defaults' => ['ellipsis' => '"\u{2026}"'],
             ],
-            'unicode' => [
-                'php'      => 'new \Clarity\Engine\UnicodeString({1}, {2}, {3})',
-                'params'   => ['start', 'length'],
-                'defaults' => ['start' => '0', 'length' => 'null'],
-            ],
             'upper' => [
                 'php' => '\mb_strtoupper({1})',
             ],
@@ -556,11 +552,15 @@ class Registry
         //
         // Names that are BOTH filter and function (`json`, `keys`, `values`,
         // `first`, `last`) appear in $filters AND $callables. The rest are
-        // call-only: their first argument is not a piped value (`context`,
+        // call-only: their first argument is not a piped value (`vars`,
         // `include`, `dump`, `dd`), so they are absent from $filters and a pipe
         // like `{{ x |> dump }}` is rejected at compile time.
 
-        $this->callables['context'] = static fn(array $vars = []): array => $vars;
+        // The scope snapshot. The compiler special-cases this name and emits the
+        // call inline (gathering loop/macro locals that `$__c_va` does not hold);
+        // the entry here exists so the name resolves, and so a hand-built
+        // tokenizer without the special case still has something to call.
+        $this->callables['vars'] = static fn(array $vars = []): array => $vars;
 
         $this->callables['include'] = function (string $view, array $context = []): string {
             if ($this->includeRenderer === null) {
@@ -648,7 +648,7 @@ class Registry
         //
         // These have no piped-value form: their argument IS the subject
         // (`range(1, 5)`, `cycle(['a','b'], 1)`), so they are callable but not
-        // filterable — the same shape as `context()`.
+        // filterable — the same shape as `vars()`.
         $this->callables['range'] = static function (mixed $low, mixed $high, mixed $step = 1): array {
             $step = (int) $step;
             if ($step === 0) {

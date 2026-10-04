@@ -267,15 +267,15 @@ class PolicyRuleTest extends BaseTestCase
      * A macro body is a compilation unit of its own: the compiler reports it
      * under the owning template's name, with a line relative to the macro
      * definition.  A `{% php %}` tag inside one must follow the same rule rather
-     * than leaking the internal `#macro@` name or a merged-source line.
+     * than leaking the internal `#macro#` name or a merged-source line.
      */
     public function testRawPhpRefusalInsideAMacroNamesTheOwningTemplate(): void
     {
         self::tpl('pc_php_macro', implode("\n", [
-            '{% macro @bad() %}',
+            '{% macro bad() %}',
             "{% php echo 'x'; %}",
             '{% endmacro %}',
-            '{% @bad() %}',
+            '{% call bad() %}',
         ]));
 
         try {

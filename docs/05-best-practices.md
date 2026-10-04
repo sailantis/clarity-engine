@@ -451,10 +451,10 @@ while debug mode is on; outputs nothing in production):
 <pre>{{ dump(products, settings) }}</pre>
 ```
 
-### Display All Context
+### Display All Variables
 
 ```twig
-<pre>{{ context() |> json |> raw }}</pre>
+<pre>{{ vars() |> json |> raw }}</pre>
 ```
 
 ### Check Variable Existence
