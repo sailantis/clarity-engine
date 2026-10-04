@@ -5,6 +5,7 @@ namespace Clarity\Localization;
 use Clarity\ClarityEngine;
 use Clarity\ClarityException;
 use Clarity\ModuleInterface;
+use Clarity\Template\TemplateLocation;
 
 /**
  * Translation module for the Clarity template engine.
@@ -124,13 +125,12 @@ class TranslationModule implements ModuleInterface
 
         $engine->addDirective(
             'with_t_domain',
-            static function (string $rest, string $sourcePath, int $tplLine, callable $processExpr): string {
+            static function (string $rest, TemplateLocation $at, callable $processExpr): string {
                 $rest = trim($rest);
                 if ($rest === '') {
                     throw new ClarityException(
                         "'with_t_domain' requires a domain argument, e.g. {% with_t_domain \"emails\" %}",
-                        $sourcePath,
-                        $tplLine
+                        $at
                     );
                 }
                 $param = $processExpr($rest);
@@ -141,7 +141,7 @@ class TranslationModule implements ModuleInterface
 
         $engine->addDirective(
             'endwith_t_domain',
-            static function (string $rest, string $sourcePath, int $tplLine, callable $processExpr): string {
+            static function (string $rest, TemplateLocation $at, callable $processExpr): string {
                 return "\$__c_sv['t']->popDomain();";
             },
             ['with_t_domain' => 'owner']

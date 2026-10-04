@@ -13,6 +13,7 @@ use Clarity\Engine\SourceMap;
 use Clarity\Template\DomainRouterLoader;
 use Clarity\Template\FileLoader;
 use Clarity\Template\TemplateLoader;
+use Clarity\Template\TemplateLocation;
 use ParseError;
 
 trait ClarityEngineTrait
@@ -397,13 +398,13 @@ trait ClarityEngineTrait
     /**
      * Register a handler for a custom directive (e.g. `with_locale`).
      *
-     * The handler is a callable that receives the raw text after the keyword,
-     * source path and line for error messages, and a `$processExpr` callable
+     * The handler is a callable that receives the raw text after the keyword, a
+     * {@see TemplateLocation} for error messages, and a `$processExpr` callable
      * that converts a Clarity expression string to a PHP expression string.
      * It must return a PHP statement string.
      *
      * ```php
-     * $engine->addDirective('with_locale', function(string $rest, string $path, int $line, callable $expr): string {
+     * $engine->addDirective('with_locale', function(string $rest, TemplateLocation $at, callable $expr): string {
      *     return "\$__c_sv['locale']->push({$expr(trim($rest))});"
      * });
      * $engine->addDirective('endwith_locale', fn(...) => "\$__c_sv['locale']->pop();");

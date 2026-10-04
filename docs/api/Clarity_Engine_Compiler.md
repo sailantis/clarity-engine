@@ -28,7 +28,7 @@ Each compiled template becomes exactly one PHP class:
   class __Clarity_<slug>_<hash> {
       public static array $dependencies = ['name' => revision, ...];
       public static string $sourceMap   = 'lineDelta,fileIdx,tplDelta;...';
-      public function __construct(private array $__c_fn, private array $__c_sv) }
+      public function __construct(private array $functions, private array $services) }
       public function render(array $__c_va): string { ... }
   }
 
@@ -71,12 +71,12 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ## Public Constants
 
-- **COMPILER_VERSION** = `25`
+- **COMPILER_VERSION** = `27`
 - **INTERNAL_PREFIX** = `'__c_'`
 
 ## Public methods
 
-### __construct() · <small>[🗎](../../src/Engine/Compiler.php#L278)</small>
+### __construct() · <small>[🗎](../../src/Engine/Compiler.php#L285)</small>
 
 `public function __construct(): mixed`
 
@@ -87,7 +87,7 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ---
 
-### default() · <small>[🗎](../../src/Engine/Compiler.php#L283)</small>
+### default() · <small>[🗎](../../src/Engine/Compiler.php#L290)</small>
 
 `public static function default(): static`
 
@@ -98,7 +98,7 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ---
 
-### setRegistry() · <small>[🗎](../../src/Engine/Compiler.php#L295)</small>
+### setRegistry() · <small>[🗎](../../src/Engine/Compiler.php#L302)</small>
 
 `public function setRegistry(Clarity\Engine\Registry $registry): static`
 
@@ -115,7 +115,7 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ---
 
-### setDebugMode() · <small>[🗎](../../src/Engine/Compiler.php#L302)</small>
+### setDebugMode() · <small>[🗎](../../src/Engine/Compiler.php#L309)</small>
 
 `public function setDebugMode(bool $debug): static`
 
@@ -132,7 +132,7 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ---
 
-### setPolicy() · <small>[🗎](../../src/Engine/Compiler.php#L328)</small>
+### setPolicy() · <small>[🗎](../../src/Engine/Compiler.php#L335)</small>
 
 `public function setPolicy(Clarity\Engine\Policy $policy): static`
 

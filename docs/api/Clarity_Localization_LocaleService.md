@@ -34,7 +34,7 @@ Template usage
 
 ## Public methods
 
-### detectLocale() · <small>[🗎](../../src/Localization/LocaleService.php#L47)</small>
+### detectLocale() · <small>[🗎](../../src/Localization/LocaleService.php#L48)</small>
 
 `public static function detectLocale(): string`
 
@@ -45,7 +45,7 @@ Template usage
 
 ---
 
-### push() · <small>[🗎](../../src/Localization/LocaleService.php#L80)</small>
+### push() · <small>[🗎](../../src/Localization/LocaleService.php#L81)</small>
 
 `public function push(string|null $locale): void`
 
@@ -67,7 +67,7 @@ that may be null do not corrupt the stack.
 
 ---
 
-### pop() · <small>[🗎](../../src/Localization/LocaleService.php#L93)</small>
+### pop() · <small>[🗎](../../src/Localization/LocaleService.php#L94)</small>
 
 `public function pop(): void`
 
@@ -82,7 +82,7 @@ Calling this when the stack is empty is a no-op.
 
 ---
 
-### current() · <small>[🗎](../../src/Localization/LocaleService.php#L105)</small>
+### current() · <small>[🗎](../../src/Localization/LocaleService.php#L106)</small>
 
 `public function current(): string|null`
 
@@ -96,7 +96,7 @@ locale when the stack is empty.
 
 ---
 
-### registerBlocks() · <small>[🗎](../../src/Localization/LocaleService.php#L116)</small>
+### registerBlocks() · <small>[🗎](../../src/Localization/LocaleService.php#L117)</small>
 
 `public static function registerBlocks(Clarity\ClarityEngine $engine): void`
 
@@ -118,7 +118,7 @@ and `IntlFormatModule` when they need to self-bootstrap the service.
 
 ---
 
-### bootstrap() · <small>[🗎](../../src/Localization/LocaleService.php#L150)</small>
+### bootstrap() · <small>[🗎](../../src/Localization/LocaleService.php#L152)</small>
 
 `public static function bootstrap(Clarity\ClarityEngine $engine): static`
 

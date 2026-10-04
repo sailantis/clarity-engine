@@ -285,7 +285,7 @@ class OpenModeTest extends BaseTestCase
     public function testDynamicLookupCannotReachTheCallableRegistryInOpenMode(): void
     {
         // `$__c_fn` IS a real local in the render frame once a filter use unpacks
-        // it (`$__c_fn = $this->__c_fn;`), so the local read has to filter engine
+        // it (`$__c_fn = $this->functions;`), so the local read has to filter engine
         // internals out.  The filter step is what forces the unpack.
         self::tpl('om_dd_registry', "{{ 'a' |> upper }}{{ \${'__c_fn'} }}");
 

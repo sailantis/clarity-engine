@@ -2,6 +2,7 @@
 namespace Clarity\Engine;
 
 use Clarity\ClarityException;
+use Clarity\Template\TemplateLocation;
 use Countable;
 use Stringable;
 
@@ -1005,16 +1006,33 @@ class Registry
      * -----------------
      * ```php
      * function(
-     *     string   $rest,        // everything after the keyword in the {% … %} tag
-     *     string   $sourcePath,  // absolute path being compiled (for error messages)
-     *     int      $tplLine,     // template line number (for error messages)
-     *     callable $processExpr  // fn(string $clarityExpr): string — converts a Clarity expression to a PHP expression string
-     * ): string                  // compiled PHP statement(s) for this directive
+     *     string           $rest,        // everything after the keyword in the {% … %} tag
+     *     TemplateLocation $at,          // where the tag sits: name, line and file
+     *     callable         $processExpr  // fn(string $clarityExpr, bool $asList = false): mixed — Clarity expression(s) to PHP
+     * ): string                          // compiled PHP statement(s) for this directive
      * ```
+     *
+     * `$at` gives the handler what it needs to raise a located
+     * {@see \Clarity\ClarityException} without being handed anything else:
+     *
+     * ```php
+     * $engine->addDirective('with_locale', function (string $rest, TemplateLocation $at, callable $processExpr): string {
+     *     if (\trim($rest) === '') {
+     *         throw new ClarityException("'with_locale' requires a locale argument", $at);
+     *     }
+     *     return "\$__c_sv['locale']->push({$processExpr(\trim($rest))});";
+     * });
+     * ```
+     *
+     * Pass `$at` straight to the exception's second parameter: it carries the
+     * logical name, the line, and — when the active loader is file-backed — the
+     * physical path. A bare `throw new ClarityException('…')` is located too, but
+     * only the compiler can discover where; handing `$at` through keeps the
+     * exception complete at the point it was thrown.
      *
      * Example registration (inside a Module::register() call):
      * ```php
-     * $engine->addDirective('with_locale', function(string $rest, string $path, int $line, callable $processExpr): string {
+     * $engine->addDirective('with_locale', function(string $rest, TemplateLocation $at, callable $processExpr): string {
      *     $param = $processExpr(trim($rest));
      *     return "\$__c_sv['locale']->push({$param});";
      * });
@@ -1340,30 +1358,21 @@ class Registry
     /**
      * Invoke the registered handler for $keyword and return compiled PHP.
      *
-     * @param string   $keyword     Directive keyword.
-     * @param string   $rest        Raw text after the keyword inside {% … %}.
-     * @param string   $sourcePath  Source file path (for error messages).
-     * @param int      $tplLine     Template line number (for error messages).
-     * @param callable $processExpr fn(string $clarityExpr): string converter.
-     * @param Compiler $compiler    The compiler invoking this directive.
+     * @param string           $keyword     Directive keyword.
+     * @param string           $rest        Raw text after the keyword inside {% … %}.
+     * @param TemplateLocation $at          Where the tag sits — for error messages, and
+     *                                      to throw with.
+     * @param callable         $processExpr fn(string $clarityExpr, bool $asList = false): mixed converter.
      * @return string Compiled PHP statement(s).
      * @throws ClarityException If the handler itself throws one.
      */
     public function compileDirective(
         string $keyword,
         string $rest,
-        string $sourcePath,
-        int $tplLine,
+        TemplateLocation $at,
         callable $processExpr,
-        Compiler $compiler,
     ): string {
-        return ($this->directiveHandlers[$keyword])(
-            $rest,
-            $sourcePath,
-            $tplLine,
-            $processExpr,
-            $compiler,
-        );
+        return ($this->directiveHandlers[$keyword])($rest, $at, $processExpr);
     }
 
     private static function fnToArray(mixed $v): array

@@ -33,18 +33,31 @@ and Clarity's own runtime mapping walks it.
 
 ## Public methods
 
-### __construct() · <small>[🗎](../../src/ClarityException.php#L38)</small>
+### __construct() · <small>[🗎](../../src/ClarityException.php#L63)</small>
 
-`public function __construct(string $message, string $templateName = '', int $templateLine = 0, string $templatePath = '', Throwable|null $previous = null): mixed`
+`public function __construct(string $message, Clarity\Template\TemplateLocation|string $templateName = '', int $templateLine = 0, string $templatePath = '', Throwable|null $previous = null): mixed`
 
 Construct a new ClarityException.
+
+The location may be given as the three separate values an engine layer
+already holds, or as a single [`TemplateLocation`](Clarity_Template_TemplateLocation.md) — what a directive
+handler is handed, and can hand straight back:
+
+```php
+throw new ClarityException('cache needs a key', $at);
+```
+
+That form matters because the handler cannot know the physical path on its
+own: the active loader is the only authority on it. Handing the whole
+location through keeps the exception COMPLETE, so no engine layer has to
+fill in what the thrower was never given.
 
 **Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$message` | string | - | The exception message. |
-| `$templateName` | string | `''` | The logical name of the template. |
+| `$templateName` | [TemplateLocation](Clarity_Template_TemplateLocation.md)\|string | `''` | The logical name of the template, or a TemplateLocation carrying name, line and path. |
 | `$templateLine` | int | `0` | The line number within the template. |
 | `$templatePath` | string | `''` | The physical path to the template file. |
 | `$previous` | Throwable\|null | `null` | The previous exception, if any. |

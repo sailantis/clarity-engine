@@ -39,7 +39,7 @@ use Clarity\Engine\Registry;
  *   class __Clarity_<slug>_<hash> {
  *       public static array $dependencies = ['name' => revision, ...];
  *       public static string $sourceMap   = 'lineDelta,fileIdx,tplDelta;...';
- *       public function __construct(private array $__c_fn, private array $__c_sv) {}
+ *       public function __construct(private array $functions, private array $services) {}
  *       public function render(array $__c_va): string { ... }
  *   }
  *
@@ -98,8 +98,13 @@ class Compiler
      * alters emitted code for EVERY template — removing a cast from a built-in
      * filter, say — is what the version is for, because it is not a policy
      * difference and no digest can express it.
+     *
+     * Version 27 renamed the generated class's constructor properties from
+     * `__c_fn`/`__c_sv` to `functions`/`services`.  Every compiled class carries
+     * that signature, so the bump is what recompiles the cache instead of
+     * instantiating a stale class against the new argument names.
      */
-    public const COMPILER_VERSION = 26;
+    public const COMPILER_VERSION = 27;
 
     /**
      * Prefix owned by the engine for every PHP variable it binds into the render

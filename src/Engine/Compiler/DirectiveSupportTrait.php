@@ -373,8 +373,8 @@ trait DirectiveSupportTrait
      * directly (`$p = …`) instead of going through {@see assertBindableName()},
      * so the reserved-prefix rule has to be repeated here.  Without it a macro
      * parameter could claim `__c_fn`, and in sandbox mode — where a filter use
-     * forces `$__c_fn = $this->__c_fn;` to be unpacked — the body could then read
-     * the callable registry through it.
+     * forces `$__c_fn = $this->functions;` to be unpacked — the body could then
+     * read the callable registry through it.
      *
      * @param int $offsetIn Where to measure the reported line from, when the
      *                      binding tag is not the text `$name` appears in.

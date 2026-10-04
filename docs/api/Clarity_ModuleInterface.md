@@ -23,7 +23,7 @@ class MyModule implements ModuleInterface
     public function register(ClarityEngine $engine): void
     {
         $engine->addFilter('my_filter', fn($v) => strtoupper($v));
-        $engine->addDirective('my_directive', fn($rest, $path, $line, $expr) => '// …');
+        $engine->addDirective('my_directive', fn($rest, $at, $expr) => '// …');
     }
 }
 ```

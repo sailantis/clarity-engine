@@ -7,7 +7,105 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Compiled-template properties renamed to `functions` / `services`.** A compiled
+  class was generated with `public function __construct(private array $__c_fn, private
+  array $__c_sv)`, so the only spelling available to a module author emitting directive
+  or inline-filter PHP was the cryptic `$__c_sv['key']`. The constructor properties are
+  now `$functions` and `$services`, which reads as `$this->services['locale']`:
+
+  ```php
+  public function __construct(private array $functions, private array $services) {}
+  ```
+
+  The render-frame **locals keep the `__c_` spelling** (`$__c_fn`, `$__c_sv`), and this
+  is not an oversight: lambda bodies and quoted filter references compile to `static`
+  closures, where `$this` is unbound, so `$__c_sv` is the only form reachable there.
+  `render()` unpacks each local from its property only when the compiled body actually
+  references it, so a template that touches neither pays nothing. Use
+  `$this->services['key']` in a directive handler (which always emits into `render()`)
+  and `$__c_sv['key']` in an inline filter that may also be referenced as a quoted name.
+  The `'this'` variable can still not be reached from a template: the `__c_` prefix
+  remains reserved, and `services`/`functions` are ordinary property names that
+  `extract($__c_va, EXTR_SKIP)` cannot collide with. `COMPILER_VERSION` moves 26 → 27,
+  so previously-cached templates are recompiled automatically.
+
+- **Directive handler signature: `$sourcePath` + `$tplLine` → one `TemplateLocation`.**
+  A handler was passed the logical template name and the line as two separate arguments,
+  neither of which is the thing a person can open, and neither of which is the physical
+  path. The two are now one {@see \Clarity\Template\TemplateLocation} (name, line, path):
+
+  ```php
+  // was
+  function (string $rest, string $path, int $line, callable $processExpr): string
+  // now
+  function (string $rest, TemplateLocation $at, callable $processExpr): string
+  ```
+
+  The unused fifth `Compiler` argument is gone with it. This is a breaking change for any
+  handler registered against the old shape — the type error is loud, not silent — but the
+  old form bought the handler nothing it could actually use, so the migration is a
+  signature edit and, where the location was discarded, a `throw new ClarityException(…,
+  $at)`. In-repo: `LocaleService`, `TranslationModule`. See `docs/04-advanced-topics.md`.
+
 ### Added
+
+- **Directive argument lists: `$processExpr($rest, true)`.** A directive handler
+  receives the raw text after its keyword, so a tag with several arguments
+  (`{% cache "user_" ~ id, ttl: 300, tags: ["user"] %}`) forced every author to
+  re-implement the comma split and the named-argument rule that the filter syntax already
+  owns. The callable handed to a handler now takes a second `bool $asList = false`
+  parameter; with `true` it compiles the whole list with the filter grammar
+  (`[name: ] expr [, [name: ] expr ...]`) and returns `[positional, named]`, both lists
+  of compiled PHP expressions keyed by numeric index and by name:
+
+  ```php
+  [$positional, $named] = $processExpr($rest, true);
+  $key = $positional[0] ?? null;
+  $ttl = $named['ttl']  ?? '300';
+  ```
+
+  Positional-after-named, a repeated name, and an empty argument are compile-time errors.
+  The single-expression form is unchanged, and an extra argument is ignored by an
+  existing single-parameter closure, so no handler needs an edit. The tokenizer gained
+  `processArgumentList()` as the single shared implementation, and
+  `compileFilterArguments()`/`compileArgList()` now reject an empty argument and a
+  duplicate named argument — so filters and call syntax inherit the same guards.
+
+- **A `ClarityException` thrown inside a directive handler is now located.** The
+  registry dispatch runs inside the compiler's `withLocation()`, the safety net every
+  other compile step already had. `throw new ClarityException('…')` from a handler used
+  to escape naming the closure's own file and line (`Handler.php:37`); it now carries the
+  template name, the line, and — for a file-backed loader — the physical path, so an
+  uncaught fatal and an IDE frame both land on the template. An explicit location passed
+  by the handler still wins, and a non-`ClarityException` throwable still passes through
+  untouched. The paired-construct errors raised by the compiler ride the same wrapper.
+
+- **`Clarity\Template\TemplateLocation`, and a handler that is handed the whole
+  location.** A directive handler can now raise a located exception without being given
+  anything else, because it receives where its tag sits:
+
+  ```php
+  $engine->addDirective('cache', function (string $rest, TemplateLocation $at, callable $processExpr): string {
+      if (trim($rest) === '') {
+          throw new ClarityException('cache needs a key', $at);
+      }
+      return "\$this->services['cache']->begin({$processExpr(trim($rest))});";
+  });
+  ```
+
+  `$at` carries the logical template name, the line, and — for a file-backed loader — the
+  physical file, which a handler could not otherwise know: the active loader is the only
+  authority on it. `ClarityException`'s second parameter therefore accepts either a
+  `TemplateLocation` or the logical name as before, so the three-value form and the bare
+  `new ClarityException('msg')` are both unchanged. An explicit `$line`/`$path` still
+  overrides the corresponding field of the location.
+
+  This also removes the nested-exception case the earlier wrapper could produce. A handler
+  that throws with `$at` raises a COMPLETE exception, so the compiler's `withLocation()`
+  finds nothing missing and rethrows it untouched — the path is no longer lost to a name
+  that was already present.
 
 - **Paired custom directives are validated at compile time.** A directive that wraps
   a body can now declare its member tags on the opening registration, using a

@@ -814,7 +814,11 @@ trait ExpressionCoreTrait
      * Clarity `name=expression` syntax and are emitted as PHP named arguments
      * (`name: phpExpr`).
      *
-     * Generated code: $this->__c_fn['name']($phpArg1, name2: $phpArg2, ...)
+     * Generated code: $__c_fn['name']($phpArg1, name2: $phpArg2, ...)
+     *
+     * The `$__c_fn` local (unpacked from the class's `functions` property) is
+     * used rather than `$this->functions` because the same emitter runs inside
+     * `static fn` closures for quoted filter references, where `$this` is unbound.
      *
      * @param string $name      The function name (already validated as registered).
      * @param string $expr      The full expression string being compiled.

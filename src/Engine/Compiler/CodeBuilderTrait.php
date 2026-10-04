@@ -178,12 +178,17 @@ trait CodeBuilderTrait
         $usesFunctions = \str_contains($body, '$__c_fn');
         $usesServices  = \str_contains($body, '$__c_sv');
 
+        // The PROPERTIES are named `functions` / `services` so a directive handler
+        // can read them as `$this->services['key']`.  The LOCALS stay `$__c_fn` /
+        // `$__c_sv`, because that is how generated code reaches them from inside an
+        // emitted `static fn` (lambda bodies and quoted filter references), where
+        // `$this` is unbound — see {@see \Clarity\Engine\Tokenizer\CallableTrait}.
         $unpacks = '';
         if ($usesFunctions) {
-            $unpacks .= "                \$__c_fn = \$this->__c_fn;\n";
+            $unpacks .= "                \$__c_fn = \$this->functions;\n";
         }
         if ($usesServices) {
-            $unpacks .= "                \$__c_sv = \$this->__c_sv;\n";
+            $unpacks .= "                \$__c_sv = \$this->services;\n";
         }
 
         // A `vars()` call inside a `{% for %}` or a macro body gathers the
@@ -246,10 +251,10 @@ trait CodeBuilderTrait
             public static int \$renderBodyLine = 0;
 
             /**
-             * @param array \$__c_fn Callable registry (name => callable)
-             * @param array \$__c_sv Service registry (name => mixed)
+             * @param array \$functions Callable registry (name => callable)
+             * @param array \$services  Service registry (name => mixed)
              */
-            public function __construct(private array \$__c_fn, private array \$__c_sv) {}
+            public function __construct(private array \$functions, private array \$services) {}
 
             /**
              * Render the template with the given variables.

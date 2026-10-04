@@ -756,8 +756,31 @@ Directives extend the template compiler with custom `{% keyword %}` tags. They a
 
 ```php
 $cache = new class {
-    private array $items = [];
     private array $keyStack = [];
+    private array $items = [];
+
+    public function pushKey(string $key): void
+    {
+        $this->keyStack[] = $key;
+    }
+
+    public function currentKey(): string
+    {
+        if ($this->keyStack === []) {
+            throw new \LogicException('No active cache key.');
+        }
+
+        return $this->keyStack[array_key_last($this->keyStack)];
+    }
+
+    public function popKey(): void
+    {
+        if ($this->keyStack === []) {
+            throw new \LogicException('No active cache key to pop.');
+        }
+
+        array_pop($this->keyStack);
+    }
 
     public function has(): bool
     {
@@ -774,66 +797,45 @@ $cache = new class {
         $this->items[$this->currentKey()] = $value;
     }
 
-    public function pushKey(string $key): void
-    {
-        $this->keyStack[] = $key;
-    }
-
-    public function currentKey(): string
-    {
-        if ($this->keyStack === []) {
-            throw new \LogicException('No cache key is active.');
-        }
-
-        return $this->keyStack[array_key_last($this->keyStack)];
-    }
-
-    public function popKey(): void
-    {
-        if ($this->keyStack === []) {
-            throw new \LogicException('No cache key is active.');
-        }
-
-        array_pop($this->keyStack);
-    }
 };
 
 // Register the cache service with the engine.
-// It is accessible via $__c_sv['cache'] in directives
+// Directives can access the cache service via $this->services['cache'] or local render-frame variable $__c_sv['cache'].
 $engine->addService('cache', $cache);
 
-$engine->addDirective('cache', function(string $rest, string $path, int $line, callable $processExpr): string {
+$engine->addDirective('cache', function(string $rest, TemplateLocation $at, callable $processExpr): string {
     $param = $processExpr(trim($rest));
     return <<<PHP
-        \$__c_sv['cache']->pushKey({$param});
+        \$this->services['cache']->pushKey({$param});
         try {
-            if (\$__c_sv['cache']->has()) {
-                echo \$__c_sv['cache']->get();
+            if (\$this->services['cache']->has()) {
+                echo \$this->services['cache']->get();
             } else {
                 ob_start();
     PHP;
 }, ['endcache' => 'required']);
 
-$engine->addDirective('endcache', function(string $rest, string $path, int $line, callable $expr): string {
+$engine->addDirective('endcache', function(string $rest, TemplateLocation $at, callable $expr): string {
     return <<<PHP
                 \$__cached = ob_get_clean();
-                \$__c_sv['cache']->set(\$__cached);
+                \$this->services['cache']->set(\$__cached);
                 echo \$__cached;
             }
         } finally {
-            \$__c_sv['cache']->popKey();
+            \$this->services['cache']->popKey();
         }
     PHP;
 }, ['cache' => 'owner']);
 ```
 
-The service is registered under `cache`, matching the `$__c_sv['cache']` lookups emitted by the directives. The cache hit check happens before the template block, so the block is skipped entirely on a hit. The `try/finally` always pops the active key, including when rendering the block throws, and the service-owned stack supports nested cache blocks. The in-memory example keeps values only while this service instance lives; use a persistent cache implementation with the same `has()`, `get()`, `set()`, `pushKey()`, `currentKey()`, and `popKey()` methods to share cached values across requests.
+The service is registered under `cache`, matching the `$this->services['cache']` lookups emitted by the directives. The cache hit check happens before the template block, so the block is skipped entirely on a hit. The `try/finally` always pops the active key, including when rendering the block throws, and the service-owned stack supports nested cache blocks. The in-memory example keeps values only while this service instance lives; use a persistent cache implementation with the same `has()`, `get()`, `set()`, `pushKey()`, `currentKey()`, and `popKey()` methods to share cached values across requests.
 
-Use the directives in a template like this:
+Example usage:
 
 ```twig
 {% cache 'homepage:featured' %}
     <h2>{{ featuredTitle }}</h2>
+    <h3>{{ "now" |> date("Y-m-d H:i:s") }}</h3>
 {% endcache %}
 ```
 
@@ -875,12 +877,70 @@ so this is opt-in per construct.
 
 ```php
 function (
-    string   $rest,        // text after the keyword inside {% … %}
-    string   $sourcePath,  // source file path (for error messages)
-    int      $tplLine,     // template line number (for error messages)
-    callable $processExpr  // fn(string): string — converts Clarity expr → PHP expr
-): string                  // must return PHP statement(s) to emit
+    string           $rest,        // text after the keyword inside {% … %}
+    TemplateLocation $at,          // where the tag sits: name, line and file
+    callable         $processExpr  // Clarity expression(s) → PHP expression(s)
+): string                          // must return PHP statement(s) to emit
 ```
+
+`$at` is a [`Clarity\Template\TemplateLocation`](../src/Template/TemplateLocation.php) carrying the
+logical template name, the line, and — when the active loader is file-backed — the physical
+file. It exists so a handler can raise a **complete** `ClarityException` on its own, without
+the engine having to fill in anything afterwards:
+
+```php
+$engine->addDirective('cache', function (string $rest, TemplateLocation $at, callable $processExpr): string {
+    if (trim($rest) === '') {
+        throw new ClarityException('cache needs a key', $at);
+    }
+    return "\$this->services['cache']->begin({$processExpr(trim($rest))});";
+}, ['endcache' => 'required']);
+```
+
+Passing `$at` straight to the second parameter is all it takes. A bare
+`throw new ClarityException('cache needs a key')` is still located against the template,
+but only because the compiler discovers where it was thrown — handing `$at` through keeps
+the exception complete at the point it was raised, which is also what keeps it from being
+wrapped a second time. `$at->path` is `''` for a loader with no file to name
+(`ArrayLoader`, `StringLoader`, a database loader), exactly as in `ClarityException`.
+
+### Directive Arguments
+
+`$processExpr($rest)` compiles **one** Clarity expression to PHP. When a tag takes a
+list — `{% cache "user_" ~ id, ttl: 300, tags: ["user"] %}` — call it with
+`$asList = true` and it compiles the whole list instead, using the same grammar and
+rules the filter syntax uses:
+
+```
+[name: ] expr [, [name: ] expr ...]
+```
+
+It returns `[positional, named]`, both lists of compiled PHP expressions, keyed by numeric
+index and by name:
+
+```php
+$engine->addDirective('cache', function (string $rest, TemplateLocation $at, callable $processExpr): string {
+    [$positional, $named] = $processExpr($rest, true);
+
+    $key  = $positional[0] ?? null;   // "user_" ~ id  → the first unnamed argument
+    $ttl  = $named['ttl']  ?? '300';  // ttl: 300
+    $tags = $named['tags'] ?? '[]';   // tags: ["user"]
+
+    return "\$this->services['cache']->begin({$key}, {$ttl}, {$tags});";
+}, ['endcache' => 'required']);
+```
+
+An argument whose text starts with `name:` is **named**; anything else is **positional**
+and takes the next numeric index. A positional argument may not follow a named one, a
+name may not repeat, and an empty argument (`a,,b`) is rejected — all at compile time,
+naming the template and line. A quoted `"a,b"`, a `{a: 1, b: 2}` literal, or a nested
+`fn(x, y)` never splits. `$processExpr($rest)` (no second argument) is unchanged, so
+existing handlers need no edit.
+
+Failure inside the handler is located too: `throw new ClarityException('…', $at)` is reported
+against the template, its line, and — when the loader is file-backed — the physical file,
+rather than the closure that threw. A bare `throw new ClarityException('…')` is located the
+same way; passing `$at` simply means the exception is already complete when thrown.
 
 ### The `__c_` prefix
 
@@ -888,7 +948,7 @@ The engine reserves the `__c_` prefix for its own internal variables. Therefore,
 
 ## Services
 
-Services are arbitrary objects registered into the engine and made available inside compiled templates via `$__c_sv['key']`. They're primarily used by modules to share mutable state (e.g. a locale stack or cache object) between registered filters/directives and inline filter PHP templates.
+Services are arbitrary objects registered into the engine and made available inside compiled templates via `$this->services['key']` (or the `$__c_sv['key']` render-frame local — see below). They're primarily used by modules to share mutable state (e.g. a locale stack or cache object) between registered filters/directives and inline filter PHP templates.
 
 ### Registering a Service
 
@@ -918,7 +978,62 @@ $engine->addInlineFilter('t', [
 ]);
 ```
 
+`$__c_sv` is the render-frame local. Use it in an inline filter because an inline
+filter may also be referenced as a quoted name, which wraps it in a `static` closure;
+there `$this->services` is unreachable and `$__c_sv` is not. See
+[$__c_sv and $this->services](#__c_sv-and-this-services--two-spellings-one-table) below.
+
 > **Note:** Services are infrastructure for module authors: an application that only registers filters and functions does not need them.
+
+### `$__c_sv` and `$this->services` — Two Spellings, One Table
+
+The services table is passed to the compiled class's constructor as `$services`, and
+the callables table as `$functions`:
+
+```php
+public function __construct(private array $functions, private array $services) {}
+```
+
+`render()` unpacks each into a local **only when the compiled body actually uses it**,
+so a template that touches neither pays nothing:
+
+```php
+public function render(array $__c_va): string
+{
+    $__c_sv = $this->services;   // emitted only when the body needs it
+    // …
+}
+```
+
+Both spellings reach the same table, and which one to use is decided by where the
+generated code ends up:
+
+| Emitted code position | `$this->services[…]` | `$__c_sv[…]` |
+| --------------------- | -------------------- | ------------ |
+| Directive body, inline filter in the direct pipe position | ✅ | ✅ |
+| Inside an emitted `static fn` — lambda body, quoted filter reference | ❌ | ✅ |
+
+Lambda bodies and quoted filter references compile to **`static` closures**, where
+`$this` is unbound. Inside one, `$__c_sv` / `$__c_fn` is the only reachable form —
+which is exactly why the locals exist and why the properties could not simply be
+inlined at every use. A service lookup emitted inside a closure must therefore use
+`$__c_sv`, and the emitted `use (…)` clause is what binds it:
+
+```php
+// {{ map(items, "quoted_inline_filter") }}
+static fn(mixed $__c_val): mixed => $__c_sv['svc'](($__c_val))
+```
+
+For a directive handler that only ever emits into `render()`, `$this->services['key']`
+is the readable choice. For an inline filter that may also be referenced as a quoted
+name, `$__c_sv['key']` is the safe one. `$__c_fn` is the counterpart for the callables
+table, and like services it is only unpacked when the body references it.
+
+> **Renamed in 0.3.0.** The constructor properties were `__c_fn` / `__c_sv` before;
+> they are now `functions` / `services`. The emitted locals keep the `__c_` prefix,
+> because a `__c_`-prefixed name is reserved by the engine and can never be claimed
+> by a template variable. `COMPILER_VERSION` moved 26 → 27, so cached templates are
+> recompiled automatically.
 
 ## Next Steps
 

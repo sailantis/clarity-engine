@@ -4,6 +4,7 @@ namespace Clarity\Tests\Engine;
 use Clarity\ClarityEngine;
 use Clarity\ClarityException;
 use Clarity\ModuleInterface;
+use Clarity\Template\TemplateLocation;
 use Clarity\Tests\BaseTestCase;
 use Clarity\Tests\TestEnvironment;
 
@@ -104,8 +105,8 @@ class ModulesTest extends BaseTestCase
     {
         $engine = new ClarityEngine();
         $engine->setViewPath(TestEnvironment::viewDir())->setCachePath(TestEnvironment::cacheDir());
-        $engine->addDirective('noop', fn(string $r, string $p, int $l, callable $e): string => '/* noop */');
-        $engine->addDirective('endnoop', fn(string $r, string $p, int $l, callable $e): string => '/* endnoop */');
+        $engine->addDirective('noop', fn(string $r, TemplateLocation $at, callable $e): string => '/* noop */');
+        $engine->addDirective('endnoop', fn(string $r, TemplateLocation $at, callable $e): string => '/* endnoop */');
 
         self::tpl('block_noop', '{% noop %}inner{% endnoop %}');
         $result = $engine->renderPartial('block_noop');
@@ -128,13 +129,13 @@ class ModulesTest extends BaseTestCase
         $engine = new ClarityEngine();
         $engine->setViewPath(TestEnvironment::viewDir())->setCachePath(TestEnvironment::cacheDir());
 
-        $engine->addDirective('tag', function (string $rest, string $path, int $line, callable $expr): string {
+        $engine->addDirective('tag', function (string $rest, TemplateLocation $at, callable $expr): string {
             $phpTag = $expr($rest);
             return "ob_start(); \$__tag = {$phpTag};";
         });
         $engine->addDirective(
             'endtag',
-            fn(string $r, string $p, int $l, callable $e): string =>
+            fn(string $r, TemplateLocation $at, callable $e): string =>
                 'echo "<" . htmlspecialchars((string)$__tag) . ">" . ob_get_clean() . "</" . htmlspecialchars((string)$__tag) . ">";'
         );
 
@@ -149,6 +150,11 @@ class ModulesTest extends BaseTestCase
      * `$__c_sv` exist inside `render()`; a literal `$__debug` local is never
      * defined, so such a block would silently never render (and raise an
      * "Undefined variable" warning whenever the guard is truthy).
+     *
+     * `$this->services['__debug']` would work in this position too, since a
+     * directive body is emitted straight into `render()`.  The `$__c_sv` local is
+     * used deliberately: it is the form that also compiles inside the `static fn`
+     * closures emitted for quoted filter references, where `$this` is unbound.
      */
     public function testCustomDirectiveCanReadDebugFlagViaService(): void
     {
@@ -158,7 +164,7 @@ class ModulesTest extends BaseTestCase
         $engine->addService('__debug', fn(): bool => $engine->isDebugMode());
         $engine->addDirective(
             'debug_if',
-            function (string $rest, string $path, int $line, callable $processExpr): string {
+            function (string $rest, TemplateLocation $at, callable $processExpr): string {
                 return 'if (' . $processExpr($rest) . ' && $__c_sv["__debug"]()) {';
             }
         );
@@ -238,5 +244,83 @@ class ModulesTest extends BaseTestCase
         self::tpl('svc_filter', '{{ a |> counted }}:{{ b |> counted }}');
         $result = $engine->renderPartial('svc_filter', ['a' => 'x', 'b' => 'y']);
         $this->assertSame('x#1:y#2', $result);
+    }
+
+    /**
+     * The generated class's constructor takes `$functions` / `$services`. The
+     * render-frame LOCALS keep the `__c_` spelling, because an emitted `static fn`
+     * (lambda body, quoted filter reference) has no `$this` to reach the
+     * properties through.
+     */
+    public function testCompiledConstructorPropertiesAreNamedFunctionsAndServices(): void
+    {
+        // `json(a)` dispatches through the callable table, which forces the unpack.
+        self::tpl('prop_names', '{{ json(a) }}');
+        self::render('prop_names', ['a' => 'x']);
+
+        $compiled = $this->compiledSource('prop_names');
+
+        $this->assertStringContainsString(
+            'public function __construct(private array $functions, private array $services)',
+            $compiled
+        );
+        $this->assertStringNotContainsString('private array $__c_fn', $compiled);
+        $this->assertStringNotContainsString('private array $__c_sv', $compiled);
+
+        // The locals are still the closure-safe form, unpacked from the property.
+        $this->assertStringContainsString('$__c_fn = $this->functions;', $compiled);
+    }
+
+    /**
+     * `$this->services['key']` must work from a directive body — that is the whole
+     * point of the rename, and a directive body is emitted straight into render().
+     */
+    public function testDirectiveCanReachServicesThroughThis(): void
+    {
+        $engine = new ClarityEngine();
+        $engine->setViewPath(TestEnvironment::viewDir())->setCachePath(TestEnvironment::cacheDir());
+
+        $engine->addService('greeter', new class
+        {
+            public function hello(string $who): string
+            {
+                return "hello {$who}";
+            }
+        });
+        $engine->addDirective(
+            'greet',
+            function (string $rest, TemplateLocation $at, callable $processExpr): string {
+                return 'echo $this->services[\'greeter\']->hello(' . $processExpr(trim($rest)) . ');';
+            }
+        );
+
+        self::tpl('svc_this_directive', '{% greet who %}');
+        $this->assertSame('hello world', $engine->renderPartial('svc_this_directive', ['who' => 'world']));
+    }
+
+    /**
+     * The counterpart constraint, pinned deliberately: the same `$this->` form breaks
+     * when the snippet lands inside an emitted `static fn`. This is why the locals
+     * exist and why both spellings are documented.
+     */
+    public function testThisIsUnboundInsideAQuotedFilterReferenceClosure(): void
+    {
+        $engine = new ClarityEngine();
+        $engine->setViewPath(TestEnvironment::viewDir())->setCachePath(TestEnvironment::cacheDir());
+
+        $engine->addService('shout', new class
+        {
+            public function __invoke(mixed $v): string
+            {
+                return strtoupper((string) $v);
+            }
+        });
+        $engine->addInlineFilter('shout_ref', ['php' => "\$this->services['shout']({1})"]);
+
+        self::tpl('svc_this_ref', '{{ map(items, "shout_ref") |> join(",") }}');
+
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/Using \$this when not in object context/');
+        $engine->renderPartial('svc_this_ref', ['items' => ['a']]);
     }
 }

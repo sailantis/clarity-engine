@@ -6,7 +6,7 @@ Extracted from Clarity\Engine\Tokenizer to keep each file small. See that class 
 
 ## Public methods
 
-### buildFilterCall() · <small>[🗎](../../src/Engine/Tokenizer/FilterCompilerTrait.php#L212)</small>
+### buildFilterCall() · <small>[🗎](../../src/Engine/Tokenizer/FilterCompilerTrait.php#L230)</small>
 
 `public function buildFilterCall(string $filterSegment, string $phpValue): string`
 

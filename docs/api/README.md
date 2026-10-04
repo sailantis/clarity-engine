@@ -41,6 +41,7 @@
 - [ControlFlowTrait](Clarity_Engine_Compiler_ControlFlowTrait.md) `Clarity\Engine\Compiler\ControlFlowTrait`
 - [DirectiveSupportTrait](Clarity_Engine_Compiler_DirectiveSupportTrait.md) `Clarity\Engine\Compiler\DirectiveSupportTrait`
 - [InheritanceTrait](Clarity_Engine_Compiler_InheritanceTrait.md) `Clarity\Engine\Compiler\InheritanceTrait`
+- [PairedDirectiveTrait](Clarity_Engine_Compiler_PairedDirectiveTrait.md) `Clarity\Engine\Compiler\PairedDirectiveTrait`
 
 ### `Clarity\Engine\Tokenizer`
 
@@ -73,4 +74,6 @@
 - [FileLoader](Clarity_Template_FileLoader.md) `Clarity\Template\FileLoader`
 - [StringLoader](Clarity_Template_StringLoader.md) `Clarity\Template\StringLoader`
 - [TemplateLoader](Clarity_Template_TemplateLoader.md) `Clarity\Template\TemplateLoader`
+- [TemplateLocation](Clarity_Template_TemplateLocation.md) `Clarity\Template\TemplateLocation`
 - [TemplateSource](Clarity_Template_TemplateSource.md) `Clarity\Template\TemplateSource`
+

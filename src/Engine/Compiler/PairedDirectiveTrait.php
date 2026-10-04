@@ -3,6 +3,7 @@
 namespace Clarity\Engine\Compiler;
 
 use Clarity\ClarityException;
+use Clarity\Template\TemplateLocation;
 
 /**
  * Compile-time validation of PAIRED custom directives.
@@ -68,12 +69,32 @@ trait PairedDirectiveTrait
     /**
      * The expression converter handed to a directive handler.
      *
-     * Kept in one place so the paired and unpaired dispatch paths cannot drift.
+     * With no second argument it compiles ONE Clarity expression, exactly as it
+     * always has.  With `$asList = true` it compiles a whole directive argument
+     * list instead — `[name: ] expr [, [name: ] expr ...]` — and returns
+     * `[positional, named]`, both lists of PHP expressions keyed by numeric index
+     * and by name respectively:
+     *
+     * ```php
+     * $engine->addDirective('cache', function(string $rest, TemplateLocation $at, callable $processExpr): string {
+     *     [$positional, $named] = $processExpr($rest, true);
+     *     $key  = $positional[0]      ?? null;
+     *     $ttl  = $named['ttl']       ?? '300';
+     *     $tags = $named['tags']      ?? '[]';
+     * });
+     * ```
+     *
+     * The overload is additive: an existing handler that calls `$processExpr($rest)`
+     * is unaffected (an extra argument to a closure is ignored anyway).  Both forms
+     * run inside {@see withLocation()}, so a failure anywhere in the tokenizer is
+     * reported against the template and line that produced the tag.
      */
     private function directiveProcessExpr(string $sourcePath, int $tplLine): callable
     {
-        return fn(string $e) => $this->withLocation(
-            fn() => $this->tokenizer->processCondition($e),
+        return fn(string $e, bool $asList = false) => $this->withLocation(
+            fn() => $asList
+                ? $this->tokenizer->processArgumentList($e)
+                : $this->tokenizer->processCondition($e),
             $sourcePath,
             $tplLine
         );
@@ -82,6 +103,16 @@ trait PairedDirectiveTrait
     /**
      * Dispatch a registered directive, applying paired-construct validation when
      * the keyword takes part in a construct.
+     *
+     * The whole dispatch runs inside {@see withLocation()}.  A compiler step has
+     * always had that safety net ({@see directiveProcessExpr()}, the loop and `set`
+     * headers, …), but the registry dispatch did not: an author's
+     * `throw new ClarityException('…')` with no location escaped naming the
+     * closure's own file and line — `Handler.php:37` — instead of the template.
+     * Wrapping here fixes that for every directive, paired or not, and for the
+     * placement errors this trait raises itself.  `withLocation()` fills only the
+     * missing fields, so a handler that DOES pass `$path`/`$line` keeps them, and a
+     * non-{@see ClarityException} throwable still passes straight through.
      *
      * @param array $lines Accumulator, reserved for parity with compileBlock()'s
      *                     signature (constructs need no line patching).
@@ -93,6 +124,19 @@ trait PairedDirectiveTrait
         int $tplLine,
         array &$lines
     ): string {
+        return $this->withLocation(
+            fn() => $this->dispatchRegisteredDirective($keyword, $rest, $sourcePath, $tplLine),
+            $sourcePath,
+            $tplLine
+        );
+    }
+
+    private function dispatchRegisteredDirective(
+        string $keyword,
+        string $rest,
+        string $sourcePath,
+        int $tplLine
+    ): string {
         $registry = $this->registry;
         $owner    = $registry->getDirectiveOwner($keyword);
 
@@ -101,14 +145,7 @@ trait PairedDirectiveTrait
             // handler runs, so the handler's own body (rare, but possible) already
             // sees the construct as open.
             if (!$registry->isDirectiveOpener($keyword)) {
-                return $registry->compileDirective(
-                    $keyword,
-                    $rest,
-                    $sourcePath,
-                    $tplLine,
-                    $this->directiveProcessExpr($sourcePath, $tplLine),
-                    $this
-                );
+                return $this->dispatchDirectiveHandler($keyword, $rest, $sourcePath, $tplLine);
             }
 
             $this->directiveStack[] = [
@@ -124,14 +161,7 @@ trait PairedDirectiveTrait
             ];
 
             try {
-                return $registry->compileDirective(
-                    $keyword,
-                    $rest,
-                    $sourcePath,
-                    $tplLine,
-                    $this->directiveProcessExpr($sourcePath, $tplLine),
-                    $this
-                );
+                return $this->dispatchDirectiveHandler($keyword, $rest, $sourcePath, $tplLine);
             } catch (\Throwable $e) {
                 // The construct never opened: leave the stack as the abort found it.
                 \array_pop($this->directiveStack);
@@ -139,7 +169,7 @@ trait PairedDirectiveTrait
             }
         }
 
-        $this->assertDirectiveMemberPlacement($keyword, $owner, $sourcePath, $tplLine);
+        $this->assertDirectiveMemberPlacement($keyword, $owner);
 
         $index = \array_key_last($this->directiveStack);
 
@@ -148,22 +178,36 @@ trait PairedDirectiveTrait
                 throw new ClarityException(
                     $this->directiveTag($keyword) . ' may only appear once inside '
                         . $this->directiveTag($owner) . $this->openedAt($this->directiveStack[$index])
-                        . '; a branch tag takes at most one body.',
-                    $sourcePath,
-                    $tplLine
+                        . '; a branch tag takes at most one body.'
                 );
             }
         } else {
             \array_pop($this->directiveStack);
         }
 
-        return $registry->compileDirective(
+        return $this->dispatchDirectiveHandler($keyword, $rest, $sourcePath, $tplLine);
+    }
+
+    /**
+     * Invoke one registered handler.  Located by the caller
+     * ({@see compileRegistryDirective()}), which is what makes an exception raised
+     * inside a handler blame the template rather than the closure.
+     */
+    private function dispatchDirectiveHandler(
+        string $keyword,
+        string $rest,
+        string $sourcePath,
+        int $tplLine
+    ): string {
+        return $this->registry->compileDirective(
             $keyword,
             $rest,
-            $sourcePath,
-            $tplLine,
-            $this->directiveProcessExpr($sourcePath, $tplLine),
-            $this
+            // The compiler is the only layer that holds the physical path, so it
+            // resolves it here instead of leaving the handler to guess it. A
+            // handler that throws with this location is complete, and nothing
+            // has to re-wrap it afterwards.
+            new TemplateLocation($sourcePath, $tplLine, $this->templatePath($sourcePath)),
+            $this->directiveProcessExpr($sourcePath, $tplLine)
         );
     }
 
@@ -171,12 +215,15 @@ trait PairedDirectiveTrait
      * Fail when a close/branch tag does not belong to the innermost open construct,
      * when an inner built-in block is still open, or when it crosses a unit
      * boundary.
+     *
+     * Every error here is raised WITHOUT an explicit location, and the dispatch
+     * wraps this call in {@see withLocation()}; that is what gives the message the
+     * template NAME, the physical PATH (an IDE-openable line) and the line, from
+     * one place instead of at each throw.
      */
     private function assertDirectiveMemberPlacement(
         string $keyword,
-        string $owner,
-        string $sourcePath,
-        int $tplLine
+        string $owner
     ): void {
         $index = \array_key_last($this->directiveStack);
         $top   = $index === null ? null : $this->directiveStack[$index];
@@ -185,9 +232,7 @@ trait PairedDirectiveTrait
             if ($top === null) {
                 throw new ClarityException(
                     'Unexpected ' . $this->directiveTag($keyword) . ': no '
-                        . $this->directiveTag($owner) . ' is open.',
-                    $sourcePath,
-                    $tplLine
+                        . $this->directiveTag($owner) . ' is open.'
                 );
             }
 
@@ -196,9 +241,7 @@ trait PairedDirectiveTrait
                     . ($this->registry->isDirectiveClose($keyword) ? ' closes ' : ' belongs to ')
                     . $this->directiveTag($owner) . ', but ' . $this->directiveTag($top['open'])
                     . $this->openedAt($top) . ' is still open. Add '
-                    . $this->directiveTag($top['close']) . ' first.',
-                $sourcePath,
-                $tplLine
+                    . $this->directiveTag($top['close']) . ' first.'
             );
         }
 
@@ -206,9 +249,7 @@ trait PairedDirectiveTrait
             throw new ClarityException(
                 $this->directiveTag($keyword) . ' cannot close ' . $this->directiveTag($owner)
                     . ' while an ' . $this->directiveTag('if') . ' opened inside it is still open; add '
-                    . $this->directiveTag('endif') . ' first.',
-                $sourcePath,
-                $tplLine
+                    . $this->directiveTag('endif') . ' first.'
             );
         }
 
@@ -216,9 +257,7 @@ trait PairedDirectiveTrait
             throw new ClarityException(
                 $this->directiveTag($keyword) . ' cannot close ' . $this->directiveTag($owner)
                     . ' while a ' . $this->directiveTag('for') . ' opened inside it is still open; add '
-                    . $this->directiveTag('endfor') . ' first.',
-                $sourcePath,
-                $tplLine
+                    . $this->directiveTag('endfor') . ' first.'
             );
         }
 
@@ -226,9 +265,7 @@ trait PairedDirectiveTrait
             throw new ClarityException(
                 $this->directiveTag($keyword) . ' belongs to a different template than the '
                     . $this->directiveTag($owner) . $this->openedAt($top)
-                    . ' it closes; a construct may not span an include or a macro.',
-                $sourcePath,
-                $tplLine
+                    . ' it closes; a construct may not span an include or a macro.'
             );
         }
     }

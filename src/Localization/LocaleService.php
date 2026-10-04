@@ -4,6 +4,7 @@ namespace Clarity\Localization;
 
 use Clarity\ClarityEngine;
 use Clarity\ClarityException;
+use Clarity\Template\TemplateLocation;
 use Locale;
 
 /**
@@ -117,13 +118,12 @@ class LocaleService
     {
         $engine->addDirective(
             'with_locale',
-            static function (string $rest, string $sourcePath, int $tplLine, callable $processExpr): string {
+            static function (string $rest, TemplateLocation $at, callable $processExpr): string {
                 $rest = \trim($rest);
                 if ($rest === '') {
                     throw new ClarityException(
                         "'with_locale' requires a locale argument, e.g. {% with_locale \"fr_FR\" %}",
-                        $sourcePath,
-                        $tplLine
+                        $at
                     );
                 }
                 $param = $processExpr($rest);
@@ -134,7 +134,7 @@ class LocaleService
 
         $engine->addDirective(
             'endwith_locale',
-            static function (string $rest, string $sourcePath, int $tplLine, callable $processExpr): string {
+            static function (string $rest, TemplateLocation $at, callable $processExpr): string {
                 return "\$__c_sv['locale']->pop();";
             },
             ['with_locale' => 'owner']

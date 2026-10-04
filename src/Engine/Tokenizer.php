@@ -311,6 +311,47 @@ class Tokenizer
     }
 
     /**
+     * Split a directive argument list into compiled positional and named arguments.
+     *
+     * This is the shared parser behind custom-directive handlers that receive a
+     * list — see {@see \Clarity\Engine\Compiler\PairedDirectiveTrait::directiveProcessExpr()},
+     * where `$processExpr($rest, true)` resolves to this method.  The grammar is
+     * the one the filter syntax already uses:
+     *
+     *     [name: ] expr [, [name: ] expr ...]
+     *
+     * An argument whose text starts with `name:` is NAMED; anything else is
+     * POSITIONAL and keys by its numeric index.  A positional argument may NOT
+     * follow a named one, matching filter calls (whose named arguments become PHP
+     * named arguments and are therefore order-bound).
+     *
+     * Both lists hold PHP expressions, compiled through {@see processCondition()},
+     * so a caller never re-implements the split or the named-argument rule.
+     *
+     * @return array{0: list<string>, 1: array<string, string>}
+     *         [positional PHP expressions, named PHP expressions]
+     * @throws ClarityException On an empty argument, a duplicate or empty-handed
+     *                          named argument, or a positional after a named one.
+     */
+    public function processArgumentList(string $rest): array
+    {
+        $rest = \trim($rest);
+        if ($rest === '') {
+            return [[], []];
+        }
+
+        $argList = $this->splitRespectingStrings($rest, ',');
+
+        foreach ($argList as $arg) {
+            if (\trim($arg) === '') {
+                throw new ClarityException('Empty argument in argument list.');
+            }
+        }
+
+        return $this->compileFilterArguments($argList);
+    }
+
+    /**
      * Set the policy every rule question is answered from.
      *
      * Also mirrors the deny-list into the flat map the call sites read, so the

@@ -129,7 +129,47 @@ is safe even for a hand-built tokenizer.
 
 ---
 
-### setPolicy() · <small>[🗎](../../src/Engine/Tokenizer.php#L320)</small>
+### processArgumentList() · <small>[🗎](../../src/Engine/Tokenizer.php#L336)</small>
+
+`public function processArgumentList(string $rest): array`
+
+Split a directive argument list into compiled positional and named arguments.
+
+This is the shared parser behind custom-directive handlers that receive a
+list — see [`PairedDirectiveTrait::directiveProcessExpr()`](Clarity_Engine_Compiler_PairedDirectiveTrait.md#directiveprocessexpr),
+where `$processExpr($rest, true)` resolves to this method.  The grammar is
+the one the filter syntax already uses:
+
+    [name: ] expr [, [name: ] expr ...]
+
+An argument whose text starts with `name:` is NAMED; anything else is
+POSITIONAL and keys by its numeric index.  A positional argument may NOT
+follow a named one, matching filter calls (whose named arguments become PHP
+named arguments and are therefore order-bound).
+
+Both lists hold PHP expressions, compiled through `processCondition()`,
+so a caller never re-implements the split or the named-argument rule.
+
+**Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$rest` | string | - |  |
+
+**Return value**
+
+- Type: `array`
+- Description: <br>[positional PHP expressions, named PHP expressions]
+
+**Throws**
+
+- [ClarityException](Clarity_ClarityException.md)  On an empty argument, a duplicate or empty-handed
+named argument, or a positional after a named one.
+
+
+---
+
+### setPolicy() · <small>[🗎](../../src/Engine/Tokenizer.php#L361)</small>
 
 `public function setPolicy(Clarity\Engine\Policy $policy): void`
 
@@ -152,7 +192,7 @@ array lookup.
 
 ---
 
-### getPolicy() · <small>[🗎](../../src/Engine/Tokenizer.php#L331)</small>
+### getPolicy() · <small>[🗎](../../src/Engine/Tokenizer.php#L372)</small>
 
 `public function getPolicy(): Clarity\Engine\Policy`
 
@@ -163,7 +203,7 @@ array lookup.
 
 ---
 
-### setLocalRoots() · <small>[🗎](../../src/Engine/Tokenizer.php#L352)</small>
+### setLocalRoots() · <small>[🗎](../../src/Engine/Tokenizer.php#L393)</small>
 
 `public function setLocalRoots(bool $enabled): void`
 
@@ -185,7 +225,7 @@ compiler that seeds no locals never emits a local read.
 
 ---
 
-### setDeniedFunctions() · <small>[🗎](../../src/Engine/Tokenizer.php#L364)</small>
+### setDeniedFunctions() · <small>[🗎](../../src/Engine/Tokenizer.php#L405)</small>
 
 `public function setDeniedFunctions(array $names): void`
 
@@ -205,7 +245,7 @@ names; empty (the default) allows every PHP function.
 
 ---
 
-### setRegistry() · <small>[🗎](../../src/Engine/Tokenizer.php#L383)</small>
+### setRegistry() · <small>[🗎](../../src/Engine/Tokenizer.php#L424)</small>
 
 `public function setRegistry(Clarity\Engine\Registry $registry): void`
 
@@ -222,7 +262,7 @@ names; empty (the default) allows every PHP function.
 
 ---
 
-### setLocalVars() · <small>[🗎](../../src/Engine/Tokenizer.php#L397)</small>
+### setLocalVars() · <small>[🗎](../../src/Engine/Tokenizer.php#L438)</small>
 
 `public function setLocalVars(array $localVars): void`
 
@@ -245,7 +285,7 @@ variable resolution inside the loop uses direct PHP local variables
 
 ---
 
-### setDynamicBindings() · <small>[🗎](../../src/Engine/Tokenizer.php#L411)</small>
+### setDynamicBindings() · <small>[🗎](../../src/Engine/Tokenizer.php#L452)</small>
 
 `public function setDynamicBindings(array $names): void`
 
@@ -474,7 +514,7 @@ tokenize back out.
 
 ---
 
-### buildFilterCall() · <small>[🗎](../../src/Engine/Tokenizer/FilterCompilerTrait.php#L212)</small>
+### buildFilterCall() · <small>[🗎](../../src/Engine/Tokenizer/FilterCompilerTrait.php#L230)</small>
 
 `public function buildFilterCall(string $filterSegment, string $phpValue): string`
 

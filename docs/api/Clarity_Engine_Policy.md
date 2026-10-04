@@ -330,7 +330,7 @@ that is allowed and not registered calls the PHP function of that name.
 
 ---
 
-### allowFilters() · <small>[🗎](../../src/Engine/Policy.php#L410)</small>
+### allowFilters() · <small>[🗎](../../src/Engine/Policy.php#L409)</small>
 
 `public function allowFilters(string ...$names): self`
 
@@ -352,7 +352,7 @@ list is about the PHP-function fallback.
 
 ---
 
-### restrictsFunctions() · <small>[🗎](../../src/Engine/Policy.php#L424)</small>
+### restrictsFunctions() · <small>[🗎](../../src/Engine/Policy.php#L423)</small>
 
 `public function restrictsFunctions(): bool`
 
@@ -368,7 +368,7 @@ what decides is the rules plus this list.  See the class docblock.
 
 ---
 
-### restrictsFilters() · <small>[🗎](../../src/Engine/Policy.php#L430)</small>
+### restrictsFilters() · <small>[🗎](../../src/Engine/Policy.php#L429)</small>
 
 `public function restrictsFilters(): bool`
 
@@ -381,7 +381,7 @@ Whether the filter allowlist restricts anything at all.
 
 ---
 
-### allowsFunction() · <small>[🗎](../../src/Engine/Policy.php#L442)</small>
+### allowsFunction() · <small>[🗎](../../src/Engine/Policy.php#L441)</small>
 
 `public function allowsFunction(string $name): bool`
 
@@ -404,7 +404,7 @@ leading namespace separator is ignored, because PHP's are.
 
 ---
 
-### allowsFilter() · <small>[🗎](../../src/Engine/Policy.php#L449)</small>
+### allowsFilter() · <small>[🗎](../../src/Engine/Policy.php#L448)</small>
 
 `public function allowsFilter(string $name): bool`
 
@@ -423,7 +423,7 @@ Whether a name may be used as a `|>` filter step under this policy.
 
 ---
 
-### allowedFunctions() · <small>[🗎](../../src/Engine/Policy.php#L456)</small>
+### allowedFunctions() · <small>[🗎](../../src/Engine/Policy.php#L455)</small>
 
 `public function allowedFunctions(): array`
 
@@ -434,7 +434,7 @@ Whether a name may be used as a `|>` filter step under this policy.
 
 ---
 
-### allowedFilters() · <small>[🗎](../../src/Engine/Policy.php#L462)</small>
+### allowedFilters() · <small>[🗎](../../src/Engine/Policy.php#L461)</small>
 
 `public function allowedFilters(): array`
 
@@ -445,7 +445,7 @@ Whether a name may be used as a `|>` filter step under this policy.
 
 ---
 
-### denyFunctions() · <small>[🗎](../../src/Engine/Policy.php#L473)</small>
+### denyFunctions() · <small>[🗎](../../src/Engine/Policy.php#L472)</small>
 
 `public function denyFunctions(string ...$names): self`
 
@@ -467,7 +467,7 @@ deny list. Denial takes precedence over the function allowlist.
 
 ---
 
-### deniesFunction() · <small>[🗎](../../src/Engine/Policy.php#L482)</small>
+### deniesFunction() · <small>[🗎](../../src/Engine/Policy.php#L481)</small>
 
 `public function deniesFunction(string $name): bool`
 
@@ -486,7 +486,7 @@ Whether this policy denies a function name outright.
 
 ---
 
-### deniedFunctions() · <small>[🗎](../../src/Engine/Policy.php#L488)</small>
+### deniedFunctions() · <small>[🗎](../../src/Engine/Policy.php#L487)</small>
 
 `public function deniedFunctions(): array`
 
@@ -497,7 +497,7 @@ Whether this policy denies a function name outright.
 
 ---
 
-### isUnrestricted() · <small>[🗎](../../src/Engine/Policy.php#L501)</small>
+### isUnrestricted() · <small>[🗎](../../src/Engine/Policy.php#L500)</small>
 
 `public function isUnrestricted(): bool`
 
@@ -511,7 +511,7 @@ the engine's former PHP mode.
 
 ---
 
-### allowsPhp() · <small>[🗎](../../src/Engine/Policy.php#L530)</small>
+### allowsPhp() · <small>[🗎](../../src/Engine/Policy.php#L529)</small>
 
 `public function allowsPhp(): bool`
 
@@ -538,7 +538,7 @@ a template any less able to run PHP.
 
 ---
 
-### isSandboxed() · <small>[🗎](../../src/Engine/Policy.php#L555)</small>
+### isSandboxed() · <small>[🗎](../../src/Engine/Policy.php#L554)</small>
 
 `public function isSandboxed(): bool`
 
@@ -555,7 +555,7 @@ one source of truth rather than a second flag that could disagree.
 
 ---
 
-### strictTypes() · <small>[🗎](../../src/Engine/Policy.php#L571)</small>
+### strictTypes() · <small>[🗎](../../src/Engine/Policy.php#L570)</small>
 
 `public function strictTypes(): bool`
 
@@ -576,7 +576,7 @@ less PHP than a weak one, it is merely held to the types it declares.
 
 ---
 
-### digest() · <small>[🗎](../../src/Engine/Policy.php#L588)</small>
+### digest() · <small>[🗎](../../src/Engine/Policy.php#L587)</small>
 
 `public function digest(): string`
 

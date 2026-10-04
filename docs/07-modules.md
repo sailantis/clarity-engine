@@ -46,14 +46,15 @@ class MyModule implements ModuleInterface
 
         $engine->addFunction('asset', fn(string $path) => '/assets/' . ltrim($path, '/'));
 
-        // Shared service, read in template and directive PHP as $__c_sv['myapi']
+        // Shared service, read in template and directive PHP as $this->services['myapi']
+        // (or $__c_sv['myapi'] — the local that also works inside an emitted static fn)
         $engine->addService('myapi', new MyApiClient($this->apiKey));
 
         // Custom directive
         $engine->addService('checkDebug', fn(): bool => $engine->isDebugMode());
         $engine->addDirective(
             'debug_if',
-            function (string $rest, string $path, int $line, callable $processExpr): string {
+            function (string $rest, TemplateLocation $at, callable $processExpr): string {
                 return 'if (' . $processExpr($rest) . ' && $__c_sv["checkDebug"]()) {';
             },
             ['debug_endif' => 'required']   // pair the closer so the compiler checks it
@@ -72,12 +73,22 @@ class MyModule implements ModuleInterface
 | `addFunction(name, callable)`       | Function callable available in template expressions                              |
 | `addDirective(keyword, handler)`    | Custom `{% keyword %}` directive processed at compile time                      |
 | `addDirective(keyword, handler, pairing)` | The same, with declared close/branch tags the compiler validates        |
-| `addService(key, object)`           | Shared value/object, read in template PHP and directive PHP as `$__c_sv['key']` |
+| `addService(key, object)`           | Shared value/object, read in template PHP and directive PHP as `$this->services['key']` |
 
 > **Block directives:** when a directive wraps a body, declare its members on the opener
 > (e.g. `['endmyblock' => 'required']`) so the compiler rejects an unclosed block, a
 > stray closer, or a closer that crosses another construct — with the template line named.
+>
+> **Directive errors:** a handler receives a `TemplateLocation` (the template name, the
+> line, and the physical file) and can `throw new ClarityException('…', $at)` to get an
+> error that already points at the template — no engine pass fills anything in. See
+> *Handler Signature* in [04-advanced-topics.md](04-advanced-topics.md).
 > See [Paired Directives](04-advanced-topics.md#paired-directives).
+>
+> **Argument lists:** a handler that takes several arguments can call
+> `$processExpr($rest, true)` to get `[positional, named]` compiled for it, instead of
+> splitting the raw text itself. See
+> [Directive Arguments](04-advanced-topics.md#directive-arguments).
 
 ---
 

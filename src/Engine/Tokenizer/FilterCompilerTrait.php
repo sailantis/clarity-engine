@@ -45,13 +45,23 @@ trait FilterCompilerTrait
     {
         $result    = [];
         $seenNamed = false;
+        $namedSeen = [];
         foreach ($argList as $arg) {
             $arg = \trim($arg);
+            if ($arg === '') {
+                throw new ClarityException('Empty argument in argument list.');
+            }
             if (\str_starts_with($arg, '...')) {
                 throw new ClarityException('Spread operator is only allowed inside array and object literals.');
             }
             $named = $this->parseNamedArg($arg);
             if ($named !== null) {
+                if (isset($namedSeen[$named['name']])) {
+                    throw new ClarityException(
+                        "Duplicate named argument '{$named['name']}' in argument list."
+                    );
+                }
+                $namedSeen[$named['name']] = true;
                 $seenNamed = true;
                 $result[] = $named['name'] . ': ' . $this->processCondition($named['expr']);
             } else {
@@ -78,12 +88,20 @@ trait FilterCompilerTrait
 
         foreach ($argList as $arg) {
             $arg = \trim($arg);
+            if ($arg === '') {
+                throw new ClarityException('Empty argument in argument list.');
+            }
             if (\str_starts_with($arg, '...')) {
                 throw new ClarityException('Spread operator is only allowed inside array and object literals.');
             }
 
             $parsedNamed = $this->parseNamedArg($arg);
             if ($parsedNamed !== null) {
+                if (isset($named[$parsedNamed['name']])) {
+                    throw new ClarityException(
+                        "Duplicate named argument '{$parsedNamed['name']}' in argument list."
+                    );
+                }
                 $seenNamed = true;
                 $named[$parsedNamed['name']] = $this->processCondition($parsedNamed['expr']);
                 continue;

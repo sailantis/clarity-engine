@@ -28,7 +28,7 @@ could render a value without masking it.
 
 ## Public methods
 
-### __construct() · <small>[🗎](../../src/Debug/DebugRuntime.php#L40)</small>
+### __construct() · <small>[🗎](../../src/Debug/DebugRuntime.php#L41)</small>
 
 `public function __construct(Clarity\Debug\DumpOptions $options): mixed`
 
@@ -45,15 +45,14 @@ could render a value without masking it.
 
 ---
 
-### register() · <small>[🗎](../../src/Debug/DebugRuntime.php#L60)</small>
+### register() · <small>[🗎](../../src/Debug/DebugRuntime.php#L61)</small>
 
 `public function register(Clarity\Engine\Registry $registry): void`
 
 Install this runtime's formatters on a registry.
 
-`dump` goes through exactly one formatter, which renders HTML or a JS
-comment according to the compile-time context, and masks the keys listed
-in {@see \DumpOptions::$maskKeys}.
+`dump` goes through exactly one formatter, which renders according to the
+compile-time context and masks the keys listed in {@see \DumpOptions::$maskKeys}.
 
 **Parameters**
 
@@ -72,8 +71,7 @@ in {@see \DumpOptions::$maskKeys}.
 
 `public function render(string $ctx, array $args): string`
 
-The body of `dump(…)` and of the `{{ x |> dump }}` probe: the rendered
-markup, as a string.
+The body of `dump(…)` and of the `{{ x |> dump }}` probe: rendered output.
 
 **Parameters**
 
@@ -89,7 +87,7 @@ markup, as a string.
 
 ---
 
-### probe() · <small>[🗎](../../src/Debug/DebugRuntime.php#L95)</small>
+### probe() · <small>[🗎](../../src/Debug/DebugRuntime.php#L97)</small>
 
 `public function probe(string $ctx, mixed $value, mixed ...$args): mixed`
 
@@ -117,7 +115,7 @@ and CSS contexts, exactly where `dump(x)` puts it.
 
 ---
 
-### dumpAndDie() · <small>[🗎](../../src/Debug/DebugRuntime.php#L110)</small>
+### dumpAndDie() · <small>[🗎](../../src/Debug/DebugRuntime.php#L112)</small>
 
 `public function dumpAndDie(string $ctx, array $args): never`
 

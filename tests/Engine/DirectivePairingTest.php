@@ -5,6 +5,7 @@ use Clarity\ClarityEngine;
 use Clarity\ClarityException;
 use Clarity\Engine\Registry;
 use Clarity\Template\ArrayLoader;
+use Clarity\Template\TemplateLocation;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -71,7 +72,7 @@ class DirectivePairingTest extends TestCase
     private function cacheConstruct(): array
     {
         $directives = [
-            'cache'     => static fn(string $rest, string $p, int $l, callable $e): string
+            'cache'     => static fn(string $rest, TemplateLocation $at, callable $e): string
                 => 'ob_start(); /* open ' . $e(\trim($rest)) . ' */',
             'cacheelse' => static fn(): string => 'echo "|";',
             'endcache'  => static fn(): string => 'echo ob_get_clean();',
