@@ -465,6 +465,15 @@ class SecurityErrorMappingTest extends BaseTestCase
             return true;
         });
 
+        // The engine forwards a diagnostic the application has masked off in
+        // `error_reporting` RAW, instead of translating it to its E_USER_*
+        // counterpart ({@see \Clarity\ClarityEngineTrait::buildErrorHandler()}).
+        // A production php.ini disables deprecations, and under that mask this
+        // test would observe the native E_DEPRECATED rather than the
+        // E_USER_DEPRECATED it pins — so enable them for the duration, the same
+        // reason and shape as testANullStillRendersEmptyThroughAStringFilter().
+        $savedReporting = \error_reporting(\E_ALL);
+
         try {
             // `upper` hands null to mb_strtoupper(): a deprecation in weak mode,
             // and the case the CHANGELOG advertises as replacing a silent ''.
@@ -481,6 +490,7 @@ class SecurityErrorMappingTest extends BaseTestCase
             }
         } finally {
             restore_error_handler();
+            \error_reporting($savedReporting);
         }
 
         $this->assertSame("TOP\n\nBOTTOM", $output, 'rendering continues past a deprecation');
