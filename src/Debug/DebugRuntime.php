@@ -35,7 +35,7 @@ final class DebugRuntime
     /** The event bus, present whenever debug is on. */
     public readonly DebugEventBus $bus;
 
-    /** The panel, subscribed to the bus only when DumpOptions::showPanel. */
+    /** The panel, subscribed to the bus only when DumpOptions::showPanel() is on. */
     public readonly ?HtmlDebugPanel $panel;
 
     public function __construct(public readonly DumpOptions $options)
@@ -46,7 +46,7 @@ final class DebugRuntime
         $this->css  = new CssDumpRenderer();
         $this->bus  = new DebugEventBus();
 
-        $this->panel = $options->showPanel ? new HtmlDebugPanel() : null;
+        $this->panel = $options->getShowPanel() ? new HtmlDebugPanel() : null;
         if ($this->panel !== null) {
             $this->bus->subscribe($this->panel);
         }
@@ -56,7 +56,7 @@ final class DebugRuntime
      * Install this runtime's formatters on a registry.
      *
      * `dump` goes through exactly one formatter, which renders according to the
-     * compile-time context and masks the keys listed in {@see DumpOptions::$maskKeys}.
+     * compile-time context and masks the keys listed in {@see DumpOptions::maskKeys()}.
      */
     public function register(Registry $registry): void
     {

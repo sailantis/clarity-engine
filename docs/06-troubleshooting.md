@@ -71,7 +71,7 @@ $engine->render('page', [
 3. **Check with conditional:**
 
 ```twig
-{% if variableName %}
+{% if isset(variableName) %}
     {{ variableName }}
 {% else %}
     No value provided
@@ -90,10 +90,11 @@ $engine->render('page', [
 
 **Error:**
 
-```
-Filter 'filterName' is not registered, and this policy does not allow PHP function
-calls, so there is nothing for it to resolve to. Register it with
-addFilter(), or grant the 'phpFunctions' rule and add the name with allowFunctions().
+```bash
+Filter 'filterName' is not registered, and this policy does not allow PHP 
+function calls, so there is nothing for it to resolve to. Register it with 
+addFilter(), or grant the 'phpFunctions' rule and add the name with 
+allowFunctions().
 ```
 
 **Cause:** Typo in filter name, or the filter was never registered.
@@ -119,54 +120,6 @@ Also check the filter name and available built-ins:
 ```
 
 See [Built-in Filters](02-filters-and-functions.md#built-in-filters).
-
----
-
-### Syntax Error
-
-**Error:**
-
-```
-Syntax error: unexpected token '}' at line 42
-```
-
-**Cause:** Missing delimiter, unclosed tag, or typo.
-
-**Common syntax issues:**
-
-1. **Unclosed tags:**
-
-```twig
-{# Wrong #}
-{% if condition %}
-    <p>Content</p>
-{# Missing {% endif %} #}
-
-{# Correct #}
-{% if condition %}
-    <p>Content</p>
-{% endif %}
-```
-
-2. **Mismatched delimiters:**
-
-```twig
-{# Wrong #}
-{{ value |> upper }}
-{# Correct #}
-{{ value |> upper }}
-```
-
-3. **Missing closing parenthesis:**
-
-```twig
-{# Wrong #}
-{{ value |> truncate(100 }}
-{# Correct #}
-{{ value |> truncate(100) }}
-```
-
-**Debugging tip:** Check the line number in the error message and examine the template file at that line.
 
 ---
 
@@ -307,12 +260,6 @@ chmod -R 755 cache/clarity
 chown -R www-data:www-data cache/clarity  # Linux/Apache
 ```
 
-On Windows:
-
-```powershell
-icacls cache\clarity /grant IIS_IUSRS:F /T
-```
-
 3. **Verify path:**
 
 ```php
@@ -398,7 +345,7 @@ rm -rf cache/clarity/*
 {# Output: &lt;script&gt;alert('XSS')&lt;/script&gt; #}
 ```
 
-**Solution:** Never use `raw` with user input. Always rely on auto-escaping for untrusted data.
+**Solution:** Never use `raw` with unfiltered user input. Rely on auto-escaping for untrusted data or use a proper sanitization filter before outputting.
 
 ---
 
@@ -627,7 +574,7 @@ $engine->isDebugMode();                         // bool
 
 // …or with options (depth, masking, HTML panel)
 use Clarity\Debug\DumpOptions;
-$engine->setDebugMode(new DumpOptions(showPanel: true, maxDepth: 4));
+$engine->setDebugMode(new DumpOptions(showPanel: true, maxDepth: 99));
 ```
 
 `dump()` displays a masked, context-aware tree only when debug mode is enabled.
@@ -648,35 +595,6 @@ Or specific variable:
 
 Unlike `{{ vars() |> json }}`, `dump()` does not expose data in production.
 
-### Check Compiled Output
-
-Inspect the compiled PHP file:
-
-```php
-$cachePath = $engine->getCachePath();
-echo "Cache directory: $cachePath\n";
-
-// Find compiled file and view it
-$files = glob($cachePath . '/*.php');
-echo file_get_contents($files[0]);
-```
-
-### Isolate the Problem
-
-Create minimal test template:
-
-```twig
-{# test.clarity.html #}
-<p>Test: {{ variable }}</p>
-```
-
-```php
-$output = $engine->render('test', ['variable' => 'Hello']);
-echo $output;
-```
-
-If this works, the problem is in your template logic, not Clarity itself.
-
 ### Use Try-Catch
 
 ```php
@@ -688,6 +606,7 @@ try {
     echo "<pre>";
     echo "Error: " . $e->getMessage() . "\n";
     echo "Template: " . $e->templateName . "\n";
+    echo "Path: " . $e->templatePath . "\n";
     echo "Line: " . $e->templateLine . "\n";
     echo "\nStack Trace:\n" . $e->getTraceAsString();
     echo "</pre>";
@@ -760,47 +679,6 @@ echo $engine->render('partials/user-list', ['users' => $users]);
 | Syntax error: unexpected token  | Missing delimiter or typo        | Check template syntax                 |
 | Class 'ClarityEngine' not found | Autoloader not included          | Include `vendor/autoload.php`         |
 | Memory exhausted                | Too much data or infinite loop   | Reduce data size or fix loop          |
-
----
-
-## Getting Help
-
-### Check Documentation
-
-1. [Getting Started](00-getting-started.md)
-2. [Template Syntax](01-template-syntax.md)
-3. [Filters Reference](02-filters-and-functions.md)
-4. [Advanced Topics](04-advanced-topics.md)
-
-### Minimal Reproducible Example
-
-Create a simple test case:
-
-```php
-require 'vendor/autoload.php';
-
-$engine = new \Clarity\ClarityEngine();
-$engine->setViewPath(__DIR__ . '/views');
-$engine->setCachePath(__DIR__ . '/cache');
-
-echo $engine->render('test', ['message' => 'Hello']);
-```
-
-If this works, the issue is in your application setup, not Clarity.
-
-### Check System Requirements
-
-- PHP >= 8.2
-- mbstring extension enabled
-- Cache directory writable
-- Composer dependencies installed
-
-```bash
-php -v
-php -m | grep mbstring
-composer install
-ls -la cache/
-```
 
 ---
 

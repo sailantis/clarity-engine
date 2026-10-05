@@ -8,7 +8,7 @@ namespace Clarity\Debug;
  * Renders debug values as an ANSI-colored (or plain-text) tree on STDERR.
  *
  * By default, output goes to STDERR (pipeline-safe: does not corrupt stdout).
- * Set DumpOptions::$forceToTemplate = true to receive the string instead.
+ * Set DumpOptions::forceToTemplate(true) to receive the string instead.
  *
  * Associative arrays → {key: value}, sequential arrays → [item, …].
  * Sensitive keys are replaced with ***.
@@ -23,7 +23,7 @@ final class CliDumpRenderer implements DumpRenderer
 
         $output = '[DUMP] ' . $this->renderValue($value, $opts, 0, $isTty) . "\n";
 
-        if (!$opts->forceToTemplate) {
+        if (!$opts->getForceToTemplate()) {
             \fwrite(\STDERR, $output);
             return '';
         }
@@ -42,7 +42,7 @@ final class CliDumpRenderer implements DumpRenderer
 
     private function renderValue(mixed $value, DumpOptions $opts, int $depth, bool $ansi): string
     {
-        if ($depth >= $opts->maxDepth) {
+        if ($depth >= $opts->getMaxDepth()) {
             return $ansi ? "\e[90m…\e[0m" : '…';
         }
 
@@ -88,7 +88,7 @@ final class CliDumpRenderer implements DumpRenderer
         $items = [];
         $shown = 0;
         foreach ($arr as $k => $v) {
-            if ($shown >= $opts->maxItems) {
+            if ($shown >= $opts->getMaxItems()) {
                 $remaining = $count - $shown;
                 $items[] = $inner . ($ansi ? "\e[90m… {$remaining} more …\e[0m" : '…');
                 break;
@@ -118,7 +118,7 @@ final class CliDumpRenderer implements DumpRenderer
     private function isMasked(string $key, DumpOptions $opts): bool
     {
         $lower = \strtolower($key);
-        foreach ($opts->maskKeys as $mask) {
+        foreach ($opts->getMaskKeys() as $mask) {
             if (\str_contains($lower, \strtolower((string) $mask))) {
                 return true;
             }

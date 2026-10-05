@@ -636,6 +636,37 @@ $engine->setDebugMode(new DumpOptions(maxDepth: 3));      // …with options
 $engine->setDebugMode(false);                             // production
 ```
 
+`DumpOptions` is set two ways that compose: named arguments in the
+constructor, or a fluent call of the same name. The chain mutates the instance
+and returns it, so options handed to the engine stay adjustable afterwards:
+
+```php
+use Clarity\Debug\DumpOptions;
+
+$opts = (new DumpOptions())
+    ->maxDepth(4)                        // nesting depth before `…`
+    ->maxItems(20)                       // items shown per level
+    ->maskKeys(['password', 'token'])    // replace the mask list…
+    ->maskKey('secret')                  // …or add / remove single entries
+    ->unmaskKey('apikey')
+    ->showPanel();                       // inject the HTML debug panel
+
+$engine->setDebugMode($opts);
+
+$opts->maxDepth(2);                      // still applies, next render onward
+```
+
+| Option | Method / argument | Default | Effect |
+| ------ | ----------------- | ------- | ------ |
+| `$maxDepth` | `maxDepth(int)` | `5` | Nesting depth rendered before values become `…` |
+| `$maxItems` | `maxItems(int)` | `50` | Items shown at any one level (HTML and CLI) |
+| `$maskKeys` | `maskKeys(array)`, `maskKey(string)`, `unmaskKey(string)` | `password`, `token`, `secret`, `apikey`, `api_key` | Key substrings whose values are hidden, case-insensitively |
+| `$forceToTemplate` | `forceToTemplate(bool)` | `false` | CLI renderer returns the string instead of writing to STDERR |
+| `$showPanel` | `showPanel(bool)` | `false` | Subscribe the HTML debug panel to the event bus |
+
+The boolean setters take no argument as shorthand for `true`, so
+`->showPanel()` reads as a command; `->showPanel(false)` turns it off.
+
 When active:
 
 - **`dump()` is rendered context-aware**
@@ -643,7 +674,7 @@ When active:
     - a JavaScript `;/* DEBUG_DUMP: … */` comment inside `<script>`
     - a CSS `/* DEBUG_DUMP: … */` comment inside `<style>`
     - with the keys listed in
-      `DumpOptions::$maskKeys` masked (`password`, `token`, `secret`, …).
+      `DumpOptions::maskKeys()` masked (`password`, `token`, `secret`, …).
 - **`{{ x |> dump }}`** dumps the piped value at the pipe position and still
   yields it, so `{{ items |> dump |> length }}` measures `items`.
 - **`{{ map(items, "dump") }}`** works as a callable reference too.
@@ -673,8 +704,9 @@ Unix timestamp:
 | `template.render`  | `template`, `duration_ms`                         |
 
 The bus reports template lifecycle metadata, not template variables or dump
-values. `new DumpOptions(showPanel: true)` automatically subscribes the
-floating HTML panel to the same events and appends it to the rendered output.
+values. `new DumpOptions(showPanel: true)` — or `->showPanel()` on an existing
+instance — automatically subscribes the floating HTML panel to the same events
+and appends it to the rendered output.
 
 ### Dump renderers
 
@@ -687,13 +719,15 @@ format.
 | HTML | A collapsible `<details>` tree, with escaped scalar text and inline CSS injected on the first HTML dump in the process. |
 | JavaScript | JSON inside a `;/* DEBUG_DUMP: … */` comment, safe to place between script statements; closing `*/` sequences in values are escaped. |
 | CSS | JSON inside a `/* DEBUG_DUMP: … */` comment; closing `*/` is escaped and tag delimiters are JSON-hex-encoded to protect the surrounding `<style>` element. |
-| CLI | A nested text tree, ANSI-colored when writing to a terminal and plain otherwise. `dd()` uses this renderer under CLI/phpdbg, writes to standard output, and exits; `CliDumpRenderer::render()` writes to standard error by default, or returns the string when `forceToTemplate` is enabled. |
+| CLI | A nested text tree, ANSI-colored when writing to a terminal and plain otherwise. `dd()` uses this renderer under CLI/phpdbg, writes to standard output, and exits; `CliDumpRenderer::render()` writes to standard error by default, or returns the string when `forceToTemplate(true)` is set. |
 
 HTML and CLI output truncate nested values at `maxDepth` and limit each array
 to `maxItems`. JavaScript output also truncates at `maxDepth`, but serializes
 all array items. CSS comments also truncate at `maxDepth` and serialize all
-array items. Matching `maskKeys` are case-insensitive string keys in arrays;
-this is not general redaction for arbitrary object properties.
+array items. Matching mask keys are case-insensitive string keys in arrays:
+this is not general redaction for arbitrary object properties. The list itself
+is replaced by `maskKeys([…])` and adjusted one entry at a time by `maskKey()`
+and `unmaskKey()`.
 
 Everything debug is **compile-time or zero-cost in production**: `dump()` is
 pruned to `''` — including the filter and reference forms, which collapse to the
@@ -749,6 +783,29 @@ Compiles to: `\str_pad($vars['invoiceNumber'], 8, '0', \STR_PAD_LEFT)` — no fu
 | `{2}`       | First additional parameter        |
 | `{3}`       | Second additional parameter, etc. |
 
+### Registering an Inline Function
+
+`addInlineFunction()` uses the same record format to register a call-only name;
+pipe syntax is rejected at compile time. Use it when the compiler must inspect
+an argument as source code rather than transform its value:
+
+```php
+$engine->addInlineFunction('isset', [
+    'php'       => 'isset({1})',
+    'callGuard' => 'presence',
+]);
+```
+
+```twig
+{{ isset(user:email) }}    {# compiles to isset($__c_va['user']['email']) #}
+{{ user:email |> isset }}  {# compile error: 'isset' is a function, not a filter #}
+```
+
+The `callGuard` validates that the first argument is a name or a chain, as
+required by PHP's `isset()`. This prevents invalid generated PHP: without the
+guard, `isset(1 + 1)` would fail to parse on first render instead of being
+rejected at compile time.
+
 ## Custom Directives
 
 Directives extend the template compiler with custom `{% keyword %}` tags. They are compiled at build time and emit raw PHP code.
@@ -801,7 +858,7 @@ $cache = new class {
 };
 
 // Register the cache service with the engine.
-// Directives can access the cache service via $this->services['cache'] or local render-frame variable $__c_sv['cache'].
+// Directives can access the cache service via $this->services['cache'].
 $engine->addService('cache', $cache);
 
 $engine->addDirective('cache', function(string $rest, TemplateLocation $at, callable $processExpr): string {
@@ -844,46 +901,26 @@ The `$processExpr` callable converts the cache-key expression (a variable or lit
 
 ### Paired Directives
 
-A directive that wraps a body — anything with an `{% end… %}` counterpart — declares
-its role with a [`Clarity\Engine\Directive`](../src/Engine/Directive.php) value. The
-factory name states the role, so the two directions of the old `keyword => role` array
-(which meant "this is my close" for an opener but "I belong to this" for a member) can
-no longer be confused:
+A directive that wraps a body declares its role with a [`Clarity\Engine\Directive`](../src/Engine/Directive.php) value. The
+factory name states the role:
 
 | Factory | The tag … | Effect |
 | ------- | --------- | ------ |
-| `Directive::opens('endcache', 'cacheelse')` | opens the construct and names its parts | one closer (a single named argument) plus any optional branch tags |
-| `Directive::branches('cache')` | is a branch segment of `cache`, like `{% else %}` | ends the current body, starts the next; the construct stays open |
-| `Directive::closes('cache')` | ends `cache` | the construct is popped |
+| `Directive::opens('endcache', 'elsecache')` | opens the construct and names its parts | one closer (a single named argument) plus any optional branch tags |
+| `Directive::branches('cache')` | is a branch segment of `cache` like `cacheelse` | ends the current body, starts the next; the construct stays open |
+| `Directive::closes('cache')` | ends `cache` like `endcache` | the construct is popped |
 | `Directive::inside('cache')` | may appear only inside `cache` | an ordinary leaf, restricted in place |
 
 ```php
-$engine->addDirective('cache',         $openHandler,   Directive::opens('endcache', 'cacheelse'));
-$engine->addDirective('cacheelse',     $branchHandler, Directive::branches('cache'));
-$engine->addDirective('endcache',      $closeHandler,  Directive::closes('cache'));
-$engine->addDirective('cache_control', $leafHandler,   Directive::inside('cache'));
+$engine->addDirective('cache',     $openHandler,   Directive::opens('endcache', 'elsecache'));
+$engine->addDirective('elsecache', $branchHandler, Directive::branches('cache'));
+$engine->addDirective('endcache',  $closeHandler,  Directive::closes('cache'));
+$engine->addDirective('cacheopt',  $leafHandler,   Directive::inside('cache'));
 ```
 
-The opener is the single source of truth for the structure; `branches()` and `closes()`
-do not change it, they **assert** it. A claim that disagrees — declaring `endcache` a
-branch while `cache` calls it the closer — is a registration error, not a silent
-override. That redundancy is deliberate: it is what catches the "registered the closer
-but forgot the opener" mistake at the start of every compile.
+The factories describe two concepts. `opens()`, `branches()`, and `closes()` define structure: they change which construct the compiler considers open. `inside()` defines containment: the tag does not open or close a body and is valid only within its owner. Containment is checked against the innermost open construct and is allowed across an `{% include %}` boundary because included templates are inlined into the same render body.
 
-The four factories cover two independent ideas. `opens`/`branches`/`closes` describe
-**structure**: the tag changes what the compiler has open, so a formatter can read them
-to indent a body. `inside()` is a preposition, not a verb, because a containment tag
-changes nothing — it opens and closes no body, it is merely invalid outside its owner.
-Containment is checked against the innermost open construct and, unlike a close, is
-allowed across an `{% include %}` boundary (an include is inlined into the same render
-body, so the tag really does run inside the construct).
-
-Once declared, the compiler rejects — with the template name and line — an unclosed
-`{% cache %}` (`Unclosed '{% cache %}' tag (opened on line 3): add '{% endcache %}'`), a
-stray `{% endcache %}`, a close that crosses a nested `{% if %}`/`{% for %}` or another
-construct, a branch tag used outside its construct, a contained tag outside its owner,
-and a construct that spans an `{% include %}`. Directives registered WITHOUT a
-`Directive` argument keep behaving exactly as before, so this is opt-in per construct.
+The opener defines the construct's structure. `branches()` and `closes()` validate that definition without changing it. For example, registering `endcache` as a branch when `cache` declares it as a closer causes a registration error. This validation also detects a closer registered without a corresponding opener at compile time.
 
 ### Handler Signature
 
@@ -895,10 +932,7 @@ function (
 ): string                          // must return PHP statement(s) to emit
 ```
 
-`$at` is a [`Clarity\Template\TemplateLocation`](../src/Template/TemplateLocation.php) carrying the
-logical template name, the line, and — when the active loader is file-backed — the physical
-file. It exists so a handler can raise a **complete** `ClarityException` on its own, without
-the engine having to fill in anything afterwards:
+`$at` is a [`Clarity\Template\TemplateLocation`](../src/Template/TemplateLocation.php) carrying the logical template name, the line, and the template path if available. It can be used to raise a `ClarityException`:
 
 ```php
 $engine->addDirective('cache', function (string $rest, TemplateLocation $at, callable $processExpr): string {
@@ -909,26 +943,17 @@ $engine->addDirective('cache', function (string $rest, TemplateLocation $at, cal
 }, Directive::opens('endcache'));
 ```
 
-Passing `$at` straight to the second parameter is all it takes. A bare
-`throw new ClarityException('cache needs a key')` is still located against the template,
-but only because the compiler discovers where it was thrown — handing `$at` through keeps
-the exception complete at the point it was raised, which is also what keeps it from being
-wrapped a second time. `$at->path` is `''` for a loader with no file to name
-(`ArrayLoader`, `StringLoader`, a database loader), exactly as in `ClarityException`.
-
 ### Directive Arguments
 
-`$processExpr($rest)` compiles **one** Clarity expression to PHP. When a tag takes a
-list — `{% cache "user_" ~ id, ttl: 300, tags: ["user"] %}` — call it with
-`$asList = true` and it compiles the whole list instead, using the same grammar and
-rules the filter syntax uses:
+`$processExpr($rest)` compiles one Clarity expression to PHP by default.  When a tag takes a list of arguments, for example: 
+`{% cache "user_" ~ id, ttl: 300, tags: ["user"] %}` 
+call `$processExpr($rest, true)` to obtain a list instead, sharing the same grammar and rules with the filter syntax:
 
 ```
 [name: ] expr [, [name: ] expr ...]
 ```
 
-It returns `[positional, named]`, both lists of compiled PHP expressions, keyed by numeric
-index and by name:
+It returns two arrays: `[positional, named]`. Both are lists of compiled PHP expressions, keyed by numeric index and by name:
 
 ```php
 $engine->addDirective('cache', function (string $rest, TemplateLocation $at, callable $processExpr): string {
@@ -942,25 +967,17 @@ $engine->addDirective('cache', function (string $rest, TemplateLocation $at, cal
 }, Directive::opens('endcache'));
 ```
 
-An argument whose text starts with `name:` is **named**; anything else is **positional**
-and takes the next numeric index. A positional argument may not follow a named one, a
-name may not repeat, and an empty argument (`a,,b`) is rejected — all at compile time,
-naming the template and line. A quoted `"a,b"`, a `{a: 1, b: 2}` literal, or a nested
-`fn(x, y)` never splits. `$processExpr($rest)` (no second argument) is unchanged, so
-existing handlers need no edit.
-
-Failure inside the handler is located too: `throw new ClarityException('…', $at)` is reported
-against the template, its line, and — when the loader is file-backed — the physical file,
-rather than the closure that threw. A bare `throw new ClarityException('…')` is located the
-same way; passing `$at` simply means the exception is already complete when thrown.
+Arguments beginning with `name:` are **named**; other arguments are **positional** and receive the next numeric index. Positional arguments cannot follow named arguments. Named arguments must be unique, and empty arguments (`a,,b`) are rejected. Commas inside quoted strings (`"a,b"`), literals such as `{a: 1, b: 2}`, and nested calls such as `fn(x, y)` do not split arguments.
 
 ### The `__c_` prefix
 
-The engine reserves the `__c_` prefix for its own internal variables. Therefore, template authors **cannot** bind a `__c_`-prefixed name.
+The engine reserves the `__c_` prefix for its own internal variables. Therefore, template authors **should not** bind a `__c_`-prefixed name.
 
 ## Services
 
-Services are arbitrary objects registered into the engine and made available inside compiled templates via `$this->services['key']` (or the `$__c_sv['key']` render-frame local — see below). They're primarily used by modules to share mutable state (e.g. a locale stack or cache object) between registered filters/directives and inline filter PHP templates.
+Services are arbitrary objects registered into the engine and made available inside compiled templates via `$this->services['key']`. They're primarily used by modules to share mutable state (e.g. a locale stack or cache object) between registered filters/directives and inline filter PHP templates.
+
+> **Note:** Services are an infrastructure for module authors: An application that simply registers filters and functions may not need to use any services at all.
 
 ### Registering a Service
 
@@ -980,72 +997,15 @@ if ($engine->hasService('my_service')) {
 
 ### Accessing Services in Inline Filters
 
-Inline filter PHP templates can reference services via `$__c_sv['key']`:
+Inline filter PHP templates can reference services via `$this->services['key']`: 
 
 ```php
 $engine->addInlineFilter('t', [
-    'php'     => "\$__c_sv['translator']->get(\$__c_sv['locale']->current(), {1})",
+    'php'     => "\$this->services['translator']->get(\$this->services['locale']->current(), {1})",
     'params'  => ['vars'],
     'defaults'=> ['vars' => 'null'],
 ]);
 ```
-
-`$__c_sv` is the render-frame local. Use it in an inline filter because an inline
-filter may also be referenced as a quoted name, which wraps it in a `static` closure;
-there `$this->services` is unreachable and `$__c_sv` is not. See
-[$__c_sv and $this->services](#__c_sv-and-this-services--two-spellings-one-table) below.
-
-> **Note:** Services are infrastructure for module authors: an application that only registers filters and functions does not need them.
-
-### `$__c_sv` and `$this->services` — Two Spellings, One Table
-
-The services table is passed to the compiled class's constructor as `$services`, and
-the callables table as `$functions`:
-
-```php
-public function __construct(private array $functions, private array $services) {}
-```
-
-`render()` unpacks each into a local **only when the compiled body actually uses it**,
-so a template that touches neither pays nothing:
-
-```php
-public function render(array $__c_va): string
-{
-    $__c_sv = $this->services;   // emitted only when the body needs it
-    // …
-}
-```
-
-Both spellings reach the same table, and which one to use is decided by where the
-generated code ends up:
-
-| Emitted code position | `$this->services[…]` | `$__c_sv[…]` |
-| --------------------- | -------------------- | ------------ |
-| Directive body, inline filter in the direct pipe position | ✅ | ✅ |
-| Inside an emitted `static fn` — lambda body, quoted filter reference | ❌ | ✅ |
-
-Lambda bodies and quoted filter references compile to **`static` closures**, where
-`$this` is unbound. Inside one, `$__c_sv` / `$__c_fn` is the only reachable form —
-which is exactly why the locals exist and why the properties could not simply be
-inlined at every use. A service lookup emitted inside a closure must therefore use
-`$__c_sv`, and the emitted `use (…)` clause is what binds it:
-
-```php
-// {{ map(items, "quoted_inline_filter") }}
-static fn(mixed $__c_val): mixed => $__c_sv['svc'](($__c_val))
-```
-
-For a directive handler that only ever emits into `render()`, `$this->services['key']`
-is the readable choice. For an inline filter that may also be referenced as a quoted
-name, `$__c_sv['key']` is the safe one. `$__c_fn` is the counterpart for the callables
-table, and like services it is only unpacked when the body references it.
-
-> **Renamed in 0.3.0.** The constructor properties were `__c_fn` / `__c_sv` before;
-> they are now `functions` / `services`. The emitted locals keep the `__c_` prefix,
-> because a `__c_`-prefixed name is reserved by the engine and can never be claimed
-> by a template variable. `COMPILER_VERSION` moved 26 → 27, so cached templates are
-> recompiled automatically.
 
 ## Next Steps
 

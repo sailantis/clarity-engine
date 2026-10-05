@@ -52,7 +52,7 @@ could render a value without masking it.
 Install this runtime's formatters on a registry.
 
 `dump` goes through exactly one formatter, which renders according to the
-compile-time context and masks the keys listed in {@see \DumpOptions::$maskKeys}.
+compile-time context and masks the keys listed in [`DumpOptions::maskKeys()`](Clarity_Debug_DumpOptions.md#maskkeys).
 
 **Parameters**
 

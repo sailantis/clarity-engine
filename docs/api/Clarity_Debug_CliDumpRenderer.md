@@ -5,7 +5,7 @@
 Renders debug values as an ANSI-colored (or plain-text) tree on STDERR.
 
 By default, output goes to STDERR (pipeline-safe: does not corrupt stdout).
-Set DumpOptions::$forceToTemplate = true to receive the string instead.
+Set DumpOptions::forceToTemplate(true) to receive the string instead.
 
 Associative arrays → {key: value}, sequential arrays → [item, …].
 Sensitive keys are replaced with ***.

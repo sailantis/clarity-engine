@@ -27,7 +27,7 @@ turning it OFF removes all of it:
   still yields it (`{{ x |> dump |> length }}` measures x);
 - a [`DebugEventBus`](Clarity_Debug_DebugEventBus.md) emitting `template.resolve`, `template.compile`
   and `template.render`;
-- the HTML debug panel, when `DumpOptions::$showPanel` is set.
+- the HTML debug panel, when `DumpOptions::showPanel()` is set.
 
 Passing [`DumpOptions`](Clarity_Debug_DumpOptions.md) is shorthand for "on, with these options" —
 `$debug instanceof DumpOptions` and `$debug === null` both mean "on".
@@ -369,7 +369,47 @@ additional parameters are declared in `params`.
 
 ---
 
-### addDirective() · <small>[🗎](../../src/ClarityEngineTrait.php#L438)</small>
+### addInlineFunction() · <small>[🗎](../../src/ClarityEngineTrait.php#L426)</small>
+
+`public function addInlineFunction(string $name, array $definition): static`
+
+Register an inline FUNCTION — codegen that compiles into the template but
+is NOT reachable with the pipe operator.
+
+`addInlineFunction()` is to `addInlineFilter()` what `addFunction()` is to
+`addFilter()`: the call form only. The `php` template backs `name(...)`
+exactly as it would for a filter, while `value |> name` is a compile-time
+error.
+
+Use it for a construct whose argument is a piece of SOURCE rather than a
+value to transform, so that a piped form has no meaning:
+
+```php
+$engine->addInlineFunction('isset', [
+    'php'    => 'isset({1})',
+    'callGuard' => 'presence',
+]);
+```
+
+The `callGuard` is what keeps the template honest about the construct's own
+restrictions: `presence` requires the first argument to be a bare name or a
+chain over one, because PHP's `isset()` accepts nothing else.
+
+**Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$name` | string | - | Function name used in templates. |
+| `$definition` | array | - |  |
+
+**Return value**
+
+- Type: `static`
+
+
+---
+
+### addDirective() · <small>[🗎](../../src/ClarityEngineTrait.php#L471)</small>
 
 `public function addDirective(string $keyword, callable $handler, Clarity\Engine\Directive|null $directive = null): static`
 
@@ -421,16 +461,16 @@ $engine->addDirective('cache_control', $leafHandler, Directive::inside('cache'))
 
 ---
 
-### addService() · <small>[🗎](../../src/ClarityEngineTrait.php#L456)</small>
+### addService() · <small>[🗎](../../src/ClarityEngineTrait.php#L489)</small>
 
 `public function addService(string $name, mixed $service): static`
 
 Store a service object in the registry so that compiled template render
-bodies can access it via `$__c_sv['key']`.
+bodies can access it via `$__c_sv['key']` or `$this->services['key']`.
 
 This is primarily used by modules that need shared mutable state (e.g. a
 locale stack) accessible both from closures that close over the object
-*and* from inline filter PHP templates using `$__c_sv['key']->method()`.
+*and* from inline filter PHP templates using `$this->services['key']->method()`.
 
 **Parameters**
 
@@ -446,7 +486,7 @@ locale stack) accessible both from closures that close over the object
 
 ---
 
-### hasService() · <small>[🗎](../../src/ClarityEngineTrait.php#L465)</small>
+### hasService() · <small>[🗎](../../src/ClarityEngineTrait.php#L498)</small>
 
 `public function hasService(string $name): bool`
 
@@ -465,7 +505,7 @@ Return true if a service with the given key has been registered.
 
 ---
 
-### getService() · <small>[🗎](../../src/ClarityEngineTrait.php#L475)</small>
+### getService() · <small>[🗎](../../src/ClarityEngineTrait.php#L508)</small>
 
 `public function getService(string $name): mixed`
 
@@ -488,7 +528,7 @@ Retrieve a previously registered service.
 
 ---
 
-### addFilter() · <small>[🗎](../../src/ClarityEngineTrait.php#L529)</small>
+### addFilter() · <small>[🗎](../../src/ClarityEngineTrait.php#L562)</small>
 
 `public function addFilter(string $name, callable $fn): static`
 
@@ -551,7 +591,7 @@ Template usage:
 
 ---
 
-### addFunction() · <small>[🗎](../../src/ClarityEngineTrait.php#L545)</small>
+### addFunction() · <small>[🗎](../../src/ClarityEngineTrait.php#L578)</small>
 
 `public function addFunction(string $name, callable $fn): static`
 
@@ -574,7 +614,7 @@ This is distinct from filters, which transform a piped value.
 
 ---
 
-### setLoader() · <small>[🗎](../../src/ClarityEngineTrait.php#L557)</small>
+### setLoader() · <small>[🗎](../../src/ClarityEngineTrait.php#L590)</small>
 
 `public function setLoader(Clarity\Template\TemplateLoader $loader): static`
 
@@ -593,7 +633,7 @@ Set a custom template loader, replacing the default FileLoader.
 
 ---
 
-### getLoader() · <small>[🗎](../../src/ClarityEngineTrait.php#L570)</small>
+### getLoader() · <small>[🗎](../../src/ClarityEngineTrait.php#L603)</small>
 
 `public function getLoader(): Clarity\Template\TemplateLoader`
 
@@ -607,7 +647,7 @@ has been set explicitly.
 
 ---
 
-### setCachePath() · <small>[🗎](../../src/ClarityEngineTrait.php#L609)</small>
+### setCachePath() · <small>[🗎](../../src/ClarityEngineTrait.php#L642)</small>
 
 `public function setCachePath(string $path): static`
 
@@ -626,7 +666,7 @@ Set the directory where compiled templates should be cached.
 
 ---
 
-### getCachePath() · <small>[🗎](../../src/ClarityEngineTrait.php#L620)</small>
+### getCachePath() · <small>[🗎](../../src/ClarityEngineTrait.php#L653)</small>
 
 `public function getCachePath(): string`
 
@@ -640,7 +680,7 @@ Get the currently configured cache directory.
 
 ---
 
-### flushCache() · <small>[🗎](../../src/ClarityEngineTrait.php#L630)</small>
+### flushCache() · <small>[🗎](../../src/ClarityEngineTrait.php#L663)</small>
 
 `public function flushCache(): static`
 
@@ -653,7 +693,7 @@ Flush all cached compiled templates.
 
 ---
 
-### render() · <small>[🗎](../../src/ClarityEngineTrait.php#L681)</small>
+### render() · <small>[🗎](../../src/ClarityEngineTrait.php#L714)</small>
 
 `public function render(string $view, array $vars = []): string`
 
@@ -714,7 +754,7 @@ $html = $engine->render('admin::dashboard', $data);
 
 ---
 
-### renderPartial() · <small>[🗎](../../src/ClarityEngineTrait.php#L703)</small>
+### renderPartial() · <small>[🗎](../../src/ClarityEngineTrait.php#L736)</small>
 
 `public function renderPartial(string $view, array $vars = []): string`
 
@@ -735,7 +775,7 @@ Render a partial view (without applying a layout) and return the output.
 
 ---
 
-### renderLayout() · <small>[🗎](../../src/ClarityEngineTrait.php#L729)</small>
+### renderLayout() · <small>[🗎](../../src/ClarityEngineTrait.php#L762)</small>
 
 `public function renderLayout(string $layout, string $content, array $vars = []): string`
 

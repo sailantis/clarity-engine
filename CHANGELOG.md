@@ -7,7 +7,87 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`DumpOptions` is fluent.** Every dump option now has a method of the same
+  name beside its constructor argument, so the same object can be composed with
+  named arguments and then adjusted:
+
+  ```php
+  $opts = (new DumpOptions())
+      ->maxDepth(4)
+      ->maxItems(20)
+      ->maskKeys(['password', 'token'])
+      ->showPanel();
+
+  $engine->setDebugMode($opts);
+
+  $opts->maxDepth(2);   // still applies, next render onward
+  ```
+
+  The chain is **mutable**: each method changes the instance and returns it, so
+  a `DumpOptions` handed to the engine earlier can be narrowed later, and every
+  holder of the object sees the change. The two boolean options take no argument
+  as shorthand for `true` — `->showPanel()` turns the panel on, `->showPanel(false)`
+  off — and `maskKey()` / `unmaskKey()` adjust the mask list one entry at a time
+  beside `maskKeys()`, which replaces it.
+
+  The five options are now `private`, with `getMaxDepth()`, `getMaxItems()`,
+  `getMaskKeys()`, `getForceToTemplate()` and `getShowPanel()` replacing the
+  former `public readonly` properties — a mutator and a `readonly` property
+  cannot coexist. `$opts->maxDepth` therefore becomes `$opts->getMaxDepth()`;
+  the renderers, which were the only readers, use the getters.
+
+- **`addInlineFunction()` — inline codegen with no piped form.** A new registry
+  record member, `filter => false`, marks an inline definition as CALL-ONLY: the
+  same `{1}`-templated codegen backs `name(...)`, while `value |> name` is refused
+  at compile time with the existing “is a function, not a filter” message. It
+  fills the one gap the two older tables could not express — a name that is
+  callable without being a runtime callable, and call-only without being listed in
+  the pipeable set.
+
+  `isset` is the built-in in this shape. It is a presence probe on a variable
+  chain, so its argument is source the compiler must see, not a value to
+  transform: `x |> isset` would ask whether the already-compiled piped expression
+  exists, which is a constant.
+
+  ```twig
+  {{ isset(user:email) }}          {# isset($__c_va['user']['email']) #}
+  {{ name |> isset }}              {# compile error: a function, not a filter #}
+  ```
+
+  A record may also declare a `callGuard`, which validates its first argument
+  while compiling. `isset` uses `presence`, which accepts only a name or a chain
+  over one. Previously `isset(1 + 1)` compiled to `isset((…))` and died as a PHP
+  fatal — “Cannot use isset() on the result of an expression” — inside the
+  compiled cache file; a template author now gets a located `ClarityException`
+  naming the construct. The guard runs on the COMPILED operand, so every access
+  operator is accepted (`user:email`, `user.email`, `items[0]`).
+
+  `COMPILER_VERSION` moves 29 → 30, so previously cached templates are recompiled
+  automatically.
+
 ### Changed
+
+- **The registry's codegen table is now `$inlineDefinitions`.** It was
+  `$inlineFilters`, which stopped being accurate the moment a record could be a
+  call-only function rather than a filter. The table answers one question — *how
+  does this name compile?* — so the neutral name states it. The public API is
+  unchanged (`addInlineFilter()`, `hasInlineFilter()`, `getInlineFilter()`), and
+  `hasInlineFilter()` still means “has codegen”; `hasFilter()` is what answers
+  “may be piped”. `Registry::isInlineFunction()` is new and asks the call-only
+  question directly.
+
+- **Compiled templates now emit arrow functions for lambdas and quoted filter
+  references.** A lambda body and a quoted filter reference used to compile to a
+  `static function (…) use (…) { … }`, which made `$this` unreachable inside them:
+  a directive handler or inline filter that named `$this->services['key']` broke
+  the moment the compiler emitted it inside one of those closures, forcing module
+  authors to learn which of two spellings was safe in which position. Both are now
+  non-static arrow functions (`fn(…) => …`), which are created in `render()` and
+  therefore inherit `$this`. `$this->services['key']` and `$__c_sv['key']` are
+  interchangeable everywhere. `COMPILER_VERSION` moves 28 → 29, so previously
+  cached templates are recompiled automatically.
 
 - **Compiled-template properties renamed to `functions` / `services`.** A compiled
   class was generated with `public function __construct(private array $__c_fn, private
@@ -19,13 +99,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   public function __construct(private array $functions, private array $services) {}
   ```
 
-  The render-frame **locals keep the `__c_` spelling** (`$__c_fn`, `$__c_sv`), and this
-  is not an oversight: lambda bodies and quoted filter references compile to `static`
-  closures, where `$this` is unbound, so `$__c_sv` is the only form reachable there.
+  The render-frame **locals keep the `__c_` spelling** (`$__c_fn`, `$__c_sv`): they are
+  the spelling the engine's own snippets use and the one a module may rely on.
   `render()` unpacks each local from its property only when the compiled body actually
-  references it, so a template that touches neither pays nothing. Use
-  `$this->services['key']` in a directive handler (which always emits into `render()`)
-  and `$__c_sv['key']` in an inline filter that may also be referenced as a quoted name.
+  references it, so a template that touches neither pays nothing. Every position the
+  compiler emits a handler's code — a directive body, or a closure it wraps a lambda
+  body or quoted filter reference in — reaches the same table through either spelling.
   The `'this'` variable can still not be reached from a template: the `__c_` prefix
   remains reserved, and `services`/`functions` are ordinary property names that
   `extract($__c_va, EXTR_SKIP)` cannot collide with. `COMPILER_VERSION` moves 26 → 27,

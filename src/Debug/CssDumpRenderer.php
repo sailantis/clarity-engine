@@ -30,7 +30,7 @@ final class CssDumpRenderer implements DumpRenderer
 
     private function maskValue(mixed $value, DumpOptions $opts, int $depth): mixed
     {
-        if ($depth >= $opts->maxDepth) {
+        if ($depth >= $opts->getMaxDepth()) {
             return '…';
         }
 
@@ -52,7 +52,7 @@ final class CssDumpRenderer implements DumpRenderer
     private function isMasked(string $key, DumpOptions $opts): bool
     {
         $lower = \strtolower($key);
-        foreach ($opts->maskKeys as $mask) {
+        foreach ($opts->getMaskKeys() as $mask) {
             if (\str_contains($lower, \strtolower((string) $mask))) {
                 return true;
             }

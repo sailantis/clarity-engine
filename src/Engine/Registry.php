@@ -11,7 +11,7 @@ use Stringable;
  *
  * The registry answers THREE independent questions, each with its own table:
  *
- *   - {@see $inlineFilters} — HOW does the name compile? (a `php` codegen
+ *   - {@see $inlineDefinitions} — HOW does the name compile? (a `php` codegen
  *     template, or nothing)
  *   - {@see $filters}       — IS the name pipeable? (`value |> name`)
  *   - {@see $callables}     — what do we invoke at RUNTIME? (the `$__c_fn` table)
@@ -23,8 +23,8 @@ use Stringable;
  * runtime never re-checks it.
  *
  * User code registers filters via {@see addFilter()}, functions via
- * {@see addFunction()}, and compiled filter templates via
- * {@see addInlineFilter()}.
+ * {@see addFunction()}, compiled filter templates via {@see addInlineFilter()},
+ * and compiled call-only functions via {@see addInlineFunction()}.
  *
  * Built-in Filters Catalog
  * -------------------------
@@ -221,17 +221,26 @@ class Registry
     ];
 
     /**
-     * INLINE filter templates, keyed by name — the codegen half of the registry.
+     * INLINE codegen templates, keyed by name — the compile-time half of the
+     * registry.
      *
      * Every record here answers exactly one question: *how does this name
-     * compile?* A name in this table is both pipeable and callable, because the
-     * same `php` template backs both forms (only the slot assignment differs),
-     * so its presence is itself the declaration.
+     * compile?* Names that must be DISPATCHED at runtime never appear here;
+     * they live in {@see $callables} instead.
      *
-     * This table is deliberately named after the public API that manages it
-     * ({@see addInlineFilter()}, {@see hasInlineFilter()}, {@see getInlineFilter()}).
-     * Names that must be DISPATCHED at runtime never appear here; they live in
-     * {@see $callables} instead.
+     * A record is BOTH pipeable and callable by default, because the same `php`
+     * template backs both forms (only the slot assignment differs). A record
+     * that sets its `filter` flag to false is a call-only inline FUNCTION: the
+     * template still backs `name(…)`, but the name is refused under the pipe.
+     * That is the one shape that cannot be derived from the other two tables —
+     * `context` / `include` are call-only by being callables absent from
+     * {@see $filters}, whereas `isset` is call-only while having no callable at
+     * all.
+     *
+     * This table is deliberately named after the public API that manages it:
+     * {@see addInlineFilter()} registers a filter (the default), and
+     * {@see addInlineFunction()} registers a call-only function on top of the
+     * same record shape.
      *
      * Record schema
      * -------------
@@ -244,6 +253,14 @@ class Registry
      *   variadic   true for `sprintf`-style filters taking a trailing arg list.
      *   valueParam Name of the parameter that receives the piped value in the
      *              filter form. Absent means slot `{1}` (the value leads).
+     *   filter     false for a CALL-ONLY inline function (`isset`): the name
+     *              answers call syntax and is refused under `|>`. Defaults to
+     *              true, so a record that omits it is a filter, as before.
+     *   callGuard  (optional) name of a validation applied to the RAW first
+     *              argument of the CALL form, before it is compiled. `presence`
+     *              accepts only a bare name or a chain over one, which is the
+     *              operand grammar of `isset()`. Ignored by the filter form
+     *              (a call-only record has none).
      *
      * Aliases (`format` = `sprintf`, `e`/`esc` = `escape`) are separate keys
      * that point at the same definition. The `raw` filter, `dump()`/`dd()`
@@ -258,17 +275,19 @@ class Registry
      *   params?: list<string>,
      *   defaults?: array<string, string>,
      *   variadic?: bool,
-     *   valueParam?: string
+     *   valueParam?: string,
+     *   filter?: bool,
+     *   callGuard?: string
      * }>
      */
-    private array $inlineFilters = [];
+    private array $inlineDefinitions = [];
 
     /**
      * Names that are PIPEABLE (`value |> name`) without an inline template.
      *
      * These are the runtime-callable filters: `map`, `slug`, `keys`, … They have
      * no `php` codegen record, so filterability cannot be derived from
-     * {@see $inlineFilters} — it is declared here, as a plain set, and the
+     * {@see $inlineDefinitions} — it is declared here, as a plain set, and the
      * runtime table supplies the implementation.
      *
      * The separation is deliberate: a name's reachability under the pipe is a
@@ -299,7 +318,7 @@ class Registry
      * This is a SOURCE table, not a derived cache. Writing the callable here
      * instead of inside a compile-time record means the hot path needs no
      * extraction step at all — the engine simply reads this array. The tables
-     * are intentionally not synced: {@see $inlineFilters} holds codegen, this
+     * are intentionally not synced: {@see $inlineDefinitions} holds codegen, this
      * one holds behaviour.
      *
      * @var array<string, callable>
@@ -310,8 +329,9 @@ class Registry
      * Non-callable service objects stored under a named key and passed into
      * compiled templates via the `$__c_sv` array.
      *
-     * Modules use this to inject shared state (e.g. a locale stack) that inline
-     * filter PHP templates can access as `$__c_sv['__key']->method()`.
+     * Modules use this to inject shared state (e.g. a locale stack) that
+     * compiled template render bodies can access as `$__c_sv['key']->method()`
+     * or, equivalently, as `$this->services['key']->method()`.
      *
      * @var array<string, mixed>
      */
@@ -358,7 +378,7 @@ class Registry
     }
 
     /**
-     * Populate {@see $inlineFilters}, {@see $filters} and {@see $callables} with
+     * Populate {@see $inlineDefinitions}, {@see $filters} and {@see $callables} with
      * the built-ins.
      *
      * A name appears ONCE per question it answers. A `php` template makes a name
@@ -371,7 +391,7 @@ class Registry
         //
         // `{1}` is the piped value; `{2}`, `{3}`, … are the declared `params`.
         // Entries whose value param does not lead declare `valueParam` (Phase 2).
-        $this->inlineFilters += [
+        $this->inlineDefinitions += [
             'abs' => [
                 'php' => '\abs({1} + 0)',
             ],
@@ -406,6 +426,17 @@ class Registry
                 'php'      => '({1} ?: {2})',
                 'params'   => ['fallback'],
                 'defaults' => ['fallback' => '""'],
+            ],
+            // Call-only inline FUNCTION (`filter => false`): `isset(x)` answers
+            // presence, so it is never a filter. `x |> isset` would ask a
+            // different question than any template intends — the piped value is
+            // already an expression, so its answer is a constant. Like `defined`
+            // and `is null`, this is a compile-time presence probe rather than an
+            // operation on a value, so it belongs to call syntax only.
+            'isset' => [
+                'php' => 'isset({1})',
+                'filter' => false,
+                'callGuard' => 'presence',
             ],
             'escape' => [
                 'php' => '\htmlspecialchars({1}, \ENT_QUOTES | \ENT_SUBSTITUTE, "UTF-8")',
@@ -510,11 +541,11 @@ class Registry
         ];
 
         // `format` is an ALIAS of `sprintf`, kept for Twig parity.
-        $this->inlineFilters['format'] = $this->inlineFilters['sprintf'];
+        $this->inlineDefinitions['format'] = $this->inlineDefinitions['sprintf'];
 
         // escape family — `e` and `esc` are aliases of `escape`.
-        $this->inlineFilters['esc'] = $this->inlineFilters['escape'];
-        $this->inlineFilters['e']   = $this->inlineFilters['escape'];
+        $this->inlineDefinitions['esc'] = $this->inlineDefinitions['escape'];
+        $this->inlineDefinitions['e']   = $this->inlineDefinitions['escape'];
 
         // ── Runtime-callable filters (pipeable via $filters, dispatched via $callables) ──
 
@@ -815,11 +846,12 @@ class Registry
      * Check whether a named filter is registered — i.e. may be used with `|>`.
      *
      * True when the name has a runtime-backed filter declaration in
-     * {@see $filters}, or an inline template in {@see $inlineFilters} (which is
-     * pipeable by construction). A runtime callable alone is NOT enough:
-     * `context` and `include` are call-only builtins whose first argument is not
-     * a piped value, so they must not become filterable just by sharing the
-     * callable table.
+     * {@see $filters}, or an inline template in {@see $inlineDefinitions} whose
+     * `filter` flag is not false. A runtime callable alone is NOT enough, and
+     * neither is a CALL-ONLY inline function (`isset`): `context` and `include`
+     * are call-only builtins whose first argument is not a piped value, so they
+     * must not become filterable just by sharing the callable table; `isset` is
+     * call-only for the same reason (see {@see addInlineFunction()}).
      *
      * `dump` is pipeable even though its callable is not value-first: it is
      * declared in {@see $filters}, and the compiler emits a pass-through probe
@@ -827,7 +859,19 @@ class Registry
      */
     public function hasFilter(string $name): bool
     {
-        return isset($this->filters[$name]) || isset($this->inlineFilters[$name]);
+        return isset($this->filters[$name]) || $this->hasFilterableInline($name);
+    }
+
+    /**
+     * True when the name has an inline template that backs the PIPE form.
+     *
+     * Every inline record is a filter unless it opts out with `filter => false`,
+     * which is what makes a call-only inline function call-only.
+     */
+    private function hasFilterableInline(string $name): bool
+    {
+        return isset($this->inlineDefinitions[$name])
+            && ($this->inlineDefinitions[$name]['filter'] ?? true) !== false;
     }
 
     /**
@@ -862,37 +906,81 @@ class Registry
      *
      * Registering an inline template makes the name BOTH pipeable and callable
      * (the same template backs both forms), so nothing else has to be declared.
+     * For a template that must stay call-only, use {@see addInlineFunction()}.
      *
      * @param string $name       Filter name used in templates.
-     * @param array{php: string, params?: string[], defaults?: array<string, string>, variadic?: bool, valueParam?: string} $definition
+     * @param array{php: string, params?: string[], defaults?: array<string, string>, variadic?: bool, valueParam?: string, filter?: bool} $definition
      */
     public function addInlineFilter(string $name, array $definition): void
     {
-        $this->inlineFilters[$name] = \array_replace($this->inlineFilters[$name] ?? [], $definition);
+        $this->inlineDefinitions[$name] = \array_replace($this->inlineDefinitions[$name] ?? [], $definition);
     }
 
     /**
-     * Check whether a named inline (compile-time) filter is registered.
+     * Register an inline FUNCTION that is compiled directly into the generated
+     * PHP but can NOT be used with the pipe operator.
+     *
+     * `addInlineFunction()` is `addInlineFilter()` with the `filter` flag turned
+     * off: the same `{1}`-templated codegen backs `name(...)`, while
+     * `value |> name` is refused at compile time with the same message a
+     * call-only runtime function gets (“… is a function, not a filter”).
+     *
+     * It exists for forms whose argument is not a value to be transformed but a
+     * piece of SOURCE the compiler must see, so there is no meaningful piped
+     * form: `isset(x)` is a presence probe on a variable chain, and piping into
+     * it would always be asking whether an expression exists.
+     *
+     * The `php` template is emitted verbatim around its compiled arguments, so a
+     * definition takes on the same restrictions as the PHP construct it mirrors —
+     * `isset()` accepts only a variable or a chain over one, and a template whose
+     * FIRST argument is an expression is a compile-time error, not a PHP fatal.
+     *
+     * @param string $name       Function name used in templates.
+     * @param array{php: string, params?: string[], defaults?: array<string, string>, variadic?: bool, valueParam?: string, filter?: bool, callGuard?: string} $definition
+     */
+    public function addInlineFunction(string $name, array $definition): void
+    {
+        $definition['filter'] = false;
+        $this->inlineDefinitions[$name] = \array_replace($this->inlineDefinitions[$name] ?? [], $definition);
+    }
+
+    /**
+     * Check whether a named inline (compile-time) template is registered.
+     *
+     * This asks whether the name has ANY codegen record, filter or call-only
+     * function alike. Use {@see hasFilter()} to ask whether it may be piped.
      */
     public function hasInlineFilter(string $name): bool
     {
-        return isset($this->inlineFilters[$name]);
+        return isset($this->inlineDefinitions[$name]);
     }
 
     /**
-     * Get the compile-time definition of a named inline filter.
+     * Check whether a named inline template is a CALL-ONLY inline function —
+     * callable but not pipeable (registered via {@see addInlineFunction()}).
+     */
+    public function isInlineFunction(string $name): bool
+    {
+        return isset($this->inlineDefinitions[$name])
+            && ($this->inlineDefinitions[$name]['filter'] ?? true) === false;
+    }
+
+    /**
+     * Get the compile-time definition of a named inline template.
      *
      * Only `php`-templated names are returned; a purely callable filter has no
-     * codegen template and yields null.
+     * codegen template and yields null. Call-only inline functions are included:
+     * the compiler needs the record to compile their call form.
      */
     public function getInlineFilter(string $name): ?array
     {
-        return $this->inlineFilters[$name] ?? null;
+        return $this->inlineDefinitions[$name] ?? null;
     }
 
     /**
      * Store a non-callable service object under a named key so that compiled
-     * template render bodies can access it via `$__c_sv['key']->method()`.
+     * template render bodies can access it via `$__c_sv['key']->method()` or
+     * `$this->services['key']->method()`.
      *
      * The key is conventionally prefixed with `__` to avoid collisions with
      * real filter names (e.g. `__locale`, `__translator`).
@@ -947,7 +1035,7 @@ class Registry
      * `$__c_fn` and dispatch BOTH the pipe form and the call form through it
      * (`$__c_fn['slug'](…)`). There is no runtime filter table, because whether
      * a name may be piped is a *compile-time* decision ({@see $filters} +
-     * {@see $inlineFilters}) enforced by the compiler — the runtime does not
+     * {@see $inlineDefinitions}) enforced by the compiler — the runtime does not
      * need to re-check it.
      *
      * Every registration that must be dispatched at runtime is present
@@ -987,7 +1075,8 @@ class Registry
      * Check whether a named function (call syntax) is registered.
      *
      * Any name with something to call — a runtime callable, or an inline `php`
-     * template (which compiles to the call itself) — is callable.
+     * template (which compiles to the call itself), call-only or not — is
+     * callable.
      */
     public function hasFunction(string $name): bool
     {
@@ -999,7 +1088,7 @@ class Registry
      */
     public function hasCallable(string $name): bool
     {
-        return isset($this->callables[$name]) || isset($this->inlineFilters[$name]);
+        return isset($this->callables[$name]) || isset($this->inlineDefinitions[$name]);
     }
 
     /**

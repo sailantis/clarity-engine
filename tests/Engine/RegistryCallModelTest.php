@@ -8,7 +8,7 @@ use Clarity\Tests\TestEnvironment;
 /**
  * Registry-level invariants for the unified call model.
  *
- * The registry keeps three independent tables: `$inlineFilters` (codegen),
+ * The registry keeps three independent tables: `$inlineDefinitions` (codegen),
  * `$filters` (the pipeable set) and `$callables` (the runtime name → callable
  * map handed to templates as `$__c_fn`). Whether a name may be PIPED is a
  * *compile-time* question — see {@see CallSyntaxTest} for the behavioural guard
@@ -50,6 +50,55 @@ class RegistryCallModelTest extends BaseTestCase
                 "'{$name}' must still be callable"
             );
         }
+    }
+
+    /**
+     * `isset` is the one CALL-ONLY INLINE function: it has codegen but no
+     * callable, and its record sets `filter => false`, so it is reachable as
+     * `isset(x)` and refused as `x |> isset`. It is the shape the two older
+     * tables cannot express — callable without being a runtime callable, and
+     * call-only without being in the pipeable set.
+     */
+    public function testIsSetIsACallOnlyInlineFunction(): void
+    {
+        $registry = TestEnvironment::registry();
+
+        $this->assertTrue($registry->hasFunction('isset'), "'isset' must be callable");
+        $this->assertTrue($registry->hasCallable('isset'), "'isset' must be reachable by call syntax");
+        $this->assertTrue($registry->hasInlineFilter('isset'), "'isset' has codegen");
+        $this->assertTrue($registry->isInlineFunction('isset'), "'isset' is a call-only inline function");
+        $this->assertFalse($registry->hasFilter('isset'), "'isset' must NOT be filterable");
+        $this->assertNull($registry->getCallable('isset'), "'isset' must not have a runtime callable");
+        $this->assertArrayNotHasKey(
+            'isset',
+            $registry->allCallables(),
+            "'isset' compiles inline and must not be in the runtime table"
+        );
+    }
+
+    public function testAddInlineFunctionRegistersCallOnlyCodegen(): void
+    {
+        $registry = new Registry();
+
+        $registry->addInlineFunction('probe_fn', ['php' => 'probe({1})']);
+
+        $this->assertTrue($registry->hasCallable('probe_fn'));
+        $this->assertTrue($registry->isInlineFunction('probe_fn'));
+        $this->assertFalse($registry->hasFilter('probe_fn'), 'an inline function is not a filter');
+        $this->assertArrayNotHasKey('probe_fn', $registry->allCallables());
+    }
+
+    public function testAddInlineFunctionOverridesAFilterRegistration(): void
+    {
+        $registry = new Registry();
+
+        $registry->addInlineFilter('probe_toggle', ['php' => '({1})']);
+        $this->assertTrue($registry->hasFilter('probe_toggle'));
+
+        $registry->addInlineFunction('probe_toggle', ['php' => '({1})']);
+
+        $this->assertFalse($registry->hasFilter('probe_toggle'));
+        $this->assertTrue($registry->isInlineFunction('probe_toggle'));
     }
 
     /**

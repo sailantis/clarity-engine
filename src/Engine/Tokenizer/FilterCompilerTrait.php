@@ -277,19 +277,20 @@ trait FilterCompilerTrait
 
         $isCallableFilter = isset(self::CALLABLE_ARG_FILTERS[$name]);
         $isRegistered     = $isCallableFilter
-            || ($this->registry !== null && ($this->registry->hasInlineFilter($name) || $this->registry->hasFilter($name)));
+            || ($this->registry !== null && $this->registry->hasFilter($name));
 
         // A name that is callable but NOT filterable (`context`, `include`,
-        // `dd`) was registered for call syntax only; its first parameter is not
-        // a piped value. Rejecting it here turns `{{ x |> context }}` into a
-        // clear compile-time error in BOTH modes — the runtime table no longer
-        // carries these names, so without this guard the failure would surface
-        // as an opaque "call to undefined array key" mid-render.
+        // `dd`, and the call-only inline function `isset`) was registered for
+        // call syntax only; its first parameter is not a piped value. Rejecting
+        // it here turns `{{ x |> context }}` into a clear compile-time error in
+        // BOTH modes — the runtime table does not carry these names, so without
+        // this guard the failure would surface as an opaque "call to undefined
+        // array key" mid-render.
         if (
             $this->registry !== null
-                && !$isRegistered
-                && $this->registry->hasCallable($name)
-                && !$this->registry->hasFilter($name)
+            && !$isRegistered
+            && $this->registry->hasCallable($name)
+            && !$this->registry->hasFilter($name)
         ) {
             throw new ClarityException(
                 "'{$name}' is a function, not a filter; call it as {$name}(…)."
@@ -556,6 +557,16 @@ trait FilterCompilerTrait
             return null;
         }
 
+        // A CALL-ONLY inline function (`isset`) has no piped form. This is the
+        // shared entry point for the filter form and for a quoted filter
+        // reference (`map(items, "isset")`), so both are refused here rather than
+        // compiling to code that ignores the piped value.
+        if (($definition['filter'] ?? true) === false) {
+            throw new ClarityException(
+                "'{$name}' is a function, not a filter; call it as {$name}(…)."
+            );
+        }
+
         [$positionalArgs, $namedArgs] = $this->compileFilterArguments($argList);
 
         if (($definition['variadic'] ?? false) === true) {
@@ -584,11 +595,83 @@ trait FilterCompilerTrait
      *
      * @param string[] $argList Raw, comma-split argument strings.
      */
+    /**
+     * Validate a call-only inline function's COMPILED first argument against a
+     * named guard.
+     *
+     * A guard exists because some constructs reject operands at the PHP lexer
+     * level, where no amount of well-formed generated code can help: `isset($a)`
+     * is legal, `isset(1 + 1)` is a compile error in PHP itself (“Cannot use
+     * isset() on the result of an expression”). Detecting that shape while
+     * compiling the template reports it against the template line instead of
+     * letting a fatal escape from the compiled cache file.
+     *
+     * Guards
+     * ------
+     *   presence  the argument must be a variable or a chain over one
+     *             (`$v['k']`, `$v->p->q`). Anything else — a literal, an
+     *             arithmetic result, a ternary, a closure — cannot appear inside
+     *             `isset()`.
+     *
+     * Run on the COMPILED operand, not the template source, so the answer does
+     * not depend on which source operator produced the read.
+     */
+    private function assertInlineCallArgument(string $name, ?string $compiled, string $guard): void
+    {
+        if ($compiled === null) {
+            throw new ClarityException(
+                "{$name}() requires exactly one argument."
+            );
+        }
+        if ($guard !== 'presence') {
+            return;
+        }
+
+        if (!\preg_match(self::PRESENCE_OPERAND_RE, $compiled)) {
+            throw new ClarityException(
+                "'{$name}' needs a name or a name chain (e.g. {$name}(user:email)); "
+                    . 'it asks whether a value exists, so it cannot take an arbitrary expression.'
+            );
+        }
+    }
+
+    /**
+     * A variable or a chain over one, as the compiler emits it:
+     * `$v`, `$v['k']`, `$v->p`, `$v->p?->q`, `$v['a']['b'][0]`.
+     *
+     * Mirrors the operand grammar of PHP's `isset()`: a variable, or a chain of
+     * property / key / index steps over one. The optional `?->` keeps an
+     * optional segment (`a?.b`) — it compiles to a nullsafe read, which is still
+     * a legal `isset()` operand.
+     */
+    private const PRESENCE_OPERAND_RE = '/^\$[A-Za-z_\x80-\xff][A-Za-z0-9_\x80-\xff]*(?:(?:\?->|->)[A-Za-z_\x80-\xff][A-Za-z0-9_\x80-\xff]*|\[[^\]]*\])*$/';
+
     private function buildInlineCallForm(string $name, array $argList): ?string
     {
         $definition = $this->registry->getInlineFilter($name);
         if ($definition === null) {
             return null;
+        }
+
+        // A GUARDED inline function compiles its first argument as a plain
+        // EXPRESSION, bypassing the named-argument parser. A chain such as
+        // `user:email` is a legal operand — it compiles to `$__c_va['user']['email']`
+        // — but `identifier:expression` reads as a named argument to that parser,
+        // which would leave the operand slot empty. The guard then validates the
+        // COMPILED read against the construct's own operand grammar, so `isset()`
+        // is refused a literal or an arithmetic result at compile time instead of
+        // emitting PHP that cannot parse (Cannot use isset() on the result of an
+        // expression).
+        if (isset($definition['callGuard'])) {
+            if (isset($argList[1])) {
+                throw new ClarityException(
+                    "{$name}() requires exactly one argument."
+                );
+            }
+            $compiled = isset($argList[0]) ? $this->processCondition(\trim($argList[0])) : null;
+            $this->assertInlineCallArgument($name, $compiled, $definition['callGuard']);
+
+            return $this->substituteInlineFilterTemplate($definition['php'], [1 => (string) $compiled]);
         }
 
         [$positionalArgs, $namedArgs] = $this->compileFilterArguments($argList);

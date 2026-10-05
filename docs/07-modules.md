@@ -11,14 +11,14 @@ Pass any `ModuleInterface` implementation to `$engine->use()`:
 
 ```php
 $engine->use(new MyModule());
-$engine->use(new IntlFormatModule(['locale' => 'de_DE']));
+$engine->use(new IntlFormatModule(['locale' => 'sv_SE']));
 ```
 
 `use()` returns the engine instance, so calls can be chained:
 
 ```php
 $engine
-    ->use(new LocaleService(['locale' => 'de_DE']))
+    ->use(new LocaleService(['locale' => 'nb_NO']))
     ->use(new TranslationModule(['translations_path' => __DIR__ . '/locales']))
     ->use(new IntlFormatModule());
 ```
@@ -45,10 +45,15 @@ class MyModule implements ModuleInterface
             'php' => '({1} * 2)',
         ]);
 
+        // Inline FUNCTION: same codegen, but call-only (no `|>` form)
+        $engine->addInlineFunction('present', [
+            'php'       => 'isset({1})',
+            'callGuard' => 'presence',
+        ]);
+
         $engine->addFunction('asset', fn(string $path) => '/assets/' . ltrim($path, '/'));
 
         // Shared service, read in template and directive PHP as $this->services['myapi']
-        // (or $__c_sv['myapi'] — the local that also works inside an emitted static fn)
         $engine->addService('myapi', new MyApiClient($this->apiKey));
 
         // Custom directive
@@ -56,7 +61,7 @@ class MyModule implements ModuleInterface
         $engine->addDirective(
             'debug_if',
             function (string $rest, TemplateLocation $at, callable $processExpr): string {
-                return 'if (' . $processExpr($rest) . ' && $__c_sv["checkDebug"]()) {';
+                return 'if (' . $processExpr($rest) . ' && $this->services["checkDebug"]()) {';
             },
             Directive::opens('debug_endif')   // pair the closer so the compiler checks it
         );
@@ -71,6 +76,7 @@ class MyModule implements ModuleInterface
 | ----------------------------------- | ------------------------------------------------------------------------------- |
 | `addFilter(name, callable)`         | Named filter callable invoked at render time                                    |
 | `addInlineFilter(name, definition)` | Filter expression compiled directly into the template PHP                       |
+| `addInlineFunction(name, definition)` | The same, call-only: callable but refused under `|>`                          |
 | `addFunction(name, callable)`       | Function callable available in template expressions                              |
 | `addDirective(keyword, handler)`    | Custom `{% keyword %}` directive processed at compile time                      |
 | `addDirective(keyword, handler, Directive)` | The same, with a role the compiler validates (a paired construct or containment) |

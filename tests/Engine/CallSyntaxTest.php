@@ -459,6 +459,8 @@ class CallSyntaxTest extends BaseTestCase
             'vars'    => ['vars'],
             'include' => ['include'],
             'dd'      => ['dd'],
+            // A call-only INLINE function: codegen, but no pipe form.
+            'isset'   => ['isset'],
         ];
     }
 
@@ -478,6 +480,20 @@ class CallSyntaxTest extends BaseTestCase
         $this->expectException(ClarityException::class);
         $this->expectExceptionMessageMatches('/is not a filter; it is a function/');
         self::render('cs_ref_callonly', ['items' => [1, 2]]);
+    }
+
+    /**
+     * A call-only INLINE function is refused as a quoted reference too: `map`
+     * would invoke it per element, but its operand is a variable chain, not the
+     * element `map` would pass.
+     */
+    public function testCallOnlyInlineFunctionRejectedAsFilterReference(): void
+    {
+        self::tpl('cs_ref_callonly_isset', '{{ map(items, "isset") }}');
+
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/is a function, not a filter/');
+        self::render('cs_ref_callonly_isset', ['items' => [1, 2]]);
     }
 
     /**
@@ -543,10 +559,10 @@ class CallSyntaxTest extends BaseTestCase
     // =========================================================================
 
     /**
-     * The lambda closure captures $__c_va unconditionally. $__c_fn and $__c_sv
-     * are render-frame LOCALS rather than parameters, so a body that uses them
-     * must ALSO capture them — otherwise it fatals at render time with
-     * "Variable $__c_fn is not defined".
+     * The lambda closure binds `$__c_va` (the outer variables) and the registry
+     * locals it reaches implicitly, because it is an arrow function. A body that
+     * pipes through a runtime callable must therefore see the callable table; this
+     * used to depend on a hand-computed `use` clause.
      *
      * @dataProvider registryUsingLambdaBodies
      */
@@ -554,6 +570,10 @@ class CallSyntaxTest extends BaseTestCase
     {
         self::tpl($view, $src);
         $this->assertSame($expected, self::render($view, $vars));
+
+        // The emitted closure is an arrow function: it binds EVERYTHING the body
+        // names, so a body reaching the registry needs no `use` clause.
+        $this->assertStringNotContainsString('use (', $this->compiledSource($view));
     }
 
     public static function registryUsingLambdaBodies(): array
@@ -575,29 +595,31 @@ class CallSyntaxTest extends BaseTestCase
         ];
     }
 
-    public function testLambdaCaptureIsOnlyAddedWhenNeeded(): void
+    /**
+     * Emission shape of a lambda closure: an arrow function binds its captures
+     * implicitly, so the emitted body never carries a `use` clause — and a body
+     * that reaches the registry binds `$__c_fn` all the same.
+     */
+    public function testEmittedLambdaIsAnArrowFunctionWithoutUseClause(): void
     {
-        // An inline-only body needs no registry, so the closure must not capture
-        // $__c_fn — keeping the emitted closure as small as possible.
         self::tpl('cs_lam_capture_min', '{{ map(items, x => x |> upper) |> join(",") }}');
         self::render('cs_lam_capture_min', ['items' => ['a']]);
 
-        $compiled = $this->compiledSource('cs_lam_capture_min');
-        $this->assertStringContainsString('use ($__c_va): mixed', $compiled);
-        $this->assertStringNotContainsString('use ($__c_va, $__c_fn)', $compiled);
+        $this->assertStringContainsString(
+            'fn(mixed $x): mixed =>',
+            $this->compiledSource('cs_lam_capture_min')
+        );
     }
 
-    public function testLambdaCapturesRegistryWhenBodyNeedsIt(): void
+    public function testLambdaBodyReachingTheRegistryEmitsTheRegistryLookup(): void
     {
         self::tpl('cs_lam_capture_fn', '{{ map(items, x => x |> slug) |> join(",") }}');
-        self::render('cs_lam_capture_fn', ['items' => ['a b']]);
+        self::assertSame('a-b', self::render('cs_lam_capture_fn', ['items' => ['a b']]));
 
         $compiled = $this->compiledSource('cs_lam_capture_fn');
-        $this->assertStringContainsString(
-            'use ($__c_va, $__c_fn): mixed',
-            $compiled,
-            'a body reaching the registry must capture $__c_fn'
-        );
+        // The body dispatches through the ONE callable table, and the closure is
+        // an arrow function, so no capture clause is involved.
+        $this->assertStringContainsString("\$__c_fn['slug'](\$x)", $compiled);
     }
 
     public function testSingleRegistryIsEmittedNotTwo(): void

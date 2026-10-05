@@ -752,6 +752,24 @@ In production (`debug` off) **every** form is eliminated: the call is pruned to
 `''` and the filter/reference forms collapse to the identity, so nothing is
 dumped and nothing is added.
 
+### isset(name)
+
+Checks whether a name or property/index chain has a non-`null` value:
+
+```twig
+{{ isset(user:email) }}          {# true when the key is present and not null #}
+{{ isset(user.profile.avatar) }} {# object property chain #}
+{{ isset(items[0]) }}            {# array index #}
+```
+
+An absent name returns `false` without raising the “Variable … is not defined”
+error produced by a strict read. This matches `name is defined`: a `null` value
+is considered unset, consistent with `isset()` behavior.
+
+`isset` is an inline function that must be called directly. The compiler must
+inspect its operand as source code (a variable chain), so it cannot be piped:
+`{{ name |> isset }}` is a compile-time error. The compiler validates the operand, so a non-chain such as `isset(1 + 1)` produces a template-located error instead of a PHP fatal in the compiled cache file.
+
 ### keys(array)
 
 Get array keys:
@@ -907,6 +925,38 @@ Use in template:
 
 > **Note:** Functions registered with `addFunction()` cannot be used as filters.
 
+### Inline Functions
+
+`addFunction()` dispatches a callable at render time. When the operation is a
+plain PHP expression, `addInlineFunction()` compiles it directly into the
+generated template — no callable, no dispatch — while keeping the call-only
+rule:
+
+```php
+$engine->addInlineFunction('present', [
+    'php'    => 'isset({1})',
+    'callGuard' => 'presence',
+]);
+```
+
+```twig
+{{ present(user:email) }}   {# compiles to isset($__c_va['user']['email']) #}
+{{ user:email |> present }} {# compile error: it is a function, not a filter #}
+```
+
+The record has the same shape as an inline filter (`php`, `params`, `defaults`,
+`variadic`, `valueParam`) plus two call-only members:
+
+| Key         | Meaning                                                                                     |
+| ----------- | ------------------------------------------------------------------------------------------- |
+| `filter`    | Always set to `false` by this method — the name is answered by call syntax only.            |
+| `callGuard` | Optional validation of the first argument. `presence` accepts only a name or a chain over one. |
+
+A `callGuard` runs on the **compiled** operand, so every access operator works:
+`user:email`, `user.email` and `items[0]` are all legal `presence` operands,
+while `present(1 + 1)` is refused at compile time with a located error (PHP's
+own `isset()` would otherwise fail to parse the compiled file).
+
 ## Named Arguments
 
 Clarity filters accept named arguments using the `param:value` syntax. This is especially useful for filters with multiple optional parameters:
@@ -1011,8 +1061,8 @@ governed by the `rawPhp` rule. See [The Policy API](09-policy-api.md) for detail
 | `raw`              | Disable auto-escaping  | `{{ html \|> raw }}`                                     |
 
 > **Note:** Every name above is also callable with parentheses; the value that would be piped becomes the first argument, except `date` and `join`, whose call form mirrors PHP (see [One call model](#one-call-model-two-signatures)).  
-> The opposite is not true: a few names are **call-only** because their first argument is not a piped value — `vars`, `include` and `dd`.  
-> Writing `{{ x |> vars }}` is a compile error; call them instead (`{{ vars() }}`).  
+> The opposite is not true: a few names are **call-only** because their first argument is not a piped value — `vars`, `include`, `dd` and the inline function `isset`.  
+> Writing `{{ x |> vars }}` or `{{ x |> isset }}` is a compile error; call them instead (`{{ vars() }}`, `{{ isset(x) }}`).  
 > `dump` is an exception: it is both callable and pipeable, because its filter form is a pass-through probe rather than a dispatch of the callable. All three `dump` forms — the call, the pipe step and the quoted reference — are eliminated in production.
 
 ## Next Steps

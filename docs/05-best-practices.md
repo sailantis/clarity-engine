@@ -128,7 +128,8 @@ Auto-escaping protects against XSS by default.
 **Bad:**
 
 ```twig
-{# Don't sanitize in templates #} {{ userBio |> strip_tags |> raw }}
+{# Don't sanitize in templates #}
+{{ userBio |> strip_tags |> raw }}
 ```
 
 **Good:**
@@ -141,7 +142,8 @@ $engine->render('profile', ['userBio' => $sanitized]);
 ```
 
 ```twig
-{# Template assumes clean data #} {{ userBio |> raw }}
+{# Template assumes clean data #}
+{{ userBio |> raw }}
 ```
 
 ### Validate File Paths
@@ -183,7 +185,7 @@ template receives data in the shape it expects:
 ```php
 // Good: validate and give the template a defined value
 $engine->render('search', [
-    'query' => trim($_GET['q'] ?? ''),
+    'query' => trim((string) ($_GET['q'] ?? '')),
 ]);
 ```
 
@@ -194,7 +196,11 @@ $engine->render('search', [
 **Bad: Complex logic in templates**
 
 ```twig
-{% set filteredUsers = users |> filter(u => u:age >= 18 and u:active and u:role == 'member') |> map(u => { name: u:firstName ~ ' ' ~ u:lastName, email: u:email |> lower, joined: u:createdAt |> date('Y-m-d') }) %}
+{% set filteredUsers = users
+    |> filter(u => u:age >= 18 and u:active and u:role == 'member')
+    |> map(u => { name: u:firstName ~ ' ' ~ u:lastName, email: u:email
+        |> lower, joined: u:createdAt
+        |> date('Y-m-d') }) %}
 ```
 
 **Good: Logic in PHP**
@@ -206,7 +212,8 @@ $filteredUsers = array_map(function($u) {
         'email' => strtolower($u->email),
         'joined' => date('Y-m-d', $u->createdAt),
     ];
-}, array_filter($users, fn($u) => $u->age >= 18 && $u->active && $u->role === 'member'));
+}, array_filter($users, fn($u) =>
+    $u->age >= 18 && $u->active && $u->role === 'member'));
 
 $engine->render('users', ['users' => $filteredUsers]);
 ```
@@ -293,72 +300,6 @@ Use consistent indentation (2 or 4 spaces):
 ```twig
 {{variable}}
 {%for item in items%}
-```
-
-## Data Handling
-
-### Pass Only Required Data
-
-**Bad: Passing entire objects**
-
-```php
-$engine->render('profile', [
-    'user' => $user,  // Entire User object
-    'app' => $app,    // Entire App object
-]);
-```
-
-**Good: Pass specific fields**
-
-```php
-$engine->render('profile', [
-    'userName' => $user->getName(),
-    'userEmail' => $user->getEmail(),
-    'userAvatar' => $user->getAvatarUrl(),
-]);
-```
-
-### Normalize Data Structure
-
-Provide consistent structures:
-
-```php
-// Good: Consistent array structure
-$products = array_map(function($p) {
-    return [
-        'id' => $p->id,
-        'name' => $p->name,
-        'price' => $p->price,
-        'inStock' => $p->stock > 0,
-    ];
-}, $productList);
-```
-
-Templates can rely on this structure:
-
-```twig
-{% for product in products %}
-<div>
-  {{ product:name }} - {% if product:inStock %}In Stock{% else %}Out of Stock{%
-  endif %}
-</div>
-{% endfor %}
-```
-
-### Handle Nulls Gracefully
-
-Use `default` filter:
-
-```twig
-{{ user:nickname |> default(user:name) }}
-{{ customMessage |> default('No message provided') }}
-```
-
-Or use the null coalescing operator:
-
-```twig
-{{ user:avatar ?? '/images/default-avatar.png' }}
-{{ customMessage ?? 'No message provided' }}
 ```
 
 ## Testing Templates
@@ -460,8 +401,8 @@ while debug mode is on; outputs nothing in production):
 ### Check Variable Existence
 
 ```twig
-{% if user %}
-    <p>User exists: {{ user:name }}</p>
+{% if user is defined %}
+    <p>User exists: {{ user.name }}</p>
 {% else %}
     <p>No user provided</p>
 {% endif %}

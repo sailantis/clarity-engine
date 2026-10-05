@@ -213,16 +213,16 @@ class Tokenizer
     /**
      * Stack of lambda PARAMETER frames, innermost LAST.
      *
-     * A lambda is emitted as a `static function (...) use (...) { … }`, so the
-     * render scope's locals are not in scope inside it: a root must keep reading
+     * A lambda is emitted as an arrow function (`fn(…) => …`), so the render
+     * scope's locals are not in scope inside it: a root must keep reading
      * `$__c_va`. A lambda PARAMETER, however, IS a real local — and because
      * lambdas NEST (`map(rows, r => map(r.vals, v => v ~ r.name))`), a parameter
      * of an enclosing lambda stays visible to the body being compiled.
      *
      * So a root name matching a parameter of ANY enclosing frame is emitted as
-     * the bare `$name`: the closure that declares it is the enclosing one, and
-     * PHP binds it lexically. An empty stack means "not inside a lambda", which
-     * is also what the former `inLambda` boolean expressed.
+     * the bare `$name`: the arrow function that declares it is the enclosing
+     * one, and PHP binds it lexically. An empty stack means "not inside a
+     * lambda", which is also what the former `inLambda` boolean expressed.
      *
      * @var list<array<string, true>>
      */

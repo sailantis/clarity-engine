@@ -298,6 +298,12 @@ namespace PHPSTORM_META
             'description' => 'Debug dump and die. Never pruned, so it requires debug mode: with debug off it throws instead of dumping raw values.',
             'example'     => '{{ dd(x) }}',
         ],
+        'isset' => [
+            'return'      => 'bool',
+            'params'      => [['name']],
+            'description' => 'Whether a name or a name chain holds a value other than null.',
+            'example'     => '{{ isset(user:email) }}',
+        ],
         'keys' => [
             'return'      => 'array',
             'params'      => [['map']],

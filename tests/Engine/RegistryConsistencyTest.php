@@ -9,7 +9,7 @@ use Clarity\Tests\BaseTestCase;
  * Structural invariants tying the three places a filter/function name can be
  * declared together:
  *
- *   1. `Registry::$inlineFilters` — codegen records (`php`, params, …)
+ *   1. `Registry::$inlineDefinitions` — codegen records (`php`, params, …)
  *   2. `Registry::$filters`       — the pipeable set (runtime-backed filters)
  *   3. `Registry::$callables`     — the runtime `$__c_fn` table
  *   4. `.phpstorm.meta.php`       — what the editor autocompletes
@@ -34,7 +34,7 @@ class RegistryConsistencyTest extends BaseTestCase
     /**
      * Filters the COMPILER intercepts before the registry is ever consulted.
      *
-     * They are legitimately absent from `$inlineFilters` while still being
+     * They are legitimately absent from `$inlineDefinitions` while still being
      * declared in the meta file, so the "meta ⊆ engine" check has to allow them.
      * `raw` only turns off auto-escaping for one output expression — it has no
      * callable and never reaches the runtime table.
@@ -138,7 +138,7 @@ class RegistryConsistencyTest extends BaseTestCase
     {
         $registry  = $this->fullRegistry();
         $filters   = $this->readPrivate($registry, 'filters');
-        $inline    = $this->readPrivate($registry, 'inlineFilters');
+        $inline    = $this->readPrivate($registry, 'inlineDefinitions');
         $callables = $this->readPrivate($registry, 'callables');
 
         // A name declared pipeable must be backed by something: a codegen
@@ -158,7 +158,7 @@ class RegistryConsistencyTest extends BaseTestCase
         // the entire reason for the table's existence. A record without one is
         // inert and would make hasInlineFilter()/getInlineFilter() disagree.
         $registry = $this->fullRegistry();
-        $inline   = $this->readPrivate($registry, 'inlineFilters');
+        $inline   = $this->readPrivate($registry, 'inlineDefinitions');
 
         foreach ($inline as $name => $definition) {
             $this->assertArrayHasKey(
@@ -185,10 +185,66 @@ class RegistryConsistencyTest extends BaseTestCase
         }
     }
 
+    /**
+     * A CALL-ONLY inline definition must be callable and must NOT be filterable:
+     * that pair is the whole point of the `filter => false` flag. A record that
+     * answered `hasFilter()` true would be reachable under `|>`, which its author
+     * declared meaningless.
+     */
+    public function testCallOnlyInlineDefinitionsAreCallableNotFilterable(): void
+    {
+        $registry = $this->fullRegistry();
+        $inline   = $this->readPrivate($registry, 'inlineDefinitions');
+
+        foreach ($inline as $name => $definition) {
+            if (($definition['filter'] ?? true) !== false) {
+                continue;
+            }
+
+            $this->assertTrue(
+                $registry->hasCallable($name),
+                "'{$name}' is a call-only inline definition but is not callable"
+            );
+            $this->assertFalse(
+                $registry->hasFilter($name),
+                "'{$name}' is a call-only inline definition but is filterable"
+            );
+            $this->assertArrayNotHasKey(
+                $name,
+                $this->readPrivate($registry, 'filters'),
+                "'{$name}' is call-only and must not be declared pipeable"
+            );
+        }
+    }
+
+    /**
+     * A call-only inline definition has no runtime callable: it compiles inline,
+     * so listing it in the runtime table would be dead weight the compiler never
+     * consults. `isset` is the only built-in in this shape.
+     */
+    public function testCallOnlyInlineDefinitionsHaveNoRuntimeCallable(): void
+    {
+        $registry = $this->fullRegistry();
+        $inline   = $this->readPrivate($registry, 'inlineDefinitions');
+        $callables = $this->readPrivate($registry, 'callables');
+
+        foreach ($inline as $name => $definition) {
+            if (($definition['filter'] ?? true) !== false) {
+                continue;
+            }
+
+            $this->assertArrayNotHasKey(
+                $name,
+                $callables,
+                "'{$name}' compiles inline and must not need a runtime entry"
+            );
+        }
+    }
+
     public function testInlineFilterSchemaIsInternallyConsistent(): void
     {
         $registry = $this->fullRegistry();
-        $inline   = $this->readPrivate($registry, 'inlineFilters');
+        $inline   = $this->readPrivate($registry, 'inlineDefinitions');
 
         foreach ($inline as $name => $definition) {
             $params = $definition['params'] ?? [];
@@ -282,7 +338,7 @@ class RegistryConsistencyTest extends BaseTestCase
     public function testAliasesShareTheirTargetDefinition(): void
     {
         $registry  = $this->fullRegistry();
-        $inline    = $this->readPrivate($registry, 'inlineFilters');
+        $inline    = $this->readPrivate($registry, 'inlineDefinitions');
         $callables = $this->readPrivate($registry, 'callables');
 
         // `format` = `sprintf` is an inline-template alias; `len` = `length` is a

@@ -248,9 +248,10 @@ class ModulesTest extends BaseTestCase
 
     /**
      * The generated class's constructor takes `$functions` / `$services`. The
-     * render-frame LOCALS keep the `__c_` spelling, because an emitted `static fn`
-     * (lambda body, quoted filter reference) has no `$this` to reach the
-     * properties through.
+     * render-frame LOCALS keep the `__c_` spelling, so directive and inline-filter
+     * snippets written against that contract keep working regardless of where the
+     * compiler emits them — including inside the non-static closures it wraps
+     * lambda bodies and quoted filter references in.
      */
     public function testCompiledConstructorPropertiesAreNamedFunctionsAndServices(): void
     {
@@ -299,11 +300,12 @@ class ModulesTest extends BaseTestCase
     }
 
     /**
-     * The counterpart constraint, pinned deliberately: the same `$this->` form breaks
-     * when the snippet lands inside an emitted `static fn`. This is why the locals
-     * exist and why both spellings are documented.
+     * The counterpart guarantee: the same `$this->` form KEEPS working when the
+     * snippet lands inside a closure the compiler emits — the non-static arrow
+     * function it uses for a quoted filter reference inherits `$this`, so both
+     * spellings are safe in every position (see the Services guide).
      */
-    public function testThisIsUnboundInsideAQuotedFilterReferenceClosure(): void
+    public function testThisIsBoundInsideAQuotedFilterReferenceClosure(): void
     {
         $engine = new ClarityEngine();
         $engine->setViewPath(TestEnvironment::viewDir())->setCachePath(TestEnvironment::cacheDir());
@@ -319,8 +321,39 @@ class ModulesTest extends BaseTestCase
 
         self::tpl('svc_this_ref', '{{ map(items, "shout_ref") |> join(",") }}');
 
-        $this->expectException(ClarityException::class);
-        $this->expectExceptionMessageMatches('/Using \$this when not in object context/');
-        $engine->renderPartial('svc_this_ref', ['items' => ['a']]);
+        $this->assertSame('A,B', $engine->renderPartial('svc_this_ref', ['items' => ['a', 'b']]));
+
+        // The emitted closure is an arrow function, not a `static` one, so it
+        // inherits `$this` at call time.
+        $compiled = $this->compiledSource('svc_this_ref');
+        $this->assertStringContainsString('fn(mixed $__c_val): mixed =>', $compiled);
+        $this->assertStringNotContainsString('static fn(', $compiled);
+    }
+
+    /**
+     * A lambda BODY is emitted as a closure too, so the same service access has to
+     * work there — a directive handler can hand the author `$this->services`.
+     */
+    public function testLambdaBodyCanReachServicesThroughThis(): void
+    {
+        $engine = new ClarityEngine();
+        $engine->setViewPath(TestEnvironment::viewDir())->setCachePath(TestEnvironment::cacheDir());
+
+        $engine->addService('suffixer', new class
+        {
+            public function __invoke(mixed $v): string
+            {
+                return $v . '!';
+            }
+        });
+        $engine->addInlineFilter('suffixed', ['php' => "\$this->services['suffixer']({1})"]);
+
+        self::tpl('svc_this_lambda', '{{ map(items, x => x |> suffixed) |> join(",") }}');
+
+        $this->assertSame('a!,b!', $engine->renderPartial('svc_this_lambda', ['items' => ['a', 'b']]));
+
+        $compiled = $this->compiledSource('svc_this_lambda');
+        $this->assertStringContainsString('fn(mixed $x): mixed =>', $compiled);
+        $this->assertStringNotContainsString('static function(', $compiled);
     }
 }

@@ -68,7 +68,7 @@ trait ClarityEngineTrait
      *   still yields it (`{{ x |> dump |> length }}` measures x);
      * - a {@see DebugEventBus} emitting `template.resolve`, `template.compile`
      *   and `template.render`;
-     * - the HTML debug panel, when `DumpOptions::$showPanel` is set.
+     * - the HTML debug panel, when `DumpOptions::showPanel()` is set.
      *
      * Passing {@see DumpOptions} is shorthand for "on, with these options" —
      * `$debug instanceof DumpOptions` and `$debug === null` both mean "on".
@@ -397,6 +397,39 @@ trait ClarityEngineTrait
     }
 
     /**
+     * Register an inline FUNCTION — codegen that compiles into the template but
+     * is NOT reachable with the pipe operator.
+     *
+     * `addInlineFunction()` is to `addInlineFilter()` what `addFunction()` is to
+     * `addFilter()`: the call form only. The `php` template backs `name(...)`
+     * exactly as it would for a filter, while `value |> name` is a compile-time
+     * error.
+     *
+     * Use it for a construct whose argument is a piece of SOURCE rather than a
+     * value to transform, so that a piped form has no meaning:
+     *
+     * ```php
+     * $engine->addInlineFunction('isset', [
+     *     'php'    => 'isset({1})',
+     *     'callGuard' => 'presence',
+     * ]);
+     * ```
+     *
+     * The `callGuard` is what keeps the template honest about the construct's own
+     * restrictions: `presence` requires the first argument to be a bare name or a
+     * chain over one, because PHP's `isset()` accepts nothing else.
+     *
+     * @param string $name       Function name used in templates.
+     * @param array{php: string, params?: string[], defaults?: array<string, string>, variadic?: bool, valueParam?: string, callGuard?: string} $definition
+     * @return $this
+     */
+    public function addInlineFunction(string $name, array $definition): static
+    {
+        $this->registry->addInlineFunction($name, $definition);
+        return $this;
+    }
+
+    /**
      * Register a handler for a custom directive (e.g. `with_locale`).
      *
      * The handler is a callable that receives the raw text after the keyword, a
@@ -443,11 +476,11 @@ trait ClarityEngineTrait
 
     /**
      * Store a service object in the registry so that compiled template render
-     * bodies can access it via `$__c_sv['key']`.
+     * bodies can access it via `$__c_sv['key']` or `$this->services['key']`.
      *
      * This is primarily used by modules that need shared mutable state (e.g. a
      * locale stack) accessible both from closures that close over the object
-     * *and* from inline filter PHP templates using `$__c_sv['key']->method()`.
+     * *and* from inline filter PHP templates using `$this->services['key']->method()`.
      *
      * @param string $name    Key under which the service is accessible.
      * @param mixed  $service Service value, can be of any type.

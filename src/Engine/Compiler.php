@@ -103,8 +103,12 @@ class Compiler
      * `__c_fn`/`__c_sv` to `functions`/`services`.  Every compiled class carries
      * that signature, so the bump is what recompiles the cache instead of
      * instantiating a stale class against the new argument names.
+     *
+     * Version 29 emits lambda bodies and quoted filter references as non-static
+     * arrow functions instead of `static` closures, so `$this` stays bound and a
+     * directive/inline-filter snippet works in every emitted position.
      */
-    public const COMPILER_VERSION = 28;
+    public const COMPILER_VERSION = 30;
 
     /**
      * Prefix owned by the engine for every PHP variable it binds into the render

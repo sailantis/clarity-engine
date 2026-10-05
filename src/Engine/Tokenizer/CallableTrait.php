@@ -21,7 +21,12 @@ trait CallableTrait
      *                                        is compiled into a closure (see
      *                                        {@see shouldInlineCallableFilterReference()})
      *
-     * Anything else (bare variable names, function calls, â€¦) is rejected.
+     * Anything else (bare variable names, function calls, …) is rejected.
+     *
+     * Emitted closures are NON-static so that `$this` stays bound: that is what
+     * a directive or inline-filter snippet can then read services through
+     * (`$this->services['key']`), wherever the compiler has to wrap it in a
+     * closure — a lambda body or a quoted filter reference.
      */
     private function compileCallableArg(string $arg, string $filterName): string
     {
@@ -75,9 +80,9 @@ trait CallableTrait
                 if ($isRegisteredFilter) {
                     if (isset($this->filterProbes[$refName])) {
                         if (isset($this->prunedFunctions[$refName])) {
-                            return 'static fn(mixed $__c_value): mixed => $__c_value';
+                            return 'fn(mixed $__c_value): mixed => $__c_value';
                         }
-                        return "static fn(mixed \$__c_value): mixed => "
+                        return "fn(mixed \$__c_value): mixed => "
                             . "\$__c_sv['" . \addslashes($this->filterProbes[$refName]) . "']"
                             . "('" . \addslashes($this->escapeContext) . "', \$__c_value)";
                     }
@@ -147,7 +152,7 @@ trait CallableTrait
             throw new ClarityException("Unknown inline filter reference: '{$referenceName}'");
         }
 
-        return "static fn(mixed \$__c_val): mixed => {$inlineCall}";
+        return "fn(mixed \$__c_val): mixed => {$inlineCall}";
     }
 
     /**
@@ -186,7 +191,7 @@ trait CallableTrait
     }
 
     /**
-     * Compile a Clarity lambda expression to a PHP static closure.
+     * Compile a Clarity lambda expression to an arrow function.
      *
      * Syntax:
      *   param => body_expression
@@ -198,11 +203,11 @@ trait CallableTrait
      *       carry, item => carry + item
      * - The body is compiled as a full Clarity expression (including filter
      *   pipelines) with the parameter name(s) treated as local variables,
-     *   while all other identifiers are resolved from the captured $__c_va.
-     * - $__c_va is always captured; $__c_fn and $__c_sv are added to the `use`
-     *   clause only when the compiled body actually references them (they are
-     *   render-frame locals, so an uncaptured reference would fatal at render
-     *   time — see {@see $captures} below).
+     *   while all other identifiers are resolved from `$__c_va`, which the
+     *   emitted arrow function captures by value.
+     * - The arrow function binds implicitly, so no `use` clause is needed: it
+     *   sees `$__c_va`, `$__c_fn`, `$__c_sv` and `$this` — and an enclosing
+     *   lambda's parameter — exactly when the body references them.
      *
      * @param string $arg      The full lambda string (e.g. 'item => item.name').
      * @param int    $arrow    Position of '=>' in $arg.
@@ -265,41 +270,13 @@ trait CallableTrait
             );
         }
 
-        // The closure captures $__c_va unconditionally (outer template variables
-        // are always read through it). Two further groups of names are captured
-        // only when the compiled body actually references them:
-        //
-        //   • $__c_fn / $__c_sv — render-frame LOCALS, not parameters. Without
-        //     the capture a body reaching the callable registry or a service
-        //     fatals with "Variable $__c_fn is not defined".
-        //   • an ENCLOSING lambda's parameter — a local of the closure that
-        //     declared it. A nested lambda referencing it compiles to a bare
-        //     `$name` (see rootPhp()), and PHP only binds that from an explicit
-        //     `use (...)`; without it the reference is undefined at render time.
-        //
-        // $this->lambdaFrames now holds only the ENCLOSING frames (this lambda's
-        // own frame was popped above), so its parameters are exactly the ones
-        // that need capturing.
-        $captures = ['$__c_va'];
-        foreach (['$__c_fn', '$__c_sv'] as $internal) {
-            if (\str_contains($phpBody, $internal)) {
-                $captures[] = $internal;
-            }
-        }
-        foreach ($this->lambdaFrames as $frame) {
-            foreach ($frame as $enclosing => $_) {
-                if (isset($params[$enclosing]) || \in_array('$' . $enclosing, $captures, true)) {
-                    continue;
-                }
-                // Word-boundary match so `$c` does not match `$count`, and `$x`
-                // does not match `$__c_va['x']` (the quote is not a word char).
-                if (\preg_match('/\$' . \preg_quote($enclosing, '/') . '\b/', $phpBody)) {
-                    $captures[] = '$' . $enclosing;
-                }
-            }
-        }
-        $useClause = 'use (' . \implode(', ', $captures) . ')';
-
-        return "static function({$signature}) {$useClause}: mixed { return {$phpBody}; }";
+        // Emitted as a non-static arrow function, so the closure INHERITS `$this`
+        // from the render frame: a directive or inline-filter snippet the body
+        // reaches then still resolves `$this->services['key']`.  `fn()` binds its
+        // captures implicitly — `$__c_va` because the body reads outer variables
+        // through it, `$__c_fn` / `$__c_sv` when the body reaches a registry, an
+        // enclosing lambda's parameter because the body names it, and `$this`
+        // always at call time — so no `use` clause has to be computed here.
+        return "fn({$signature}): mixed => {$phpBody}";
     }
 }

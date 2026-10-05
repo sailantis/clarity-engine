@@ -114,63 +114,66 @@ class NestedLambdaTest extends BaseTestCase
         ];
     }
 
-    public function testOuterParameterIsCapturedInTheInnerClosure(): void
+    /**
+     * A lambda body is emitted as a NON-static arrow function, so it binds its
+     * captures implicitly — the enclosing parameter among them, and `$this` with
+     * them.  There is no computed `use` clause any more, which is what removes the
+     * whole class of "was the name captured?" mistakes.
+     */
+    public function testNestedClosuresAreArrowFunctions(): void
     {
         self::tpl('nl_capture', '{{ map(items, x => map(words, w => w ~ x)) |> json |> raw }}');
-        self::render('nl_capture', ['items' => ['A'], 'words' => ['p']]);
+        $this->assertSame('[["pA"]]', self::render('nl_capture', ['items' => ['A'], 'words' => ['p']]));
 
         $compiled = $this->compiledSource('nl_capture');
 
-        // The inner closure must capture the outer parameter.
-        $this->assertStringContainsString('use ($__c_va, $x): mixed', $compiled);
+        // Outer and inner are BOTH arrow functions — no `static`, no `use` clause.
+        $this->assertStringContainsString('fn(mixed $x): mixed =>', $compiled);
+        $this->assertStringContainsString('fn(mixed $w): mixed =>', $compiled);
+        $this->assertStringNotContainsString('static function(', $compiled);
+        $this->assertStringNotContainsString('use (', $compiled);
     }
 
-    public function testOuterParameterIsNotCapturedWhenUnused(): void
+    /**
+     * An inner lambda that does NOT mention the outer parameter gets none of it:
+     * an arrow function binds only what its body names, so a body reading the
+     * scope variable `count` never receives `$c` — the over-capture the old `use`
+     * computation had to guard against.
+     */
+    public function testInnerLambdaBindsOnlyWhatItsBodyNames(): void
     {
-        // The inner body never mentions `x`, so the inner closure must not
-        // capture it — otherwise every nested lambda would drag in names it
-        // does not need.
-        self::tpl('nl_no_capture', '{{ map(items, x => map(words, w => w ~ "!")) |> json |> raw }}');
-        self::render('nl_no_capture', ['items' => ['A'], 'words' => ['p']]);
+        self::tpl(
+            'nl_no_capture',
+            '{{ map(items, c => map(words, w => w ~ count)) |> json |> raw }}'
+        );
+        $this->assertSame(
+            '[["p7"]]',
+            self::render('nl_no_capture', ['items' => ['A'], 'words' => ['p'], 'count' => 7])
+        );
 
         $compiled = $this->compiledSource('nl_no_capture');
 
-        $this->assertStringContainsString('use ($__c_va): mixed', $compiled);
-        $this->assertStringNotContainsString('use ($__c_va, $x)', $compiled);
+        // The inner body reads the SCOPE variable `count`, never the outer `$c`.
+        $this->assertStringContainsString('fn(mixed $w): mixed =>', $compiled);
+        $this->assertStringContainsString("\$__c_va['count']", $compiled);
     }
 
-    public function testShadowedInnerParameterIsNotCapturedFromTheOuterLambda(): void
+    /**
+     * A shadowing inner parameter is its own local: the inner arrow function binds
+     * `$x` from its own signature, so the outer `$x` cannot leak into it.
+     */
+    public function testShadowingInnerParameterIsItsOwnLocal(): void
     {
-        // Both lambdas declare `x`. The inner closure must NOT capture the outer
-        // `x`, because its own parameter shadows it.
         self::tpl('nl_shadow_capture', '{{ map(items, x => map(words, x => x ~ "!")) |> json |> raw }}');
-        self::render('nl_shadow_capture', ['items' => ['A'], 'words' => ['p']]);
+        $this->assertSame(
+            '[["p!","q!"]]',
+            self::render('nl_shadow_capture', ['items' => ['IGNORED'], 'words' => ['p', 'q']])
+        );
 
+        // Both arrows are emitted, and BOTH declare `$x` — so the shadowing is
+        // ordinary PHP scoping rather than a hand-computed capture list.
         $compiled = $this->compiledSource('nl_shadow_capture');
-
-        $this->assertStringNotContainsString(
-            'use ($__c_va, $x)',
-            $compiled,
-            'a shadowing inner parameter must not be captured from the outer lambda'
-        );
-    }
-
-    public function testShortOuterParameterNameDoesNotOverCapture(): void
-    {
-        // A one-letter outer parameter must not be captured merely because the
-        // body contains a longer name starting with that letter: `$c` must match
-        // `$c`, never a scope read `$__c_va['count']`.
-        self::tpl(
-            'nl_no_overcapture',
-            '{{ map(items, c => map(words, w => w ~ count)) |> json |> raw }}'
-        );
-        self::render('nl_no_overcapture', ['items' => ['A'], 'words' => ['p'], 'count' => 7]);
-
-        $compiled = $this->compiledSource('nl_no_overcapture');
-
-        // The inner body references the scope variable `count`, not `$c`, so the
-        // only capture it needs is $__c_va.
-        $this->assertStringContainsString('static function(mixed $w) use ($__c_va): mixed', $compiled);
+        $this->assertSame(2, \substr_count($compiled, 'fn(mixed $x): mixed =>'));
     }
 
     public function testLambdaFrameStackIsCleanedUpAfterACompileError(): void

@@ -30,7 +30,7 @@ final class HtmlDumpRenderer implements DumpRenderer
 
     private function renderValue(mixed $value, DumpOptions $opts, int $depth): string
     {
-        if ($depth >= $opts->maxDepth) {
+        if ($depth >= $opts->getMaxDepth()) {
             return '<em class="cd-truncated">…</em>';
         }
 
@@ -78,7 +78,7 @@ final class HtmlDumpRenderer implements DumpRenderer
         $items = '';
         $shown = 0;
         foreach ($arr as $k => $v) {
-            if ($shown >= $opts->maxItems) {
+            if ($shown >= $opts->getMaxItems()) {
                 $remaining = $count - $shown;
                 $items .= '<li class="cd-more">… ' . $remaining . ' more …</li>';
                 break;
@@ -109,7 +109,7 @@ final class HtmlDumpRenderer implements DumpRenderer
     private function isMasked(string $key, DumpOptions $opts): bool
     {
         $lower = \strtolower($key);
-        foreach ($opts->maskKeys as $mask) {
+        foreach ($opts->getMaskKeys() as $mask) {
             if (\str_contains($lower, \strtolower((string) $mask))) {
                 return true;
             }

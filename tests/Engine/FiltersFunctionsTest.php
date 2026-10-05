@@ -345,7 +345,7 @@ class FiltersFunctionsTest extends BaseTestCase
 
         $compiled = $tokenizer->buildFilterCall('map("upper")', '$items');
 
-        $this->assertStringContainsString('static fn(mixed $__c_val): mixed =>', $compiled);
+        $this->assertStringContainsString('fn(mixed $__c_val): mixed =>', $compiled);
         $this->assertStringContainsString('\\mb_strtoupper', $compiled);
         $this->assertStringNotContainsString('$this->__c_fn[\'upper\']', $compiled);
     }

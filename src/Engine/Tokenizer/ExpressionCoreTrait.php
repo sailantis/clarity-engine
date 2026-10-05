@@ -816,9 +816,9 @@ trait ExpressionCoreTrait
      *
      * Generated code: $__c_fn['name']($phpArg1, name2: $phpArg2, ...)
      *
-     * The `$__c_fn` local (unpacked from the class's `functions` property) is
-     * used rather than `$this->functions` because the same emitter runs inside
-     * `static fn` closures for quoted filter references, where `$this` is unbound.
+     * The `$__c_fn` local is used rather than `$this->functions` because that is
+     * the spelling directive and inline-filter PHP templates are written in (the
+     * documented contract), and the unpack in `render()` is what defines it.
      *
      * @param string $name      The function name (already validated as registered).
      * @param string $expr      The full expression string being compiled.

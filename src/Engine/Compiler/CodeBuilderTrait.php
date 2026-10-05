@@ -179,10 +179,11 @@ trait CodeBuilderTrait
         $usesServices  = \str_contains($body, '$__c_sv');
 
         // The PROPERTIES are named `functions` / `services` so a directive handler
-        // can read them as `$this->services['key']`.  The LOCALS stay `$__c_fn` /
-        // `$__c_sv`, because that is how generated code reaches them from inside an
-        // emitted `static fn` (lambda bodies and quoted filter references), where
-        // `$this` is unbound — see {@see \Clarity\Engine\Tokenizer\CallableTrait}.
+        // can read them as `$this->services['key']` — a form that works in every
+        // position the compiler emits a handler's snippet, because the generated
+        // closures are non-static and therefore inherit `$this`.  The LOCALS stay
+        // `$__c_fn` / `$__c_sv` because that is the spelling the registry and
+        // service contract is written in (see {@see \Clarity\Engine\Tokenizer\CallableTrait}).
         $unpacks = '';
         if ($usesFunctions) {
             $unpacks .= "                \$__c_fn = \$this->functions;\n";

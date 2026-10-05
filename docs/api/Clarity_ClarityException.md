@@ -29,7 +29,7 @@ and Clarity's own runtime mapping walks it.
 
 - `public readonly` string `$templateName` · <small>[🗎](../../src/ClarityException.php)</small>
 - `public readonly` int `$templateLine` · <small>[🗎](../../src/ClarityException.php)</small>
-- `public` string `$templatePath` · <small>[🗎](../../src/ClarityException.php)</small>
+- `public readonly` string `$templatePath` · <small>[🗎](../../src/ClarityException.php)</small>
 
 ## Public methods
 
