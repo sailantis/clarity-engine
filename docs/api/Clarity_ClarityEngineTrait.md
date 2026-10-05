@@ -4,7 +4,7 @@
 
 ## Public methods
 
-### setDebugMode() · <small>[🗎](../../src/ClarityEngineTrait.php#L82)</small>
+### setDebugMode() · <small>[🗎](../../src/ClarityEngineTrait.php#L83)</small>
 
 `public function setDebugMode(Clarity\Debug\DumpOptions|bool|null $debug = true): static`
 
@@ -49,7 +49,7 @@ it while debug is off instead of dumping raw, unmasked values.
 
 ---
 
-### isDebugMode() · <small>[🗎](../../src/ClarityEngineTrait.php#L131)</small>
+### isDebugMode() · <small>[🗎](../../src/ClarityEngineTrait.php#L132)</small>
 
 `public function isDebugMode(): bool`
 
@@ -62,7 +62,7 @@ Return whether debug mode is currently enabled.
 
 ---
 
-### setPolicy() · <small>[🗎](../../src/ClarityEngineTrait.php#L158)</small>
+### setPolicy() · <small>[🗎](../../src/ClarityEngineTrait.php#L159)</small>
 
 `public function setPolicy(Clarity\Engine\Policy|array $policy): static`
 
@@ -97,7 +97,7 @@ policy are automatically recompiled under another.
 
 ---
 
-### getPolicy() · <small>[🗎](../../src/ClarityEngineTrait.php#L175)</small>
+### getPolicy() · <small>[🗎](../../src/ClarityEngineTrait.php#L176)</small>
 
 `public function getPolicy(): Clarity\Engine\Policy`
 
@@ -115,7 +115,7 @@ answers what the old `isSandboxed()` answered.
 
 ---
 
-### isSandboxed() · <small>[🗎](../../src/ClarityEngineTrait.php#L186)</small>
+### isSandboxed() · <small>[🗎](../../src/ClarityEngineTrait.php#L187)</small>
 
 `public function isSandboxed(): bool`
 
@@ -131,7 +131,7 @@ that only wants the coarse answer.
 
 ---
 
-### enableDebug() · <small>[🗎](../../src/ClarityEngineTrait.php#L207)</small>
+### enableDebug() · <small>[🗎](../../src/ClarityEngineTrait.php#L208)</small>
 
 `public function enableDebug(Clarity\Debug\DumpOptions|null $opts = null): static`
 
@@ -160,7 +160,7 @@ $engine->enableDebug(new DumpOptions(showPanel: true, maxDepth: 4));
 
 ---
 
-### disableDebug() · <small>[🗎](../../src/ClarityEngineTrait.php#L220)</small>
+### disableDebug() · <small>[🗎](../../src/ClarityEngineTrait.php#L221)</small>
 
 `public function disableDebug(): static`
 
@@ -176,7 +176,7 @@ the panel, and the registry's dump/dd handlers.
 
 ---
 
-### getDebugBus() · <small>[🗎](../../src/ClarityEngineTrait.php#L228)</small>
+### getDebugBus() · <small>[🗎](../../src/ClarityEngineTrait.php#L229)</small>
 
 `public function getDebugBus(): Clarity\Debug\DebugEventBus|null`
 
@@ -189,7 +189,7 @@ Return the active DebugEventBus, or null when debug mode is off.
 
 ---
 
-### getDebugPanel() · <small>[🗎](../../src/ClarityEngineTrait.php#L236)</small>
+### getDebugPanel() · <small>[🗎](../../src/ClarityEngineTrait.php#L237)</small>
 
 `public function getDebugPanel(): Clarity\Debug\HtmlDebugPanel|null`
 
@@ -202,7 +202,7 @@ Return the active HtmlDebugPanel, or null when disabled.
 
 ---
 
-### setViewPath() · <small>[🗎](../../src/ClarityEngineTrait.php#L247)</small>
+### setViewPath() · <small>[🗎](../../src/ClarityEngineTrait.php#L248)</small>
 
 `public function setViewPath(string $path): static`
 
@@ -221,7 +221,7 @@ Set the base path for resolving relative template names.
 
 ---
 
-### getViewPath() · <small>[🗎](../../src/ClarityEngineTrait.php#L273)</small>
+### getViewPath() · <small>[🗎](../../src/ClarityEngineTrait.php#L274)</small>
 
 `public function getViewPath(): string`
 
@@ -235,7 +235,7 @@ Get the currently configured base path for view resolution.
 
 ---
 
-### setExtension() · <small>[🗎](../../src/ClarityEngineTrait.php#L284)</small>
+### setExtension() · <small>[🗎](../../src/ClarityEngineTrait.php#L285)</small>
 
 `public function setExtension(string $ext): static`
 
@@ -254,7 +254,7 @@ Set the view file extension for this instance.
 
 ---
 
-### getExtension() · <small>[🗎](../../src/ClarityEngineTrait.php#L301)</small>
+### getExtension() · <small>[🗎](../../src/ClarityEngineTrait.php#L302)</small>
 
 `public function getExtension(): string`
 
@@ -268,7 +268,7 @@ Get the effective file extension used when resolving templates.
 
 ---
 
-### addNamespace() · <small>[🗎](../../src/ClarityEngineTrait.php#L315)</small>
+### addNamespace() · <small>[🗎](../../src/ClarityEngineTrait.php#L316)</small>
 
 `public function addNamespace(string $name, string $path): static`
 
@@ -290,7 +290,7 @@ Views can be referenced using the syntax "namespace::view.name".
 
 ---
 
-### getNamespaces() · <small>[🗎](../../src/ClarityEngineTrait.php#L342)</small>
+### getNamespaces() · <small>[🗎](../../src/ClarityEngineTrait.php#L343)</small>
 
 `public function getNamespaces(): array`
 
@@ -304,7 +304,7 @@ Get the currently registered view namespaces.
 
 ---
 
-### use() · <small>[🗎](../../src/ClarityEngineTrait.php#L364)</small>
+### use() · <small>[🗎](../../src/ClarityEngineTrait.php#L365)</small>
 
 `public function use(Clarity\ModuleInterface $module): static`
 
@@ -334,7 +334,7 @@ $engine->use(new \Clarity\LocalizationModule([
 
 ---
 
-### addInlineFilter() · <small>[🗎](../../src/ClarityEngineTrait.php#L392)</small>
+### addInlineFilter() · <small>[🗎](../../src/ClarityEngineTrait.php#L393)</small>
 
 `public function addInlineFilter(string $name, array $definition): static`
 
@@ -369,9 +369,9 @@ additional parameters are declared in `params`.
 
 ---
 
-### addDirective() · <small>[🗎](../../src/ClarityEngineTrait.php#L439)</small>
+### addDirective() · <small>[🗎](../../src/ClarityEngineTrait.php#L438)</small>
 
-`public function addDirective(string $keyword, callable $handler, array|null $pairing = null): static`
+`public function addDirective(string $keyword, callable $handler, Clarity\Engine\Directive|null $directive = null): static`
 
 Register a handler for a custom directive (e.g. `with_locale`).
 
@@ -389,22 +389,22 @@ $engine->addDirective('endwith_locale', fn(...) => "\$__c_sv['locale']->pop();")
 
 Paired directives
 -----------------
-A directive that wraps a body declares its members on the OPENER, using the
-same `keyword => role` shape:
+A directive that wraps a body declares its parts with a [`Directive`](Clarity_Engine_Directive.md)
+whose factory name states the role:
 ```php
-$engine->addDirective('cache', $openHandler, [
-    'endcache'  => 'required',   // the closing tag
-    'cacheelse' => 'allowed',    // optional branch tag
-]);
-$engine->addDirective('endcache', $closeHandler);
+$engine->addDirective('cache',      $openHandler,   Directive::opens('endcache', 'cache_else'));
+$engine->addDirective('cache_else', $branchHandler, Directive::branches('cache'));
+$engine->addDirective('endcache',   $closeHandler,  Directive::closes('cache'));
 ```
 The compiler then rejects an unclosed `{% cache %}`, a stray `{% endcache %}`,
 a close that crosses another construct, and a branch tag used outside its
 construct — all at compile time, naming the template and line.
 
-A member may assert its owner instead, in the same direction:
-`$engine->addDirective('endcache', $closeHandler, ['cache' => 'owner'])`.
-That is checked at the start of every compile; it changes nothing else.
+A leaf that may only appear within a construct says so with `inside()`, which
+asserts no structure — the tag stays an ordinary directive:
+```php
+$engine->addDirective('cache_control', $leafHandler, Directive::inside('cache'));
+```
 
 **Parameters**
 
@@ -412,7 +412,7 @@ That is checked at the start of every compile; it changes nothing else.
 |---|---|---|---|
 | `$keyword` | string | - | The directive keyword in lowercase (e.g. 'with_locale'). |
 | `$handler` | callable | - | See [`Registry`](Clarity_Engine_Registry.md) for the expected signature. |
-| `$pairing` | array\|null | `null` | Opener: member keyword → 'required' (one) or 'allowed'.<br>Member: ['owner' => '<opener keyword>']. |
+| `$directive` | [Directive](Clarity_Engine_Directive.md)\|null | `null` | Omit for an ordinary directive; see [`Directive`](Clarity_Engine_Directive.md). |
 
 **Return value**
 
@@ -421,7 +421,7 @@ That is checked at the start of every compile; it changes nothing else.
 
 ---
 
-### addService() · <small>[🗎](../../src/ClarityEngineTrait.php#L457)</small>
+### addService() · <small>[🗎](../../src/ClarityEngineTrait.php#L456)</small>
 
 `public function addService(string $name, mixed $service): static`
 
@@ -446,7 +446,7 @@ locale stack) accessible both from closures that close over the object
 
 ---
 
-### hasService() · <small>[🗎](../../src/ClarityEngineTrait.php#L466)</small>
+### hasService() · <small>[🗎](../../src/ClarityEngineTrait.php#L465)</small>
 
 `public function hasService(string $name): bool`
 
@@ -465,7 +465,7 @@ Return true if a service with the given key has been registered.
 
 ---
 
-### getService() · <small>[🗎](../../src/ClarityEngineTrait.php#L476)</small>
+### getService() · <small>[🗎](../../src/ClarityEngineTrait.php#L475)</small>
 
 `public function getService(string $name): mixed`
 
@@ -488,7 +488,7 @@ Retrieve a previously registered service.
 
 ---
 
-### addFilter() · <small>[🗎](../../src/ClarityEngineTrait.php#L530)</small>
+### addFilter() · <small>[🗎](../../src/ClarityEngineTrait.php#L529)</small>
 
 `public function addFilter(string $name, callable $fn): static`
 
@@ -551,7 +551,7 @@ Template usage:
 
 ---
 
-### addFunction() · <small>[🗎](../../src/ClarityEngineTrait.php#L546)</small>
+### addFunction() · <small>[🗎](../../src/ClarityEngineTrait.php#L545)</small>
 
 `public function addFunction(string $name, callable $fn): static`
 
@@ -574,7 +574,7 @@ This is distinct from filters, which transform a piped value.
 
 ---
 
-### setLoader() · <small>[🗎](../../src/ClarityEngineTrait.php#L558)</small>
+### setLoader() · <small>[🗎](../../src/ClarityEngineTrait.php#L557)</small>
 
 `public function setLoader(Clarity\Template\TemplateLoader $loader): static`
 
@@ -593,7 +593,7 @@ Set a custom template loader, replacing the default FileLoader.
 
 ---
 
-### getLoader() · <small>[🗎](../../src/ClarityEngineTrait.php#L571)</small>
+### getLoader() · <small>[🗎](../../src/ClarityEngineTrait.php#L570)</small>
 
 `public function getLoader(): Clarity\Template\TemplateLoader`
 
@@ -607,7 +607,7 @@ has been set explicitly.
 
 ---
 
-### setCachePath() · <small>[🗎](../../src/ClarityEngineTrait.php#L610)</small>
+### setCachePath() · <small>[🗎](../../src/ClarityEngineTrait.php#L609)</small>
 
 `public function setCachePath(string $path): static`
 
@@ -626,7 +626,7 @@ Set the directory where compiled templates should be cached.
 
 ---
 
-### getCachePath() · <small>[🗎](../../src/ClarityEngineTrait.php#L621)</small>
+### getCachePath() · <small>[🗎](../../src/ClarityEngineTrait.php#L620)</small>
 
 `public function getCachePath(): string`
 
@@ -640,7 +640,7 @@ Get the currently configured cache directory.
 
 ---
 
-### flushCache() · <small>[🗎](../../src/ClarityEngineTrait.php#L631)</small>
+### flushCache() · <small>[🗎](../../src/ClarityEngineTrait.php#L630)</small>
 
 `public function flushCache(): static`
 
@@ -653,7 +653,7 @@ Flush all cached compiled templates.
 
 ---
 
-### render() · <small>[🗎](../../src/ClarityEngineTrait.php#L682)</small>
+### render() · <small>[🗎](../../src/ClarityEngineTrait.php#L681)</small>
 
 `public function render(string $view, array $vars = []): string`
 
@@ -714,7 +714,7 @@ $html = $engine->render('admin::dashboard', $data);
 
 ---
 
-### renderPartial() · <small>[🗎](../../src/ClarityEngineTrait.php#L704)</small>
+### renderPartial() · <small>[🗎](../../src/ClarityEngineTrait.php#L703)</small>
 
 `public function renderPartial(string $view, array $vars = []): string`
 
@@ -735,7 +735,7 @@ Render a partial view (without applying a layout) and return the output.
 
 ---
 
-### renderLayout() · <small>[🗎](../../src/ClarityEngineTrait.php#L730)</small>
+### renderLayout() · <small>[🗎](../../src/ClarityEngineTrait.php#L729)</small>
 
 `public function renderLayout(string $layout, string $content, array $vars = []): string`
 

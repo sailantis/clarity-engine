@@ -29,6 +29,7 @@ Implement the `Clarity\ModuleInterface` interface, which requires a single `regi
 
 ```php
 use Clarity\ClarityEngine;
+use Clarity\Engine\Directive;
 use Clarity\ModuleInterface;
 
 class MyModule implements ModuleInterface
@@ -57,9 +58,9 @@ class MyModule implements ModuleInterface
             function (string $rest, TemplateLocation $at, callable $processExpr): string {
                 return 'if (' . $processExpr($rest) . ' && $__c_sv["checkDebug"]()) {';
             },
-            ['debug_endif' => 'required']   // pair the closer so the compiler checks it
+            Directive::opens('debug_endif')   // pair the closer so the compiler checks it
         );
-        $engine->addDirective('debug_endif', fn() => '}', ['debug_if' => 'owner']);
+        $engine->addDirective('debug_endif', fn() => '}', Directive::closes('debug_if'));
     }
 }
 ```
@@ -72,12 +73,16 @@ class MyModule implements ModuleInterface
 | `addInlineFilter(name, definition)` | Filter expression compiled directly into the template PHP                       |
 | `addFunction(name, callable)`       | Function callable available in template expressions                              |
 | `addDirective(keyword, handler)`    | Custom `{% keyword %}` directive processed at compile time                      |
-| `addDirective(keyword, handler, pairing)` | The same, with declared close/branch tags the compiler validates        |
+| `addDirective(keyword, handler, Directive)` | The same, with a role the compiler validates (a paired construct or containment) |
 | `addService(key, object)`           | Shared value/object, read in template PHP and directive PHP as `$this->services['key']` |
 
-> **Block directives:** when a directive wraps a body, declare its members on the opener
-> (e.g. `['endmyblock' => 'required']`) so the compiler rejects an unclosed block, a
-> stray closer, or a closer that crosses another construct — with the template line named.
+> **Block directives:** when a directive wraps a body, declare its role on the opener with
+> `Directive::opens('endmyblock')` so the compiler rejects an unclosed block, a stray
+> closer, or a closer that crosses another construct — with the template line named. A
+> member tag may additionally assert its side of that structure with `Directive::closes()`
+> or `Directive::branches()`; a leaf that belongs inside a block uses
+> `Directive::inside('myblock')`. See *Paired Directives* in
+> [04-advanced-topics.md](04-advanced-topics.md).
 >
 > **Directive errors:** a handler receives a `TemplateLocation` (the template name, the
 > line, and the physical file) and can `throw new ClarityException('…', $at)` to get an

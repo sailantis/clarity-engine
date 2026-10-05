@@ -3,6 +3,7 @@ namespace Clarity\Tests\Engine;
 
 use Clarity\ClarityEngine;
 use Clarity\ClarityException;
+use Clarity\Engine\Directive;
 use Clarity\Template\ArrayLoader;
 use Clarity\Template\FileLoader;
 use Clarity\Template\TemplateLocation;
@@ -73,7 +74,7 @@ class DirectiveArgumentsTest extends TestCase
         $engine->setCachePath($this->cacheDir);
 
         foreach ($directives as $keyword => $handler) {
-            $engine->addDirective($keyword, $handler, $paired ? ['end' . $keyword => 'required'] : null);
+            $engine->addDirective($keyword, $handler, $paired ? Directive::opens('end' . $keyword) : null);
             if ($paired) {
                 $engine->addDirective('end' . $keyword, static fn(): string => '');
             }
@@ -297,7 +298,7 @@ class DirectiveArgumentsTest extends TestCase
         $engine->setLoader(new FileLoader($views, 'clarity.html'));
         $engine->addDirective('probe', static function (): string {
             throw new ClarityException('file loader boom');
-        }, ['endprobe' => 'required']);
+        }, Directive::opens('endprobe'));
         $engine->addDirective('endprobe', static fn(): string => '');
 
         try {
@@ -352,7 +353,7 @@ class DirectiveArgumentsTest extends TestCase
             $seen = $at;
 
             return '';
-        }, ['endprobe' => 'required']);
+        }, Directive::opens('endprobe'));
         $engine->addDirective('endprobe', static fn(): string => '');
 
         try {
@@ -387,7 +388,7 @@ class DirectiveArgumentsTest extends TestCase
             static function (string $rest, TemplateLocation $at) use (&$thrown): string {
                 throw $thrown = new ClarityException('handler boom', $at);
             },
-            ['endprobe' => 'required']
+            Directive::opens('endprobe')
         );
         $engine->addDirective('endprobe', static fn(): string => '');
 

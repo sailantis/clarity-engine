@@ -7,6 +7,7 @@ use Clarity\Debug\DumpOptions;
 use Clarity\Debug\HtmlDebugPanel;
 use Clarity\Engine\Cache;
 use Clarity\Engine\Compiler;
+use Clarity\Engine\Directive;
 use Clarity\Engine\Policy;
 use Clarity\Engine\Registry;
 use Clarity\Engine\SourceMap;
@@ -412,33 +413,31 @@ trait ClarityEngineTrait
      *
      * Paired directives
      * -----------------
-     * A directive that wraps a body declares its members on the OPENER, using the
-     * same `keyword => role` shape:
+     * A directive that wraps a body declares its parts with a {@see Directive}
+     * whose factory name states the role:
      * ```php
-     * $engine->addDirective('cache', $openHandler, [
-     *     'endcache'  => 'required',   // the closing tag
-     *     'cacheelse' => 'allowed',    // optional branch tag
-     * ]);
-     * $engine->addDirective('endcache', $closeHandler);
+     * $engine->addDirective('cache',      $openHandler,   Directive::opens('endcache', 'cache_else'));
+     * $engine->addDirective('cache_else', $branchHandler, Directive::branches('cache'));
+     * $engine->addDirective('endcache',   $closeHandler,  Directive::closes('cache'));
      * ```
      * The compiler then rejects an unclosed `{% cache %}`, a stray `{% endcache %}`,
      * a close that crosses another construct, and a branch tag used outside its
      * construct — all at compile time, naming the template and line.
      *
-     * A member may assert its owner instead, in the same direction:
-     * `$engine->addDirective('endcache', $closeHandler, ['cache' => 'owner'])`.
-     * That is checked at the start of every compile; it changes nothing else.
+     * A leaf that may only appear within a construct says so with `inside()`, which
+     * asserts no structure — the tag stays an ordinary directive:
+     * ```php
+     * $engine->addDirective('cache_control', $leafHandler, Directive::inside('cache'));
+     * ```
      *
-     * @param string        $keyword The directive keyword in lowercase (e.g. 'with_locale').
-     * @param callable      $handler See {@see Registry} for the expected signature.
-     * @param array<string, string>|null $pairing
-     *   Opener: member keyword → 'required' (one) or 'allowed'.
-     *   Member: ['owner' => '<opener keyword>'].
+     * @param string         $keyword The directive keyword in lowercase (e.g. 'with_locale').
+     * @param callable       $handler See {@see Registry} for the expected signature.
+     * @param Directive|null $directive Omit for an ordinary directive; see {@see Directive}.
      * @return $this
      */
-    public function addDirective(string $keyword, callable $handler, ?array $pairing = null): static
+    public function addDirective(string $keyword, callable $handler, ?Directive $directive = null): static
     {
-        $this->registry->addDirective($keyword, $handler, $pairing);
+        $this->registry->addDirective($keyword, $handler, $directive);
         return $this;
     }
 

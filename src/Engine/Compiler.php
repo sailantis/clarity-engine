@@ -104,7 +104,7 @@ class Compiler
      * that signature, so the bump is what recompiles the cache instead of
      * instantiating a stale class against the new argument names.
      */
-    public const COMPILER_VERSION = 27;
+    public const COMPILER_VERSION = 28;
 
     /**
      * Prefix owned by the engine for every PHP variable it binds into the render

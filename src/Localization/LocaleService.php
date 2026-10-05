@@ -4,6 +4,7 @@ namespace Clarity\Localization;
 
 use Clarity\ClarityEngine;
 use Clarity\ClarityException;
+use Clarity\Engine\Directive;
 use Clarity\Template\TemplateLocation;
 use Locale;
 
@@ -129,7 +130,7 @@ class LocaleService
                 $param = $processExpr($rest);
                 return "\$__c_sv['locale']->push({$param});";
             },
-            ['endwith_locale' => 'required']
+            Directive::opens('endwith_locale')
         );
 
         $engine->addDirective(
@@ -137,7 +138,7 @@ class LocaleService
             static function (string $rest, TemplateLocation $at, callable $processExpr): string {
                 return "\$__c_sv['locale']->pop();";
             },
-            ['with_locale' => 'owner']
+            Directive::closes('with_locale')
         );
     }
 

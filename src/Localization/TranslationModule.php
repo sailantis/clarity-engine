@@ -4,6 +4,7 @@ namespace Clarity\Localization;
 
 use Clarity\ClarityEngine;
 use Clarity\ClarityException;
+use Clarity\Engine\Directive;
 use Clarity\ModuleInterface;
 use Clarity\Template\TemplateLocation;
 
@@ -136,7 +137,7 @@ class TranslationModule implements ModuleInterface
                 $param = $processExpr($rest);
                 return "\$__c_sv['t']->pushDomain({$param});";
             },
-            ['endwith_t_domain' => 'required']
+            Directive::opens('endwith_t_domain')
         );
 
         $engine->addDirective(
@@ -144,7 +145,7 @@ class TranslationModule implements ModuleInterface
             static function (string $rest, TemplateLocation $at, callable $processExpr): string {
                 return "\$__c_sv['t']->popDomain();";
             },
-            ['with_t_domain' => 'owner']
+            Directive::closes('with_t_domain')
         );
 
     }

@@ -3,6 +3,7 @@ namespace Clarity\Tests\Engine;
 
 use Clarity\ClarityEngine;
 use Clarity\ClarityException;
+use Clarity\Engine\Directive;
 use Clarity\Engine\Registry;
 use Clarity\Template\ArrayLoader;
 use Clarity\Template\TemplateLocation;
@@ -46,18 +47,18 @@ class DirectivePairingTest extends TestCase
      * An engine with the `cache` construct registered, plus an unrelated unpaired
      * directive.  Overridable so individual tests can vary the registration.
      *
-     * @param array<string,string>   $templates
-     * @param array<string,callable> $directives keyword → handler
-     * @param array<string,array>    $pairings   keyword → pairing argument
+     * @param array<string,string>    $templates
+     * @param array<string,callable>  $directives keyword → handler
+     * @param array<string,Directive> $roles      keyword → Directive declaration
      */
-    private function engine(array $templates, array $directives = [], array $pairings = []): ClarityEngine
+    private function engine(array $templates, array $directives = [], array $roles = []): ClarityEngine
     {
         $engine = new ClarityEngine();
         $engine->setLoader(new ArrayLoader($templates));
         $engine->setCachePath($this->cacheDir);
 
         foreach ($directives as $keyword => $handler) {
-            $engine->addDirective($keyword, $handler, $pairings[$keyword] ?? null);
+            $engine->addDirective($keyword, $handler, $roles[$keyword] ?? null);
         }
 
         return $engine;
@@ -67,31 +68,33 @@ class DirectivePairingTest extends TestCase
      * The canonical construct used throughout: an opener that buffers, a branch
      * tag, and a closer that echoes the buffer.
      *
-     * @return array{array<string,callable>, array<string,array>}
+     * @return array{array<string,callable>, array<string,Directive>}
      */
     private function cacheConstruct(): array
     {
         $directives = [
-            'cache'     => static fn(string $rest, TemplateLocation $at, callable $e): string
+            'cache'         => static fn(string $rest, TemplateLocation $at, callable $e): string
                 => 'ob_start(); /* open ' . $e(\trim($rest)) . ' */',
-            'cacheelse' => static fn(): string => 'echo "|";',
-            'endcache'  => static fn(): string => 'echo ob_get_clean();',
-            'noop'      => static fn(): string => '/* noop */',
+            'cacheelse'     => static fn(): string => 'echo "|";',
+            'endcache'      => static fn(): string => 'echo ob_get_clean();',
+            'cache_control' => static fn(): string => '/* ctrl */',
+            'noop'          => static fn(): string => '/* noop */',
         ];
-        $pairings = [
-            'cache'     => ['endcache' => 'required', 'cacheelse' => 'allowed'],
-            'endcache'  => ['cache' => 'owner'],
-            'cacheelse' => ['cache' => 'owner'],
+        $roles = [
+            'cache'         => Directive::opens('endcache', 'cacheelse'),
+            'endcache'      => Directive::closes('cache'),
+            'cacheelse'     => Directive::branches('cache'),
+            'cache_control' => Directive::inside('cache'),
         ];
 
-        return [$directives, $pairings];
+        return [$directives, $roles];
     }
 
     private function render(string $template, array $vars = []): string
     {
-        [$directives, $pairings] = $this->cacheConstruct();
+        [$directives, $roles] = $this->cacheConstruct();
 
-        return $this->engine(['t' => $template], $directives, $pairings)
+        return $this->engine(['t' => $template], $directives, $roles)
             ->renderPartial('t', $vars);
     }
 
@@ -181,15 +184,15 @@ class DirectivePairingTest extends TestCase
 
     public function testCloseOfOtherConstructIsRejected(): void
     {
-        [$directives, $pairings] = $this->cacheConstruct();
+        [$directives, $roles] = $this->cacheConstruct();
         $directives['outer']    = static fn(): string => '/* outer */';
         $directives['endouter'] = static fn(): string => '/* endouter */';
-        $pairings['outer']      = ['endouter' => 'required'];
+        $roles['outer']         = Directive::opens('endouter');
 
         $engine = $this->engine(
             ['t' => '{% outer %}{% cache k %}b{% endouter %}{% endcache %}'],
             $directives,
-            $pairings
+            $roles
         );
 
         try {
@@ -232,12 +235,12 @@ class DirectivePairingTest extends TestCase
 
     public function testBranchInWrongConstructIsRejected(): void
     {
-        [$directives, $pairings] = $this->cacheConstruct();
+        [$directives, $roles] = $this->cacheConstruct();
         $directives['outer'] = static fn(): string => '/* outer */';
-        $pairings['outer']   = ['endouter' => 'required'];
+        $roles['outer']      = Directive::opens('endouter');
         $directives['endouter'] = static fn(): string => '/* endouter */';
 
-        $engine = $this->engine(['t' => '{% outer %}{% cacheelse %}{% endouter %}'], $directives, $pairings);
+        $engine = $this->engine(['t' => '{% outer %}{% cacheelse %}{% endouter %}'], $directives, $roles);
 
         $this->expectException(ClarityException::class);
         $this->expectExceptionMessageMatches("/belongs to '\\{% cache %\\}'/");
@@ -265,12 +268,80 @@ class DirectivePairingTest extends TestCase
     }
 
     // =========================================================================
+    // Containment-only directives (Directive::inside)
+    // =========================================================================
+
+    public function testContainedLeafRendersInsideItsOwner(): void
+    {
+        self::assertSame(
+            'A b Z',
+            $this->render('A {% cache k %}b{% cache_control %}{% endcache %} Z', ['k' => 'k1'])
+        );
+    }
+
+    /**
+     * Containment is lexical, not per-segment: after a branch tag the construct is
+     * still open, so the leaf is still inside it.
+     */
+    public function testContainedLeafRendersInsideABranchSegment(): void
+    {
+        self::assertSame(
+            'A b|c Z',
+            $this->render('A {% cache k %}b{% cacheelse %}c{% cache_control %}{% endcache %} Z', ['k' => 'k1'])
+        );
+    }
+
+    /**
+     * An include is inlined into the same render body, so a contained tag within
+     * it really runs inside the open construct — unlike a close, containment may
+     * cross the unit boundary.
+     */
+    public function testContainedLeafRendersFromAnInclude(): void
+    {
+        [$directives, $roles] = $this->cacheConstruct();
+
+        $engine = $this->engine(
+            ['t' => '{% cache k %}b{% include "inner" %}{% endcache %}', 'inner' => '{% cache_control %}'],
+            $directives,
+            $roles
+        );
+
+        self::assertSame('b', $engine->renderPartial('t', ['k' => 'k1']));
+    }
+
+    public function testContainedLeafOutsideItsOwnerIsRejected(): void
+    {
+        $this->assertRejects(
+            'A {% cache_control %} Z',
+            "'{% cache_control %}' is only valid inside '{% cache %}'"
+        );
+    }
+
+    public function testContainedLeafInTheWrongConstructIsRejected(): void
+    {
+        [$directives, $roles] = $this->cacheConstruct();
+        $directives['outer']    = static fn(): string => '/* outer */';
+        $directives['endouter'] = static fn(): string => '/* endouter */';
+        $roles['outer']         = Directive::opens('endouter');
+
+        $engine = $this->engine(
+            ['t' => '{% outer %}{% cache_control %}{% endouter %}'],
+            $directives,
+            $roles
+        );
+
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches("/is only valid inside '\\{% cache %\\}'/");
+        $engine->renderPartial('t');
+    }
+
+    // =========================================================================
     // Template-unit boundaries
     // =========================================================================
 
     public function testCloseAcrossIncludeBoundaryIsRejected(): void
     {
-        [$directives, $pairings] = $this->cacheConstruct();
+        [$directives, $roles] = $this->cacheConstruct();
 
         // The INNER template's own body closes the host's construct; the inner
         // unit's depth snapshot is what catches it, because an include is inlined
@@ -278,7 +349,7 @@ class DirectivePairingTest extends TestCase
         $engine = $this->engine(
             ['t' => '{% cache k %}{% include "inner" %}', 'inner' => 'x{% endcache %}'],
             $directives,
-            $pairings
+            $roles
         );
 
         $this->expectException(ClarityException::class);
@@ -288,12 +359,12 @@ class DirectivePairingTest extends TestCase
 
     public function testConstructLeftOpenInIncludeNamesTheInclude(): void
     {
-        [$directives, $pairings] = $this->cacheConstruct();
+        [$directives, $roles] = $this->cacheConstruct();
 
         $engine = $this->engine(
             ['t' => '{% include "inner" %}', 'inner' => 'x {% cache k %}y'],
             $directives,
-            $pairings
+            $roles
         );
 
         $this->expectException(ClarityException::class);
@@ -320,34 +391,16 @@ class DirectivePairingTest extends TestCase
 
         $this->expectException(ClarityException::class);
         $this->expectExceptionMessageMatches('/cannot declare the built-in keyword/');
-        $engine->addDirective('cache', static fn(): string => '', ['endif' => 'required']);
+        $engine->addDirective('cache', static fn(): string => '', Directive::opens('endif'));
     }
 
-    public function testDeclarationNeedsExactlyOneRequired(): void
+    public function testBuiltinKeywordCannotBeAnOwner(): void
     {
         $engine = new ClarityEngine();
 
         $this->expectException(ClarityException::class);
-        $this->expectExceptionMessageMatches("/exactly one 'required'/");
-        $engine->addDirective('cache', static fn(): string => '', ['cacheelse' => 'allowed']);
-    }
-
-    public function testUnknownRoleIsRejected(): void
-    {
-        $engine = new ClarityEngine();
-
-        $this->expectException(ClarityException::class);
-        $this->expectExceptionMessageMatches('/Unknown pairing role/');
-        $engine->addDirective('cache', static fn(): string => '', ['endcahce' => 'requird']);
-    }
-
-    public function testMixedRolesInOneRegistrationAreRejected(): void
-    {
-        $engine = new ClarityEngine();
-
-        $this->expectException(ClarityException::class);
-        $this->expectExceptionMessageMatches('/only one owner/');
-        $engine->addDirective('cache', static fn(): string => '', ['cache' => 'owner', 'endcache' => 'required']);
+        $this->expectExceptionMessageMatches('/cannot belong to the built-in keyword/');
+        $engine->addDirective('endcache', static fn(): string => '', Directive::closes('for'));
     }
 
     public function testSelfOwnershipIsRejected(): void
@@ -355,28 +408,55 @@ class DirectivePairingTest extends TestCase
         $engine = new ClarityEngine();
 
         $this->expectException(ClarityException::class);
-        $this->expectExceptionMessageMatches('/cannot own itself/');
-        $engine->addDirective('cache', static fn(): string => '', ['cache' => 'owner']);
+        $this->expectExceptionMessageMatches('/cannot belong to itself/');
+        $engine->addDirective('cache', static fn(): string => '', Directive::closes('cache'));
+    }
+
+    public function testSelfBranchIsRejected(): void
+    {
+        $engine = new ClarityEngine();
+
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/cannot belong to itself/');
+        $engine->addDirective('cacheelse', static fn(): string => '', Directive::branches('cacheelse'));
+    }
+
+    public function testSelfClosingOpenerIsRejected(): void
+    {
+        $engine = new ClarityEngine();
+
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/cannot close itself/');
+        $engine->addDirective('cache', static fn(): string => '', Directive::opens('cache'));
+    }
+
+    public function testBranchCannotAlsoBeTheCloseTag(): void
+    {
+        $engine = new ClarityEngine();
+
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/both the closing tag and a branch tag/');
+        $engine->addDirective('cache', static fn(): string => '', Directive::opens('endcache', 'endcache'));
     }
 
     public function testMissingMemberHandlerIsCaughtBeforeCompiling(): void
     {
-        [$directives, $pairings] = $this->cacheConstruct();
-        unset($directives['endcache'], $pairings['endcache']);
+        [$directives, $roles] = $this->cacheConstruct();
+        unset($directives['endcache'], $roles['endcache']);
 
-        $engine = $this->engine(['t' => 'hello'], $directives, $pairings);
+        $engine = $this->engine(['t' => 'hello'], $directives, $roles);
 
         $this->expectException(ClarityException::class);
         $this->expectExceptionMessageMatches("/no handler is registered for 'endcache'/");
         $engine->renderPartial('t');
     }
 
-    public function testOrphanedOwnerAssertionIsCaughtBeforeCompiling(): void
+    public function testOrphanedOwnerClaimIsCaughtBeforeCompiling(): void
     {
         $engine = $this->engine(
             ['t' => 'hello'],
             ['endfoo' => static fn(): string => ''],
-            ['endfoo' => ['foo' => 'owner']]
+            ['endfoo' => Directive::closes('foo')]
         );
 
         $this->expectException(ClarityException::class);
@@ -384,16 +464,46 @@ class DirectivePairingTest extends TestCase
         $engine->renderPartial('t');
     }
 
-    public function testOwnerAssertionTheOwnerDoesNotHonourIsCaught(): void
+    public function testClaimTheOwnerDoesNotHonourIsCaught(): void
     {
-        [$directives, $pairings] = $this->cacheConstruct();
+        [$directives, $roles] = $this->cacheConstruct();
         $directives['endother'] = static fn(): string => '';
-        $pairings['endother']   = ['cache' => 'owner'];
+        $roles['endother']      = Directive::closes('cache');
 
-        $engine = $this->engine(['t' => 'hello'], $directives, $pairings);
+        $engine = $this->engine(['t' => 'hello'], $directives, $roles);
 
         $this->expectException(ClarityException::class);
         $this->expectExceptionMessageMatches("/does not declare it as a close or branch/");
+        $engine->renderPartial('t');
+    }
+
+    /**
+     * The member's claim is deliberately redundant with the opener — that is what
+     * makes "declared it a branch, called it a closer" a caught error rather than a
+     * silent override.
+     */
+    public function testClaimedRoleMustMatchTheOwnersDeclaration(): void
+    {
+        [$directives, $roles] = $this->cacheConstruct();
+        $roles['endcache'] = Directive::branches('cache');
+
+        $engine = $this->engine(['t' => 'hello'], $directives, $roles);
+
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches("/claims to be a branch tag of 'cache'/");
+        $engine->renderPartial('t');
+    }
+
+    public function testContainmentOwnerMustBeAnOpener(): void
+    {
+        $engine = $this->engine(
+            ['t' => 'hello'],
+            ['noop' => static fn(): string => '', 'leaf' => static fn(): string => ''],
+            ['leaf' => Directive::inside('noop')]
+        );
+
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches("/not a registered opener/");
         $engine->renderPartial('t');
     }
 
@@ -407,8 +517,8 @@ class DirectivePairingTest extends TestCase
         $engine->setLoader(new ArrayLoader(['t' => 'A {% cache k %}b{% endcache %}']));
         $engine->setCachePath($this->cacheDir);
 
-        $engine->addDirective('endcache', static fn(): string => 'echo ob_get_clean();', ['cache' => 'owner']);
-        $engine->addDirective('cache', static fn(): string => 'ob_start();', ['endcache' => 'required']);
+        $engine->addDirective('endcache', static fn(): string => 'echo ob_get_clean();', Directive::closes('cache'));
+        $engine->addDirective('cache', static fn(): string => 'ob_start();', Directive::opens('endcache'));
 
         self::assertSame('A b', $engine->renderPartial('t', ['k' => 'k1']));
     }

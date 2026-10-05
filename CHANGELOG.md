@@ -136,6 +136,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tag. `COMPILER_VERSION` moves 25 → 26 so previously-cached templates are recompiled and
   now fail loudly.
 
+- **A directive's construct role is now a `Directive` value, not a
+  `keyword => role` array.** The array encoded two different ideas in the same shape:
+  `['endcache' => 'required']` said "this tag is my closing tag", while
+  `['cache' => 'owner']` said "this tag belongs to cache" — the direction of the mapping
+  flipped between the two forms, and the role was a magic string that had to be spelled
+  exactly right. A {@see \Clarity\Engine\Directive} factory names the role instead:
+
+  ```php
+  // was
+  $engine->addDirective('cache',      $openHandler,   ['endcache' => 'required', 'cacheelse' => 'allowed']);
+  $engine->addDirective('endcache',   $closeHandler,  ['cache' => 'owner']);
+  $engine->addDirective('cacheelse',  $branchHandler, ['cache' => 'owner']);
+  // now
+  $engine->addDirective('cache',      $openHandler,   Directive::opens('endcache', 'cacheelse'));
+  $engine->addDirective('endcache',   $closeHandler,  Directive::closes('cache'));
+  $engine->addDirective('cacheelse',  $branchHandler, Directive::branches('cache'));
+  ```
+
+  Four factories cover two independent ideas. `opens`/`branches`/`closes` describe
+  **structure** — the tag changes what the compiler has open, so the role is also what a
+  formatter needs to indent a body. `inside()` is a preposition, not a verb, because a
+  containment-only tag changes nothing; it is an ordinary leaf that is merely invalid
+  outside its owner, and it is now checked at compile time against the innermost open
+  construct:
+
+  ```php
+  $engine->addDirective('cache_control', $leafHandler, Directive::inside('cache'));
+  ```
+
+  `opens()` takes the closing keyword as a single named argument, so "exactly one closer"
+  is guaranteed by the shape of the call instead of by a counter; the variadic tail is the
+  optional branch tags. A member's `branches()`/`closes()` remains an assertion against
+  the opener and must now match its **role** too, not just its owner — declaring a tag a
+  branch while the opener calls it the closer is a registration error, not a silent
+  override. `Directive::inside()` is allowed across an `{% include %}` boundary (an
+  include is inlined into the same render body), unlike a close. The old array form is
+  removed, not deprecated. `COMPILER_VERSION` moves 27 → 28.
+
 - **The policy API: a template's reach is now a set of rules, not one
   boolean.** A `Clarity\Engine\Policy` is a set of rules plus two
   allowlists, and every decision it makes is made **at compile time** — there is

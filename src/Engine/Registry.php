@@ -170,17 +170,31 @@ class Registry
     private array $directivePairings = [];
 
     /**
-     * Member tags that asserted their owner: member keyword → owner keyword.
+     * Member tags that asserted which construct they belong to:
+     * member keyword → `['owner' => opener, 'role' => 'closer'|'branch']`.
      *
      * This is an ASSERTION, not a second declaration: it never changes how a tag
      * compiles, it only lets a close/branch tag state which construct it belongs
-     * to.  The consistency pass fails when the claim disagrees with the owner's
-     * declaration — which catches "registered the close but forgot the opener",
-     * the one authoring bug the opener-only metadata cannot see.
+     * to AND which of the two it is.  The consistency pass fails when the claim
+     * disagrees with the owner's declaration — which catches "registered the close
+     * but forgot the opener", the one authoring bug the opener-only metadata
+     * cannot see.
+     *
+     * @var array<string, array{owner: string, role: string}>
+     */
+    private array $directiveMemberClaims = [];
+
+    /**
+     * Leaf tags restricted to the inside of a construct: keyword → owner keyword.
+     *
+     * Unlike {@see $directiveMemberClaims}, a containment tag is NOT part of the
+     * construct: it opens and closes nothing, carries no cardinality, and renders
+     * just like any other leaf.  It is only refused outside its owner, checked at
+     * compile time against the innermost open construct.
      *
      * @var array<string, string>
      */
-    private array $directiveOwners = [];
+    private array $directiveContainment = [];
 
     /**
      * Reverse index of {@see $directivePairings}: member keyword → opener keyword.
@@ -1041,35 +1055,29 @@ class Registry
      *
      * Paired (block) directives
      * -------------------------
-     * A directive that wraps a body is declared by its OPENER, which lists every
-     * member tag and that tag's role:
+     * A directive that wraps a body declares its parts with a {@see Directive}
+     * value, whose factory name states the role:
      * ```php
-     * $engine->addDirective('cache', $openHandler, [
-     *     'endcache'  => 'required',   // the closing tag
-     *     'cacheelse' => 'allowed',    // optional branch tag, at most once
-     * ]);
-     * $engine->addDirective('endcache',  $closeHandler);
-     * $engine->addDirective('cacheelse', $branchHandler);
+     * $engine->addDirective('cache',      $openHandler,   Directive::opens('endcache', 'cache_else'));
+     * $engine->addDirective('cache_else', $branchHandler, Directive::branches('cache'));
+     * $engine->addDirective('endcache',   $closeHandler,  Directive::closes('cache'));
+     * $engine->addDirective('cache_ctrl', $leafHandler,   Directive::inside('cache'));
      * ```
-     * Members need no metadata to FUNCTION: the opener's declaration is what makes
-     * the compiler treat them as a close/branch tag.  A member MAY additionally
-     * assert its owner, in the same `keyword => role` direction:
-     * ```php
-     * $engine->addDirective('endcache', $closeHandler, ['cache' => 'owner']);
-     * ```
-     * That assertion never changes compilation; it makes the start of every compile
-     * verify that `cache` exists and does declare `endcache` (as `'required'` or
-     * `'allowed'`).  It is the guard against registering a close without its opener.
+     * The opener is the single source of truth for the structure; each member's
+     * `branches()`/`closes()` ASSERTS a role that must match what the opener
+     * declared, so "registered the closer but forgot the opener" is caught at the
+     * start of every compile.  `inside()` is a separate, weaker claim — the tag is
+     * an ordinary leaf that may only appear directly within its owner.
      *
-     * @param string        $keyword  Directive keyword (lowercase, e.g. 'with_locale').
-     * @param callable      $handler  See class docblock for expected signature.
-     * @param array<string, string>|null $pairing
-     *   Opener form: member keyword → `'required'` (exactly one) or `'allowed'`.
-     *   Member form: `['owner' => '<opener keyword>']` — a single entry, assertion only.
-     * @throws ClarityException On an invalid role, a reserved keyword, a mixed or
-     *                          self-referential declaration.
+     * @param string         $keyword  Directive keyword (lowercase, e.g. 'with_locale').
+     * @param callable       $handler  See class docblock for expected signature.
+     * @param Directive|null $directive
+     *   Omit for an ordinary directive; otherwise one of {@see Directive::opens()},
+     *   {@see Directive::branches()}, {@see Directive::closes()}, {@see Directive::inside()}.
+     * @throws ClarityException On an invalid keyword, a built-in keyword, or a
+     *                          contradictory or self-referential declaration.
      */
-    public function addDirective(string $keyword, callable $handler, ?array $pairing = null): static
+    public function addDirective(string $keyword, callable $handler, ?Directive $directive = null): static
     {
         if (!self::isDirectiveKeyword($keyword)) {
             throw new ClarityException(
@@ -1084,8 +1092,8 @@ class Registry
             );
         }
 
-        if ($pairing !== null) {
-            $this->assertDirectivePairing($keyword, $pairing);
+        if ($directive !== null) {
+            $this->recordDirectiveRole($keyword, $directive);
         }
 
         $this->directiveHandlers[$keyword] = $handler;
@@ -1093,102 +1101,144 @@ class Registry
     }
 
     /**
-     * Validate one `addDirective()` pairing argument and record it.
+     * Record one {@see Directive} declaration for `$keyword`.
      *
-     * The two forms are told apart by their VALUES, not by a flag: an entry whose
-     * value is `'owner'` is the member form, `'required'`/`'allowed'` are the opener
-     * form.  Mixing the two in one call is refused, because it would leave the
-     * direction of the mapping ambiguous.
-     *
-     * @param string                $keyword
-     * @param array<string, string> $pairing
+     * The four factories write to three different tables: an opener fills
+     * {@see $directivePairings}, a branch/closer fills {@see $directiveMemberClaims},
+     * and an `inside()` leaf fills {@see $directiveContainment}.  A keyword may not
+     * appear in more than one of them — those would be contradictory roles for one
+     * tag.
      */
-    private function assertDirectivePairing(string $keyword, array $pairing): void
+    private function recordDirectiveRole(string $keyword, Directive $directive): void
     {
-        if (\array_is_list($pairing)) {
+        if ($directive->isOpener()) {
+            $this->declareDirectiveOpener($keyword, $directive);
+            return;
+        }
+
+        $owner = (string) $directive->owner();
+        $this->assertDirectiveOwnerIsDeclarable($keyword, $owner);
+
+        if ($directive->isContainment()) {
+            if (isset($this->directivePairings[$keyword])
+                || isset($this->directiveMemberClaims[$keyword])
+            ) {
+                throw new ClarityException(
+                    "'{$keyword}' is declared structurally, so it cannot also use Directive::inside()."
+                );
+            }
+
+            $this->directiveContainment[$keyword] = $owner;
+            return;
+        }
+
+        if (isset($this->directivePairings[$keyword])) {
             throw new ClarityException(
-                "The pairing argument for '{$keyword}' must map keywords to roles, "
-                    . "e.g. ['endcache' => 'required'] or ['cache' => 'owner']."
+                "'{$keyword}' declares member tags, so it cannot also assert a branch/closer role."
+            );
+        }
+        if (isset($this->directiveContainment[$keyword])) {
+            throw new ClarityException(
+                "'{$keyword}' is declared with Directive::inside(), so it cannot also be a branch/closer."
             );
         }
 
-        $ownerEntries = 0;
-        $required     = 0;
-
-        foreach ($pairing as $member => $role) {
-            if (!\is_string($member) || !self::isDirectiveKeyword($member)) {
-                throw new ClarityException(
-                    "Invalid directive keyword '" . (string) $member . "' in the pairing argument of '{$keyword}'."
-                );
-            }
-
-            if (\in_array($member, self::BUILTIN_DIRECTIVE_KEYWORDS, true)) {
-                throw new ClarityException(
-                    "Directive '{$keyword}' cannot declare the built-in keyword '{$member}' as a member; "
-                        . 'the compiler dispatches it before the registry is consulted.'
-                );
-            }
-
-            if ($role === 'owner') {
-                $ownerEntries++;
-                if ($ownerEntries > 1 || \count($pairing) > 1) {
-                    throw new ClarityException(
-                        "'{$keyword}' may assert only one owner, e.g. ['cache' => 'owner']."
-                    );
-                }
-                if ($member === $keyword) {
-                    throw new ClarityException("A directive cannot own itself: '{$keyword}'.");
-                }
-                if (\in_array($member, self::BUILTIN_DIRECTIVE_KEYWORDS, true)) {
-                    throw new ClarityException(
-                        "Directive '{$keyword}' cannot be owned by the built-in keyword '{$member}'."
-                    );
-                }
-                if (isset($this->directivePairings[$keyword])) {
-                    throw new ClarityException(
-                        "'{$keyword}' already declares member tags, so it cannot also assert an owner."
-                    );
-                }
-
-                $this->directiveOwners[$keyword] = $member;
-                return;
-            }
-
-            if ($role !== 'required' && $role !== 'allowed') {
-                throw new ClarityException(
-                    "Unknown pairing role '" . (string) $role . "' for '{$member}' in the declaration of "
-                        . "'{$keyword}': expected 'required', 'allowed', or 'owner'."
-                );
-            }
-
-            if (isset($this->directiveOwners[$keyword])) {
-                throw new ClarityException(
-                    "'{$keyword}' asserts an owner, so it cannot also declare member tags."
-                );
-            }
-
-            if ($member === $keyword) {
-                throw new ClarityException("A directive cannot be its own member: '{$keyword}'.");
-            }
-
-            if (isset($this->directivePairings[$keyword][$member])) {
-                throw new ClarityException(
-                    "'{$member}' is declared twice in the declaration of '{$keyword}'."
-                );
-            }
-
-            if ($role === 'required' && ++$required > 1) {
-                throw new ClarityException(
-                    "The declaration of '{$keyword}' has more than one 'required' close tag."
-                );
-            }
-
-            $this->directivePairings[$keyword][$member] = $role;
+        $role = $directive->isBranch() ? 'branch' : 'closer';
+        if (isset($this->directiveMemberClaims[$keyword]) && $this->directiveMemberClaims[$keyword]['role'] !== $role) {
+            throw new ClarityException(
+                "'{$keyword}' is declared as both a branch and a closer tag."
+            );
         }
 
-        if ($required === 0) {
+        $this->directiveMemberClaims[$keyword] = ['owner' => $owner, 'role' => $role];
+    }
+
+    /**
+     * Record and validate one {@see Directive::opens()} declaration.
+     */
+    private function declareDirectiveOpener(string $keyword, Directive $directive): void
+    {
+        if (isset($this->directiveMemberClaims[$keyword]) || isset($this->directiveContainment[$keyword])) {
             throw new ClarityException(
-                "The declaration of '{$keyword}' needs exactly one 'required' close tag."
+                "'{$keyword}' asserts a branch/closer or containment role, so it cannot also declare member tags."
+            );
+        }
+
+        $closer = (string) $directive->closer();
+        $this->assertDirectiveMemberKeyword($keyword, $closer, 'close tag');
+
+        if ($closer === $keyword) {
+            throw new ClarityException("A directive cannot close itself: '{$keyword}'.");
+        }
+        if (isset($this->directivePairings[$keyword][$closer])) {
+            throw new ClarityException(
+                "'{$closer}' is declared twice in the declaration of '{$keyword}'."
+            );
+        }
+
+        $this->directivePairings[$keyword][$closer] = 'required';
+
+        foreach ($directive->branchTags() as $branch) {
+            $this->assertDirectiveMemberKeyword($keyword, $branch, 'branch tag');
+
+            if ($branch === $keyword) {
+                throw new ClarityException("A directive cannot be its own branch tag: '{$keyword}'.");
+            }
+            if ($branch === $closer) {
+                throw new ClarityException(
+                    "'{$branch}' cannot be both the closing tag and a branch tag of '{$keyword}'."
+                );
+            }
+            if (isset($this->directivePairings[$keyword][$branch])) {
+                throw new ClarityException(
+                    "'{$branch}' is declared twice in the declaration of '{$keyword}'."
+                );
+            }
+
+            $this->directivePairings[$keyword][$branch] = 'allowed';
+        }
+    }
+
+    /**
+     * Reject a member/owner keyword that is malformed or reserved.
+     */
+    private function assertDirectiveMemberKeyword(string $opener, string $member, string $what): void
+    {
+        if (!self::isDirectiveKeyword($member)) {
+            throw new ClarityException(
+                "Invalid directive keyword '{$member}' as a {$what} in the declaration of '{$opener}'."
+            );
+        }
+
+        if (\in_array($member, self::BUILTIN_DIRECTIVE_KEYWORDS, true)) {
+            throw new ClarityException(
+                "Directive '{$opener}' cannot declare the built-in keyword '{$member}' as a member; "
+                    . 'the compiler dispatches it before the registry is consulted.'
+            );
+        }
+    }
+
+    /**
+     * Reject an owner keyword that is malformed, reserved, or the tag itself.
+     */
+    private function assertDirectiveOwnerIsDeclarable(string $keyword, string $owner): void
+    {
+        if (!self::isDirectiveKeyword($owner)) {
+            throw new ClarityException(
+                "Invalid directive keyword '{$owner}' as the owner of '{$keyword}'."
+            );
+        }
+
+        if (\in_array($owner, self::BUILTIN_DIRECTIVE_KEYWORDS, true)) {
+            throw new ClarityException(
+                "Directive '{$keyword}' cannot belong to the built-in keyword '{$owner}'."
+            );
+        }
+
+        if ($owner === $keyword) {
+            throw new ClarityException(
+                "A directive cannot belong to itself: '{$keyword}'. "
+                    . 'An opener declares its members with Directive::opens().'
             );
         }
     }
@@ -1206,12 +1256,15 @@ class Registry
      * pass over the finished tables can catch a missing handler or a contradiction.
      *
      * @throws ClarityException On a missing member handler, a member declared by
-     *                          two openers, a member that is also an opener, or an
-     *                          owner assertion the owner does not honour.
+     *                          two openers, a member that is also an opener, or a
+     *                          member/containment claim the owner does not honour.
      */
     public function assertPairingConsistency(): void
     {
-        if ($this->directivePairings === [] && $this->directiveOwners === []) {
+        if ($this->directivePairings === []
+            && $this->directiveMemberClaims === []
+            && $this->directiveContainment === []
+        ) {
             return;
         }
 
@@ -1222,15 +1275,6 @@ class Registry
                 throw new ClarityException(
                     "Directive '{$opener}' declares member tags but has no registered handler."
                 );
-            }
-
-            $closes = 0;
-            foreach ($members as $role) {
-                if ($role === 'required' && ++$closes > 1) {
-                    throw new ClarityException(
-                        "The declaration of '{$opener}' has more than one 'required' close tag."
-                    );
-                }
             }
 
             foreach ($members as $member => $role) {
@@ -1258,25 +1302,78 @@ class Registry
             }
         }
 
-        foreach ($this->directiveOwners as $member => $owner) {
+        $this->assertDirectiveClaimsHonoured();
+        $this->assertContainmentOwnersDeclarable();
+
+        $this->directiveMemberToOpener = $memberToOpener;
+    }
+
+    /**
+     * Fail when a member's `branches()`/`closes()` claim disagrees with its
+     * owner's declaration, or points at an owner that does not exist.
+     *
+     * A claim is deliberately redundant with the opener: it is exactly the
+     * redundancy that catches "registered the closer but forgot the opener",
+     * which the opener-only metadata cannot see.  Both must therefore agree
+     * before the construct may compile.
+     */
+    private function assertDirectiveClaimsHonoured(): void
+    {
+        foreach ($this->directiveMemberClaims as $member => $claim) {
+            $owner = $claim['owner'];
+
             if (!isset($this->directiveHandlers[$member])) {
                 throw new ClarityException(
-                    "Directive '{$member}' asserts owner '{$owner}' but has no registered handler."
+                    "Directive '{$member}' claims owner '{$owner}' but has no registered handler."
                 );
             }
             if (!isset($this->directiveHandlers[$owner])) {
                 throw new ClarityException(
-                    "Directive '{$member}' asserts owner '{$owner}', but no such directive is registered."
+                    "Directive '{$member}' claims owner '{$owner}', but no such directive is registered."
                 );
             }
-            if (!isset($this->directivePairings[$owner][$member])) {
+
+            $declared = $this->directivePairings[$owner][$member] ?? null;
+
+            if ($declared === null) {
                 throw new ClarityException(
-                    "Directive '{$member}' asserts owner '{$owner}', but '{$owner}' does not declare it as a close or branch tag."
+                    "Directive '{$member}' claims owner '{$owner}', but '{$owner}' does not declare it as a close or branch tag."
+                );
+            }
+
+            $expected = $claim['role'] === 'branch' ? 'allowed' : 'required';
+            if ($declared !== $expected) {
+                throw new ClarityException(
+                    "Directive '{$member}' claims to be a "
+                        . ($claim['role'] === 'branch' ? 'branch tag' : 'close tag')
+                        . " of '{$owner}', but '{$owner}' declares it as "
+                        . ($declared === 'required' ? 'its close tag' : 'a branch tag') . '.'
                 );
             }
         }
+    }
 
-        $this->directiveMemberToOpener = $memberToOpener;
+    /**
+     * Fail when an `inside()` owner is not a registered opener.
+     *
+     * Containment is checked during dispatch (the tag needs an owner open around
+     * it); here the owner itself is validated once, so a typo is caught before any
+     * template compiles.
+     */
+    private function assertContainmentOwnersDeclarable(): void
+    {
+        foreach ($this->directiveContainment as $keyword => $owner) {
+            if (!isset($this->directiveHandlers[$keyword])) {
+                throw new ClarityException(
+                    "Directive '{$keyword}' belongs inside '{$owner}' but has no registered handler."
+                );
+            }
+            if (!isset($this->directivePairings[$owner])) {
+                throw new ClarityException(
+                    "Directive '{$keyword}' belongs inside '{$owner}', but '{$owner}' is not a registered opener."
+                );
+            }
+        }
     }
 
     /**
@@ -1328,6 +1425,18 @@ class Registry
     }
 
     /**
+     * The opener a containment-only directive must appear inside, or null.
+     *
+     * Distinct from {@see getDirectiveOwner()}: a containment tag is not part of
+     * the construct (it closes nothing), it is merely valid only while that owner
+     * is open somewhere around it.
+     */
+    public function getDirectiveContainmentOwner(string $keyword): ?string
+    {
+        return $this->directiveContainment[$keyword] ?? null;
+    }
+
+    /**
      * Whether `$keyword` is the close tag of its construct (vs a branch tag).
      */
     public function isDirectiveClose(string $keyword): bool
@@ -1372,6 +1481,12 @@ class Registry
         TemplateLocation $at,
         callable $processExpr,
     ): string {
+        if (!isset($this->directiveHandlers[$keyword])) {
+            throw new ClarityException(
+                "No handler registered for directive '{$keyword}'.",
+                $at
+            );
+        }
         return ($this->directiveHandlers[$keyword])($rest, $at, $processExpr);
     }
 

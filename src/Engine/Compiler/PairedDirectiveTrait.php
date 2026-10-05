@@ -138,6 +138,9 @@ trait PairedDirectiveTrait
         int $tplLine
     ): string {
         $registry = $this->registry;
+
+        $this->assertDirectiveContainment($keyword);
+
         $owner    = $registry->getDirectiveOwner($keyword);
 
         if ($owner === null) {
@@ -189,6 +192,43 @@ trait PairedDirectiveTrait
     }
 
     /**
+     * Fail when a containment-only directive (`Directive::inside()`) is used while
+     * its owner is not the innermost open construct.
+     *
+     * This is a weaker guarantee than a member tag's: the tag still opens and
+     * closes nothing, it is only refused where it would be meaningless.  Unlike a
+     * close, containment is allowed across an include boundary — an include is
+     * inlined into the same render body, so a contained tag inside it really does
+     * run within the open construct.
+     */
+    private function assertDirectiveContainment(string $keyword): void
+    {
+        $owner = $this->registry->getDirectiveContainmentOwner($keyword);
+
+        if ($owner === null) {
+            return;
+        }
+
+        $index = \array_key_last($this->directiveStack);
+        $top   = $index === null ? null : $this->directiveStack[$index];
+
+        if ($top === null) {
+            throw new ClarityException(
+                $this->directiveTag($keyword) . ' is only valid inside '
+                    . $this->directiveTag($owner) . ', which is not open.'
+            );
+        }
+
+        if ($top['open'] !== $owner) {
+            throw new ClarityException(
+                $this->directiveTag($keyword) . ' is only valid inside '
+                    . $this->directiveTag($owner) . ', but ' . $this->directiveTag($top['open'])
+                    . $this->openedAt($top) . ' is the innermost open construct.'
+            );
+        }
+    }
+
+    /**
      * Invoke one registered handler.  Located by the caller
      * ({@see compileRegistryDirective()}), which is what makes an exception raised
      * inside a handler blame the template rather than the closure.
@@ -202,10 +242,6 @@ trait PairedDirectiveTrait
         return $this->registry->compileDirective(
             $keyword,
             $rest,
-            // The compiler is the only layer that holds the physical path, so it
-            // resolves it here instead of leaving the handler to guess it. A
-            // handler that throws with this location is complete, and nothing
-            // has to re-wrap it afterwards.
             new TemplateLocation($sourcePath, $tplLine, $this->templatePath($sourcePath)),
             $this->directiveProcessExpr($sourcePath, $tplLine)
         );

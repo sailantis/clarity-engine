@@ -564,6 +564,7 @@ opcache.revalidate_freq=2
 
 ```php
 use Clarity\ClarityEngine;
+use Clarity\Engine\Directive;
 
 $engine = new ClarityEngine();
 
@@ -813,7 +814,7 @@ $engine->addDirective('cache', function(string $rest, TemplateLocation $at, call
             } else {
                 ob_start();
     PHP;
-}, ['endcache' => 'required']);
+}, Directive::opens('endcache'));
 
 $engine->addDirective('endcache', function(string $rest, TemplateLocation $at, callable $expr): string {
     return <<<PHP
@@ -825,7 +826,7 @@ $engine->addDirective('endcache', function(string $rest, TemplateLocation $at, c
             \$this->services['cache']->popKey();
         }
     PHP;
-}, ['cache' => 'owner']);
+}, Directive::closes('cache'));
 ```
 
 The service is registered under `cache`, matching the `$this->services['cache']` lookups emitted by the directives. The cache hit check happens before the template block, so the block is skipped entirely on a hit. The `try/finally` always pops the active key, including when rendering the block throws, and the service-owned stack supports nested cache blocks. The in-memory example keeps values only while this service instance lives; use a persistent cache implementation with the same `has()`, `get()`, `set()`, `pushKey()`, `currentKey()`, and `popKey()` methods to share cached values across requests.
@@ -843,35 +844,46 @@ The `$processExpr` callable converts the cache-key expression (a variable or lit
 
 ### Paired Directives
 
-A directive that wraps a body — anything with an `{% end… %}` counterpart — should
-declare its members on the opening tag. The declaration is a `keyword => role` map:
+A directive that wraps a body — anything with an `{% end… %}` counterpart — declares
+its role with a [`Clarity\Engine\Directive`](../src/Engine/Directive.php) value. The
+factory name states the role, so the two directions of the old `keyword => role` array
+(which meant "this is my close" for an opener but "I belong to this" for a member) can
+no longer be confused:
 
-| Role | Where | Meaning |
-| ---- | ----- | ------- |
-| `'required'` | opener | The closing tag. Exactly one per construct. |
-| `'allowed'` | opener | An optional branch tag, usable at most once between open and close. |
-| `'owner'` | member | Assertion that this tag belongs to the named opener (checked; changes nothing else). |
+| Factory | The tag … | Effect |
+| ------- | --------- | ------ |
+| `Directive::opens('endcache', 'cacheelse')` | opens the construct and names its parts | one closer (a single named argument) plus any optional branch tags |
+| `Directive::branches('cache')` | is a branch segment of `cache`, like `{% else %}` | ends the current body, starts the next; the construct stays open |
+| `Directive::closes('cache')` | ends `cache` | the construct is popped |
+| `Directive::inside('cache')` | may appear only inside `cache` | an ordinary leaf, restricted in place |
 
 ```php
-$engine->addDirective('cache', $openHandler, [
-    'endcache'  => 'required',   // the closing tag
-    'cacheelse' => 'allowed',    // optional branch tag
-]);
-
-$engine->addDirective('endcache',  $closeHandler);                       // no metadata needed
-$engine->addDirective('cacheelse', $branchHandler, ['cache' => 'owner']); // …or assert the owner
+$engine->addDirective('cache',         $openHandler,   Directive::opens('endcache', 'cacheelse'));
+$engine->addDirective('cacheelse',     $branchHandler, Directive::branches('cache'));
+$engine->addDirective('endcache',      $closeHandler,  Directive::closes('cache'));
+$engine->addDirective('cache_control', $leafHandler,   Directive::inside('cache'));
 ```
 
-The opener's declaration is the single source of truth; a member's `'owner'` entry only
-asserts agreement with it, catching the "registered the close but forgot the opener"
-mistake at the start of every compile.
+The opener is the single source of truth for the structure; `branches()` and `closes()`
+do not change it, they **assert** it. A claim that disagrees — declaring `endcache` a
+branch while `cache` calls it the closer — is a registration error, not a silent
+override. That redundancy is deliberate: it is what catches the "registered the closer
+but forgot the opener" mistake at the start of every compile.
+
+The four factories cover two independent ideas. `opens`/`branches`/`closes` describe
+**structure**: the tag changes what the compiler has open, so a formatter can read them
+to indent a body. `inside()` is a preposition, not a verb, because a containment tag
+changes nothing — it opens and closes no body, it is merely invalid outside its owner.
+Containment is checked against the innermost open construct and, unlike a close, is
+allowed across an `{% include %}` boundary (an include is inlined into the same render
+body, so the tag really does run inside the construct).
 
 Once declared, the compiler rejects — with the template name and line — an unclosed
 `{% cache %}` (`Unclosed '{% cache %}' tag (opened on line 3): add '{% endcache %}'`), a
 stray `{% endcache %}`, a close that crosses a nested `{% if %}`/`{% for %}` or another
-construct, a branch tag used outside its construct, and a construct that spans an
-`{% include %}`. Directives registered WITHOUT a pairing keep behaving exactly as before,
-so this is opt-in per construct.
+construct, a branch tag used outside its construct, a contained tag outside its owner,
+and a construct that spans an `{% include %}`. Directives registered WITHOUT a
+`Directive` argument keep behaving exactly as before, so this is opt-in per construct.
 
 ### Handler Signature
 
@@ -894,7 +906,7 @@ $engine->addDirective('cache', function (string $rest, TemplateLocation $at, cal
         throw new ClarityException('cache needs a key', $at);
     }
     return "\$this->services['cache']->begin({$processExpr(trim($rest))});";
-}, ['endcache' => 'required']);
+}, Directive::opens('endcache'));
 ```
 
 Passing `$at` straight to the second parameter is all it takes. A bare
@@ -927,7 +939,7 @@ $engine->addDirective('cache', function (string $rest, TemplateLocation $at, cal
     $tags = $named['tags'] ?? '[]';   // tags: ["user"]
 
     return "\$this->services['cache']->begin({$key}, {$ttl}, {$tags});";
-}, ['endcache' => 'required']);
+}, Directive::opens('endcache'));
 ```
 
 An argument whose text starts with `name:` is **named**; anything else is **positional**
