@@ -7,20 +7,20 @@ registration. Clarity includes localization modules and supports custom modules.
 
 ### Registering a Module
 
-Pass any `ModuleInterface` implementation to `$engine->use()`:
+Pass any `ModuleInterface` implementation to `$engine->addModule()`:
 
 ```php
-$engine->use(new MyModule());
-$engine->use(new IntlFormatModule(['locale' => 'sv_SE']));
+$engine->addModule(new MyModule());
+$engine->addModule(new IntlFormatModule(['locale' => 'sv_SE']));
 ```
 
-`use()` returns the engine instance, so calls can be chained:
+`addModule()` returns the engine instance, so calls can be chained:
 
 ```php
 $engine
-    ->use(new LocaleService(['locale' => 'nb_NO']))
-    ->use(new TranslationModule(['translations_path' => __DIR__ . '/locales']))
-    ->use(new IntlFormatModule());
+    ->addModule(new LocaleService(['locale' => 'nb_NO']))
+    ->addModule(new TranslationModule(['translations_path' => __DIR__ . '/locales']))
+    ->addModule(new IntlFormatModule());
 ```
 
 ### Implementing a Custom Module
@@ -34,7 +34,9 @@ use Clarity\ModuleInterface;
 
 class MyModule implements ModuleInterface
 {
-    public function __construct(private string $apiKey) {}
+    public function __construct(
+        private string $apiKey
+    ) {}
 
     public function register(ClarityEngine $engine): void
     {
@@ -133,7 +135,7 @@ Manages the locale stack and installs the `{% with_locale %}` /
 ```php
 use Clarity\Localization\LocaleService;
 
-$engine->use(new LocaleService([
+$engine->addModule(new LocaleService([
     'locale' => 'de_DE',   // default locale; auto-detected from intl/env if omitted
 ]));
 ```
@@ -175,7 +177,7 @@ Registers the `t` filter for looking up translation strings from locale files, p
 ```php
 use Clarity\Localization\TranslationModule;
 
-$engine->use(new TranslationModule([
+$engine->addModule(new TranslationModule([
     'locale'            => 'de_DE',
     'fallback_locale'   => 'en_US',
     'translations_path' => __DIR__ . '/locales',
@@ -280,8 +282,8 @@ Use `{% with_t_domain %}` to switch the active domain for a section of the templ
 
 ```php
 $engine
-    ->use(new LocaleService(['locale' => 'de_DE']))
-    ->use(new TranslationModule([
+    ->addModule(new LocaleService(['locale' => 'de_DE']))
+    ->addModule(new TranslationModule([
         'translations_path' => __DIR__ . '/locales',
         'fallback_locale'   => 'en_US',
     ]));
@@ -306,7 +308,7 @@ Registers locale-aware number, currency, date, time, and text formatting filters
 ```php
 use Clarity\Localization\IntlFormatModule;
 
-$engine->use(new IntlFormatModule([
+$engine->addModule(new IntlFormatModule([
     'locale'   => 'de_DE',
     'timezone' => 'Europe/Berlin',
 ]));
@@ -434,12 +436,12 @@ $engine->setViewPath(__DIR__ . '/templates');
 $engine->setCachePath(__DIR__ . '/cache/clarity');
 
 $engine
-    ->use(new LocaleService(['locale' => 'de_DE']))
-    ->use(new TranslationModule([
+    ->addModule(new LocaleService(['locale' => 'de_DE']))
+    ->addModule(new TranslationModule([
         'translations_path' => __DIR__ . '/locales',
         'fallback_locale'   => 'en_US',
     ]))
-    ->use(new IntlFormatModule([
+    ->addModule(new IntlFormatModule([
         'timezone' => 'Europe/Berlin',
     ]));
 ```

@@ -57,8 +57,8 @@ class RegistryConsistencyTest extends BaseTestCase
     private function fullRegistry(): Registry
     {
         $engine = new ClarityEngine();
-        $engine->use(new \Clarity\Localization\TranslationModule());
-        $engine->use(new \Clarity\Localization\IntlFormatModule());
+        $engine->addModule(new \Clarity\Localization\TranslationModule());
+        $engine->addModule(new \Clarity\Localization\IntlFormatModule());
 
         $prop = new \ReflectionProperty($engine, 'registry');
         $prop->setAccessible(true);

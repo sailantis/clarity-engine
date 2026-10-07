@@ -27,7 +27,7 @@ class ModulesTest extends BaseTestCase
             }
         };
 
-        TestEnvironment::engine()->use($module);
+        TestEnvironment::engine()->addModule($module);
 
         self::tpl('mod_use', '{{ 2 |> double }}');
 
@@ -61,7 +61,7 @@ class ModulesTest extends BaseTestCase
         };
 
         $this->assertFalse($registered);
-        $engine->use($module);
+        $engine->addModule($module);
         $this->assertTrue($registered);
     }
 
@@ -74,7 +74,7 @@ class ModulesTest extends BaseTestCase
             {
             }
         };
-        $result = $engine->use($module);
+        $result = $engine->addModule($module);
         $this->assertSame($engine, $result);
     }
 
@@ -90,7 +90,7 @@ class ModulesTest extends BaseTestCase
                 $e->addFilter('shout', fn(string $v): string => strtoupper($v) . '!!!');
             }
         };
-        $engine->use($module);
+        $engine->addModule($module);
 
         self::tpl('mod_filter', '{{ word |> shout }}');
         $result = $engine->renderPartial('mod_filter', ['word' => 'hello']);

@@ -304,9 +304,9 @@ Get the currently registered view namespaces.
 
 ---
 
-### use() · <small>[🗎](../../src/ClarityEngineTrait.php#L365)</small>
+### addModule() · <small>[🗎](../../src/ClarityEngineTrait.php#L365)</small>
 
-`public function use(Clarity\ModuleInterface $module): static`
+`public function addModule(Clarity\ModuleInterface $module): static`
 
 Register a module, granting it access to this engine instance so it can
 self-register filters, functions, services, and directives.
@@ -315,7 +315,7 @@ Modules are the recommended way to bundle related features (e.g. a full
 localization set with filters, a locale stack, and `with_locale` directives).
 
 ```php
-$engine->use(new \Clarity\LocalizationModule([
+$engine->addModule(new \Clarity\LocalizationModule([
     'locale'            => 'de_DE',
     'translations_path' => __DIR__ . '/locales',
 ]));

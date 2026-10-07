@@ -353,7 +353,7 @@ trait ClarityEngineTrait
      * localization set with filters, a locale stack, and `with_locale` directives).
      *
      * ```php
-     * $engine->use(new \Clarity\LocalizationModule([
+     * $engine->addModule(new \Clarity\LocalizationModule([
      *     'locale'            => 'de_DE',
      *     'translations_path' => __DIR__ . '/locales',
      * ]));
@@ -362,7 +362,7 @@ trait ClarityEngineTrait
      * @param ModuleInterface $module Module to register.
      * @return $this
      */
-    public function use(ModuleInterface $module): static
+    public function addModule(ModuleInterface $module): static
     {
         $module->register($this);
         return $this;

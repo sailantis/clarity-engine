@@ -69,6 +69,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`$engine->use()` is now `$engine->addModule()`.** The one public method on the
+  engine that registers a `ModuleInterface` was also the only registration method
+  not named `add*`, next to `addNamespace()`, `addFilter()`, `addFunction()`,
+  `addDirective()`, `addService()`, `addInlineFilter()` and `addInlineFunction()`.
+  A module is what is being added, so the call now says so:
+
+  ```php
+  // was
+  $engine->use(new IntlFormatModule(['locale' => 'en_US']));
+
+  // now
+  $engine->addModule(new IntlFormatModule(['locale' => 'en_US']));
+  ```
+
+  `use()` is removed rather than aliased — an alias would preserve exactly the
+  ambiguity the rename exists to remove, and the module system has no other
+  meaning for “use”. The method’s behaviour is unchanged: it still calls
+  `$module->register($this)` and returns `static` for chaining. Update any
+  `$engine->use(...)` call to `$engine->addModule(...)`; nothing else about
+  `ModuleInterface` changes.
+
 - **The registry's codegen table is now `$inlineDefinitions`.** It was
   `$inlineFilters`, which stopped being accurate the moment a record could be a
   call-only function rather than a filter. The table answers one question — *how

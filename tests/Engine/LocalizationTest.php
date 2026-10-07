@@ -136,7 +136,7 @@ class LocalizationTest extends BaseTestCase
     {
         $engine = new ClarityEngine();
         $engine->setViewPath(TestEnvironment::viewDir())->setCachePath(TestEnvironment::cacheDir());
-        $engine->use(new \Clarity\Localization\TranslationModule([
+        $engine->addModule(new \Clarity\Localization\TranslationModule([
             'locale'            => 'en_US',
             'fallback_locale'   => 'en_US',
             'translations_path' => $translationsDir,
@@ -179,7 +179,7 @@ class LocalizationTest extends BaseTestCase
     {
         $engine = new ClarityEngine();
         $engine->setViewPath(TestEnvironment::viewDir())->setCachePath(TestEnvironment::cacheDir());
-        $engine->use(new \Clarity\Localization\IntlFormatModule(['locale' => 'en_US']));
+        $engine->addModule(new \Clarity\Localization\IntlFormatModule(['locale' => 'en_US']));
 
         // Rendering a documented example is the assertion that matters: before
         // the rename the filter was registered as `format`, so this threw
@@ -195,7 +195,7 @@ class LocalizationTest extends BaseTestCase
     {
         $engine = new ClarityEngine();
         $engine->setViewPath(TestEnvironment::viewDir())->setCachePath(TestEnvironment::cacheDir());
-        $engine->use(new \Clarity\Localization\IntlFormatModule(['locale' => 'en_US']));
+        $engine->addModule(new \Clarity\Localization\IntlFormatModule(['locale' => 'en_US']));
 
         // A simple `{placeholder}` pattern is handled by the local fallback, so
         // this asserts the filter is wired up without requiring the intl extension.
@@ -212,7 +212,7 @@ class LocalizationTest extends BaseTestCase
         }
         $engine = new ClarityEngine();
         $engine->setViewPath(TestEnvironment::viewDir())->setCachePath(TestEnvironment::cacheDir());
-        $engine->use(new \Clarity\Localization\IntlFormatModule(['locale' => 'en_US']));
+        $engine->addModule(new \Clarity\Localization\IntlFormatModule(['locale' => 'en_US']));
         self::tpl('lmod_currency', '{{ price |> format_currency("USD", "en_US") }}');
         $result = $engine->renderPartial('lmod_currency', ['price' => 1234.56]);
         $this->assertStringContainsString('1,234.56', $result);
@@ -225,7 +225,7 @@ class LocalizationTest extends BaseTestCase
         }
         $engine = new ClarityEngine();
         $engine->setViewPath(TestEnvironment::viewDir())->setCachePath(TestEnvironment::cacheDir());
-        $engine->use(new \Clarity\Localization\IntlFormatModule(['locale' => 'en_US']));
+        $engine->addModule(new \Clarity\Localization\IntlFormatModule(['locale' => 'en_US']));
 
         self::tpl('lmod_with_locale', '{{ 1234.56 |> format_currency("EUR", "en_US") }}|{% with_locale "de_DE" %}{{ 1234.56 |> format_currency("EUR", "de_DE") }}{% endwith_locale %}');
         $result = $engine->renderPartial('lmod_with_locale');
@@ -242,7 +242,7 @@ class LocalizationTest extends BaseTestCase
         }
         $engine = new ClarityEngine();
         $engine->setViewPath(TestEnvironment::viewDir())->setCachePath(TestEnvironment::cacheDir());
-        $engine->use(new \Clarity\Localization\IntlFormatModule(['locale' => 'en_US']));
+        $engine->addModule(new \Clarity\Localization\IntlFormatModule(['locale' => 'en_US']));
 
         self::tpl(
             'lmod_locale_restore',
@@ -256,7 +256,7 @@ class LocalizationTest extends BaseTestCase
     {
         $engine = new ClarityEngine();
         $engine->setViewPath(TestEnvironment::viewDir())->setCachePath(TestEnvironment::cacheDir());
-        $engine->use(new \Clarity\Localization\IntlFormatModule(['locale' => 'en_US']));
+        $engine->addModule(new \Clarity\Localization\IntlFormatModule(['locale' => 'en_US']));
 
         $this->expectException(ClarityException::class);
         $this->expectExceptionMessageMatches("/'with_locale' requires/");
@@ -271,7 +271,7 @@ class LocalizationTest extends BaseTestCase
         }
         $engine = new ClarityEngine();
         $engine->setViewPath(TestEnvironment::viewDir())->setCachePath(TestEnvironment::cacheDir());
-        $engine->use(new \Clarity\Localization\IntlFormatModule(['locale' => 'en_US']));
+        $engine->addModule(new \Clarity\Localization\IntlFormatModule(['locale' => 'en_US']));
 
         self::tpl('lmod_var_locale', '{% with_locale userLocale %}{{ 1234.56 |> format_currency("EUR", "de_DE") }}{% endwith_locale %}');
         $result = $engine->renderPartial('lmod_var_locale', ['userLocale' => 'de_DE']);

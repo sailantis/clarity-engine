@@ -20,9 +20,9 @@ Registration
 ------------
 ```php
 // Optional: explicit locale service (register first to share with IntlFormatModule)
-$engine->use(new LocaleService(['locale' => 'de_DE']));
+$engine->addModule(new LocaleService(['locale' => 'de_DE']));
 
-$engine->use(new TranslationModule([
+$engine->addModule(new TranslationModule([
     'locale'            => 'de_DE',
     'fallback_locale'   => 'en_US',
     'translations_path' => __DIR__ . '/locales',

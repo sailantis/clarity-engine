@@ -13,9 +13,9 @@ Registration
 ------------
 ```php
 // Optional: explicit locale service (register first to share with TranslationModule)
-$engine->use(new LocaleService(['locale' => 'de_DE']));
+$engine->addModule(new LocaleService(['locale' => 'de_DE']));
 
-$engine->use(new IntlFormatModule([
+$engine->addModule(new IntlFormatModule([
     'locale'    => 'de_DE',   // default locale (inherits from LocaleService if registered first)
     'timezone'  => 'Europe/Dublin',  // default timezone for date/time formatting
 ]));
@@ -103,7 +103,7 @@ Config options: {
 Register all filters, functions, services, and directives that
 this module provides into the given engine instance.
 
-This method is called once by [`ClarityEngine::use()`](Clarity_ClarityEngine.md#use) at engine
+This method is called once by [`ClarityEngine::addModule()`](Clarity_ClarityEngine.md#addmodule) at engine
 setup time, before any templates are compiled or rendered.
 
 **Parameters**

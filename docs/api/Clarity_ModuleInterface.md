@@ -5,12 +5,12 @@
 Contract for Clarity engine modules.
 
 A module bundles a cohesive set of filters, functions, and directives
-and registers them all in one call via [`ClarityEngine::use()`](Clarity_ClarityEngine.md#use).
+and registers them all in one call via [`ClarityEngine::addModule()`](Clarity_ClarityEngine.md#addmodule).
 
 Example
 -------
 ```php
-$clarity->use(new IntlFormatModule([
+$clarity->addModule(new IntlFormatModule([
     'locale'            => 'jp_JP',
 ]));
 ```
@@ -37,7 +37,7 @@ class MyModule implements ModuleInterface
 Register all filters, functions, services, and directives that
 this module provides into the given engine instance.
 
-This method is called once by [`ClarityEngine::use()`](Clarity_ClarityEngine.md#use) at engine
+This method is called once by [`ClarityEngine::addModule()`](Clarity_ClarityEngine.md#addmodule) at engine
 setup time, before any templates are compiled or rendered.
 
 **Parameters**

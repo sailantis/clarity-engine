@@ -14,9 +14,10 @@ Registration order
 Always register `LocaleService` **before** the translation / format modules:
 
 ```php
-$engine->use(new LocaleService(['locale' => 'de_DE']));
-$engine->use(new TranslationModule(['translations_path' => __DIR__ . '/locales']));
-$engine->use(new IntlFormatModule());
+$engine->addModule(new LocaleService(['locale' => 'de_DE']));
+$engine->addModule(new TranslationModule([
+    'translations_path' => __DIR__ . '/locales',
+]));
 ```
 
 If either translation or format module is registered without a prior
@@ -34,7 +35,7 @@ Template usage
 
 ## Public methods
 
-### detectLocale() · <small>[🗎](../../src/Localization/LocaleService.php#L49)</small>
+### detectLocale() · <small>[🗎](../../src/Localization/LocaleService.php#L50)</small>
 
 `public static function detectLocale(): string`
 
@@ -45,7 +46,7 @@ Template usage
 
 ---
 
-### push() · <small>[🗎](../../src/Localization/LocaleService.php#L82)</small>
+### push() · <small>[🗎](../../src/Localization/LocaleService.php#L83)</small>
 
 `public function push(string|null $locale): void`
 
@@ -67,7 +68,7 @@ that may be null do not corrupt the stack.
 
 ---
 
-### pop() · <small>[🗎](../../src/Localization/LocaleService.php#L95)</small>
+### pop() · <small>[🗎](../../src/Localization/LocaleService.php#L96)</small>
 
 `public function pop(): void`
 
@@ -82,7 +83,7 @@ Calling this when the stack is empty is a no-op.
 
 ---
 
-### current() · <small>[🗎](../../src/Localization/LocaleService.php#L107)</small>
+### current() · <small>[🗎](../../src/Localization/LocaleService.php#L108)</small>
 
 `public function current(): string|null`
 
@@ -96,7 +97,7 @@ locale when the stack is empty.
 
 ---
 
-### registerBlocks() · <small>[🗎](../../src/Localization/LocaleService.php#L118)</small>
+### registerBlocks() · <small>[🗎](../../src/Localization/LocaleService.php#L119)</small>
 
 `public static function registerBlocks(Clarity\ClarityEngine $engine): void`
 
@@ -118,7 +119,7 @@ and `IntlFormatModule` when they need to self-bootstrap the service.
 
 ---
 
-### bootstrap() · <small>[🗎](../../src/Localization/LocaleService.php#L153)</small>
+### bootstrap() · <small>[🗎](../../src/Localization/LocaleService.php#L154)</small>
 
 `public static function bootstrap(Clarity\ClarityEngine $engine): static`
 

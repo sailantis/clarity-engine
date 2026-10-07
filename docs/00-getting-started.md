@@ -201,10 +201,10 @@ use Clarity\Localization\IntlFormatModule;
 use Clarity\Localization\TranslationModule;
 
 // Locale-aware number, date, and currency filters (requires intl extension)
-$engine->use(new IntlFormatModule(['locale' => 'en_US']));
+$engine->addModule(new IntlFormatModule(['locale' => 'en_US']));
 
 // Translation filter (t) with file-based catalogs
-$engine->use(new TranslationModule([
+$engine->addModule(new TranslationModule([
     'locale'            => 'en_US',
     'translations_path' => __DIR__ . '/locales',
 ]));

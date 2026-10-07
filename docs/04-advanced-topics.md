@@ -608,8 +608,8 @@ Modules are the recommended way to bundle related filters, functions, block dire
 use Clarity\Localization\IntlFormatModule;
 use Clarity\Localization\TranslationModule;
 
-$engine->use(new IntlFormatModule(['locale' => 'de_DE', 'timezone' => 'Europe/Berlin']));
-$engine->use(new TranslationModule([
+$engine->addModule(new IntlFormatModule(['locale' => 'de_DE', 'timezone' => 'Europe/Berlin']));
+$engine->addModule(new TranslationModule([
     'locale'            => 'de_DE',
     'fallback_locale'   => 'en_US',
     'translations_path' => __DIR__ . '/locales',

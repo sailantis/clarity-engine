@@ -282,8 +282,8 @@ $engine->addFilter('currency', fn($v) => '€ ' . number_format($v, 2));
 $engine->flushCache();
 
 // Modules: bundle filters, functions, and directives
-$engine->use(new \Clarity\Localization\IntlFormatModule(['locale' => 'en_US']));
-$engine->use(new \Clarity\Localization\TranslationModule([
+$engine->addModule(new \Clarity\Localization\IntlFormatModule(['locale' => 'en_US']));
+$engine->addModule(new \Clarity\Localization\TranslationModule([
     'locale'            => 'en_US',
     'translations_path' => __DIR__ . '/locales',
 ]));

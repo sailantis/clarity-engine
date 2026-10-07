@@ -18,9 +18,9 @@ use MessageFormatter;
  * ------------
  * ```php
  * // Optional: explicit locale service (register first to share with TranslationModule)
- * $engine->use(new LocaleService(['locale' => 'de_DE']));
+ * $engine->addModule(new LocaleService(['locale' => 'de_DE']));
  *
- * $engine->use(new IntlFormatModule([
+ * $engine->addModule(new IntlFormatModule([
  *     'locale'    => 'de_DE',   // default locale (inherits from LocaleService if registered first)
  *     'timezone'  => 'Europe/Dublin',  // default timezone for date/time formatting
  * ]));

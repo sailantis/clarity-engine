@@ -21,9 +21,10 @@ use Locale;
  * Always register `LocaleService` **before** the translation / format modules:
  *
  * ```php
- * $engine->use(new LocaleService(['locale' => 'de_DE']));
- * $engine->use(new TranslationModule(['translations_path' => __DIR__ . '/locales']));
- * $engine->use(new IntlFormatModule());
+ * $engine->addModule(new LocaleService(['locale' => 'de_DE']));
+ * $engine->addModule(new TranslationModule([
+ *     'translations_path' => __DIR__ . '/locales',
+ * ]));
  * ```
  *
  * If either translation or format module is registered without a prior
