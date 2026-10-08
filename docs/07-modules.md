@@ -217,19 +217,21 @@ use Clarity\Localization\TranslationModule;
 $engine->addModule(new TranslationModule([
     'locale'            => 'de_DE',
     'fallback_locale'   => 'en_US',
-    'translations_path' => __DIR__ . '/locales',
     'default_domain'    => 'messages',
+    'translations_path' => __DIR__ . '/locales',
     'cache_path'        => sys_get_temp_dir(),
+    'loader'            => null,   // optional, any TranslationLoaderInterface
 ]));
 ```
 
-| Option              | Type   | Default         | Description                                                                                                  |
-| ------------------- | ------ | --------------- | ------------------------------------------------------------------------------------------------------------ |
-| `locale`            | string | `null`          | Locale to translate into; falls back to the `LocaleService` default, then to the detected environment locale |
-| `fallback_locale`   | string | `'en_US'`       | Used when a key is not found in the active locale                                                            |
-| `translations_path` | string | `null`          | Directory containing translation files                                                                       |
-| `default_domain`    | string | `'messages'`    | Domain used when none is specified in the template                                                           |
-| `cache_path`        | string | system temp dir | Where compiled YAML/JSON caches are stored                                                                   |
+| Option              | Type                         | Default         | Description                                                                                                                                                                                              |
+| ------------------- | ---------------------------- | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `locale`            | string                       | `null`          | Locale to translate into; falls back to the `LocaleService` default, then to the detected environment locale                                                                                             |
+| `fallback_locale`   | string                       | `'en_US'`       | Used when a key is not found in the active locale                                                                                                                                                        |
+| `translations_path` | string                       | `null`          | Directory containing translation files                                                                                                                                                                   |
+| `default_domain`    | string                       | `'messages'`    | Domain used when none is specified in the template                                                                                                                                                       |
+| `cache_path`        | string                       | system temp dir | Where compiled YAML/JSON caches are stored                                                                                                                                                               |
+| `loader`            | `TranslationLoaderInterface` | `null`          | Loader used to resolve keys. Defaults to a `FileTranslationLoader` over `translations_path` and `cache_path`, which are otherwise not used for loading. See [Translation Loaders](#translation-loaders). |
 
 ### File Naming Convention
 
@@ -337,6 +339,143 @@ $engine
     {{ "greeting" |> t({name: user:name}) }}
 {% endwith_locale %}
 ```
+
+### Translation Loaders
+
+`TranslationModule` delegates loading to a `TranslationLoaderInterface`.
+Loaders receive a `domain` and `locale`, similar to how a `TemplateLoader`
+resolves a template name. A loader can read translations from any source.
+
+```php
+interface TranslationLoaderInterface
+{
+    /** @return array<string, string> Flat key → message map. */
+    public function load(string $domain, string $locale): array;
+}
+```
+
+Set the `loader` option to use a custom loader instead of the default file
+loader:
+
+```php
+$engine->addModule(new TranslationModule([
+    'locale' => 'de_DE',
+    'loader' => $myLoader,   // any TranslationLoaderInterface
+]));
+```
+
+Clarity includes three loader implementations:
+
+| Loader                   | Purpose                                                                     |
+| ------------------------ | --------------------------------------------------------------------------- |
+| `FileTranslationLoader`  | Default. Reads `{domain}.{locale}.{php,json,yaml}` and compiles a PHP cache |
+| `ChainTranslationLoader` | Merges several loaders; later arguments override earlier ones               |
+| `RedisCachingLoader`     | Decorator that caches any other loader in Redis                             |
+
+#### ChainTranslationLoader
+
+Combine sources in precedence order, such as a database overriding file-based
+translations:
+
+```php
+use Clarity\Localization\ChainTranslationLoader;
+use Clarity\Localization\FileTranslationLoader;
+
+$engine->addModule(new TranslationModule([
+    'loader' => new ChainTranslationLoader(
+        new FileTranslationLoader(__DIR__ . '/locales'),   // base
+        new DatabaseTranslationLoader($pdo),               // overrides the base
+    ),
+]));
+```
+
+The chain queries loaders in argument order and merges their results. If more
+than one loader defines a key, the last definition wins. The chain queries
+every loader rather than stopping at the first match.
+
+#### RedisCachingLoader
+
+Wrap a loader to cache its results in Redis. A cache hit skips the wrapped
+loader; a miss queries it and stores the result.
+
+```php
+use Clarity\Localization\RedisCachingLoader;
+
+$inner  = new FileTranslationLoader(__DIR__ . '/locales');
+$loader = new RedisCachingLoader($inner, $redis, /* ttl */ 3600);
+```
+
+Keys use `translations:{domain}:{locale}` and are stored with `SETEX` for the
+configured TTL. Values are PHP-serialized. Invalidate entries explicitly:
+
+```php
+$loader->invalidate('messages', 'de_DE');  // one key
+$loader->invalidate('messages');           // every locale of one domain
+$loader->invalidate();                     // everything under translations:*
+```
+
+Requirements and invalidation:
+
+- Requires the **`ext-redis`** extension and a `\Redis` instance as a
+  constructor argument. The extension is optional, as is `ext-intl` for
+  `IntlFormatModule`.
+- Call `invalidate()` explicitly when the underlying data changes. You can
+  access the loader through the module:
+
+  ```php
+  $loader = $engine->getService('t')->getLoader();
+
+  if ($loader instanceof RedisCachingLoader) {
+      $loader->invalidate('messages');
+  }
+  ```
+
+  `getLoader()` returns the configured loader. Use `instanceof` to check its
+  type when it is configured elsewhere, such as through the environment.
+
+#### Caching, and its cost
+
+A loader runs for every `t` lookup; `TranslationModule` does not cache
+catalogs. The per-lookup cost depends on the loader:
+
+| Setup                             | Per `t` lookup                         |
+| --------------------------------- | -------------------------------------- |
+| `FileTranslationLoader` (default) | one `require` of a compiled cache file |
+| `RedisCachingLoader(…, $redis)`   | one Redis `GET`                        |
+
+The default file loader does not require an additional cache. Use
+`RedisCachingLoader` if a custom loader is slow. Redis caching applies across
+requests; per-request memoization is not provided.
+
+#### Writing a Loader
+
+Implement the interface and return a flat map of keys to messages. Handling
+nested data is the loader's responsibility. As `FileTranslationLoader` does,
+flatten nested keys to dotted keys such as `nav.home` so that
+`{{ "nav.home" |> t }}` resolves.
+
+```php
+use Clarity\Localization\TranslationLoaderInterface;
+
+final class DatabaseTranslationLoader implements TranslationLoaderInterface
+{
+    public function __construct(private \PDO $pdo) {}
+
+    public function load(string $domain, string $locale): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT key, message FROM translations WHERE domain = ? AND locale = ?'
+        );
+        $stmt->execute([$domain, $locale]);
+
+        return $stmt->fetchAll(\PDO::FETCH_KEY_PAIR);
+    }
+}
+```
+
+Return an empty array when there are no translations; do not return `null`.
+The module then checks `fallback_locale` and returns the key if no translation
+is found there.
 
 ---
 

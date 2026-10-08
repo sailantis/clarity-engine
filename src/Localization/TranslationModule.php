@@ -35,6 +35,7 @@ use Clarity\Template\TemplateLocation;
  *     'translations_path' => __DIR__ . '/locales',
  *     'default_domain'    => 'messages',   // optional, default: 'messages'
  *     'cache_path'        => sys_get_temp_dir(), // optional, where JSON/YAML caches go
+ *     'loader'            => null,  // optional, any TranslationLoaderInterface
  * ]));
  * ```
  *
@@ -62,52 +63,51 @@ class TranslationModule implements ModuleInterface
     private ?string $configuredLocale;
     private string $detectedLocale;
     private string $fallbackLocale;
-    private ?string $translationsPath;
     private string $defaultDomain;
-    private ?string $cachePath;
     private array $domainStack = [];
     private string $currentDomain;
     private TranslationLoaderInterface $loader;
     private ?LocaleService $localeService = null;
-
-    /**
-     * Loaded catalogs: [domain][locale] → [key → message].
-     *
-     * @var array<string, array<string, array<string, string>>>
-     */
-    private array $catalog = [];
 
     public function __construct(array $config = [])
     {
         $this->configuredLocale = $config['locale'] ?? null;
         $this->detectedLocale   = LocaleService::detectLocale();
         $this->fallbackLocale   = $config['fallback_locale'] ?? 'en_US';
-        $this->translationsPath = $config['translations_path'] ?? null;
         $this->defaultDomain    = $config['default_domain'] ?? 'messages';
         $this->currentDomain    = $this->defaultDomain;
 
-        if ($this->translationsPath !== null) {
-            $this->translationsPath = rtrim($this->translationsPath, '/\\');
-            if (!is_dir($this->translationsPath)) {
-                throw new \InvalidArgumentException("Translations path '{$this->translationsPath}' does not exist or is not a directory.");
+        if (isset($config['loader'])) {
+            if (!$config['loader'] instanceof TranslationLoaderInterface) {
+                throw new \InvalidArgumentException("Loader must implement TranslationLoaderInterface.");
+            }
+            $this->loader = $config['loader'];
+            return;
+        }
+
+        $translationsPath = $config['translations_path'] ?? null;
+
+        if ($translationsPath !== null) {
+            $translationsPath = rtrim($translationsPath, '/\\');
+            if (!is_dir($translationsPath)) {
+                throw new \InvalidArgumentException("Translations path '{$translationsPath}' does not exist or is not a directory.");
             }
         }
 
         $cachePath = $config['cache_path'] ?? null;
         if ($cachePath === null) {
             $cachePath = \sys_get_temp_dir() . \DIRECTORY_SEPARATOR . 'clarity_translations';
-            if ($this->translationsPath !== null) {
+            if ($translationsPath !== null) {
                 $cachePath .= \DIRECTORY_SEPARATOR;
-                $cachePath .= md5($this->translationsPath);
+                $cachePath .= md5($translationsPath);
             }
         }
-        $this->cachePath = rtrim($cachePath, '/\\');
+        $cachePath = rtrim($cachePath, '/\\');
 
-        $this->loader = $config['loader']
-            ?? new FileTranslationLoader(
-                $this->translationsPath ?? '',
-                $this->cachePath
-            );
+        $this->loader = new FileTranslationLoader(
+            $translationsPath ?? '',
+            $cachePath
+        );
 
     }
 
@@ -159,6 +159,25 @@ class TranslationModule implements ModuleInterface
     // =========================================================================
 
     /**
+     * Return the loader this module resolves keys with.
+     *
+     * The loader is injectable, and a decorator such as `RedisCachingLoader`
+     * has an `invalidate()` that is not reachable any other way. The module is
+     * registered as the `t` service, so:
+     *
+     * ```php
+     * $loader = $engine->getService('t')->getLoader();
+     * if ($loader instanceof RedisCachingLoader) {
+     *     $loader->invalidate('messages');
+     * }
+     * ```
+     */
+    public function getLoader(): TranslationLoaderInterface
+    {
+        return $this->loader;
+    }
+
+    /**
      * Resolve the locale to translate into, in order of precedence:
      *
      * 1. the locale passed to this call,
@@ -196,39 +215,21 @@ class TranslationModule implements ModuleInterface
 
         $domain ??= $this->currentDomain;
 
-        // Quick path: direct lookup without loading if we already have the catalog and key
-        $msg = $this->catalog[$domain][$locale][$key]
-            ?? $this->catalog[$domain][$this->fallbackLocale][$key]
-                ?? null;
-
-        // If we got a hit, we can skip the loading logic and go straight to substitution
-        if ($msg !== null) {
-            goto buildPairs;
-        }
-
-        // Find out what is missing and load as needed, in order of preference:
+        // Find out what is missing and load as needed, in order of preference.
+        // The loader is asked on every lookup: the module caches nothing, so a
+        // loader that is expensive should be wrapped in RedisCachingLoader.
         // 1. Requested locale
-        if (!isset($this->catalog[$domain][$locale])) {
-            $catalog = $this->loader->load($domain, $locale);
-            $msg     = $catalog[$key] ?? null;
-            if ($msg !== null) {
-                goto buildPairs;
-            }
-        }
+        $catalog = $this->loader->load($domain, $locale);
+        $msg     = $catalog[$key] ?? null;
 
         // 2. Fallback locale (if different from requested)
-        if ($locale !== $this->fallbackLocale && !isset($this->catalog[$domain][$this->fallbackLocale])) {
+        if ($msg === null && $locale !== $this->fallbackLocale) {
             $fallback = $this->loader->load($domain, $this->fallbackLocale);
             $msg      = $fallback[$key] ?? null;
-            if ($msg !== null) {
-                goto buildPairs;
-            }
         }
 
         // 3. Nothing found → return key
-        $msg = $key;
-
-    buildPairs:
+        $msg ??= $key;
 
         if ($vars === null) {
             return $msg;

@@ -17,7 +17,8 @@
     "phpdocumentor/reflection-docblock": "^6.0"
   },
   "suggest": {
-    "ext-intl": "Locale-aware formatting via IntlFormatModule (format_number, format_currency, format_date, ...)"
+    "ext-intl": "Locale-aware formatting via IntlFormatModule (format_number, format_currency, format_date, ...)",
+    "ext-redis": "Caching translation lookups via RedisCachingLoader"
   },
   "license": "MIT",
   "authors": [

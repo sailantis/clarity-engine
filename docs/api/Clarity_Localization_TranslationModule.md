@@ -28,6 +28,7 @@ $engine->addModule(new TranslationModule([
     'translations_path' => __DIR__ . '/locales',
     'default_domain'    => 'messages',   // optional, default: 'messages'
     'cache_path'        => sys_get_temp_dir(), // optional, where JSON/YAML caches go
+    'loader'            => null,  // optional, any TranslationLoaderInterface
 ]));
 ```
 
@@ -52,7 +53,7 @@ Template usage
 
 ## Public methods
 
-### __construct() · <small>[🗎](../../src/Localization/TranslationModule.php#L80)</small>
+### __construct() · <small>[🗎](../../src/Localization/TranslationModule.php#L74)</small>
 
 `public function __construct(array $config = []): mixed`
 
@@ -69,7 +70,7 @@ Template usage
 
 ---
 
-### register() · <small>[🗎](../../src/Localization/TranslationModule.php#L114)</small>
+### register() · <small>[🗎](../../src/Localization/TranslationModule.php#L108)</small>
 
 `public function register(Clarity\ClarityEngine $engine): void`
 
@@ -86,7 +87,31 @@ Template usage
 
 ---
 
-### get() · <small>[🗎](../../src/Localization/TranslationModule.php#L189)</small>
+### getLoader() · <small>[🗎](../../src/Localization/TranslationModule.php#L169)</small>
+
+`public function getLoader(): Clarity\Localization\TranslationLoaderInterface`
+
+Return the loader this module resolves keys with.
+
+The loader is injectable, and a decorator such as `RedisCachingLoader`
+has an `invalidate()` that is not reachable any other way. The module is
+registered as the `t` service, so:
+
+```php
+$loader = $engine->getService('t')->getLoader();
+if ($loader instanceof RedisCachingLoader) {
+    $loader->invalidate('messages');
+}
+```
+
+**Return value**
+
+- Type: [TranslationLoaderInterface](Clarity_Localization_TranslationLoaderInterface.md)
+
+
+---
+
+### get() · <small>[🗎](../../src/Localization/TranslationModule.php#L202)</small>
 
 `public function get(string $key, array|null $vars = null, string|null $domain = null, string|null $locale = null): string`
 
@@ -108,7 +133,7 @@ Look up a translation key with optional placeholder substitution.
 
 ---
 
-### pushDomain() · <small>[🗎](../../src/Localization/TranslationModule.php#L264)</small>
+### pushDomain() · <small>[🗎](../../src/Localization/TranslationModule.php#L259)</small>
 
 `public function pushDomain(string|null $domain): void`
 
@@ -144,7 +169,7 @@ In this example, the first `t` filter looks up `welcome_subject` in the
 
 ---
 
-### popDomain() · <small>[🗎](../../src/Localization/TranslationModule.php#L273)</small>
+### popDomain() · <small>[🗎](../../src/Localization/TranslationModule.php#L268)</small>
 
 `public function popDomain(): void`
 

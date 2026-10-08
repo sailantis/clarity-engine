@@ -36,6 +36,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   same PHP literal, so it is a shorter spelling rather than a second value, and
   it shadows a passed variable of the same name exactly as `null` always has.
 
+- **The translation loader architecture is documented.** `TranslationModule`
+  has always taken a pluggable `loader` (`TranslationLoaderInterface`), with
+  `FileTranslationLoader`, `ChainTranslationLoader` and `RedisCachingLoader`
+  shipped — but none of it appeared outside the generated API pages, and
+  `RedisCachingLoader` was mentioned nowhere at all. `07-modules.md` now covers
+  the interface, the `loader` option, chaining, the Redis decorator (including
+  that it needs `ext-redis` and how to reach `invalidate()`), and how to write a
+  loader. `composer.json` now suggests `ext-redis` beside `ext-intl`, and the
+  three loaders have tests for the first time
+  (`tests/Engine/TranslationLoaderArchitectureTest.php`) — including a pin on the
+  per-lookup behaviour described under *Fixed* below.
+
 ### Fixed
 
 - **`true`, `false` and `null` had stopped being keywords.** They were dropped
@@ -64,6 +76,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   offset is a fatal `Cannot use object of type ResourceBundle as array` — a
   working `{{ currency_name("USD") }}` was impossible. The entry is now read
   through `get(0)`/`get(1)`, and an unknown code falls back to the code itself.
+
+- **`TranslationModule`'s catalog memoization was dead code, and is gone.**
+  `7818c46` ("introduce `ChainTranslationLoader` and `FileTranslationLoader`")
+  moved the file reading out of the module and into `FileTranslationLoader`, but
+  only the *reads* of `$this->catalog` came along — the writes stayed behind. The
+  field was thereafter permanently empty, so its fast path and both `isset()`
+  guards were dead branches that always fell through to the loader: a lookup
+  consulted the loader every single time. The interface docblock asserted the
+  opposite ("caches them internally"), which is how the regression went
+  unnoticed. The field, the fast path and the guards are removed — each dropped
+  branch was always-true, so behaviour is unchanged — and the docblock now places
+  caching with the loader.
+
+- **`TranslationModule::getLoader()` exposes the loader.** It is injectable, and
+  a decorator such as `RedisCachingLoader` has an `invalidate()` that was
+  reachable from nowhere in the library. The module is registered as the `t`
+  service, so `$engine->getService('t')->getLoader()` now returns it and
+  invalidation is possible without holding a separate reference.
 
 ### Changed
 
