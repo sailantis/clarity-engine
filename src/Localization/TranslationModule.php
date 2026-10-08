@@ -26,7 +26,7 @@ use Clarity\Template\TemplateLocation;
  * Registration
  * ------------
  * ```php
- * // Optional: explicit locale service (register first to share with IntlFormatModule)
+ * // Optional: register to set an application-wide default locale
  * $engine->addModule(new LocaleService(['locale' => 'de_DE']));
  *
  * $engine->addModule(new TranslationModule([
@@ -59,7 +59,8 @@ use Clarity\Template\TemplateLocation;
  */
 class TranslationModule implements ModuleInterface
 {
-    private string $locale;
+    private ?string $configuredLocale;
+    private string $detectedLocale;
     private string $fallbackLocale;
     private ?string $translationsPath;
     private string $defaultDomain;
@@ -78,7 +79,8 @@ class TranslationModule implements ModuleInterface
 
     public function __construct(array $config = [])
     {
-        $this->locale           = $config['locale'] ?? LocaleService::detectLocale();
+        $this->configuredLocale = $config['locale'] ?? null;
+        $this->detectedLocale   = LocaleService::detectLocale();
         $this->fallbackLocale   = $config['fallback_locale'] ?? 'en_US';
         $this->translationsPath = $config['translations_path'] ?? null;
         $this->defaultDomain    = $config['default_domain'] ?? 'messages';
@@ -115,13 +117,14 @@ class TranslationModule implements ModuleInterface
         $engine->addService('t', $this);
 
         // ── t filter ────────────────────────────────────────────────────────
-        // Signature: t($key, $vars=null, $domain=null)
-        // Named arg: {{ "key" |> t(domain:"books") }}     → vars defaults to null
+        // Signature: t($key, $vars=null, $domain=null, $locale=null)
+        // Named arg: {{ "key" |> t(domain:"books") }}              → vars defaults to null
         //            {{ "key" |> t({name: v}, domain:"common") }}
+        //            {{ "key" |> t(locale:"de_DE") }}
         $engine->addInlineFilter('t', [
-            'php'      => "\$__c_sv['t']->get({1}, {2}, {3})",
-            'params'   => ['vars', 'domain'],
-            'defaults' => ['vars' => 'null', 'domain' => 'null'],
+            'php'      => "\$__c_sv['t']->get({1}, {2}, {3}, {4})",
+            'params'   => ['vars', 'domain', 'locale'],
+            'defaults' => ['vars' => 'null', 'domain' => 'null', 'locale' => 'null'],
         ]);
 
         $engine->addDirective(
@@ -155,18 +158,40 @@ class TranslationModule implements ModuleInterface
     // =========================================================================
 
     /**
+     * Resolve the locale to translate into, in order of precedence:
+     *
+     * 1. the locale passed to this call,
+     * 2. the `{% with_locale %}` block currently in effect,
+     * 3. this module's own `locale` option,
+     * 4. the `LocaleService` application-wide default,
+     * 5. the detected environment locale.
+     */
+    private function resolveLocale(?string $locale = null): string
+    {
+        return $locale
+            ?? $this->localeService?->current()
+            ?? $this->configuredLocale
+            ?? $this->localeService?->defaultLocale()
+            ?? $this->detectedLocale;
+    }
+
+    /**
      * Look up a translation key with optional placeholder substitution.
      *
      * @param string              $key    Translation key.
      * @param ?array<string,mixed> $vars   Placeholder values for `{name}` substitution.
      * @param string|null         $domain Override the default domain.
+     * @param string|null         $locale Translate into this locale for this call only,
+     *                                    overriding both the active `{% with_locale %}`
+     *                                    block and the module's own `locale` option.
      */
     public function get(
         string $key,
         ?array $vars = null,
-        ?string $domain = null
+        ?string $domain = null,
+        ?string $locale = null
     ): string {
-        $locale = $this->localeService?->current() ?? $this->locale;
+        $locale = $this->resolveLocale($locale);
 
         $domain ??= $this->currentDomain;
 

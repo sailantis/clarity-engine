@@ -74,28 +74,28 @@ class MyModule implements ModuleInterface
 
 ### What a Module Can Register
 
-| API                                 | Purpose                                                                         |
-| ----------------------------------- | ------------------------------------------------------------------------------- |
-| `addFilter(name, callable)`         | Named filter callable invoked at render time                                    |
-| `addInlineFilter(name, definition)` | Filter expression compiled directly into the template PHP                       |
-| `addInlineFunction(name, definition)` | The same, call-only: callable but refused under `|>`                          |
-| `addFunction(name, callable)`       | Function callable available in template expressions                              |
-| `addDirective(keyword, handler)`    | Custom `{% keyword %}` directive processed at compile time                      |
-| `addDirective(keyword, handler, Directive)` | The same, with a role the compiler validates (a paired construct or containment) |
-| `addService(key, object)`           | Shared value/object, read in template PHP and directive PHP as `$this->services['key']` |
+| API                                         | Purpose                                                                                 |
+| ------------------------------------------- | --------------------------------------------------------------------------------------- | --- |
+| `addFilter(name, callable)`                 | Named filter callable invoked at render time                                            |
+| `addInlineFilter(name, definition)`         | Filter expression compiled directly into the template PHP                               |
+| `addInlineFunction(name, definition)`       | The same, call-only: callable but refused under `                                       | >`  |
+| `addFunction(name, callable)`               | Function callable available in template expressions                                     |
+| `addDirective(keyword, handler)`            | Custom `{% keyword %}` directive processed at compile time                              |
+| `addDirective(keyword, handler, Directive)` | The same, with a role the compiler validates (a paired construct or containment)        |
+| `addService(key, object)`                   | Shared value/object, read in template PHP and directive PHP as `$this->services['key']` |
 
 > **Block directives:** when a directive wraps a body, declare its role on the opener with
 > `Directive::opens('endmyblock')` so the compiler rejects an unclosed block, a stray
 > closer, or a closer that crosses another construct — with the template line named. A
 > member tag may additionally assert its side of that structure with `Directive::closes()`
 > or `Directive::branches()`; a leaf that belongs inside a block uses
-> `Directive::inside('myblock')`. See *Paired Directives* in
-> [04-advanced-topics.md](04-advanced-topics.md).
+> `Directive::inside('myblock')`. See _Paired Directives_ in
+> [04-advanced-topics.md](04-advanced-topics.md#paired-directives).
 >
 > **Directive errors:** a handler receives a `TemplateLocation` (the template name, the
 > line, and the physical file) and can `throw new ClarityException('…', $at)` to get an
 > error that already points at the template — no engine pass fills anything in. See
-> *Handler Signature* in [04-advanced-topics.md](04-advanced-topics.md).
+> _Handler Signature_ in [04-advanced-topics.md](04-advanced-topics.md#handler-signature).
 > See [Paired Directives](04-advanced-topics.md#paired-directives).
 >
 > **Argument lists:** a handler that takes several arguments can call
@@ -119,7 +119,40 @@ TranslationModule      IntlFormatModule
 (t filter, domains)    (number/date/currency filters)
 ```
 
-Both modules auto-bootstrap `LocaleService` if it hasn't been registered yet. Registering `LocaleService` explicitly first lets the two modules share the same locale stack.
+Both modules register `LocaleService` automatically if it is not already
+registered. Registering it explicitly sets an application-wide default locale
+for modules without their own `locale` option.
+
+Each module has an independent `locale` option. If unset, the module uses the
+`LocaleService` default, then the detected environment locale. Detection checks
+PHP `intl`, `setlocale(LC_ALL, 0)`, `LC_ALL`, `LANG`, and `LANGUAGE`, then
+defaults to `'en_US'`.
+
+### Locale precedence
+
+The first available source determines the active locale:
+
+| #   | Source                              | Example                                        |
+| --- | ----------------------------------- | ---------------------------------------------- |
+| 1   | Locale passed to the filter         | `format_currency("EUR", "it_IT")`              |
+| 2   | Enclosing `{% with_locale %}` block | `{% with_locale "fr_FR" %}`                    |
+| 3   | The module's own `locale` option    | `new TranslationModule(['locale' => 'de_DE'])` |
+| 4   | The `LocaleService` default locale  | `new LocaleService(['locale' => 'nb_NO'])`     |
+| 5   | Detected environment locale         | —                                              |
+
+Both modules accept a per-call locale argument — `t(locale: …)` and the intl
+filters' trailing `locale` — and both honor `{% with_locale %}`. When the block
+ends, each resumes its own locale precedence, starting with its configured
+`locale` if present.
+
+```php
+$engine->addModule(new LocaleService(['locale' => 'nb_NO']));      // row 4
+$engine->addModule(new IntlFormatModule(['locale' => 'fr_FR']));   // row 3 → fr_FR wins
+$engine->addModule(new TranslationModule(['locale' => 'de_DE']));  // row 3 → de_DE wins
+```
+
+Formatting uses French and translations use German. The `nb_NO` default applies
+to modules without their own `locale` option.
 
 ---
 
@@ -127,7 +160,8 @@ Both modules auto-bootstrap `LocaleService` if it hasn't been registered yet. Re
 
 `Clarity\Localization\LocaleService`
 
-Manages the locale stack and installs the `{% with_locale %}` /
+A `ModuleInterface` implementation that puts the locale stack on the engine
+under the service key `'locale'` and installs the `{% with_locale %}` /
 `{% endwith_locale %}` directives.
 
 ### Configuration
@@ -136,16 +170,19 @@ Manages the locale stack and installs the `{% with_locale %}` /
 use Clarity\Localization\LocaleService;
 
 $engine->addModule(new LocaleService([
-    'locale' => 'de_DE',   // default locale; auto-detected from intl/env if omitted
+    'locale' => 'de_DE',   // optional: application-wide default locale
 ]));
 ```
 
-| Option   | Type   | Default       | Description                                |
-| -------- | ------ | ------------- | ------------------------------------------ |
-| `locale` | string | auto-detected | Default locale (e.g. `'de_DE'`, `'en_US'`) |
+| Option   | Type   | Default | Description                                                                                                                           |
+| -------- | ------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `locale` | string | `null`  | Application-wide default used when no `{% with_locale %}` block or module-specific `locale` applies. It is not pushed onto the stack. |
 
-Locale auto-detection order: PHP `intl`, `setlocale(LC_ALL, 0)`,
-`LC_ALL`/`LANG`/`LANGUAGE`, then `'en_US'`.
+The service stores this default separately from the locale stack. Stack entries
+take precedence over module options, so adding the default to the stack would
+override module-specific settings. Registering `LocaleService` after a module
+has already registered it does not replace that instance. The new default is
+used only if the installed service has none.
 
 ### Template Usage
 
@@ -186,13 +223,13 @@ $engine->addModule(new TranslationModule([
 ]));
 ```
 
-| Option              | Type   | Default         | Description                                        |
-| ------------------- | ------ | --------------- | -------------------------------------------------- |
-| `locale`            | string | auto-detected   | Active locale                                      |
-| `fallback_locale`   | string | `'en_US'`       | Used when a key is not found in the active locale  |
-| `translations_path` | string | `null`          | Directory containing translation files             |
-| `default_domain`    | string | `'messages'`    | Domain used when none is specified in the template |
-| `cache_path`        | string | system temp dir | Where compiled YAML/JSON caches are stored         |
+| Option              | Type   | Default         | Description                                                                                                  |
+| ------------------- | ------ | --------------- | ------------------------------------------------------------------------------------------------------------ |
+| `locale`            | string | `null`          | Locale to translate into; falls back to the `LocaleService` default, then to the detected environment locale |
+| `fallback_locale`   | string | `'en_US'`       | Used when a key is not found in the active locale                                                            |
+| `translations_path` | string | `null`          | Directory containing translation files                                                                       |
+| `default_domain`    | string | `'messages'`    | Domain used when none is specified in the template                                                           |
+| `cache_path`        | string | system temp dir | Where compiled YAML/JSON caches are stored                                                                   |
 
 ### File Naming Convention
 
@@ -253,12 +290,18 @@ return [
 {# Specify a domain explicitly #}
 {{ "welcome_subject" |> t(domain:"emails") }}
 {{ "title" |> t({}, domain:"common") }}
+
+{# Translate one string into another locale, without a with_locale block #}
+{{ "greeting" |> t(locale:"fr_FR") }}
+{{ "welcome" |> t({name: user:name}, domain:"emails", locale:"de_DE") }}
 ```
 
-**Filter signature:** `t(key, vars?, domain?)`
+**Filter signature:** `t(key, vars?, domain?, locale?)`
 
 - `vars` — associative array of `{placeholder}` replacements
 - `domain` — override the active domain for this call
+- `locale` — translate into this locale for this call, overriding both the
+  enclosing `{% with_locale %}` block and the module's `locale` option
 
 When a key is not found in the active locale, the fallback locale is tried. If still not found, the key itself is returned.
 
@@ -314,27 +357,27 @@ $engine->addModule(new IntlFormatModule([
 ]));
 ```
 
-| Option     | Type   | Default       | Description                               |
-| ---------- | ------ | ------------- | ----------------------------------------- |
-| `locale`   | string | auto-detected | Default locale for all formatting filters |
-| `timezone` | string | `null`        | Default timezone for date/time formatting |
+| Option     | Type   | Default | Description                                                                                                                   |
+| ---------- | ------ | ------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `locale`   | string | `null`  | Default locale for all formatting filters; falls back to the `LocaleService` default, then to the detected environment locale |
+| `timezone` | string | `null`  | Default timezone for date/time formatting                                                                                     |
 
 ### Filter Reference
 
-Every filter accepts an optional trailing `$loc` parameter to override the active locale for that single call.
+Every filter accepts an optional trailing `locale` parameter to override the active locale for that single call.
 
 #### Number Filters
 
 | Filter            | Signature                               | Description                           |
 | ----------------- | --------------------------------------- | ------------------------------------- |
-| `format_number`   | `format_number(decimals:2, loc?)`       | Locale-aware decimal number           |
-| `format_currency` | `format_currency(currency:"EUR", loc?)` | Locale-aware currency amount          |
-| `currency_name`   | `currency_name(displayLocale?, loc?)`   | `"USD"` → `"US Dollar"`               |
-| `currency_symbol` | `currency_symbol(loc?)`                 | `"USD"` → `"$"`                       |
-| `percent`         | `percent(decimals:0, loc?)`             | Locale-aware percentage               |
-| `scientific`      | `scientific(loc?)`                      | Scientific notation, e.g. `"1.23E4"`  |
-| `spellout`        | `spellout(loc?)`                        | Number to words, e.g. `"forty-two"`   |
-| `ordinal`         | `ordinal(loc?)`                         | Ordinal suffix, e.g. `"1st"`, `"2nd"` |
+| `format_number`   | `format_number(decimals:2, locale?)`       | Locale-aware decimal number           |
+| `format_currency` | `format_currency(currency:"EUR", locale?)` | Locale-aware currency amount          |
+| `currency_name`   | `currency_name(displayLocale?, locale?)`   | `"USD"` → `"US Dollar"`               |
+| `currency_symbol` | `currency_symbol(locale?)`                 | `"USD"` → `"$"`                       |
+| `percent`         | `percent(decimals:0, locale?)`             | Locale-aware percentage               |
+| `scientific`      | `scientific(locale?)`                      | Scientific notation, e.g. `"1.23E4"`  |
+| `spellout`        | `spellout(locale?)`                        | Number to words, e.g. `"forty-two"`   |
+| `ordinal`         | `ordinal(locale?)`                         | Ordinal suffix, e.g. `"1st"`, `"2nd"` |
 
 ```twig
 {{ 1234567.89 |> format_number(2) }}
@@ -359,10 +402,10 @@ Input values can be a Unix timestamp (int), a `DateTimeInterface`, or a date str
 
 | Filter            | Signature                                                            | Description                           |
 | ----------------- | -------------------------------------------------------------------- | ------------------------------------- |
-| `format_date`     | `format_date(style:"medium", loc?, tz?)`                             | Locale-aware date                     |
-| `format_time`     | `format_time(style:"medium", loc?, tz?)`                             | Locale-aware time                     |
-| `format_datetime` | `format_datetime(dateStyle:"medium", timeStyle:"medium", loc?, tz?)` | Date + time                           |
-| `format_relative` | `format_relative(loc?)`                                              | Relative time, e.g. `"3 minutes ago"` |
+| `format_date`     | `format_date(style:"medium", locale?, tz?)`                             | Locale-aware date                     |
+| `format_time`     | `format_time(style:"medium", locale?, tz?)`                             | Locale-aware time                     |
+| `format_datetime` | `format_datetime(dateStyle:"medium", timeStyle:"medium", locale?, tz?)` | Date + time                           |
+| `format_relative` | `format_relative(locale?)`                                              | Relative time, e.g. `"3 minutes ago"` |
 
 ```twig
 {{ order:created_at |> format_date }}
@@ -380,9 +423,9 @@ Input values can be a Unix timestamp (int), a `DateTimeInterface`, or a date str
 
 | Filter          | Signature                             | Description                      |
 | --------------- | ------------------------------------- | -------------------------------- |
-| `country_name`  | `country_name(displayLocale?, loc?)`  | ISO country code → display name  |
-| `language_name` | `language_name(displayLocale?, loc?)` | ISO language code → display name |
-| `locale_name`   | `locale_name(displayLocale?, loc?)`   | Locale identifier → display name |
+| `country_name`  | `country_name(displayLocale?, locale?)`  | ISO country code → display name  |
+| `language_name` | `language_name(displayLocale?, locale?)` | ISO language code → display name |
+| `locale_name`   | `locale_name(displayLocale?, locale?)`   | Locale identifier → display name |
 
 ```twig
 {{ "DE" |> country_name }}            {# "Germany" (in current locale) #}
@@ -406,7 +449,7 @@ Input values can be a Unix timestamp (int), a `DateTimeInterface`, or a date str
 
 | Filter           | Signature                       | Description                             |
 | ---------------- | ------------------------------- | --------------------------------------- |
-| `format_message` | `format_message(vars:[], loc?)` | ICU MessageFormat (plurals, selects, …) |
+| `format_message` | `format_message(vars:[], locale?)` | ICU MessageFormat (plurals, selects, …) |
 
 ```twig
 {{ "{count, plural, one{# item} other{# items}}" |> format_message({count: n}) }}

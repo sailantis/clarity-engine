@@ -774,6 +774,9 @@ safe on a name that was never passed to the template:
 {% if items is not empty %}…{% endif %}
 ```
 
+`nil` is accepted anywhere `null` is, in both the value and the test position:
+`{{ nil }}`, `{{ x is nil }}`, `{{ x ?? nil }}` and `{{ f(nil) }}` all work.
+
 **`is defined` asks whether a name holds a value other than `null`.** A name
 that was passed as `null` is reported as **not** defined, because the probe is
 PHP's `isset()`. Use `is null` to ask about the value instead; the two together

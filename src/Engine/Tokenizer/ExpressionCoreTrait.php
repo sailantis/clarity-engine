@@ -109,18 +109,16 @@ trait ExpressionCoreTrait
     public function convertVarsAndOps(string $expr): string
     {
         static $keywordMap = [
-            'and'   => '&&',
-            'or'    => '||',
-            'not'   => '!',
-            'bor'   => '|',
-            'band'  => '&',
-            'bxor'  => '^',
-            'bnot'  => '~',
-            'blsh'  => '<<',
-            'brsh'  => '>>',
-            'true'  => 'true',
-            'false' => 'false',
-            'null'  => 'null',
+            'and'  => '&&',
+            'or'   => '||',
+            'not'  => '!',
+            'bor'  => '|',
+            'band' => '&',
+            'bxor' => '^',
+            'bnot' => '~',
+            'blsh' => '<<',
+            'brsh' => '>>',
+            'nil'  => 'null',
         ];
 
         $len      = \strlen($expr);

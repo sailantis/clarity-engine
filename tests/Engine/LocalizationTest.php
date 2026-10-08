@@ -38,6 +38,18 @@ class LocalizationTest extends BaseTestCase
     // LocaleService (unit)
     // =========================================================================
 
+    /**
+     * Collapse the Unicode space characters ICU uses as grouping separators
+     * (NBSP, narrow NBSP, word joiner) so formatter output can be asserted with
+     * plain strings regardless of the ICU data version.
+     *
+     * @param string $s Formatted output.
+     */
+    private static function normalizeSpaces(string $s): string
+    {
+        return \str_replace(["\u{202F}", "\u{00A0}", "\u{2060}"], ' ', $s);
+    }
+
     public function testClarityLocalePushPop(): void
     {
         $locale = new \Clarity\Localization\LocaleService();
@@ -69,6 +81,158 @@ class LocalizationTest extends BaseTestCase
         $locale = new \Clarity\Localization\LocaleService();
         $locale->pop(); // should not throw
         $this->assertSame(null, $locale->current());
+    }
+
+    public function testLocaleServiceIsAModule(): void
+    {
+        $this->assertInstanceOf(\Clarity\ModuleInterface::class, new \Clarity\Localization\LocaleService());
+    }
+
+    public function testLocaleServiceKeepsItsConfiguredLocaleOffTheStack(): void
+    {
+        $engine = new ClarityEngine();
+        $module = new \Clarity\Localization\LocaleService(['locale' => 'de_DE']);
+        $engine->addModule($module);
+
+        // The instance that was registered IS the engine's service, so a caller
+        // holding the module sees the same stack templates push onto.
+        $this->assertSame($module, $engine->getService('locale'));
+
+        // The configured locale is a fallback beside the stack, not an entry on
+        // it: a stack entry would outrank every module's own `locale` option and
+        // silently discard it.
+        $this->assertSame('de_DE', $module->defaultLocale());
+        $this->assertSame(null, $module->current());
+    }
+
+    public function testLocaleServiceRegisteredAfterBootstrapLeavesTheServiceAlone(): void
+    {
+        $engine = new ClarityEngine();
+        $engine->addModule(new \Clarity\Localization\TranslationModule(['locale' => 'en_US']));
+        $bootstrapped = $engine->getService('locale');
+        $this->assertSame(null, $bootstrapped->defaultLocale());
+
+        $engine->addModule(new \Clarity\Localization\LocaleService(['locale' => 'de_DE']));
+
+        // The stack itself is not displaced by a late registration...
+        $this->assertSame($bootstrapped, $engine->getService('locale'));
+        $this->assertSame(null, $engine->getService('locale')->current());
+
+        // ...but its configured default is adopted, since the installed service
+        // had none of its own.
+        $this->assertSame('de_DE', $bootstrapped->defaultLocale());
+    }
+
+    public function testLocaleServiceRegisteredAfterAnotherDefaultKeepsTheFirst(): void
+    {
+        $engine = new ClarityEngine();
+        $first  = new \Clarity\Localization\LocaleService(['locale' => 'de_DE']);
+        $engine->addModule($first);
+        $engine->addModule(new \Clarity\Localization\LocaleService(['locale' => 'fr_FR']));
+
+        $this->assertSame($first, $engine->getService('locale'));
+        $this->assertSame('de_DE', $first->defaultLocale());
+    }
+
+    // =========================================================================
+    // Locale precedence
+    // =========================================================================
+
+    /**
+     * A module's own `locale` option must win over the LocaleService default.
+     *
+     * Before the split, the default was pushed onto the stack, and the stack
+     * outranks module config — so `fr_FR` here was dead and everything came out
+     * as `de_DE`.
+     */
+    public function testModuleLocaleWinsOverTheLocaleServiceDefault(): void
+    {
+        if (!\extension_loaded('intl')) {
+            $this->markTestSkipped('intl extension required');
+        }
+        $engine = new ClarityEngine();
+        $engine->setViewPath(TestEnvironment::viewDir())->setCachePath(TestEnvironment::cacheDir());
+        $engine->addModule(new \Clarity\Localization\LocaleService(['locale' => 'de_DE']));
+        $engine->addModule(new \Clarity\Localization\IntlFormatModule(['locale' => 'fr_FR']));
+
+        self::tpl('lmod_prec_module_wins', '{{ 1234.56 |> format_currency("EUR") }}');
+        $result = self::normalizeSpaces($engine->renderPartial('lmod_prec_module_wins'));
+
+        // fr_FR groups with a space and uses a comma as the decimal separator.
+        $this->assertStringContainsString('1 234,56', $result);
+        $this->assertStringNotContainsString('1.234,56', $result);
+    }
+
+    /**
+     * The module's `locale` option is only consulted when the stack is empty, so
+     * a `{% with_locale %}` block must still override it — and must pop back to
+     * the module's locale, not to the LocaleService default.
+     */
+    public function testWithLocaleOverridesTheModuleLocaleAndPopsBackToIt(): void
+    {
+        if (!\extension_loaded('intl')) {
+            $this->markTestSkipped('intl extension required');
+        }
+        $engine = new ClarityEngine();
+        $engine->setViewPath(TestEnvironment::viewDir())->setCachePath(TestEnvironment::cacheDir());
+        $engine->addModule(new \Clarity\Localization\LocaleService(['locale' => 'de_DE']));
+        $engine->addModule(new \Clarity\Localization\IntlFormatModule(['locale' => 'en_US']));
+
+        self::tpl(
+            'lmod_prec_stack_wins',
+            '{{ 1234.56 |> format_currency("EUR") }}|'
+            . '{% with_locale "de_DE" %}{{ 1234.56 |> format_currency("EUR") }}{% endwith_locale %}|'
+            . '{{ 1234.56 |> format_currency("EUR") }}'
+        );
+        $result = self::normalizeSpaces($engine->renderPartial('lmod_prec_stack_wins'));
+
+        // en_US | de_DE | en_US — the last segment proves the pop restored the
+        // module's own locale rather than the LocaleService default.
+        $this->assertSame('€1,234.56|1.234,56 €|€1,234.56', \trim($result));
+    }
+
+    public function testLocaleServiceDefaultIsUsedWhenTheModuleConfiguresNone(): void
+    {
+        if (!\extension_loaded('intl')) {
+            $this->markTestSkipped('intl extension required');
+        }
+        $engine = new ClarityEngine();
+        $engine->setViewPath(TestEnvironment::viewDir())->setCachePath(TestEnvironment::cacheDir());
+        $engine->addModule(new \Clarity\Localization\LocaleService(['locale' => 'fr_FR']));
+        $engine->addModule(new \Clarity\Localization\IntlFormatModule());
+
+        self::tpl('lmod_prec_service_default', '{{ 1234.56 |> format_currency("EUR") }}');
+        $result = self::normalizeSpaces($engine->renderPartial('lmod_prec_service_default'));
+
+        // fr_FR, not the detected environment locale (de_DE here).
+        $this->assertStringContainsString('1 234,56', $result);
+    }
+
+    /**
+     * The resolved locale must not depend on registration order: a late
+     * LocaleService still contributes its default.
+     */
+    public function testLocalePrecedenceIsRegistrationOrderIndependent(): void
+    {
+        if (!\extension_loaded('intl')) {
+            $this->markTestSkipped('intl extension required');
+        }
+
+        $render = static function (bool $serviceFirst): string {
+            $engine = new ClarityEngine();
+            $engine->setViewPath(TestEnvironment::viewDir())->setCachePath(TestEnvironment::cacheDir());
+            $service = new \Clarity\Localization\LocaleService(['locale' => 'de_DE']);
+            $intl    = new \Clarity\Localization\IntlFormatModule(['locale' => 'fr_FR']);
+
+            $engine->addModule($serviceFirst ? $service : $intl);
+            $engine->addModule($serviceFirst ? $intl : $service);
+
+            $name = 'lmod_prec_order_' . ($serviceFirst ? 'a' : 'b');
+            self::tpl($name, '{{ 1234.56 |> format_currency("EUR") }}');
+            return $engine->renderPartial($name);
+        };
+
+        $this->assertSame($render(true), $render(false));
     }
 
     // =========================================================================
@@ -142,6 +306,75 @@ class LocalizationTest extends BaseTestCase
             'translations_path' => $translationsDir,
         ]));
         return $engine;
+    }
+
+    public function testTFilterAcceptsAPerCallLocale(): void
+    {
+        $dir = sys_get_temp_dir() . '/clarity_test_t_locale_' . uniqid();
+        mkdir($dir);
+        file_put_contents($dir . '/messages.en_US.php', '<?php return ' . \var_export(['greeting' => 'Hello'], true) . ';');
+        file_put_contents($dir . '/messages.de_DE.php', '<?php return ' . \var_export(['greeting' => 'Hallo'], true) . ';');
+
+        $engine = $this->makeLocaleEngine($dir); // module locale: en_US
+
+        // Positional and named, next to a domain, and with vars.
+        self::tpl('lmod_t_loc_pos', '{{ "greeting" |> t(null, null, "de_DE") }}');
+        $this->assertSame('Hallo', $engine->renderPartial('lmod_t_loc_pos'));
+
+        self::tpl('lmod_t_loc_named', '{{ "greeting" |> t(locale: "de_DE") }}');
+        $this->assertSame('Hallo', $engine->renderPartial('lmod_t_loc_named'));
+
+        self::tpl('lmod_t_loc_full', '{{ "greeting" |> t({}, domain: "messages", locale: "de_DE") }}');
+        $this->assertSame('Hallo', $engine->renderPartial('lmod_t_loc_full'));
+
+        @unlink($dir . '/messages.en_US.php');
+        @unlink($dir . '/messages.de_DE.php');
+        @rmdir($dir);
+    }
+
+    /**
+     * The per-call locale must outrank an enclosing `{% with_locale %}` block,
+     * the same way the intl filters' trailing locale argument does. Otherwise an
+     * explicit argument could be silently ignored.
+     */
+    public function testTFilterPerCallLocaleOutranksWithLocaleBlock(): void
+    {
+        $dir = sys_get_temp_dir() . '/clarity_test_t_loc_prec_' . uniqid();
+        mkdir($dir);
+        file_put_contents($dir . '/messages.en_US.php', '<?php return ' . \var_export(['greeting' => 'Hello'], true) . ';');
+        file_put_contents($dir . '/messages.de_DE.php', '<?php return ' . \var_export(['greeting' => 'Hallo'], true) . ';');
+        file_put_contents($dir . '/messages.fr_FR.php', '<?php return ' . \var_export(['greeting' => 'Bonjour'], true) . ';');
+
+        $engine = $this->makeLocaleEngine($dir);
+
+        self::tpl(
+            'lmod_t_loc_prec',
+            '{% with_locale "de_DE" %}{{ "greeting" |> t }}|{{ "greeting" |> t(locale: "fr_FR") }}{% endwith_locale %}'
+        );
+        // The block governs the bare lookup; the argument wins for the other.
+        $this->assertSame('Hallo|Bonjour', $engine->renderPartial('lmod_t_loc_prec'));
+
+        @unlink($dir . '/messages.en_US.php');
+        @unlink($dir . '/messages.de_DE.php');
+        @unlink($dir . '/messages.fr_FR.php');
+        @rmdir($dir);
+    }
+
+    public function testTFilterPerCallLocaleFallsBackToFallbackLocale(): void
+    {
+        $dir = sys_get_temp_dir() . '/clarity_test_t_loc_fb_' . uniqid();
+        mkdir($dir);
+        // No pt_BR catalogue; only the en_US fallback exists.
+        file_put_contents($dir . '/messages.en_US.php', '<?php return ' . \var_export(['greeting' => 'Hello'], true) . ';');
+
+        $engine = $this->makeLocaleEngine($dir);
+        self::tpl('lmod_t_loc_fb', '{{ "greeting" |> t(locale: "pt_BR") }}');
+
+        // fallback_locale is relative to the RESOLVED locale, not the module's.
+        $this->assertSame('Hello', $engine->renderPartial('lmod_t_loc_fb'));
+
+        @unlink($dir . '/messages.en_US.php');
+        @rmdir($dir);
     }
 
     public function testTFilterSimpleTranslation(): void

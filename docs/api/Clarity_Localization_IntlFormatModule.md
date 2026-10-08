@@ -12,11 +12,11 @@ returning the value unmodified.
 Registration
 ------------
 ```php
-// Optional: explicit locale service (register first to share with TranslationModule)
+// Optional: register to set an application-wide default locale
 $engine->addModule(new LocaleService(['locale' => 'de_DE']));
 
 $engine->addModule(new IntlFormatModule([
-    'locale'    => 'de_DE',   // default locale (inherits from LocaleService if registered first)
+    'locale'    => 'de_DE',   // this module's locale; wins over the LocaleService default
     'timezone'  => 'Europe/Dublin',  // default timezone for date/time formatting
 ]));
 ```
@@ -25,28 +25,28 @@ Registered filters
 ------------------
 | Filter            | Signature                                              | Description                                      |
 |-------------------|--------------------------------------------------------|--------------------------------------------------|
-| `format_number`   | `format_number($v [, $decimals=2] [, $loc])`           | Locale-aware decimal number                      |
-| `format_currency` | `format_currency($v [, $currency='EUR'] [, $loc])`     | Locale-aware currency amount                     |
-| `currency_name`   | `currency_name($code [, $displayLocale] [, $loc])`     | Currency code → display name (e.g. "US Dollar")  |
-| `currency_symbol` | `currency_symbol($code [, $loc])`                      | Currency code → symbol (e.g. "$")                |
-| `percent`         | `percent($v [, $decimals=0] [, $loc])`                 | Locale-aware percentage                          |
-| `scientific`      | `scientific($v [, $loc])`                              | Scientific notation (e.g. "1.23E4")              |
-| `spellout`        | `spellout($v [, $loc])`                                | Number → words (e.g. "forty-two")                |
-| `ordinal`         | `ordinal($v [, $loc])`                                 | Ordinal suffix (e.g. "1st", "2nd")               |
-| `format_date`     | `format_date($v [, $style='medium'] [, $loc] [, $tz])` | Locale-aware date                                |
-| `format_time`     | `format_time($v [, $style='medium'] [, $loc] [, $tz])` | Locale-aware time                                |
-| `format_datetime` | `format_datetime($v [, $ds='medium'] [, $ts='medium'] [, $loc] [, $tz])` | Date + time               |
-| `format_relative` | `format_relative($v [, $loc])`                         | Relative time ("3 minutes ago")                  |
+| `format_number`   | `format_number($v [, $decimals=2] [, $locale])`        | Locale-aware decimal number                      |
+| `format_currency` | `format_currency($v [, $currency='EUR'] [, $locale])`  | Locale-aware currency amount                     |
+| `currency_name`   | `currency_name($code [, $displayLocale] [, $locale])`  | Currency code → display name (e.g. "US Dollar")  |
+| `currency_symbol` | `currency_symbol($code [, $locale])`                   | Currency code → symbol (e.g. "$")                |
+| `percent`         | `percent($v [, $decimals=0] [, $locale])`              | Locale-aware percentage                          |
+| `scientific`      | `scientific($v [, $locale])`                           | Scientific notation (e.g. "1.23E4")              |
+| `spellout`        | `spellout($v [, $locale])`                             | Number → words (e.g. "forty-two")                |
+| `ordinal`         | `ordinal($v [, $locale])`                              | Ordinal suffix (e.g. "1st", "2nd")               |
+| `format_date`     | `format_date($v [, $style='medium'] [, $locale] [, $tz])` | Locale-aware date                            |
+| `format_time`     | `format_time($v [, $style='medium'] [, $locale] [, $tz])` | Locale-aware time                            |
+| `format_datetime` | `format_datetime($v [, $ds='medium'] [, $ts='medium'] [, $locale] [, $tz])` | Date + time       |
+| `format_relative` | `format_relative($v [, $locale])`                      | Relative time ("3 minutes ago")                  |
 | `transliterate`   | `transliterate($v [, $rules='Any-Latin; Latin-ASCII'])` | Transliterate text                               |
-| `format_message`  | `format_message($pattern [, $vars=[]] [, $loc])`       | ICU MessageFormat (plurals, selects, …)          |
+| `format_message`  | `format_message($pattern [, $vars=[]] [, $locale])`    | ICU MessageFormat (plurals, selects, …)          |
 
 Registered functions
 --------------------
 | Function          | Signature                                              | Description                                      |
 |-------------------|--------------------------------------------------------|--------------------------------------------------|
-| `country_name`    | `country_name($code [, $displayLocale] [, $loc])`      | ISO country code → display name                  |
-| `language_name`   | `language_name($code [, $displayLocale] [, $loc])`     | Language code → display name                     |
-| `locale_name`     | `locale_name($id [, $displayLocale] [, $loc])`         | Locale identifier → display name                 |
+| `country_name`    | `country_name($code [, $displayLocale] [, $locale])`  | ISO country code → display name                  |
+| `language_name`   | `language_name($code [, $displayLocale] [, $locale])` | Language code → display name                     |
+| `locale_name`     | `locale_name($id [, $displayLocale] [, $locale])`     | Locale identifier → display name                 |
 | `timezone_name`   | `timezone_name($tz [, $displayLocale])`                | Timezone identifier → display name               |
 
 Template usage
@@ -70,7 +70,7 @@ Template usage
 
 ## Public methods
 
-### __construct() · <small>[🗎](../../src/Localization/IntlFormatModule.php#L100)</small>
+### __construct() · <small>[🗎](../../src/Localization/IntlFormatModule.php#L102)</small>
 
 `public function __construct(array $config = []): mixed`
 
@@ -78,7 +78,8 @@ Create a new IntlFormatModule instance.
 
 ```php
 Config options: {
-    string|null $locale   Default locale (e.g. "en_US"). Inherits from LocaleService if omitted.
+    string|null $locale   Locale for formatting (e.g. "en_US"). Falls back to the
+                          LocaleService default, then the detected environment locale.
     string|null $timezone Default timezone (e.g. "UTC" or "Europe/Berlin").
 }
 ```
@@ -96,7 +97,7 @@ Config options: {
 
 ---
 
-### register() · <small>[🗎](../../src/Localization/IntlFormatModule.php#L108)</small>
+### register() · <small>[🗎](../../src/Localization/IntlFormatModule.php#L111)</small>
 
 `public function register(Clarity\ClarityEngine $engine): void`
 

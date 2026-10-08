@@ -48,6 +48,7 @@ trait OperatorTestTrait
         'defined'  => ['binary' => false, 'tolerates' => true, 'call' => 'defined'],
         'null'     => ['binary' => false, 'tolerates' => true, 'call' => 'is_null'],
         'none'     => ['binary' => false, 'tolerates' => true, 'call' => 'is_null'],
+        'nil'      => ['binary' => false, 'tolerates' => true, 'call' => 'is_null'],
         'empty'    => ['binary' => false, 'tolerates' => true, 'call' => 'is_empty'],
         'iterable' => ['binary' => false, 'tolerates' => false, 'call' => 'iterable'],
         'even'     => ['binary' => false, 'tolerates' => false, 'call' => 'is_even'],

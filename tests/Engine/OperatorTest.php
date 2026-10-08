@@ -197,6 +197,49 @@ class OperatorTest extends BaseTestCase
         $this->assertSame('Y', self::render('op_not_null', ['name' => 'x']));
     }
 
+    /**
+     * `nil` is the same value as `null` under a shorter spelling, in every
+     * position: as a value, as a filter argument, on either side of `??`, and as
+     * a test. It compiles to the same PHP literal, so there is nothing to
+     * distinguish them at runtime.
+     */
+    public function testNilIsAnAliasForNull(): void
+    {
+        self::tpl('op_nil_value', '[{{ nil }}]');
+        $this->assertSame('[]', self::render('op_nil_value'));
+
+        self::tpl('op_nil_coalesce', '[{{ nil ?? "F" }}|{{ missing ?? nil ?? "F" }}]');
+        $this->assertSame('[F|F]', self::render('op_nil_coalesce'));
+
+        self::tpl('op_nil_arg', '{{ nil |> default("F") }}|{{ [nil, 1] |> length }}');
+        $this->assertSame('F|2', self::render('op_nil_arg'));
+
+        self::tpl('op_nil_test_value', '{% if v is nil %}Y{% else %}N{% endif %}');
+        $this->assertSame('Y', self::render('op_nil_test_value', ['v' => null]));
+        $this->assertSame('N', self::render('op_nil_test_value', ['v' => 0]));
+        $this->assertSame('Y', self::render('op_nil_test_value')); // absent is null too
+
+        self::tpl('op_nil_test_literal', '{% if nil is null %}Y{% else %}N{% endif %}');
+        $this->assertSame('Y', self::render('op_nil_test_literal'));
+
+        self::tpl('op_nil_set', '{% set x = nil %}{% if x is nil %}Y{% else %}N{% endif %}');
+        $this->assertSame('Y', self::render('op_nil_set'));
+    }
+
+    /**
+     * A variable named `nil` is shadowed by the keyword, exactly as one named
+     * `null` always has been. Documented so the behaviour is a decision rather
+     * than a surprise.
+     */
+    public function testNilKeywordShadowsASameNamedVariable(): void
+    {
+        self::tpl('op_nil_shadow', '[{{ nil }}]');
+        $this->assertSame('[]', self::render('op_nil_shadow', ['nil' => 'FROM-VAR']));
+
+        self::tpl('op_null_shadow', '[{{ null }}]');
+        $this->assertSame('[]', self::render('op_null_shadow', ['null' => 'FROM-VAR']));
+    }
+
     public function testIsEmpty(): void
     {
         self::tpl('op_empty', '{% if items is empty %}Y{% else %}N{% endif %}');

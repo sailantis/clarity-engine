@@ -620,7 +620,7 @@ The built-in localization modules provide:
 
 - **`IntlFormatModule`** — locale-aware number, currency, date and text filters backed by PHP's `intl` extension: `format_number`, `format_currency`, `percent`, `spellout`, `ordinal`, `format_date`, `format_relative`, `country_name`, `format_message`, …
 - **`TranslationModule`** — a `t` filter for lookup in domain-separated locale files (PHP, JSON, YAML) plus the `{% with_t_domain %}` block for domain switching
-- **`LocaleService`** — a push/pop locale stack with the `{% with_locale %}` block (auto-bootstrapped by the other two modules)
+- **`LocaleService`** — a push/pop locale stack with the `{% with_locale %}` block; optional, since the other two modules bootstrap it. Register it to set an application-wide default locale for modules that configure none (a module's own `locale` still wins)
 
 Custom modules implement `Clarity\ModuleInterface` with a single `register(ClarityEngine $engine): void` method.
 

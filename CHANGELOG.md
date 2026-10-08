@@ -9,6 +9,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`t` accepts a per-call locale, and `nil` is a keyword.** Two gaps closed
+  around locale handling:
+
+  ```twig
+  {{ "subject" |> t(locale: "fr_FR") }}
+  {{ "welcome" |> t({name: user:name}, domain: "emails", locale: "de_DE") }}
+  {{ user:middle_name ?? nil }}
+  ```
+
+  `t(key, vars?, domain?, locale?)` gains a trailing `locale`, matching the
+  intl filters' optional trailing `locale`. It outranks both an enclosing
+  `{% with_locale %}` block and the module's own `locale` option, so one string
+  can be translated without scoping the surrounding page:
+
+  ```twig
+  {# the page stays en_US; only this lookup is French #}
+  {{ "subject" |> t(locale: "fr_FR") }}
+  ```
+
+  Previously the only way to do this was a `{% with_locale %}` block, which also
+  changed the locale of any formatting inside it.
+
+  `nil` is now a keyword spelled alongside `null`, in both value and test
+  position (`{{ nil }}`, `{{ x is nil }}`, `{{ f(nil) }}`). It compiles to the
+  same PHP literal, so it is a shorter spelling rather than a second value, and
+  it shadows a passed variable of the same name exactly as `null` always has.
+
+### Changed
+
+- **Every locale parameter is now named `locale`.** The intl filters had split
+  between `locale` (12 of them) and `loc` (`country_name`, `language_name`,
+  `locale_name`, `format_message`), and the module docs abbreviated all sixteen
+  as `$loc`, which was callable on none of them — `format_number(loc: "de_DE")`
+  threw `Unknown named parameter $loc`. Named arguments are matched against the
+  parameter name and are not aliased, so a wrong spelling is an error rather
+  than a silent fallback. All sixteen now use `locale`, which is also the config
+  key on all three localization modules. **Update any `loc:` call** to
+  `locale:`.
+
 - **`DumpOptions` is fluent.** Every dump option now has a method of the same
   name beside its constructor argument, so the same object can be composed with
   named arguments and then adjusted:
@@ -89,6 +128,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `$module->register($this)` and returns `static` for chaining. Update any
   `$engine->use(...)` call to `$engine->addModule(...)`; nothing else about
   `ModuleInterface` changes.
+
+- **`LocaleService` is a module.** The localization stack was documented — in
+  its own docblock, in `07-modules.md`, and in the generated API pages — as
+  something you register with `$engine->addModule(new LocaleService([...]))`.
+  It could not be: the class had no `__construct()` and no `register()`, so every
+  one of those examples died with a `TypeError` at the `addModule()` call, and the
+  `locale` option they passed was ignored. It now implements `ModuleInterface`;
+  the documented calls work and the option does what it says:
+
+  ```php
+  $engine->addModule(new LocaleService(['locale' => 'de_DE']));
+  ```
+
+  `register()` puts the locale stack on the engine and installs the
+  `with_locale` directives. The configured `locale` is kept **off** the stack as
+  an application-wide default rather than pushed onto it: a stack entry
+  outranks every module's own `locale` option, so seeding it would have made
+  `IntlFormatModule(['locale' => 'fr_FR'])` silently format in the service's
+  locale instead. Kept beside the stack, the default is only consulted when a
+  module configures no locale of its own, so `TranslationModule` and
+  `IntlFormatModule` can still be configured independently.
+
+  Registration is a **no-op when a locale service is already installed**, so
+  the order the docs recommended is no longer the only safe one:
+  `TranslationModule` and `IntlFormatModule` may bootstrap the service first
+  (they still do, unchanged) and an explicit `LocaleService` registered
+  afterwards leaves that instance, and anyone holding it, alone — while still
+  contributing its default if the installed service had none.
+
+  With no `locale` option the stack starts empty, exactly as
+  `LocaleService::bootstrap()` leaves it, so a module that bootstrapped first
+  keeps falling back to its own configured `locale`. The new `defaultLocale()`
+  accessor reports the configured default; `current()` reports only what a
+  `{% with_locale %}` block is applying, and stays `null` outside one.
+  `bootstrap()` and `registerBlocks()` are unchanged and stay public for code
+  that manages the service itself.
 
 - **The registry's codegen table is now `$inlineDefinitions`.** It was
   `$inlineFilters`, which stopped being accurate the moment a record could be a

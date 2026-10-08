@@ -17,11 +17,11 @@ use MessageFormatter;
  * Registration
  * ------------
  * ```php
- * // Optional: explicit locale service (register first to share with TranslationModule)
+ * // Optional: register to set an application-wide default locale
  * $engine->addModule(new LocaleService(['locale' => 'de_DE']));
  *
  * $engine->addModule(new IntlFormatModule([
- *     'locale'    => 'de_DE',   // default locale (inherits from LocaleService if registered first)
+ *     'locale'    => 'de_DE',   // this module's locale; wins over the LocaleService default
  *     'timezone'  => 'Europe/Dublin',  // default timezone for date/time formatting
  * ]));
  * ```
@@ -30,28 +30,28 @@ use MessageFormatter;
  * ------------------
  * | Filter            | Signature                                              | Description                                      |
  * |-------------------|--------------------------------------------------------|--------------------------------------------------|
- * | `format_number`   | `format_number($v [, $decimals=2] [, $loc])`           | Locale-aware decimal number                      |
- * | `format_currency` | `format_currency($v [, $currency='EUR'] [, $loc])`     | Locale-aware currency amount                     |
- * | `currency_name`   | `currency_name($code [, $displayLocale] [, $loc])`     | Currency code → display name (e.g. "US Dollar")  |
- * | `currency_symbol` | `currency_symbol($code [, $loc])`                      | Currency code → symbol (e.g. "$")                |
- * | `percent`         | `percent($v [, $decimals=0] [, $loc])`                 | Locale-aware percentage                          |
- * | `scientific`      | `scientific($v [, $loc])`                              | Scientific notation (e.g. "1.23E4")              |
- * | `spellout`        | `spellout($v [, $loc])`                                | Number → words (e.g. "forty-two")                |
- * | `ordinal`         | `ordinal($v [, $loc])`                                 | Ordinal suffix (e.g. "1st", "2nd")               |
- * | `format_date`     | `format_date($v [, $style='medium'] [, $loc] [, $tz])` | Locale-aware date                                |
- * | `format_time`     | `format_time($v [, $style='medium'] [, $loc] [, $tz])` | Locale-aware time                                |
- * | `format_datetime` | `format_datetime($v [, $ds='medium'] [, $ts='medium'] [, $loc] [, $tz])` | Date + time               |
- * | `format_relative` | `format_relative($v [, $loc])`                         | Relative time ("3 minutes ago")                  |
+ * | `format_number`   | `format_number($v [, $decimals=2] [, $locale])`        | Locale-aware decimal number                      |
+ * | `format_currency` | `format_currency($v [, $currency='EUR'] [, $locale])`  | Locale-aware currency amount                     |
+ * | `currency_name`   | `currency_name($code [, $displayLocale] [, $locale])`  | Currency code → display name (e.g. "US Dollar")  |
+ * | `currency_symbol` | `currency_symbol($code [, $locale])`                   | Currency code → symbol (e.g. "$")                |
+ * | `percent`         | `percent($v [, $decimals=0] [, $locale])`              | Locale-aware percentage                          |
+ * | `scientific`      | `scientific($v [, $locale])`                           | Scientific notation (e.g. "1.23E4")              |
+ * | `spellout`        | `spellout($v [, $locale])`                             | Number → words (e.g. "forty-two")                |
+ * | `ordinal`         | `ordinal($v [, $locale])`                              | Ordinal suffix (e.g. "1st", "2nd")               |
+ * | `format_date`     | `format_date($v [, $style='medium'] [, $locale] [, $tz])` | Locale-aware date                            |
+ * | `format_time`     | `format_time($v [, $style='medium'] [, $locale] [, $tz])` | Locale-aware time                            |
+ * | `format_datetime` | `format_datetime($v [, $ds='medium'] [, $ts='medium'] [, $locale] [, $tz])` | Date + time       |
+ * | `format_relative` | `format_relative($v [, $locale])`                      | Relative time ("3 minutes ago")                  |
  * | `transliterate`   | `transliterate($v [, $rules='Any-Latin; Latin-ASCII'])` | Transliterate text                               |
- * | `format_message`  | `format_message($pattern [, $vars=[]] [, $loc])`       | ICU MessageFormat (plurals, selects, …)          |
+ * | `format_message`  | `format_message($pattern [, $vars=[]] [, $locale])`    | ICU MessageFormat (plurals, selects, …)          |
  *
  * Registered functions
  * --------------------
  * | Function          | Signature                                              | Description                                      |
  * |-------------------|--------------------------------------------------------|--------------------------------------------------|
- * | `country_name`    | `country_name($code [, $displayLocale] [, $loc])`      | ISO country code → display name                  |
- * | `language_name`   | `language_name($code [, $displayLocale] [, $loc])`     | Language code → display name                     |
- * | `locale_name`     | `locale_name($id [, $displayLocale] [, $loc])`         | Locale identifier → display name                 |
+ * | `country_name`    | `country_name($code [, $displayLocale] [, $locale])`  | ISO country code → display name                  |
+ * | `language_name`   | `language_name($code [, $displayLocale] [, $locale])` | Language code → display name                     |
+ * | `locale_name`     | `locale_name($id [, $displayLocale] [, $locale])`     | Locale identifier → display name                 |
  * | `timezone_name`   | `timezone_name($tz [, $displayLocale])`                | Timezone identifier → display name               |
  *
  * Template usage
@@ -75,7 +75,8 @@ use MessageFormatter;
  */
 class IntlFormatModule implements ModuleInterface
 {
-    private string $locale;
+    private ?string $configuredLocale;
+    private string $detectedLocale;
     private ?string $timezone;
     private bool $intlAvailable;
 
@@ -91,7 +92,8 @@ class IntlFormatModule implements ModuleInterface
      * Create a new IntlFormatModule instance.
      * ```php
      * Config options: {
-     *     string|null $locale   Default locale (e.g. "en_US"). Inherits from LocaleService if omitted.
+     *     string|null $locale   Locale for formatting (e.g. "en_US"). Falls back to the
+ *                           LocaleService default, then the detected environment locale.
      *     string|null $timezone Default timezone (e.g. "UTC" or "Europe/Berlin").
      * }
      * ```
@@ -99,9 +101,10 @@ class IntlFormatModule implements ModuleInterface
      */
     public function __construct(array $config = [])
     {
-        $this->intlAvailable = \extension_loaded('intl');
-        $this->locale        = $config['locale'] ?? LocaleService::detectLocale();
-        $this->timezone      = $config['timezone'] ?? null;
+        $this->intlAvailable    = \extension_loaded('intl');
+        $this->configuredLocale = $config['locale'] ?? null;
+        $this->detectedLocale   = LocaleService::detectLocale();
+        $this->timezone         = $config['timezone'] ?? null;
     }
 
     /** @inheritDoc */
@@ -118,6 +121,32 @@ class IntlFormatModule implements ModuleInterface
     }
 
     // =========================================================================
+    // Locale resolution
+    // =========================================================================
+
+    /**
+     * Resolve the locale a filter or function should use, in order of precedence:
+     *
+     * 1. the locale passed to the filter itself,
+     * 2. the `{% with_locale %}` block currently in effect,
+     * 3. this module's own `locale` option,
+     * 4. the `LocaleService` application-wide default,
+     * 5. the detected environment locale.
+     *
+     * Keeping the module option above the service default is what lets
+     * formatting and translation be configured independently; keeping the
+     * stack above both lets a template scope either one.
+     */
+    private function localeFor(?string $locale, LocaleService $localeService): string
+    {
+        return $locale
+            ?? $localeService->current()
+            ?? $this->configuredLocale
+            ?? $localeService->defaultLocale()
+            ?? $this->detectedLocale;
+    }
+
+    // =========================================================================
     // Number formatters
     // =========================================================================
 
@@ -129,7 +158,7 @@ class IntlFormatModule implements ModuleInterface
             'format_number',
             function (mixed $v, int $decimals = 2, ?string $locale = null) use ($localeService, $intl): string {
                 static $cache = [];
-                $l = $locale ?? $localeService->current() ?? $this->locale;
+                $l = $this->localeFor($locale, $localeService);
                 if ($intl) {
                     $fmt = $cache[$l] ??= new \NumberFormatter($l, \NumberFormatter::DECIMAL);
                     $fmt->setAttribute(\NumberFormatter::FRACTION_DIGITS, $decimals);
@@ -144,7 +173,7 @@ class IntlFormatModule implements ModuleInterface
             'format_currency',
             function (mixed $v, string $currency = 'EUR', ?string $locale = null) use ($localeService, $intl): string {
                 static $cache = [];
-                $l = $locale ?? $localeService->current() ?? $this->locale;
+                $l = $this->localeFor($locale, $localeService);
                 if ($intl) {
                     $fmt    = $cache[$l] ??= new \NumberFormatter($l, \NumberFormatter::CURRENCY);
                     $result = $fmt->formatCurrency((float) $v, $currency);
@@ -159,7 +188,7 @@ class IntlFormatModule implements ModuleInterface
             'currency_name',
             function (string $code, ?string $locale = null) use ($localeService, $intl): string {
                 static $cache = [];
-                $dl  = $locale ?? $localeService->current() ?? $this->locale;
+                $dl  = $this->localeFor($locale, $localeService);
                 $key = $dl . '|' . $code;
                 if ($intl && \class_exists(\ResourceBundle::class)) {
                     if (isset($cache[$key])) {
@@ -184,7 +213,7 @@ class IntlFormatModule implements ModuleInterface
             'currency_symbol',
             function (string $code, ?string $locale = null) use ($localeService, $intl): string {
                 static $cache = [];
-                $l   = $locale ?? $localeService->current() ?? $this->locale;
+                $l   = $this->localeFor($locale, $localeService);
                 $key = $l . '|' . $code;
                 if ($intl && \class_exists(\ResourceBundle::class)) {
                     if (isset($cache[$key])) {
@@ -209,7 +238,7 @@ class IntlFormatModule implements ModuleInterface
             'percent',
             function (mixed $v, int $decimals = 0, ?string $locale = null) use ($localeService, $intl): string {
                 static $cache = [];
-                $l = $locale ?? $localeService->current() ?? $this->locale;
+                $l = $this->localeFor($locale, $localeService);
                 if ($intl) {
                     $fmt = $cache[$l] ??= new \NumberFormatter($l, \NumberFormatter::PERCENT);
                     $fmt->setAttribute(\NumberFormatter::FRACTION_DIGITS, $decimals);
@@ -224,7 +253,7 @@ class IntlFormatModule implements ModuleInterface
             'scientific',
             function (mixed $v, ?string $locale = null) use ($localeService, $intl): string {
                 static $cache = [];
-                $l = $locale ?? $localeService->current() ?? $this->locale;
+                $l = $this->localeFor($locale, $localeService);
                 if ($intl) {
                     $fmt    = $cache[$l] ??= new \NumberFormatter($l, \NumberFormatter::SCIENTIFIC);
                     $result = $fmt->format((float) $v);
@@ -238,7 +267,7 @@ class IntlFormatModule implements ModuleInterface
             'spellout',
             function (mixed $v, ?string $locale = null) use ($localeService, $intl): string {
                 static $cache = [];
-                $l = $locale ?? $localeService->current() ?? $this->locale;
+                $l = $this->localeFor($locale, $localeService);
                 if ($intl) {
                     $fmt    = $cache[$l] ??= new \NumberFormatter($l, \NumberFormatter::SPELLOUT);
                     $result = $fmt->format((float) $v);
@@ -252,7 +281,7 @@ class IntlFormatModule implements ModuleInterface
             'ordinal',
             function (mixed $v, ?string $locale = null) use ($localeService, $intl): string {
                 static $cache = [];
-                $l = $locale ?? $localeService->current() ?? $this->locale;
+                $l = $this->localeFor($locale, $localeService);
                 if ($intl) {
                     $fmt    = $cache[$l] ??= new \NumberFormatter($l, \NumberFormatter::ORDINAL);
                     $result = $fmt->format((int) $v);
@@ -286,7 +315,7 @@ class IntlFormatModule implements ModuleInterface
         $engine->addFilter(
             'format_date',
             function (mixed $v, string $style = 'medium', ?string $locale = null, ?string $tz = null) use ($localeService, $intl, $defTz): string {
-                $l = $locale ?? $localeService->current() ?? $this->locale;
+                $l = $this->localeFor($locale, $localeService);
                 if ($intl) {
                     return $this->intlDate($v, $style, 'none', $l, $tz ?? $defTz);
                 }
@@ -297,7 +326,7 @@ class IntlFormatModule implements ModuleInterface
         $engine->addFilter(
             'format_time',
             function (mixed $v, string $style = 'medium', ?string $locale = null, ?string $tz = null) use ($localeService, $intl, $defTz): string {
-                $l = $locale ?? $localeService->current() ?? $this->locale;
+                $l = $this->localeFor($locale, $localeService);
                 if ($intl) {
                     return $this->intlDate($v, 'none', $style, $l, $tz ?? $defTz);
                 }
@@ -308,7 +337,7 @@ class IntlFormatModule implements ModuleInterface
         $engine->addFilter(
             'format_datetime',
             function (mixed $v, string $dateStyle = 'medium', string $timeStyle = 'medium', ?string $locale = null, ?string $tz = null) use ($localeService, $intl, $defTz): string {
-                $l = $locale ?? $localeService->current() ?? $this->locale;
+                $l = $this->localeFor($locale, $localeService);
                 if ($intl) {
                     return $this->intlDate($v, $dateStyle, $timeStyle, $l, $tz ?? $defTz);
                 }
@@ -320,7 +349,7 @@ class IntlFormatModule implements ModuleInterface
             'format_relative',
             function (mixed $v, ?string $locale = null) use ($localeService, $intl): string {
                 static $cache = [];
-                $l = $locale ?? $localeService->current() ?? $this->locale;
+                $l = $this->localeFor($locale, $localeService);
                 if ($intl && \class_exists(\RelativeDateTimeFormatter::class)) {
                     $ts   = $this->toTimestamp($v);
                     $diff = \time() - $ts;
@@ -361,8 +390,8 @@ class IntlFormatModule implements ModuleInterface
 
         $engine->addFunction(
             'country_name',
-            function (string $code, ?string $displayLocale = null, ?string $loc = null) use ($localeService, $intl): string {
-                $l = $loc ?? $localeService->current() ?? $this->locale;
+            function (string $code, ?string $displayLocale = null, ?string $locale = null) use ($localeService, $intl): string {
+                $l = $this->localeFor($locale, $localeService);
                 if ($intl) {
                     $name = \Locale::getDisplayRegion('und-' . $code, $displayLocale ?? $l);
                     return $name ?: $code;
@@ -373,8 +402,8 @@ class IntlFormatModule implements ModuleInterface
 
         $engine->addFunction(
             'language_name',
-            function (string $code, ?string $displayLocale = null, ?string $loc = null) use ($localeService, $intl): string {
-                $l = $loc ?? $localeService->current() ?? $this->locale;
+            function (string $code, ?string $displayLocale = null, ?string $locale = null) use ($localeService, $intl): string {
+                $l = $this->localeFor($locale, $localeService);
                 if ($intl) {
                     $name = \Locale::getDisplayLanguage($code, $displayLocale ?? $l);
                     return $name ?: $code;
@@ -385,8 +414,8 @@ class IntlFormatModule implements ModuleInterface
 
         $engine->addFunction(
             'locale_name',
-            function (string $id, ?string $displayLocale = null, ?string $loc = null) use ($localeService, $intl): string {
-                $l = $loc ?? $localeService->current() ?? $this->locale;
+            function (string $id, ?string $displayLocale = null, ?string $locale = null) use ($localeService, $intl): string {
+                $l = $this->localeFor($locale, $localeService);
                 if ($intl) {
                     $name = \Locale::getDisplayName($id, $displayLocale ?? $l);
                     return $name ?: $id;
@@ -400,7 +429,7 @@ class IntlFormatModule implements ModuleInterface
             function (string $tz, ?string $displayLocale = null) use ($localeService, $intl): string {
                 if ($intl) {
                     $formatter = new \IntlDateFormatter(
-                        $displayLocale ?? $localeService->current() ?? $this->locale,
+                        $this->localeFor($displayLocale, $localeService),
                         \IntlDateFormatter::NONE,
                         \IntlDateFormatter::NONE,
                         $tz,
@@ -446,7 +475,7 @@ class IntlFormatModule implements ModuleInterface
     // ICU MessageFormat filter
     // =========================================================================
 
-    private function registerMessageFilter(ClarityEngine $engine, LocaleService $locale): void
+    private function registerMessageFilter(ClarityEngine $engine, LocaleService $localeService): void
     {
         $intl = $this->intlAvailable;
 
@@ -458,17 +487,17 @@ class IntlFormatModule implements ModuleInterface
          *
          * @param string $pattern ICU pattern or simple string with {placeholders}
          * @param ?array<string,mixed> $vars e.g. ['name'=>'Joe','count'=>2]
-         * @param ?string $loc  e.g. 'en_US'
+         * @param ?string $locale e.g. 'en_US'
          * @return string
          */
-        $formatMessage = function (string $pattern, ?array $vars = null, ?string $loc = null) use ($intl, $locale): string {
+        $formatMessage = function (string $pattern, ?array $vars = null, ?string $locale = null) use ($intl, $localeService): string {
             static $cache = [];
-            $loc ??= $locale->current() ?? $this->locale;
+            $locale = $this->localeFor($locale, $localeService);
 
             // Try intl first (cached per locale+pattern)
             if ($intl) {
-                $cacheKey = $loc . '|' . $pattern;
-                $fmt      = $cache[$cacheKey] ??= @new MessageFormatter($loc, $pattern);
+                $cacheKey = $locale . '|' . $pattern;
+                $fmt      = $cache[$cacheKey] ??= @new MessageFormatter($locale, $pattern);
 
                 if ($fmt !== false) {
                     $res = $fmt->format($vars);

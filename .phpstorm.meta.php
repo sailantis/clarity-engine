@@ -431,7 +431,7 @@ namespace PHPSTORM_META
         ],
         't' => [
             'return'      => 'string',
-            'params'      => [['vars', 'null'], ['domain', 'null']],
+            'params'      => [['vars', 'null'], ['domain', 'null'], ['locale', 'null']],
             'description' => 'Translate a key from domain-separated locale files.',
             'example'     => "{{ 'logout' |> t }}",
         ],

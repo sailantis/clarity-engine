@@ -19,7 +19,7 @@ Examples:
 Registration
 ------------
 ```php
-// Optional: explicit locale service (register first to share with IntlFormatModule)
+// Optional: register to set an application-wide default locale
 $engine->addModule(new LocaleService(['locale' => 'de_DE']));
 
 $engine->addModule(new TranslationModule([
@@ -52,7 +52,7 @@ Template usage
 
 ## Public methods
 
-### __construct() · <small>[🗎](../../src/Localization/TranslationModule.php#L79)</small>
+### __construct() · <small>[🗎](../../src/Localization/TranslationModule.php#L80)</small>
 
 `public function __construct(array $config = []): mixed`
 
@@ -69,7 +69,7 @@ Template usage
 
 ---
 
-### register() · <small>[🗎](../../src/Localization/TranslationModule.php#L111)</small>
+### register() · <small>[🗎](../../src/Localization/TranslationModule.php#L113)</small>
 
 `public function register(Clarity\ClarityEngine $engine): void`
 
@@ -86,9 +86,9 @@ Template usage
 
 ---
 
-### get() · <small>[🗎](../../src/Localization/TranslationModule.php#L164)</small>
+### get() · <small>[🗎](../../src/Localization/TranslationModule.php#L188)</small>
 
-`public function get(string $key, array|null $vars = null, string|null $domain = null): string`
+`public function get(string $key, array|null $vars = null, string|null $domain = null, string|null $locale = null): string`
 
 Look up a translation key with optional placeholder substitution.
 
@@ -99,6 +99,7 @@ Look up a translation key with optional placeholder substitution.
 | `$key` | string | - | Translation key. |
 | `$vars` | array\|null | `null` | Placeholder values for `{name}` substitution. |
 | `$domain` | string\|null | `null` | Override the default domain. |
+| `$locale` | string\|null | `null` | Translate into this locale for this call only,<br>overriding both the active `{% with_locale %}`<br>block and the module's own `locale` option. |
 
 **Return value**
 
@@ -107,7 +108,7 @@ Look up a translation key with optional placeholder substitution.
 
 ---
 
-### pushDomain() · <small>[🗎](../../src/Localization/TranslationModule.php#L238)</small>
+### pushDomain() · <small>[🗎](../../src/Localization/TranslationModule.php#L263)</small>
 
 `public function pushDomain(string|null $domain): void`
 
@@ -143,7 +144,7 @@ In this example, the first `t` filter looks up `welcome_subject` in the
 
 ---
 
-### popDomain() · <small>[🗎](../../src/Localization/TranslationModule.php#L247)</small>
+### popDomain() · <small>[🗎](../../src/Localization/TranslationModule.php#L272)</small>
 
 `public function popDomain(): void`
 
