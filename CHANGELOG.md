@@ -36,6 +36,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   same PHP literal, so it is a shorter spelling rather than a second value, and
   it shadows a passed variable of the same name exactly as `null` always has.
 
+- **`ArrayTranslationLoader` — translations held in a PHP array.** The fourth
+  loader, and the one `ChainTranslationLoader`'s docblock had been advertising
+  all along: it named an `ArrayTranslationLoader` that did not exist. It serves
+  the same role as the template engine's `ArrayLoader` — tests without a fixture
+  directory, and strings that belong beside the code using them — and composes
+  with the others, so a small array can override a few keys from the files:
+
+  ```php
+  'loader' => new ChainTranslationLoader(
+      new FileTranslationLoader(__DIR__ . '/locales'),
+      new ArrayTranslationLoader(['messages' => ['de_DE' => ['greeting' => 'Servus']]]),
+  ),
+  ```
+
+  It flattens nested keys to dot notation and stringifies values, both shared
+  with `FileTranslationLoader` through a new `CatalogNormalizationTrait` — the
+  two must agree on the shape of a catalog or the same lookup would resolve
+  differently depending on which loader read it. Flattening happens once, in the
+  constructor; `load()` returns the stored map unchanged, and `set()` writes a
+  single flat entry, so a dotted key never rewrites its branch.
+
 - **The translation loader architecture is documented.** `TranslationModule`
   has always taken a pluggable `loader` (`TranslationLoaderInterface`), with
   `FileTranslationLoader`, `ChainTranslationLoader` and `RedisCachingLoader`
@@ -44,7 +65,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the interface, the `loader` option, chaining, the Redis decorator (including
   that it needs `ext-redis` and how to reach `invalidate()`), and how to write a
   loader. `composer.json` now suggests `ext-redis` beside `ext-intl`, and the
-  three loaders have tests for the first time
+  loaders have tests for the first time
   (`tests/Engine/TranslationLoaderArchitectureTest.php`) — including a pin on the
   per-lookup behaviour described under *Fixed* below.
 

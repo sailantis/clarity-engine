@@ -58,6 +58,8 @@
 
 ### `Clarity\Localization`
 
+- [ArrayTranslationLoader](Clarity_Localization_ArrayTranslationLoader.md) `Clarity\Localization\ArrayTranslationLoader`
+- [CatalogNormalizationTrait](Clarity_Localization_CatalogNormalizationTrait.md) `Clarity\Localization\CatalogNormalizationTrait`
 - [ChainTranslationLoader](Clarity_Localization_ChainTranslationLoader.md) `Clarity\Localization\ChainTranslationLoader`
 - [FileTranslationLoader](Clarity_Localization_FileTranslationLoader.md) `Clarity\Localization\FileTranslationLoader`
 - [IntlFormatModule](Clarity_Localization_IntlFormatModule.md) `Clarity\Localization\IntlFormatModule`

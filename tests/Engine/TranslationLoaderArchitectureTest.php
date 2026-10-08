@@ -1,6 +1,7 @@
 <?php
 namespace Clarity\Tests\Engine;
 
+use Clarity\Localization\ArrayTranslationLoader;
 use Clarity\Localization\ChainTranslationLoader;
 use Clarity\Localization\FileTranslationLoader;
 use Clarity\Localization\RedisCachingLoader;
@@ -169,6 +170,148 @@ class TranslationLoaderArchitectureTest extends BaseTestCase
         \touch($this->localeDir() . '/messages.de_DE.yaml', \time() + 120);
 
         $this->assertSame(['greeting' => 'Hallo'], $loader->load('messages', 'de_DE'));
+    }
+
+    // =========================================================================
+    // ArrayTranslationLoader
+    // =========================================================================
+
+    public function testArrayLoaderServesAFlatCatalog(): void
+    {
+        $loader = new ArrayTranslationLoader([
+            'messages' => ['de_DE' => ['greeting' => 'Hallo', 'logout' => 'Abmelden']],
+        ]);
+
+        $this->assertSame(
+            ['greeting' => 'Hallo', 'logout' => 'Abmelden'],
+            $loader->load('messages', 'de_DE')
+        );
+    }
+
+    public function testArrayLoaderFlattensNestedKeysLikeTheFileLoaderDoes(): void
+    {
+        $nested = ['nav' => ['home' => 'Startseite', 'about' => 'Über uns'], 'logout' => 'Abmelden'];
+
+        $arrayLoader = new ArrayTranslationLoader(['messages' => ['de_DE' => $nested]]);
+
+        // The same nesting through the file loader: both must agree on the
+        // flattened shape, or a lookup would resolve differently per loader.
+        $this->writePhpCatalog('messages.de_DE', $nested);
+        $fileLoader = new FileTranslationLoader($this->localeDir());
+
+        $expected = ['nav.home' => 'Startseite', 'nav.about' => 'Über uns', 'logout' => 'Abmelden'];
+
+        $this->assertSame($expected, $arrayLoader->load('messages', 'de_DE'));
+        $this->assertSame($expected, $fileLoader->load('messages', 'de_DE'));
+    }
+
+    public function testArrayLoaderStringifiesNonStringValues(): void
+    {
+        $loader = new ArrayTranslationLoader([
+            'messages' => ['de_DE' => ['count' => 3, 'ratio' => 1.5, 'flag' => true]],
+        ]);
+
+        $this->assertSame(
+            ['count' => '3', 'ratio' => '1.5', 'flag' => '1'],
+            $loader->load('messages', 'de_DE')
+        );
+    }
+
+    public function testArrayLoaderReturnsEmptyArrayForUnknownDomainOrLocale(): void
+    {
+        $loader = new ArrayTranslationLoader(['messages' => ['de_DE' => ['a' => 'A']]]);
+
+        $this->assertSame([], $loader->load('nonexistent', 'de_DE'), 'unknown domain');
+        $this->assertSame([], $loader->load('messages', 'fr_FR'), 'unknown locale');
+        $this->assertSame([], (new ArrayTranslationLoader())->load('messages', 'de_DE'), 'empty loader');
+    }
+
+    public function testArrayLoaderSetAddsAndReplacesAMessage(): void
+    {
+        $loader = new ArrayTranslationLoader();
+
+        $loader->set('messages', 'de_DE', 'greeting', 'Hallo');
+        $this->assertSame(['greeting' => 'Hallo'], $loader->load('messages', 'de_DE'));
+
+        // A dotted key writes one flat entry, reading back exactly as the nested
+        // array form does.
+        $loader->set('messages', 'de_DE', 'nav.home', 'Startseite');
+
+        $nested = new ArrayTranslationLoader([
+            'messages' => ['de_DE' => ['greeting' => 'Hallo', 'nav' => ['home' => 'Startseite']]],
+        ]);
+
+        $this->assertSame(
+            $nested->load('messages', 'de_DE'),
+            $loader->load('messages', 'de_DE'),
+            'set() with a dotted key must equal the nested array form'
+        );
+
+        // Replacing an existing key wins.
+        $loader->set('messages', 'de_DE', 'greeting', 'Servus');
+        $this->assertSame('Servus', $loader->load('messages', 'de_DE')['greeting']);
+    }
+
+    /**
+     * A dotted key is a key, not a path: writing `nav.home` must not disturb a
+     * separate `nav` message. An implementation that nested on write would have
+     * to overwrite the scalar `nav` to store the child.
+     */
+    public function testArrayLoaderSetIsAdditiveAndLeavesSiblingKeysAlone(): void
+    {
+        $loader = new ArrayTranslationLoader(['messages' => ['de_DE' => ['nav' => 'Start']]]);
+
+        $loader->set('messages', 'de_DE', 'nav.home', 'Startseite');
+
+        $this->assertSame(
+            ['nav' => 'Start', 'nav.home' => 'Startseite'],
+            $loader->load('messages', 'de_DE'),
+            'the scalar and the dotted key coexist'
+        );
+    }
+
+    public function testArrayLoaderFlattensOnceAtConstructionNotPerLoad(): void
+    {
+        $loader = new ArrayTranslationLoader([
+            'messages' => ['de_DE' => ['nav' => ['home' => 'Startseite']]],
+        ]);
+
+        $first = $loader->load('messages', 'de_DE');
+        $this->assertSame('Startseite', $first['nav.home']);
+
+        // A second load returns the same flat map; there is no re-flattening
+        // step that could disagree with the first.
+        $this->assertSame($first, $loader->load('messages', 'de_DE'));
+    }
+
+    public function testArrayLoaderWorksAsAProgrammaticOverlayOnAFileLoader(): void
+    {
+        $this->writePhpCatalog('messages.de_DE', ['greeting' => 'Hallo', 'logout' => 'Abmelden']);
+
+        $chain = new ChainTranslationLoader(
+            new FileTranslationLoader($this->localeDir()),
+            new ArrayTranslationLoader([
+                'messages' => ['de_DE' => ['greeting' => 'Servus']],
+            ]),
+        );
+
+        $this->assertSame(
+            ['greeting' => 'Servus', 'logout' => 'Abmelden'],
+            $chain->load('messages', 'de_DE'),
+            'the array layer overrides one key and leaves the rest to the files'
+        );
+    }
+
+    public function testArrayLoaderBackedModuleResolvesNestedKeys(): void
+    {
+        $module = new TranslationModule([
+            'locale' => 'de_DE',
+            'loader' => new ArrayTranslationLoader([
+                'messages' => ['de_DE' => ['nav' => ['home' => 'Startseite']]],
+            ]),
+        ]);
+
+        $this->assertSame('Startseite', $module->get('nav.home'));
     }
 
     // =========================================================================

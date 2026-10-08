@@ -17,13 +17,14 @@ namespace Clarity\Localization;
  */
 class FileTranslationLoader implements TranslationLoaderInterface
 {
+    use CatalogNormalizationTrait;
+
     public function __construct(
         private string $translationsPath,
         private ?string $cachePath = null
-    )
-    {
+    ) {
         $this->translationsPath = rtrim($this->translationsPath, '/\\');
-        $this->cachePath = $this->cachePath !== null ? rtrim($this->cachePath, '/\\') : sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'clarity_translations';
+        $this->cachePath        = $this->cachePath !== null ? rtrim($this->cachePath, '/\\') : sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'clarity_translations';
     }
 
     public function load(string $domain, string $locale): array
@@ -67,7 +68,7 @@ class FileTranslationLoader implements TranslationLoaderInterface
         if (!\is_array($data)) {
             return null;
         }
-        return $this->normalizeToStrings($this->flattenArray($data));
+        return $this->normalizeToStrings($this->flattenCatalog($data));
     }
 
     /** @return array<string, string> */
@@ -77,17 +78,17 @@ class FileTranslationLoader implements TranslationLoaderInterface
         if (!\is_array($decoded)) {
             return null;
         }
-        return $this->normalizeToStrings($this->flattenArray($decoded));
+        return $this->normalizeToStrings($this->flattenCatalog($decoded));
     }
 
     /**
-    * Load a translation file by compiling it to a PHP cache if necessary,
-    * then requiring the cached file.
-    *
-    * @param  string   $sourceFile Absolute path to the source (JSON/YAML) file.
-    * @param  callable $parser     fn(string $content): array<string,string>
-    * @return array<string, string>
-    */
+     * Load a translation file by compiling it to a PHP cache if necessary,
+     * then requiring the cached file.
+     *
+     * @param  string   $sourceFile Absolute path to the source (JSON/YAML) file.
+     * @param  callable $parser     fn(string $content): array<string,string>
+     * @return array<string, string>
+     */
     private function loadViaCachePhp(string $sourceFile, callable $parser): array
     {
         $cacheFile = $this->cachePath . \DIRECTORY_SEPARATOR . \md5($sourceFile) . '.php';
@@ -134,7 +135,7 @@ class FileTranslationLoader implements TranslationLoaderInterface
             \mkdir($dir, 0755, true);
         }
 
-        $export = \var_export($data, true);
+        $export  = \var_export($data, true);
         $content = "<?php\n// Auto-generated translation cache — do not edit\nreturn {$export};\n";
 
         // Atomic write via temp file
@@ -153,35 +154,11 @@ class FileTranslationLoader implements TranslationLoaderInterface
     // =========================================================================
 
     /**
-    * Flatten a nested array into dot-notation keys.
-    * `['page' => ['title' => 'Foo']]` → `['page.title' => 'Foo']`
-    *
-    * @param  array<mixed, mixed> $array
-    * @param string $prefix
-    * @return array<string, string>
-    */
-    private function flattenArray(array $array, string $prefix = ''): array
-    {
-        $result = [];
-        foreach ($array as $k => $v) {
-            $key = $prefix !== '' ? $prefix . '.' . $k : (string) $k;
-            if (\is_array($v)) {
-                foreach ($this->flattenArray($v, $key) as $fk => $fv) {
-                    $result[$fk] = $fv;
-                }
-            } else {
-                $result[$key] = (string) $v;
-            }
-        }
-        return $result;
-    }
-
-    /**
-    * Ensure every value in the catalog is a string.
-    *
-    * @param  array<mixed, mixed> $data
-    * @return array<string, string>
-    */
+     * Ensure every value in the catalog is a string.
+     *
+     * @param  array<mixed, mixed> $data
+     * @return array<string, string>
+     */
     private function normalizeToStrings(array $data): array
     {
         foreach ($data as $k => $v) {
@@ -192,4 +169,5 @@ class FileTranslationLoader implements TranslationLoaderInterface
         /** @var array<string, string> $data */
         return $data;
     }
+
 }

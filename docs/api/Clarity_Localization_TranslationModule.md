@@ -53,7 +53,7 @@ Template usage
 
 ## Public methods
 
-### __construct() · <small>[🗎](../../src/Localization/TranslationModule.php#L74)</small>
+### __construct() · <small>[🗎](../../src/Localization/TranslationModule.php#L72)</small>
 
 `public function __construct(array $config = []): mixed`
 
@@ -70,7 +70,7 @@ Template usage
 
 ---
 
-### register() · <small>[🗎](../../src/Localization/TranslationModule.php#L108)</small>
+### register() · <small>[🗎](../../src/Localization/TranslationModule.php#L114)</small>
 
 `public function register(Clarity\ClarityEngine $engine): void`
 
@@ -87,7 +87,7 @@ Template usage
 
 ---
 
-### getLoader() · <small>[🗎](../../src/Localization/TranslationModule.php#L169)</small>
+### getLoader() · <small>[🗎](../../src/Localization/TranslationModule.php#L175)</small>
 
 `public function getLoader(): Clarity\Localization\TranslationLoaderInterface`
 
@@ -111,7 +111,7 @@ if ($loader instanceof RedisCachingLoader) {
 
 ---
 
-### get() · <small>[🗎](../../src/Localization/TranslationModule.php#L202)</small>
+### get() · <small>[🗎](../../src/Localization/TranslationModule.php#L208)</small>
 
 `public function get(string $key, array|null $vars = null, string|null $domain = null, string|null $locale = null): string`
 
@@ -133,7 +133,7 @@ Look up a translation key with optional placeholder substitution.
 
 ---
 
-### pushDomain() · <small>[🗎](../../src/Localization/TranslationModule.php#L259)</small>
+### pushDomain() · <small>[🗎](../../src/Localization/TranslationModule.php#L265)</small>
 
 `public function pushDomain(string|null $domain): void`
 
@@ -169,7 +169,7 @@ In this example, the first `t` filter looks up `welcome_subject` in the
 
 ---
 
-### popDomain() · <small>[🗎](../../src/Localization/TranslationModule.php#L268)</small>
+### popDomain() · <small>[🗎](../../src/Localization/TranslationModule.php#L274)</small>
 
 `public function popDomain(): void`
 

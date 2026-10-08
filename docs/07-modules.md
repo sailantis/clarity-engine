@@ -364,13 +364,49 @@ $engine->addModule(new TranslationModule([
 ]));
 ```
 
-Clarity includes three loader implementations:
+Clarity includes four translation loaders:
 
-| Loader                   | Purpose                                                                     |
-| ------------------------ | --------------------------------------------------------------------------- |
-| `FileTranslationLoader`  | Default. Reads `{domain}.{locale}.{php,json,yaml}` and compiles a PHP cache |
-| `ChainTranslationLoader` | Merges several loaders; later arguments override earlier ones               |
-| `RedisCachingLoader`     | Decorator that caches any other loader in Redis                             |
+| Loader                     | Purpose                                                                     |
+| -------------------------- | --------------------------------------------------------------------------- |
+| `FileTranslationLoader`    | Default; reads `{domain}.{locale}.{php,json,yaml}` files and compiles a PHP cache |
+| `ArrayTranslationLoader`   | Loads in-memory catalogs from a PHP array                                      |
+| `ChainTranslationLoader`   | Combines loaders; later loaders override earlier ones                         |
+| `RedisCachingLoader`       | Caches results from another loader in Redis                                    |
+
+#### ArrayTranslationLoader
+
+Store translations in an array instead of files. This can be useful in tests
+without a fixture directory, or for a small set of strings defined alongside
+the code that uses them:
+
+```php
+use Clarity\Localization\ArrayTranslationLoader;
+
+$loader = new ArrayTranslationLoader([
+    'messages' => [
+        'de_DE' => ['greeting' => 'Hallo', 'nav' => ['home' => 'Startseite']],
+        'en_US' => ['greeting' => 'Hello'],
+    ],
+]);
+
+// Add an individual entry
+$loader->set('messages', 'de_DE', 'nav.about', 'Über uns');
+```
+
+Nested keys are flattened with dots, so `nav.home` resolves the same way it does
+from a file. `set()` treats a dotted key as one message key, not as a path; for
+example, setting `nav.home` does not change a separate `nav` entry. An unknown
+domain or locale returns an empty array, as it does for a missing file.
+
+Combine the array loader with the file loader to override selected messages
+while retaining the other file-based translations:
+
+```php
+'loader' => new ChainTranslationLoader(
+    new FileTranslationLoader(__DIR__ . '/locales'),
+    new ArrayTranslationLoader(['messages' => ['de_DE' => ['greeting' => 'Servus']]]),
+),
+```
 
 #### ChainTranslationLoader
 

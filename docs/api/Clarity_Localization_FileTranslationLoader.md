@@ -17,7 +17,7 @@ the parsed translations for faster subsequent loading. The cache is automaticall
 
 ## Public methods
 
-### __construct() · <small>[🗎](../../src/Localization/FileTranslationLoader.php#L20)</small>
+### __construct() · <small>[🗎](../../src/Localization/FileTranslationLoader.php#L22)</small>
 
 `public function __construct(string $translationsPath, string|null $cachePath = null): mixed`
 
@@ -35,7 +35,7 @@ the parsed translations for faster subsequent loading. The cache is automaticall
 
 ---
 
-### load() · <small>[🗎](../../src/Localization/FileTranslationLoader.php#L29)</small>
+### load() · <small>[🗎](../../src/Localization/FileTranslationLoader.php#L31)</small>
 
 `public function load(string $domain, string $locale): array`
 
