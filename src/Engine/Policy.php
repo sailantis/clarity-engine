@@ -102,9 +102,6 @@ final class Policy
         'variableVariables',
     ];
 
-    /** The two allowlists, in documentation order. */
-    public const ALLOWLISTS = ['functions', 'filters'];
-
     /** @var array<string, bool> rule name => allowed */
     private array $rules;
 
@@ -296,7 +293,7 @@ final class Policy
 
             throw new ClarityException(
                 "Unknown policy key '{$key}'. Known keys: "
-                    . \implode(', ', \array_merge(['rules'], self::ALLOWLISTS, ['deniedFunctions'])) . '.'
+                    . \implode(', ', \array_merge(['rules'], ['functions', 'filters', 'deniedFunctions'])) . '.'
             );
         }
 
@@ -311,7 +308,7 @@ final class Policy
     public function toArray(): array
     {
         return [
-            'rules'    => $this->rules,
+            'rules'           => $this->rules,
             'functions'       => \array_keys($this->functions),
             'filters'         => \array_keys($this->filters),
             'deniedFunctions' => \array_keys($this->denied),

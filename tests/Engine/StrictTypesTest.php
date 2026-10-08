@@ -149,6 +149,60 @@ class StrictTypesTest extends BaseTestCase
     }
 
     // =========================================================================
+    // A numeric string is still refused — the cast is the remedy, not a cast
+    // inside the filter
+    // =========================================================================
+
+    /**
+     * The numeric built-ins do NOT cast their input, and this is deliberate.
+     *
+     * Every `(float)`/`(int)` wrapper was removed from the built-in filter
+     * templates on purpose (see the CHANGELOG entry that removed them): a filter
+     * that silently accepts the wrong type defeats the reason `strictTypes` is on.
+     * `number` is the one sanctioned exception, because `number_format()` has no
+     * `string` overload at all.
+     *
+     * This test exists so that a future "fix" for the error below has to DELETE a
+     * test to land. The answer to `round` refusing a string is an explicit cast at
+     * the call site, which states the conversion rather than hiding it:
+     *
+     *     {{ x |> float |> round(2) }}
+     */
+    public function testANumericStringIsStillRefusedByTheNumericFilters(): void
+    {
+        self::tpl('st_numstr', "{{ '3.7' |> round(2) }}");
+
+        $this->expectException(ClarityException::class);
+        self::strict()->renderPartial('st_numstr');
+    }
+
+    /**
+     * The complement: the cast makes the same call work, in strict AND in weak
+     * mode, because the conversion is now stated by the template rather than
+     * inferred by PHP. One assertion covers both modes because the cast means the
+     * mode no longer decides the answer.
+     */
+    public function testAnExplicitCastMakesTheSameCallWorkInBothModes(): void
+    {
+        self::tpl('st_numstr_cast', "{{ '3.7' |> float |> round(2) }}");
+
+        $this->assertSame('3.7', self::strict()->renderPartial('st_numstr_cast'));
+        $this->assertSame('3.7', self::weak()->renderPartial('st_numstr_cast'));
+    }
+
+    /**
+     * `number` keeps its cast, so a pipeline whose previous step yields a string
+     * still works — the exception the CHANGELOG calls out. Pinned next to the rule
+     * it is an exception to, so the two read as one decision.
+     */
+    public function testNumberStillAcceptsAStringBecauseItCannotWorkOtherwise(): void
+    {
+        self::tpl('st_number_cast', "{{ ' 3.14 ' |> trim |> number(1) }}");
+
+        $this->assertSame('3.1', self::strict()->renderPartial('st_number_cast'));
+    }
+
+    // =========================================================================
     // Error accounting — the declaration must not shift the mapping
     // =========================================================================
 

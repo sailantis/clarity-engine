@@ -35,7 +35,7 @@ the parsed translations for faster subsequent loading. The cache is automaticall
 
 ---
 
-### load() · <small>[🗎](../../src/Localization/FileTranslationLoader.php#L31)</small>
+### load() · <small>[🗎](../../src/Localization/FileTranslationLoader.php#L30)</small>
 
 `public function load(string $domain, string $locale): array`
 

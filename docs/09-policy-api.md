@@ -305,6 +305,15 @@ error rather than a silently formatted number.
 | `{{ ' 3.14 ' \|> round(1) }}` | `'3.1'`            | `TypeError`        |
 | `{{ 42 }}`                    | `'42'`             | `'42'` (unchanged) |
 
+To avoid a `TypeError` under `strictTypes`, use an explicit [cast](01-template-syntax.md#cast-syntax) or an explicit [conversion filter](02-filters-and-functions.md#type-cast-filters), which states the conversion instead of relying on the mode. Explicit casts make the intended type conversion clear and work under all policy presets.
+
+```twig
+{{ ' 3.14 ' |> trim |> number(1) }}  {# TypeError — number casts, this does not #}
+{{ '3.7' |> round(2) }}              {# TypeError                               #}
+{{ (float) '3.7' |> round(2) }}      {# 3.7 — cast to float, then round         #}
+{{ '3.7' |> float |> round(2) }}     {# 3.7 — cast to float, then round         #}
+```
+
 ---
 
 ## The API
@@ -322,14 +331,14 @@ $policy = Policy::default()
 
 // Array — for config files, which cannot call methods
 $policy = Policy::fromArray([
-    'rules'    => ['methodCalls' => true],
+    'rules'           => ['methodCalls' => true],
     'functions'       => ['strtoupper', 'count'],
     'filters'         => ['markdown'],
     'deniedFunctions' => ['exec'],
 ]);
 ```
 
-Use the array form in `env.php` or framework configuration. `toArray()` produces
+The array form is useful for configuration files. `toArray()` produces
 a round-trippable representation. Unknown keys and rule names are rejected.
 
 `fromArray()` starts from `restricted()`, so a config only has to name what it
@@ -338,29 +347,14 @@ changes.
 ### Engine integration
 
 ```php
-$engine->setPolicy(Policy::restricted());   // the default
+$engine->setPolicy(Policy::restricted());              // the default
 $engine->setPolicy(Policy::trusted());
 $engine->setPolicy(Policy::unrestricted());
 $engine->setPolicy(['rules' => ['rawPhp' => true]]);   // array form
-$policy = $engine->getPolicy();            // always a real object
+$policy = $engine->getPolicy();                        // always a real object
 ```
 
-`setPolicy()` accepts either form. `getPolicy()` always returns a policy; a new
-engine uses `Policy::restricted()`.
-
-### `allowFunctions()` vs `addFunction()`
-
-These methods do different things:
-
-- `addFunction('upper', $fn)` registers a **callable** under a name. Existing
-  API, unchanged.
-- `allowFunctions('strtoupper')` **permits a PHP function to be called by its own
-  name**, without registering anything.
-
-If a name is both registered and allowed, the registered callable is used. If it
-is allowed but not registered, the PHP function is called. If neither, compilation
-fails. A registered callable takes precedence over a PHP function with the same
-name.
+`setPolicy()` accepts either form. `getPolicy()` always returns a policy object.
 
 ### Inspecting a policy
 
@@ -372,40 +366,8 @@ Use these methods for a summary without inspecting individual rules:
 | `$policy->isSandboxed()`    | no rule that reaches PHP is on                           |
 | `$policy->allowsPhp()`      | a rule that reaches PHP is on                            |
 
-`allowsPhp()` is on when the `phpFunctions` rule is on, or when a rule that makes
-another PHP construct reachable is on. A **filter** allowlist alone does not
-enable PHP access; it only narrows which names may be used. For example,
-`Policy::restricted()->allowFilters('markdown')` remains sandboxed. A **function**
-allowlist does turn the `phpFunctions` rule on as it grants, so
-`Policy::restricted()->allowFunctions('count')` reaches PHP and resolves only
-`count`.
-
 The engine also exposes `isSandboxed()` as a shortcut for
 `getPolicy()->isSandboxed()`.
-
----
-
-## Semantics
-
-### Every rejection is a compile-time `ClarityException`
-
-Rule, allowlist, function-call and filter-step violations raise a
-`ClarityException` during compilation, not rendering. An unregistered filter
-that cannot resolve to a PHP function also fails at compile time.
-
-### The message names the remedy
-
-Errors name the required change and report the template location through
-`getFile()` / `getLine()` and `templateName` / `templateLine`. See
-[Error Handling](04-advanced-topics.md#error-handling).
-
-| Situation                         | Message                                                                                                                                                                                                                             |
-| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| unregistered **function**         | `Call to unregistered function 'x()' in context '…'. Grant the 'phpFunctions' rule to allow PHP function calls, then add the name with allowFunctions().`                                                                           |
-| unregistered **filter step**      | `Filter 'x' is not registered, and this policy does not allow PHP function calls, so there is nothing for it to resolve to. Register it with addFilter(), or grant the 'phpFunctions' rule and add the name with allowFunctions().` |
-| a **denied or unlisted** function | `Function 'x' is not allowed by this policy: it is not in the function allowlist, or it is denied. Add it with allowFunctions().`                                                                                                   |
-| an **unlisted filter**            | `Filter 'x' is not registered and is not in the policy's filter allowlist. Add it with allowFilters(), or register it with addFilter().`                                                                                            |
-| a **denied rule**                 | `'{% php %}' is not allowed by this policy. Grant the 'rawPhp' rule to allow it.`                                                                                                                                                   |
 
 ### A policy change invalidates the compiled cache
 
@@ -413,53 +375,6 @@ Compiled templates record a digest of the effective policy. The loader recompile
 when the digest changes, so a template compiled under one policy is not reused
 under another. The digest includes sorted rules and allowlist entries.
 Compiled files store the digest, not the policy itself.
-
-### Registration order does not change the policy
-
-The policy is resolved against the function registry during compilation, so
-`allowFunctions('a', 'b')` works regardless of registration order. The last
-policy set before rendering applies.
-
----
-
-## What the policy does not cover
-
-### A `tags` allowlist
-
-There is no tag allowlist. Clarity tags do not expose access beyond the
-rules, filters and functions already described. Restricting tags is a
-linting concern, not a security control.
-
-### Method and property allowlists by class
-
-There are no per-class method or property allowlists. The object is only known at
-render time; `methodCalls` permits calls on any object in the scope.
-
-### A read-only mode
-
-There is no read-only mode. Make data read-only when building the render scope.
-
-### Runtime checks
-
-Policies are enforced at compile time; the engine does not recheck them while
-rendering.
-
----
-
-## Comparison with other engines
-
-Other template engines organize these controls differently:
-
-- **Superglobals.** Latte's `SecurityPolicy` controls tags, filters, functions,
-  methods and properties, but has no superglobal control. Clarity treats
-  superglobals as a separate rule.
-- **Includes.** Clarity's `{% include %}` accepts a literal name; the
-  [view path](#the-view-path-is-a-boundary) keeps it inside the view root.
-- **Variable variables.** Latte rejects `${expr}` in its sandbox. Clarity permits
-  it under every policy because it resolves only names in the render scope.
-- **Blade** has no policy; templates are PHP. **Twig** has a `SecurityPolicy`
-  for tags, filters, methods, properties and functions. Its `is defined`, like
-  Clarity's, uses `array_key_exists`.
 
 ---
 
@@ -499,9 +414,6 @@ a plain name. This prevents `.` or `..` segments from escaping the view path.
 
 Absolute template names are rejected. To use a different root, configure it on
 the host, for example `new FileLoader('/their/root')`. The same path rules apply.
-
-Custom loaders must enforce the same rules as part of the `TemplateLoader`
-contract.
 
 ---
 

@@ -47,6 +47,7 @@
 ### `Clarity\Engine\Tokenizer`
 
 - [CallableTrait](Clarity_Engine_Tokenizer_CallableTrait.md) `Clarity\Engine\Tokenizer\CallableTrait`
+- [CastTrait](Clarity_Engine_Tokenizer_CastTrait.md) `Clarity\Engine\Tokenizer\CastTrait`
 - [CollectionLiteralTrait](Clarity_Engine_Tokenizer_CollectionLiteralTrait.md) `Clarity\Engine\Tokenizer\CollectionLiteralTrait`
 - [ExpressionCoreTrait](Clarity_Engine_Tokenizer_ExpressionCoreTrait.md) `Clarity\Engine\Tokenizer\ExpressionCoreTrait`
 - [ExpressionSupportTrait](Clarity_Engine_Tokenizer_ExpressionSupportTrait.md) `Clarity\Engine\Tokenizer\ExpressionSupportTrait`

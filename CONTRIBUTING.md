@@ -78,6 +78,7 @@ Tokenizer (`src/Engine/Tokenizer/`):
 | `OperatorTestTrait`      | `in` / `is …` operator tests                                                                              |
 | `CollectionLiteralTrait` | array/object literals + postfix property/index access                                                     |
 | `PhpConstructTrait`      | class names: `new Foo(...)`, `Foo::member`, the `instanceof` operand                                      |
+| `CastTrait`              | `(type) expr` casts, and telling a cast from a parenthesised expression                                  |
 
 Compiler (`src/Engine/Compiler/`):
 

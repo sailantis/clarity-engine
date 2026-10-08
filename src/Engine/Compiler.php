@@ -107,8 +107,20 @@ class Compiler
      * Version 29 emits lambda bodies and quoted filter references as non-static
      * arrow functions instead of `static` closures, so `$this` stays bound and a
      * directive/inline-filter snippet works in every emitted position.
+     *
+     * Version 31 adds the cast grammar (`(int) x`) and the cast filters, so a
+     * template that previously could not compile at all now emits a cast — and,
+     * more importantly, a template cached under version 30 must not be reused
+     * against a tokenizer that reads `( … )` differently.
+     *
+     * Version 32 lets a cast be GLUED to its operand (`(int)x`), so the operand
+     * opener alone decides and the whitespace is optional. Reading a cast out of
+     * `(int)(x)`, `(int)[0]` and `(int)-5` changes the meaning of three
+     * expressions that a template holding a variable named `int` used to compile
+     * to a call, an index and a subtraction, so cached classes from version 31
+     * must not be reused.
      */
-    public const COMPILER_VERSION = 30;
+    public const COMPILER_VERSION = 32;
 
     /**
      * Prefix owned by the engine for every PHP variable it binds into the render

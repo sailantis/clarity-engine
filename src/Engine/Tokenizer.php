@@ -10,6 +10,7 @@ use Clarity\Engine\Tokenizer\OperatorTestTrait;
 use Clarity\Engine\Tokenizer\VarChainTrait;
 use Clarity\Engine\Tokenizer\CollectionLiteralTrait;
 use Clarity\Engine\Tokenizer\PhpConstructTrait;
+use Clarity\Engine\Tokenizer\CastTrait;
 
 use Clarity\ClarityException;
 
@@ -66,6 +67,7 @@ class Tokenizer
     use VarChainTrait;
     use CollectionLiteralTrait;
     use PhpConstructTrait;
+    use CastTrait;
 
     public const TEXT = 1;
     public const OUTPUT = 2;

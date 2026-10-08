@@ -9,6 +9,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Type casts — `{{ x |> int }}` and `{{ (int) x }}`.** A conversion between
+  the scalar types and `array`, available in both syntaxes:
+
+  ```twig
+  {{ '3.7' |> int }}              {# 3                                     #}
+  {{ 1.5 |> string }}             {# '1.5'                                 #}
+  {{ '0' |> bool }}               {# false — PHP truthiness, not emptiness #}
+  {{ abs((int) '-4343') }}        {# 4343                                  #}
+  {{ x |> float |> round(2) }}    {# the reason casts are needed, below    #}
+  ```
+
+  Each cast is a total function: it never throws and never yields `null`, so it
+  is safe on a value whose type is only known at render time — a form field, a
+  DB row, a decoded payload. `(int) 'dsfd'` is `0`, and that is the property
+  being bought.
+
+  Six names are registered — `int`, `float`, `string`, `bool`, `array` and
+  `object` — each usable as a filter or a call, and each also spellable as a
+  `(type) expr` cast prefix. `object` turns a scalar or array into an object
+  (useful for a JSON field a consumer expects to be an object); it is the one
+  cast whose result cannot be rendered directly, so pipe it into a serializer:
+  `{{ x |> object |> json }}`.
+
+  There is one spelling per cast. `(integer)`, `(boolean)` and `(double)` are
+  **not** casts — `int`, `bool` and `float` spell the same conversion more
+  briefly, and refusing the long forms keeps a cast from shadowing a name a
+  template plausibly holds as data. `(real)` and `(unset)` are not casts either:
+  PHP removed both in 8.0. `(binary)` is not a cast because it does nothing — a
+  legacy alias for `(string)` with byte-identical output, not a base-2
+  conversion. All six keep their previous meaning: a parenthesised variable read.
+
+  The cast syntax is GRAMMAR, not a capability: it needs no rule, appears in no
+  preset, and works under `restricted()` exactly as under `unrestricted()`. No
+  policy digest changes. A cast is told apart from `(a) + b` by whether what
+  follows the `)` can open an operand — the whitespace is optional, so
+  `{{ (int)x }}` and `{{ (int) x }}` are the same cast. See
+  [Cast Syntax](docs/01-template-syntax.md#cast-syntax).
+
+  Because the cast name alone decides, three spellings change meaning for a
+  template that holds a variable named after a cast type:
+
+  | Template     | Before                        | After                |
+  | ------------ | ----------------------------- | -------------------- |
+  | `(int)(x)`   | a call on the variable `int`  | a cast of the `(x)`  |
+  | `(int)[0]`   | an index into the variable    | a cast of `[0]`      |
+  | `(int)-5`    | the variable `int` minus `5`  | a cast of `-5`       |
+
+  Every other previously valid reading of `( … )` compiles to the same PHP as
+  before: a name that is not one of the six cast types never reaches the rule.
+
+  This is what a template uses to pass through `strictTypes` deliberately. The
+  numeric built-ins still do **not** cast their input, so a numeric string
+  reaching `round`, `ceil`, `floor` or `abs` remains a `TypeError` under the
+  default policy:
+
+  ```twig
+  {{ '3.7' |> round(2) }}          {# TypeError — unchanged, on purpose #}
+  {{ '3.7' |> float |> round(2) }} {# 3.7 — the conversion is stated    #}
+  ```
+
+  That contrast is the point rather than a wart. A filter quietly accepting the
+  wrong type is the failure `strictTypes` was turned on to eliminate, and
+  `number` is the sole remaining exception because `number_format()` has no
+  `string` overload at all. `intval`, `floatval`, `strval` and `boolval` are
+  deliberately not registered: they are reachable in PHP mode as ordinary
+  functions, so registering them would duplicate these casts under a second
+  naming convention.
+
+  `COMPILER_VERSION` moves 30 → 32: the cast grammar decides how a `( … )` group
+  is read, so a template compiled before it must not be reused against a
+  tokenizer that could read it differently. The glued form widened what that
+  covers, so the bump is to 32 rather than 31 — both belong to the same unmerged
+  release.
+
 - **`t` accepts a per-call locale, and `nil` is a keyword.** Two gaps closed
   around locale handling:
 

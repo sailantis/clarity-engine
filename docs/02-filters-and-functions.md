@@ -550,6 +550,74 @@ Convert to base64 data URI:
 <img src="{{ imageData |> data_uri('image/png') }}" />
 ```
 
+### Type Cast Filters
+
+Convert a value's type. Each of the six casts is available as a filter
+(`{{ x |> int }}`), as a call (`{{ int(x) }}`) and as a cast prefix
+(`{{ (int) x }}`). See [Cast Syntax](01-template-syntax.md#cast-syntax).
+
+```twig
+{{ '3.7' |> int }}          {# 3        — truncates, does not round #}
+{{ '3.7' |> float }}        {# 3.7                                  #}
+{{ 1.5 |> string }}         {# '1.5'                                #}
+{{ '0' |> bool }}           {# false    — PHP truthiness            #}
+{{ 1 |> array }}            {# [1]      — a scalar is wrapped       #}
+{{ 1 |> object }}           {# stdClass — a scalar is wrapped       #}
+```
+
+Casts never throw and never return `null`. A value that cannot be read as the
+target type becomes that type's empty value.
+
+| Value     | `int` | `float` | `string`  | `bool`  | `array`     | `object` (JSON)      |
+| --------- | ----- | ------- | --------- | ------- | ----------- | -------------------- |
+| `'3.7'`   | `3`   | `3.7`   | `'3.7'`   | `true`  | `['3.7']`   | `{"scalar":"3.7"}`   |
+| `'42abc'` | `42`  | `42.0`  | `'42abc'` | `true`  | `['42abc']` | `{"scalar":"42abc"}` |
+| `'dsfd'`  | `0`   | `0.0`   | `'dsfd'`  | `true`  | `['dsfd']`  | `{"scalar":"dsfd"}`  |
+| `''`      | `0`   | `0.0`   | `''`      | `false` | `['']`      | `{"scalar":""}`      |
+| `'0'`     | `0`   | `0.0`   | `'0'`     | `false` | `['0']`     | `{"scalar":"0"}`     |
+| `null`    | `0`   | `0.0`   | `''`      | `false` | `[]`        | `{}`                 |
+| `true`    | `1`   | `1.0`   | `'1'`     | `true`  | `[true]`    | `{"scalar":true}`    |
+| `[1, 2]`  | `1`   | `1.0`   | `'Array'` | `true`  | `[1, 2]`    | `{"0":1,"1":2}`      |
+
+> `'42abc'` is read up to its leading number, as in PHP. `'dsfd'` has no leading
+> number, so it becomes `0`.
+
+> `'0'` is a non-empty string that casts to `false`. Bool casts follow PHP
+> truthiness, not emptiness checks. A naive `!empty()` check gets this case wrong.
+
+> `object` produces a `stdClass`, which has no `__toString()`. Rendering it
+> directly, as in `{{ x |> object }}`, throws. Pass it to a serializer first:
+> `{{ x |> object |> json }}`. The table shows the JSON form for this reason.
+
+#### Why casts are needed
+
+The numeric filters `round`, `ceil`, `floor` and `abs` do not coerce their
+input. Under `strictTypes` (on by default), a numeric string raises a
+`TypeError`:
+
+```twig
+{{ '3.7' |> round(2) }}          {# TypeError under strictTypes #}
+{{ '3.7' |> float |> round(2) }} {# 3.7 — the cast states the conversion #}
+```
+
+This is intended. A filter that accepts the wrong type and returns a plausible
+result hides bugs, and `strictTypes` exists to prevent that. The one exception
+is `number`, which still accepts a string because `number_format()` has no
+`string` overload.
+
+#### Cast Syntax
+
+Each cast also has a PHP-style prefix, which fits inside a call's argument list:
+
+```twig
+{{ (int) x }}                    {# same as {{ x |> int }}  #}
+{{ abs((int) '-4343') }}         {# 4343                    #}
+```
+
+The accepted type names and the parsing rules are in
+[Cast Syntax](01-template-syntax.md#cast-syntax). The prefix and filter forms
+accept the same six names, including `object`.
+
 ## Lambda Expressions
 
 Lambdas allow inline transformation logic for `map`, `filter`, and `reduce` filters.
@@ -947,9 +1015,9 @@ $engine->addInlineFunction('present', [
 The record has the same shape as an inline filter (`php`, `params`, `defaults`,
 `variadic`, `valueParam`) plus two call-only members:
 
-| Key         | Meaning                                                                                     |
-| ----------- | ------------------------------------------------------------------------------------------- |
-| `filter`    | Always set to `false` by this method — the name is answered by call syntax only.            |
+| Key         | Meaning                                                                                        |
+| ----------- | ---------------------------------------------------------------------------------------------- |
+| `filter`    | Always set to `false` by this method — the name is answered by call syntax only.               |
 | `callGuard` | Optional validation of the first argument. `presence` accepts only a name or a chain over one. |
 
 A `callGuard` runs on the **compiled** operand, so every access operator works:
@@ -973,8 +1041,8 @@ Named arguments can be combined with positional ones:
 {{ text |> truncate(100, ellipsis:"...") }}
 ```
 
-> **Note:** For inline filters, Clarity resolves and validates arguments while compiling the template. 
-> For runtime callables and PHP functions, named arguments are emitted as PHP 8 named arguments, so PHP applies its usual argument validation at runtime. 
+> **Note:** For inline filters, Clarity resolves and validates arguments while compiling the template.
+> For runtime callables and PHP functions, named arguments are emitted as PHP 8 named arguments, so PHP applies its usual argument validation at runtime.
 > Positional arguments must come before named ones.
 
 ## PHP Functions as Filters
@@ -1013,52 +1081,57 @@ governed by the `rawPhp` rule. See [The Policy API](09-policy-api.md) for detail
 
 ## Filter Reference Quick Table
 
-| Filter             | Purpose                | Example                                                  |
-| ------------------ | ---------------------- | -------------------------------------------------------- |
-| `trim`             | Remove whitespace      | `{{ text \|> trim }}`                                    |
-| `upper`            | Uppercase              | `{{ name \|> upper }}`                                   |
-| `lower`            | Lowercase              | `{{ email \|> lower }}`                                  |
-| `capitalize`       | Capitalize first char  | `{{ word \|> capitalize }}`                              |
-| `title`            | Title case             | `{{ heading \|> title }}`                                |
-| `nl2br`            | Newlines to `<br>`     | `{{ text \|> nl2br \|> raw }}`                           |
-| `replace(s,r)`     | Replace occurrences    | `{{ text \|> replace('a','b') }}`                        |
-| `striptags`        | Strip HTML tags        | `{{ html \|> striptags }}`                               |
-| `slug`             | URL-friendly slug      | `{{ title \|> slug }}`                                   |
-| `truncate(len)`    | Truncate string        | `{{ text \|> truncate(100) }}`                           |
-| `sprintf(...args)` | sprintf formatting     | `{{ "%s: %d" \|> sprintf(name, n) }}`                    |
-| `format` (alias)   | Alias of `sprintf`     | `{{ "%s: %d" \|> format(name, n) }}`                     |
-| `number(dec)`      | Format number          | `{{ price \|> number(2) }}`                              |
-| `abs`              | Absolute value         | `{{ n \|> abs }}`                                        |
-| `round(prec)`      | Round number           | `{{ n \|> round(2) }}`                                   |
-| `ceil` / `floor`   | Ceil/floor             | `{{ n \|> ceil }}`                                       |
-| `date(fmt)`        | Format date            | `{{ time \|> date('Y-m-d') }}`                           |
-| `date_modify(mod, fmt='c')` | Modify date      | `{{ time \|> date_modify('+1 day', 'Y-m-d') }}`           |
-| `format_datetime`  | Locale-aware datetime  | `{{ time \|> format_datetime('long','short') }}`         |
-| `first`            | First element/char     | `{{ items \|> first }}`                                  |
-| `last`             | Last element/char      | `{{ items \|> last }}`                                   |
-| `keys`             | Array keys             | `{{ obj \|> keys \|> join(', ') }}`                      |
-| `values`           | Array values           | `{{ obj \|> values }}`                                   |
-| `join(glue)`       | Join array             | `{{ tags \|> join(', ') }}`                              |
-| `split(delim)`     | Split string           | `{{ csv \|> split(',') }}`                               |
-| `slice(start,len)` | Extract portion        | `{{ items \|> slice(0, 10) }}`                           |
-| `merge(other)`     | Merge arrays           | `{{ a \|> merge(b) }}`                                   |
-| `sort`             | Sort array             | `{{ items \|> sort }}`                                   |
-| `reverse`          | Reverse array/string   | `{{ items \|> reverse }}`                                |
-| `shuffle`          | Shuffle array          | `{{ items \|> shuffle }}`                                |
-| `batch(size)`      | Split into chunks      | `{{ items \|> batch(3) }}`                               |
-| `map(fn)`          | Transform each element | `{{ items \|> map(i => i:name) }}`                       |
-| `filter(fn)`       | Filter elements        | `{{ items \|> filter(i => i:active) }}`                  |
-| `reduce(fn,init)`  | Reduce to single value | `{{ nums \|> reduce(s, v => s + v, 0) }}`                |
-| `length`           | Count/length           | `{{ items \|> length }}`                                 |
-| `len` (alias)      | Alias of `length`      | `{{ items \|> len }}`                                    |
-| `default(val)`     | Fallback for null      | `{{ name \|> default('Guest') }}`                        |
-| `empty(val)`       | Fallback for falsy     | `{{ name \|> empty('Anon') }}`                           |
-| `json`             | JSON encode            | `{{ data \|> json \|> raw }}`                            |
-| `url_encode`       | URL-encode             | `{{ q \|> url_encode }}`                                 |
-| `data_uri(mime)`   | Base64 data URI        | `{{ img \|> data_uri('image/png') }}`                    |
-| `unicode`          | Unicode string ops     | `{{ text \|> unicode \|> reverse }}`                     |
-| `escape` / `esc`   | HTML escape            | `{{ html \|> escape }}`                                  |
-| `raw`              | Disable auto-escaping  | `{{ html \|> raw }}`                                     |
+| Filter                      | Purpose                | Example                                          |
+| --------------------------- | ---------------------- | ------------------------------------------------ |
+| `trim`                      | Remove whitespace      | `{{ text \|> trim }}`                            |
+| `upper`                     | Uppercase              | `{{ name \|> upper }}`                           |
+| `lower`                     | Lowercase              | `{{ email \|> lower }}`                          |
+| `capitalize`                | Capitalize first char  | `{{ word \|> capitalize }}`                      |
+| `title`                     | Title case             | `{{ heading \|> title }}`                        |
+| `nl2br`                     | Newlines to `<br>`     | `{{ text \|> nl2br \|> raw }}`                   |
+| `replace(s,r)`              | Replace occurrences    | `{{ text \|> replace('a','b') }}`                |
+| `striptags`                 | Strip HTML tags        | `{{ html \|> striptags }}`                       |
+| `slug`                      | URL-friendly slug      | `{{ title \|> slug }}`                           |
+| `truncate(len)`             | Truncate string        | `{{ text \|> truncate(100) }}`                   |
+| `sprintf(...args)`          | sprintf formatting     | `{{ "%s: %d" \|> sprintf(name, n) }}`            |
+| `format` (alias)            | Alias of `sprintf`     | `{{ "%s: %d" \|> format(name, n) }}`             |
+| `number(dec)`               | Format number          | `{{ price \|> number(2) }}`                      |
+| `abs`                       | Absolute value         | `{{ n \|> abs }}`                                |
+| `round(prec)`               | Round number           | `{{ n \|> round(2) }}`                           |
+| `ceil` / `floor`            | Ceil/floor             | `{{ n \|> ceil }}`                               |
+| `date(fmt)`                 | Format date            | `{{ time \|> date('Y-m-d') }}`                   |
+| `date_modify(mod, fmt='c')` | Modify date            | `{{ time \|> date_modify('+1 day', 'Y-m-d') }}`  |
+| `format_datetime`           | Locale-aware datetime  | `{{ time \|> format_datetime('long','short') }}` |
+| `first`                     | First element/char     | `{{ items \|> first }}`                          |
+| `last`                      | Last element/char      | `{{ items \|> last }}`                           |
+| `keys`                      | Array keys             | `{{ obj \|> keys \|> join(', ') }}`              |
+| `values`                    | Array values           | `{{ obj \|> values }}`                           |
+| `join(glue)`                | Join array             | `{{ tags \|> join(', ') }}`                      |
+| `split(delim)`              | Split string           | `{{ csv \|> split(',') }}`                       |
+| `slice(start,len)`          | Extract portion        | `{{ items \|> slice(0, 10) }}`                   |
+| `merge(other)`              | Merge arrays           | `{{ a \|> merge(b) }}`                           |
+| `sort`                      | Sort array             | `{{ items \|> sort }}`                           |
+| `reverse`                   | Reverse array/string   | `{{ items \|> reverse }}`                        |
+| `shuffle`                   | Shuffle array          | `{{ items \|> shuffle }}`                        |
+| `batch(size)`               | Split into chunks      | `{{ items \|> batch(3) }}`                       |
+| `map(fn)`                   | Transform each element | `{{ items \|> map(i => i:name) }}`               |
+| `filter(fn)`                | Filter elements        | `{{ items \|> filter(i => i:active) }}`          |
+| `reduce(fn,init)`           | Reduce to single value | `{{ nums \|> reduce(s, v => s + v, 0) }}`        |
+| `length`                    | Count/length           | `{{ items \|> length }}`                         |
+| `len` (alias)               | Alias of `length`      | `{{ items \|> len }}`                            |
+| `int`                       | Cast to int            | `{{ x \|> int }}`                                |
+| `float`                     | Cast to float          | `{{ '3.7' \|> float \|> round(2) }}`             |
+| `string`                    | Cast to string         | `{{ n \|> string \|> trim }}`                    |
+| `bool`                      | Cast to bool           | `{{ x \|> bool }}`                               |
+| `array`                     | Cast to array          | `{{ x \|> array }}`                              |
+| `default(val)`              | Fallback for null      | `{{ name \|> default('Guest') }}`                |
+| `empty(val)`                | Fallback for falsy     | `{{ name \|> empty('Anon') }}`                   |
+| `json`                      | JSON encode            | `{{ data \|> json \|> raw }}`                    |
+| `url_encode`                | URL-encode             | `{{ q \|> url_encode }}`                         |
+| `data_uri(mime)`            | Base64 data URI        | `{{ img \|> data_uri('image/png') }}`            |
+| `unicode`                   | Unicode string ops     | `{{ text \|> unicode \|> reverse }}`             |
+| `escape` / `esc`            | HTML escape            | `{{ html \|> escape }}`                          |
+| `raw`                       | Disable auto-escaping  | `{{ html \|> raw }}`                             |
 
 > **Note:** Every name above is also callable with parentheses; the value that would be piped becomes the first argument, except `date` and `join`, whose call form mirrors PHP (see [One call model](#one-call-model-two-signatures)).  
 > The opposite is not true: a few names are **call-only** because their first argument is not a piped value — `vars`, `include`, `dd` and the inline function `isset`.  

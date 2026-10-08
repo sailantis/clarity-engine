@@ -213,11 +213,21 @@ class Registry
      * the tag would be captured by the built-in arm and never reach its handler.
      */
     private const BUILTIN_DIRECTIVE_KEYWORDS = [
-        'if', 'elseif', 'else', 'endif',
-        'for', 'endfor', 'set',
-        'macro', 'call',
-        'extends', 'block', 'endblock', 'include',
-        'php', 'parent',
+        'if',
+        'elseif',
+        'else',
+        'endif',
+        'for',
+        'endfor',
+        'set',
+        'macro',
+        'call',
+        'extends',
+        'block',
+        'endblock',
+        'include',
+        'php',
+        'parent',
     ];
 
     /**
@@ -434,8 +444,8 @@ class Registry
             // and `is null`, this is a compile-time presence probe rather than an
             // operation on a value, so it belongs to call syntax only.
             'isset' => [
-                'php' => 'isset({1})',
-                'filter' => false,
+                'php'       => 'isset({1})',
+                'filter'    => false,
                 'callGuard' => 'presence',
             ],
             'escape' => [
@@ -537,6 +547,26 @@ class Registry
             ],
             'url_encode' => [
                 'php' => '\rawurlencode({1})',
+            ],
+
+            // ── Type casts ───────────────────────────────────────────────────
+            'array' => [
+                'php' => '(array) ({1})',
+            ],
+            'object' => [
+                'php' => '(object) ({1})',
+            ],
+            'bool' => [
+                'php' => '(bool) ({1})',
+            ],
+            'float' => [
+                'php' => '(float) ({1})',
+            ],
+            'int' => [
+                'php' => '(int) ({1})',
+            ],
+            'string' => [
+                'php' => '(string) ({1})',
             ],
         ];
 
@@ -1209,8 +1239,9 @@ class Registry
         $this->assertDirectiveOwnerIsDeclarable($keyword, $owner);
 
         if ($directive->isContainment()) {
-            if (isset($this->directivePairings[$keyword])
-                || isset($this->directiveMemberClaims[$keyword])
+            if (
+                isset($this->directivePairings[$keyword])
+                    || isset($this->directiveMemberClaims[$keyword])
             ) {
                 throw new ClarityException(
                     "'{$keyword}' is declared structurally, so it cannot also use Directive::inside()."
@@ -1350,9 +1381,10 @@ class Registry
      */
     public function assertPairingConsistency(): void
     {
-        if ($this->directivePairings === []
-            && $this->directiveMemberClaims === []
-            && $this->directiveContainment === []
+        if (
+            $this->directivePairings === []
+                && $this->directiveMemberClaims === []
+                && $this->directiveContainment === []
         ) {
             return;
         }

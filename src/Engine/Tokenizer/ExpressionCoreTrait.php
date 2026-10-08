@@ -522,7 +522,21 @@ trait ExpressionCoreTrait
                 continue;
             }
 
+            // A cast prefix is `(type)`, and `(type)` is lexically identical to a
+            // parenthesised sub-expression. The cast is tried FIRST because it is
+            // the narrower reading — the matcher decides on the NAME and requires
+            // an operand opener after the `)`, so anything that is merely a
+            // parenthesised value returns null here and takes the arm below
+            // unchanged. See {@see CastTrait} for the disambiguation rule.
             if ($ch === '(') {
+                $cast = $this->tryCompileCastPrefix($expr, $i, $len);
+                if ($cast !== null) {
+                    $end = null;
+                    $out .= '(' . $cast[0] . ') ' . $this->compileCastOperand($expr, $cast[1], $len, $end);
+                    $i = $end ?? $cast[1];
+                    continue;
+                }
+
                 [$inner, $end] = $this->extractBalancedSegment($expr, $i);
                 $out .= '(' . $this->processCondition($inner) . ')';
                 $i = $end;

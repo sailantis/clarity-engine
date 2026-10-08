@@ -55,7 +55,7 @@ Named arguments
 
 ## Public methods
 
-### setPrunedFunctions() · <small>[🗎](../../src/Engine/Tokenizer.php#L256)</small>
+### setPrunedFunctions() · <small>[🗎](../../src/Engine/Tokenizer.php#L258)</small>
 
 `public function setPrunedFunctions(array $names): void`
 
@@ -72,7 +72,7 @@ Named arguments
 
 ---
 
-### setContextInjectedFunctions() · <small>[🗎](../../src/Engine/Tokenizer.php#L262)</small>
+### setContextInjectedFunctions() · <small>[🗎](../../src/Engine/Tokenizer.php#L264)</small>
 
 `public function setContextInjectedFunctions(array $names): void`
 
@@ -89,7 +89,7 @@ Named arguments
 
 ---
 
-### setFilterProbes() · <small>[🗎](../../src/Engine/Tokenizer.php#L278)</small>
+### setFilterProbes() · <small>[🗎](../../src/Engine/Tokenizer.php#L280)</small>
 
 `public function setFilterProbes(array $names): void`
 
@@ -114,7 +114,7 @@ user-registered template function of the same name.
 
 ---
 
-### __construct() · <small>[🗎](../../src/Engine/Tokenizer.php#L308)</small>
+### __construct() · <small>[🗎](../../src/Engine/Tokenizer.php#L310)</small>
 
 `public function __construct(): mixed`
 
@@ -129,7 +129,7 @@ is safe even for a hand-built tokenizer.
 
 ---
 
-### processArgumentList() · <small>[🗎](../../src/Engine/Tokenizer.php#L336)</small>
+### processArgumentList() · <small>[🗎](../../src/Engine/Tokenizer.php#L338)</small>
 
 `public function processArgumentList(string $rest): array`
 
@@ -169,7 +169,7 @@ named argument, or a positional after a named one.
 
 ---
 
-### setPolicy() · <small>[🗎](../../src/Engine/Tokenizer.php#L361)</small>
+### setPolicy() · <small>[🗎](../../src/Engine/Tokenizer.php#L363)</small>
 
 `public function setPolicy(Clarity\Engine\Policy $policy): void`
 
@@ -192,7 +192,7 @@ array lookup.
 
 ---
 
-### getPolicy() · <small>[🗎](../../src/Engine/Tokenizer.php#L372)</small>
+### getPolicy() · <small>[🗎](../../src/Engine/Tokenizer.php#L374)</small>
 
 `public function getPolicy(): Clarity\Engine\Policy`
 
@@ -203,7 +203,7 @@ array lookup.
 
 ---
 
-### setLocalRoots() · <small>[🗎](../../src/Engine/Tokenizer.php#L393)</small>
+### setLocalRoots() · <small>[🗎](../../src/Engine/Tokenizer.php#L395)</small>
 
 `public function setLocalRoots(bool $enabled): void`
 
@@ -225,7 +225,7 @@ compiler that seeds no locals never emits a local read.
 
 ---
 
-### setDeniedFunctions() · <small>[🗎](../../src/Engine/Tokenizer.php#L405)</small>
+### setDeniedFunctions() · <small>[🗎](../../src/Engine/Tokenizer.php#L407)</small>
 
 `public function setDeniedFunctions(array $names): void`
 
@@ -245,7 +245,7 @@ names; empty (the default) allows every PHP function.
 
 ---
 
-### setRegistry() · <small>[🗎](../../src/Engine/Tokenizer.php#L424)</small>
+### setRegistry() · <small>[🗎](../../src/Engine/Tokenizer.php#L426)</small>
 
 `public function setRegistry(Clarity\Engine\Registry $registry): void`
 
@@ -262,7 +262,7 @@ names; empty (the default) allows every PHP function.
 
 ---
 
-### setLocalVars() · <small>[🗎](../../src/Engine/Tokenizer.php#L438)</small>
+### setLocalVars() · <small>[🗎](../../src/Engine/Tokenizer.php#L440)</small>
 
 `public function setLocalVars(array $localVars): void`
 
@@ -285,7 +285,7 @@ variable resolution inside the loop uses direct PHP local variables
 
 ---
 
-### setDynamicBindings() · <small>[🗎](../../src/Engine/Tokenizer.php#L452)</small>
+### setDynamicBindings() · <small>[🗎](../../src/Engine/Tokenizer.php#L454)</small>
 
 `public function setDynamicBindings(array $names): void`
 

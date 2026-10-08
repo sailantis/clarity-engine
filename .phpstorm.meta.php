@@ -23,6 +23,11 @@ namespace PHPSTORM_META
             'description' => 'Absolute value of a number.',
             'example'     => '{{ x |> abs }}',
         ],
+        'array' => [
+            'return'      => 'array',
+            'description' => 'Cast to array — a scalar is wrapped in a one-element array.',
+            'example'     => '{{ x |> array }}',
+        ],
         'batch' => [
             'return'      => 'array',
             'params'      => [['size'], ['fill', 'null']],
@@ -33,6 +38,11 @@ namespace PHPSTORM_META
             'return'      => 'string',
             'description' => 'First character uppercase, rest lowercase (Unicode-aware).',
             'example'     => '{{ name |> capitalize }}',
+        ],
+        'bool' => [
+            'return'      => 'bool',
+            'description' => 'Cast to bool. Follows PHP truthiness — the string "0" is false.',
+            'example'     => '{{ x |> bool }}',
         ],
         'ceil' => [
             'return'      => 'int',
@@ -99,6 +109,11 @@ namespace PHPSTORM_META
             'description' => 'Round down to the nearest integer.',
             'example'     => '{{ x |> floor }}',
         ],
+        'float' => [
+            'return'      => 'float',
+            'description' => 'Cast to float. A non-numeric value becomes 0.0 — a cast is total.',
+            'example'     => "{{ '3.7' |> float |> round(2) }}",
+        ],
         'format' => [
             'return'      => 'string',
             'variadic'    => true,
@@ -115,6 +130,11 @@ namespace PHPSTORM_META
             'return'      => 'string',
             'description' => 'JSON-encode the value. Use with |> raw to output unescaped.',
             'example'     => '{{ data |> json |> raw }}',
+        ],
+        'int' => [
+            'return'      => 'int',
+            'description' => 'Cast to int, truncating any fraction. A non-numeric value becomes 0.',
+            'example'     => "{{ '3.7' |> int }}",
         ],
         'join' => [
             'return'      => 'string',
@@ -169,6 +189,11 @@ namespace PHPSTORM_META
             'params'      => [['decimals', '2']],
             'description' => 'Format a number with decimal places.',
             'example'     => '{{ price |> number(2) }}',
+        ],
+        'object' => [
+            'return'      => 'object',
+            'description' => 'Cast to object.',
+            'example'     => '{{ x |> object }}',
         ],
         'raw' => [
             'return'      => 'string',
@@ -237,6 +262,11 @@ namespace PHPSTORM_META
             'params'      => [['allowedTags', "''"]],
             'description' => 'Strip HTML/PHP tags.',
             'example'     => '{{ html |> striptags }}',
+        ],
+        'string' => [
+            'return'      => 'string',
+            'description' => 'Cast to string. The way into the string filters from a non-string value.',
+            'example'     => '{{ n |> string |> trim }}',
         ],
         'title' => [
             'return'      => 'string',
@@ -345,6 +375,47 @@ namespace PHPSTORM_META
             'params'      => [['subject'], ['name'], ['default', 'null']],
             'description' => 'Dynamic read: array key or public object property.',
             'example'     => "{{ attribute(user, 'name') }}",
+        ],
+
+        // ── Type casts (also filters; see the filter block) ──────────────
+        //
+        // A cast is GRAMMAR as well as a filter, so it is spelled both ways:
+        // `{{ x |> int }}` and `{{ (int) x }}` compile to the same PHP.
+        'int' => [
+            'return'      => 'int',
+            'params'      => [['value']],
+            'description' => 'Cast to int, truncating any fraction. A non-numeric value becomes 0.',
+            'example'     => "{{ int('3.7') }}",
+        ],
+        'float' => [
+            'return'      => 'float',
+            'params'      => [['value']],
+            'description' => 'Cast to float. A non-numeric value becomes 0.0 — a cast is total.',
+            'example'     => "{{ float('3.7') }}",
+        ],
+        'string' => [
+            'return'      => 'string',
+            'params'      => [['value']],
+            'description' => 'Cast to string. The way into the string filters from a non-string value.',
+            'example'     => '{{ string(n) }}',
+        ],
+        'bool' => [
+            'return'      => 'bool',
+            'params'      => [['value']],
+            'description' => 'Cast to bool. Follows PHP truthiness — the string "0" is false.',
+            'example'     => '{{ bool(x) }}',
+        ],
+        'array' => [
+            'return'      => 'array',
+            'params'      => [['value']],
+            'description' => 'Cast to array — a scalar is wrapped in a one-element array.',
+            'example'     => '{{ array(x) }}',
+        ],
+        'object' => [
+            'return'      => 'object',
+            'params'      => [['value']],
+            'description' => 'Cast to object.',
+            'example'     => '{{ object(x) }}',
         ],
     ]));
 

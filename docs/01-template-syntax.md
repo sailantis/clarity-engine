@@ -905,6 +905,65 @@ Returns the right value if the left is null or undefined.
 {{ 'single quotes' }}
 ```
 
+### Cast Syntax
+
+A PHP-style cast prefix converts a value's type. It is equivalent to the
+[cast filters](02-filters-and-functions.md#type-cast-filters), written in PHP
+syntax:
+
+```twig
+{{ (int) x }}                    {# same as {{ x |> int }}        #}
+{{ (float) '3.7' }}              {# 3.7                           #}
+{{ (string) 1.5 }}               {# '1.5'                         #}
+{{ (bool) value }}               {# true or false                 #}
+{{ (array) value }}              {# [value]                       #}
+{{ (object) value }}             {# scalar 1 becomes {"scalar":1} #}
+```
+
+The available types are `int`, `float`, `string`, `bool`, `array` and `object`.
+`object` converts a scalar or an array into an object.
+
+The operand is a single value: a name, a chain (`(int) user:age`), an index
+(`(int) x[0]`), a literal (`(int) -5`), a parenthesized expression
+(`(int) (10 + 5)`), or another cast. Casts can be nested:
+
+```twig
+{{ (int) (float) x }}            {# 3.9 -> 3 #}
+```
+
+A cast can be followed by a pipe:
+
+```twig
+{{ (int) x |> string }}          {# cast, then filter #}
+```
+
+#### Cast or parenthesized expression
+
+`(int)` and `(a)` have the same shape. The parser decides by what follows the
+closing parenthesis: if the parenthesized name is a cast type and an operand
+follows, it is a cast. Whitespace between the `)` and the operand is optional.
+
+| Expression    | Reading                                   |
+| ------------- | ----------------------------------------- |
+| `(int) x`     | cast: whitespace, then a name             |
+| `(int)x`      | cast: same reading without whitespace     |
+| `(int) -5`    | cast: whitespace, then a sign             |
+| `(int)-5`     | cast: sign directly before a number       |
+| `(int) (x)`   | cast of the grouped `x`                   |
+| `(int)(x)`    | cast of the grouped `x`, not a call       |
+| `(int)[0]`    | cast of the array `[0]`, not an index     |
+| `(a) + b`     | not a cast: `+` cannot start an operand   |
+| `(a) ? b : c` | not a cast: `?` cannot start an operand   |
+| `(a) x`       | not a cast: existing reading is unchanged |
+
+An operand can start with an identifier, `$`, a quote, a digit, `(`, `[`, `{`,
+or a sign directly before a number. Otherwise the existing reading applies, so
+`{{ (a) }}`, `{{ (a + b) }}`, `{% if (a) %}` and `{{ (a) ? b : c }}` compile as
+before. Names that are not cast types are never treated as casts.
+
+A `-` is a sign only when a digit or `.` follows it directly. This is why
+`(int) -5` is a cast and `(a) - 5` is subtraction.
+
 ### Collection Literals
 
 **Arrays:**
@@ -1067,27 +1126,27 @@ Available contexts:
 
 ### Directive Summary
 
-| Directive                                    | Purpose                     |
-| -------------------------------------------- | --------------------------- |
-| `{% if condition %}`                         | Conditional rendering       |
-| `{% elseif condition %}`                     | Alternative condition       |
-| `{% else %}`                                 | Fallback case               |
-| `{% endif %}`                                | End conditional             |
-| `{% for item in array %}`                    | Loop over array             |
-| `{% for key, value in array %}`              | Loop with key variable      |
-| `{% for i in start..end %}`                  | Range loop (inclusive end)  |
-| `{% for i in start...end %}`                 | Range loop (exclusive end)  |
-| `{% else %}` (inside a loop)                 | Runs when the loop is empty |
-| `{% endfor %}`                               | End loop                    |
-| `{% set variable = value %}`                 | Variable assignment         |
-| `{% extends "template" %}`                   | Inherit from layout         |
-| `{% block name %}...{% endblock %}`          | Define/override block       |
-| `{% include "template" %}`                   | Include another template    |
+| Directive                                   | Purpose                     |
+| ------------------------------------------- | --------------------------- |
+| `{% if condition %}`                        | Conditional rendering       |
+| `{% elseif condition %}`                    | Alternative condition       |
+| `{% else %}`                                | Fallback case               |
+| `{% endif %}`                               | End conditional             |
+| `{% for item in array %}`                   | Loop over array             |
+| `{% for key, value in array %}`             | Loop with key variable      |
+| `{% for i in start..end %}`                 | Range loop (inclusive end)  |
+| `{% for i in start...end %}`                | Range loop (exclusive end)  |
+| `{% else %}` (inside a loop)                | Runs when the loop is empty |
+| `{% endfor %}`                              | End loop                    |
+| `{% set variable = value %}`                | Variable assignment         |
+| `{% extends "template" %}`                  | Inherit from layout         |
+| `{% block name %}...{% endblock %}`         | Define/override block       |
+| `{% include "template" %}`                  | Include another template    |
 | `{% macro name(params) %}...{% endmacro %}` | Define a reusable macro     |
-| `{% call name(args) %}`                      | Call a macro                |
+| `{% call name(args) %}`                     | Call a macro                |
 | `{% parent %}`                              | Inline parent block content |
-| `{# comment #}`                              | Template comment            |
-| `{# @context js\|css\|html #}`               | Switch escaping context     |
+| `{# comment #}`                             | Template comment            |
+| `{# @context js\|css\|html #}`              | Switch escaping context     |
 
 ### Operator Summary
 

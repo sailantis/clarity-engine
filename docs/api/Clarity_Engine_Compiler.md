@@ -71,12 +71,12 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ## Public Constants
 
-- **COMPILER_VERSION** = `30`
+- **COMPILER_VERSION** = `32`
 - **INTERNAL_PREFIX** = `'__c_'`
 
 ## Public methods
 
-### __construct() · <small>[🗎](../../src/Engine/Compiler.php#L289)</small>
+### __construct() · <small>[🗎](../../src/Engine/Compiler.php#L301)</small>
 
 `public function __construct(): mixed`
 
@@ -87,7 +87,7 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ---
 
-### default() · <small>[🗎](../../src/Engine/Compiler.php#L294)</small>
+### default() · <small>[🗎](../../src/Engine/Compiler.php#L306)</small>
 
 `public static function default(): static`
 
@@ -98,7 +98,7 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ---
 
-### setRegistry() · <small>[🗎](../../src/Engine/Compiler.php#L306)</small>
+### setRegistry() · <small>[🗎](../../src/Engine/Compiler.php#L318)</small>
 
 `public function setRegistry(Clarity\Engine\Registry $registry): static`
 
@@ -115,7 +115,7 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ---
 
-### setDebugMode() · <small>[🗎](../../src/Engine/Compiler.php#L313)</small>
+### setDebugMode() · <small>[🗎](../../src/Engine/Compiler.php#L325)</small>
 
 `public function setDebugMode(bool $debug): static`
 
@@ -132,7 +132,7 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ---
 
-### setPolicy() · <small>[🗎](../../src/Engine/Compiler.php#L339)</small>
+### setPolicy() · <small>[🗎](../../src/Engine/Compiler.php#L351)</small>
 
 `public function setPolicy(Clarity\Engine\Policy $policy): static`
 

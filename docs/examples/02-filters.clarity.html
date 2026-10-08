@@ -94,6 +94,51 @@
     </div>
 
     <div class="section">
+      <h2>Type Casts</h2>
+      <p>
+        A cast converts a value's type. Use it when a value arrives as a string
+        (a form field, a database column, a decoded payload) and the numeric
+        filters need a number.
+      </p>
+
+      <div class="example">
+        <strong>Int (truncates):</strong> {{ priceString |> int }}
+      </div>
+
+      <div class="example">
+        <strong>Float (keeps the fraction):</strong> {{ priceString |> float }}
+      </div>
+
+      <div class="example">
+        <strong>String:</strong> {{ price |> string |> trim }}
+      </div>
+
+      <div class="example">
+        <strong>Bool (PHP truthiness, not emptiness):</strong> {{ zeroString |>
+        bool }}
+      </div>
+
+      <div class="example">
+        <strong>Array (wraps a scalar):</strong> {{ price |> array |> json |> raw }}
+      </div>
+
+      <div class="example">
+        <strong>Object (wraps a scalar; pipe it into a serializer):</strong> {{ price
+        |> object |> json |> raw }}
+      </div>
+
+      <div class="example">
+        <strong>Cast, then a numeric filter:</strong> {{ priceString |> float
+        |> round(2) }}
+      </div>
+
+      <div class="example">
+        <strong>PHP cast syntax:</strong> {{ (int) priceString }} and {{
+        abs((int) negativeString) }}
+      </div>
+    </div>
+
+    <div class="section">
       <h2>Date Filters</h2>
 
       <div class="example">

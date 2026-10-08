@@ -124,7 +124,7 @@ Template usage:
 
 ## Public methods
 
-### setDumpHandler() · <small>[🗎](../../src/Engine/Registry.php#L364)</small>
+### setDumpHandler() · <small>[🗎](../../src/Engine/Registry.php#L374)</small>
 
 `public function setDumpHandler(Closure|null $fn): void`
 
@@ -152,7 +152,7 @@ Passing null restores that neutral state; it is what disabling debug does.
 
 ---
 
-### setDdHandler() · <small>[🗎](../../src/Engine/Registry.php#L369)</small>
+### setDdHandler() · <small>[🗎](../../src/Engine/Registry.php#L379)</small>
 
 `public function setDdHandler(Closure|null $fn): void`
 
@@ -169,7 +169,7 @@ Passing null restores that neutral state; it is what disabling debug does.
 
 ---
 
-### __construct() · <small>[🗎](../../src/Engine/Registry.php#L374)</small>
+### __construct() · <small>[🗎](../../src/Engine/Registry.php#L384)</small>
 
 `public function __construct(callable|null $includeRenderer = null): mixed`
 
@@ -186,7 +186,7 @@ Passing null restores that neutral state; it is what disabling debug does.
 
 ---
 
-### hasFilter() · <small>[🗎](../../src/Engine/Registry.php#L860)</small>
+### hasFilter() · <small>[🗎](../../src/Engine/Registry.php#L890)</small>
 
 `public function hasFilter(string $name): bool`
 
@@ -217,7 +217,7 @@ for it instead of dispatching the callable with the piped value.
 
 ---
 
-### addFilter() · <small>[🗎](../../src/Engine/Registry.php#L888)</small>
+### addFilter() · <small>[🗎](../../src/Engine/Registry.php#L918)</small>
 
 `public function addFilter(string $name, callable $fn): static`
 
@@ -241,7 +241,7 @@ registered as a function.
 
 ---
 
-### addInlineFilter() · <small>[🗎](../../src/Engine/Registry.php#L914)</small>
+### addInlineFilter() · <small>[🗎](../../src/Engine/Registry.php#L944)</small>
 
 `public function addInlineFilter(string $name, array $definition): void`
 
@@ -274,7 +274,7 @@ For a template that must stay call-only, use `addInlineFunction()`.
 
 ---
 
-### addInlineFunction() · <small>[🗎](../../src/Engine/Registry.php#L941)</small>
+### addInlineFunction() · <small>[🗎](../../src/Engine/Registry.php#L971)</small>
 
 `public function addInlineFunction(string $name, array $definition): void`
 
@@ -310,7 +310,7 @@ FIRST argument is an expression is a compile-time error, not a PHP fatal.
 
 ---
 
-### hasInlineFilter() · <small>[🗎](../../src/Engine/Registry.php#L953)</small>
+### hasInlineFilter() · <small>[🗎](../../src/Engine/Registry.php#L983)</small>
 
 `public function hasInlineFilter(string $name): bool`
 
@@ -332,7 +332,7 @@ function alike. Use `hasFilter()` to ask whether it may be piped.
 
 ---
 
-### isInlineFunction() · <small>[🗎](../../src/Engine/Registry.php#L962)</small>
+### isInlineFunction() · <small>[🗎](../../src/Engine/Registry.php#L992)</small>
 
 `public function isInlineFunction(string $name): bool`
 
@@ -352,7 +352,7 @@ callable but not pipeable (registered via `addInlineFunction()`).
 
 ---
 
-### getInlineFilter() · <small>[🗎](../../src/Engine/Registry.php#L975)</small>
+### getInlineFilter() · <small>[🗎](../../src/Engine/Registry.php#L1005)</small>
 
 `public function getInlineFilter(string $name): array|null`
 
@@ -375,7 +375,7 @@ the compiler needs the record to compile their call form.
 
 ---
 
-### addService() · <small>[🗎](../../src/Engine/Registry.php#L991)</small>
+### addService() · <small>[🗎](../../src/Engine/Registry.php#L1021)</small>
 
 `public function addService(string $name, mixed $service): static`
 
@@ -400,7 +400,7 @@ real filter names (e.g. `__locale`, `__translator`).
 
 ---
 
-### hasService() · <small>[🗎](../../src/Engine/Registry.php#L1000)</small>
+### hasService() · <small>[🗎](../../src/Engine/Registry.php#L1030)</small>
 
 `public function hasService(string $name): bool`
 
@@ -419,7 +419,7 @@ Check whether a named service is registered.
 
 ---
 
-### getService() · <small>[🗎](../../src/Engine/Registry.php#L1010)</small>
+### getService() · <small>[🗎](../../src/Engine/Registry.php#L1040)</small>
 
 `public function getService(string $name): mixed`
 
@@ -442,7 +442,7 @@ Retrieve a named service.
 
 ---
 
-### allServices() · <small>[🗎](../../src/Engine/Registry.php#L1026)</small>
+### allServices() · <small>[🗎](../../src/Engine/Registry.php#L1056)</small>
 
 `public function allServices(): array`
 
@@ -458,7 +458,7 @@ The returned array includes callable filters, inline-filter markers
 
 ---
 
-### allCallables() · <small>[🗎](../../src/Engine/Registry.php#L1053)</small>
+### allCallables() · <small>[🗎](../../src/Engine/Registry.php#L1083)</small>
 
 `public function allCallables(): array`
 
@@ -488,7 +488,7 @@ handing the table to a template — see
 
 ---
 
-### addFunction() · <small>[🗎](../../src/Engine/Registry.php#L1068)</small>
+### addFunction() · <small>[🗎](../../src/Engine/Registry.php#L1098)</small>
 
 `public function addFunction(string $name, callable $fn): static`
 
@@ -511,7 +511,7 @@ in templates via `name(...)`.
 
 ---
 
-### hasFunction() · <small>[🗎](../../src/Engine/Registry.php#L1081)</small>
+### hasFunction() · <small>[🗎](../../src/Engine/Registry.php#L1111)</small>
 
 `public function hasFunction(string $name): bool`
 
@@ -534,7 +534,7 @@ callable.
 
 ---
 
-### hasCallable() · <small>[🗎](../../src/Engine/Registry.php#L1089)</small>
+### hasCallable() · <small>[🗎](../../src/Engine/Registry.php#L1119)</small>
 
 `public function hasCallable(string $name): bool`
 
@@ -553,7 +553,7 @@ Check whether a name can be invoked under call syntax `name(...)`.
 
 ---
 
-### getCallable() · <small>[🗎](../../src/Engine/Registry.php#L1098)</small>
+### getCallable() · <small>[🗎](../../src/Engine/Registry.php#L1128)</small>
 
 `public function getCallable(string $name): callable|null`
 
@@ -573,7 +573,7 @@ is inline-only (the caller then derives the call inline from `php`).
 
 ---
 
-### addDirective() · <small>[🗎](../../src/Engine/Registry.php#L1169)</small>
+### addDirective() · <small>[🗎](../../src/Engine/Registry.php#L1199)</small>
 
 `public function addDirective(string $keyword, callable $handler, Clarity\Engine\Directive|null $directive = null): static`
 
@@ -654,7 +654,7 @@ contradictory or self-referential declaration.
 
 ---
 
-### assertPairingConsistency() · <small>[🗎](../../src/Engine/Registry.php#L1351)</small>
+### assertPairingConsistency() · <small>[🗎](../../src/Engine/Registry.php#L1382)</small>
 
 `public function assertPairingConsistency(): void`
 
@@ -677,7 +677,7 @@ member/containment claim the owner does not honour.
 
 ---
 
-### isDirectiveOpener() · <small>[🗎](../../src/Engine/Registry.php#L1471)</small>
+### isDirectiveOpener() · <small>[🗎](../../src/Engine/Registry.php#L1503)</small>
 
 `public function isDirectiveOpener(string $keyword): bool`
 
@@ -696,7 +696,7 @@ Whether `$keyword` opens a paired construct (i.e. declares member tags).
 
 ---
 
-### getDirectiveCloseKeyword() · <small>[🗎](../../src/Engine/Registry.php#L1479)</small>
+### getDirectiveCloseKeyword() · <small>[🗎](../../src/Engine/Registry.php#L1511)</small>
 
 `public function getDirectiveCloseKeyword(string $keyword): string|null`
 
@@ -715,7 +715,7 @@ The close-tag keyword of the construct `$keyword` opens, or null.
 
 ---
 
-### getDirectiveBranchKeywords() · <small>[🗎](../../src/Engine/Registry.php#L1495)</small>
+### getDirectiveBranchKeywords() · <small>[🗎](../../src/Engine/Registry.php#L1527)</small>
 
 `public function getDirectiveBranchKeywords(string $keyword): array`
 
@@ -734,7 +734,7 @@ Branch keywords declared by the construct `$keyword` opens.
 
 ---
 
-### getDirectiveOwner() · <small>[🗎](../../src/Engine/Registry.php#L1511)</small>
+### getDirectiveOwner() · <small>[🗎](../../src/Engine/Registry.php#L1543)</small>
 
 `public function getDirectiveOwner(string $keyword): string|null`
 
@@ -754,7 +754,7 @@ ordinary, unpaired directive.
 
 ---
 
-### getDirectiveContainmentOwner() · <small>[🗎](../../src/Engine/Registry.php#L1523)</small>
+### getDirectiveContainmentOwner() · <small>[🗎](../../src/Engine/Registry.php#L1555)</small>
 
 `public function getDirectiveContainmentOwner(string $keyword): string|null`
 
@@ -777,7 +777,7 @@ is open somewhere around it.
 
 ---
 
-### isDirectiveClose() · <small>[🗎](../../src/Engine/Registry.php#L1531)</small>
+### isDirectiveClose() · <small>[🗎](../../src/Engine/Registry.php#L1563)</small>
 
 `public function isDirectiveClose(string $keyword): bool`
 
@@ -796,7 +796,7 @@ Whether `$keyword` is the close tag of its construct (vs a branch tag).
 
 ---
 
-### isDirectiveBranch() · <small>[🗎](../../src/Engine/Registry.php#L1541)</small>
+### isDirectiveBranch() · <small>[🗎](../../src/Engine/Registry.php#L1573)</small>
 
 `public function isDirectiveBranch(string $keyword): bool`
 
@@ -815,7 +815,7 @@ Whether `$keyword` is a branch tag of its construct.
 
 ---
 
-### hasDirective() · <small>[🗎](../../src/Engine/Registry.php#L1551)</small>
+### hasDirective() · <small>[🗎](../../src/Engine/Registry.php#L1583)</small>
 
 `public function hasDirective(string $keyword): bool`
 
@@ -834,7 +834,7 @@ Check whether a handler is registered for the given keyword.
 
 ---
 
-### compileDirective() · <small>[🗎](../../src/Engine/Registry.php#L1567)</small>
+### compileDirective() · <small>[🗎](../../src/Engine/Registry.php#L1599)</small>
 
 `public function compileDirective(string $keyword, string $rest, Clarity\Template\TemplateLocation $at, callable $processExpr): string`
 
