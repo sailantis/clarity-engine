@@ -69,7 +69,7 @@ Template usage
 
 ---
 
-### register() · <small>[🗎](../../src/Localization/TranslationModule.php#L113)</small>
+### register() · <small>[🗎](../../src/Localization/TranslationModule.php#L114)</small>
 
 `public function register(Clarity\ClarityEngine $engine): void`
 
@@ -86,7 +86,7 @@ Template usage
 
 ---
 
-### get() · <small>[🗎](../../src/Localization/TranslationModule.php#L188)</small>
+### get() · <small>[🗎](../../src/Localization/TranslationModule.php#L189)</small>
 
 `public function get(string $key, array|null $vars = null, string|null $domain = null, string|null $locale = null): string`
 
@@ -108,7 +108,7 @@ Look up a translation key with optional placeholder substitution.
 
 ---
 
-### pushDomain() · <small>[🗎](../../src/Localization/TranslationModule.php#L263)</small>
+### pushDomain() · <small>[🗎](../../src/Localization/TranslationModule.php#L264)</small>
 
 `public function pushDomain(string|null $domain): void`
 
@@ -144,7 +144,7 @@ In this example, the first `t` filter looks up `welcome_subject` in the
 
 ---
 
-### popDomain() · <small>[🗎](../../src/Localization/TranslationModule.php#L272)</small>
+### popDomain() · <small>[🗎](../../src/Localization/TranslationModule.php#L273)</small>
 
 `public function popDomain(): void`
 

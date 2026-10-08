@@ -240,6 +240,88 @@ class OperatorTest extends BaseTestCase
         $this->assertSame('[]', self::render('op_null_shadow', ['null' => 'FROM-VAR']));
     }
 
+    /**
+     * The three original value keywords must stay keywords.
+     *
+     * Adding `nil` to the keyword map once *removed* `true`, `false` and `null`
+     * from it: the map is a single array literal, so a careless edit that
+     * appends one entry while reformatting the rest drops whatever it does not
+     * re-list. Nothing failed loudly — the names simply fell through to the
+     * variable resolver and threw "Variable is not defined in this context"
+     * only where a template actually used them.
+     *
+     * `{% if %}` kept working because the directive path tests the token
+     * separately, which is exactly why the loss could survive a suite that
+     * exercises `if` far more than bare literals.
+     */
+    public function testTrueFalseAndNullRemainKeywordsAfterAddingNil(): void
+    {
+        self::tpl('op_kw_true', '[{{ true }}]');
+        $this->assertSame('[1]', self::render('op_kw_true'));
+
+        self::tpl('op_kw_false', '[{{ false }}]');
+        $this->assertSame('[]', self::render('op_kw_false'));
+
+        self::tpl('op_kw_null', '[{{ null }}]');
+        $this->assertSame('[]', self::render('op_kw_null'));
+
+        self::tpl('op_kw_logic', '{% if true and not false %}Y{% else %}N{% endif %}');
+        $this->assertSame('Y', self::render('op_kw_logic'));
+
+        self::tpl('op_kw_coalesce', '[{{ null ?? "F" }}]');
+        $this->assertSame('[F]', self::render('op_kw_coalesce'));
+    }
+
+    /**
+     * A keyword must also resolve in the CONDITION of a ternary.
+     *
+     * The identifier's continuation gate hands `a ? b : c` to the chain parser,
+     * and the condition is exactly where a literal sits — so a keyword test
+     * placed behind that gate never ran, and `{{ true ? 'y' : 'n' }}` reported
+     * `true` as an undefined variable while `{% if true %}` worked fine.
+     */
+    public function testKeywordsResolveInATernaryCondition(): void
+    {
+        self::tpl('op_tern_true', '{{ true ? "y" : "n" }}');
+        $this->assertSame('y', self::render('op_tern_true'));
+
+        self::tpl('op_tern_false', '{{ false ? "y" : "n" }}');
+        $this->assertSame('n', self::render('op_tern_false'));
+
+        self::tpl('op_tern_null', '{{ null ? "y" : "n" }}');
+        $this->assertSame('n', self::render('op_tern_null'));
+
+        self::tpl('op_tern_nil', '{{ nil ? "y" : "n" }}');
+        $this->assertSame('n', self::render('op_tern_nil'));
+
+        self::tpl('op_tern_composed', '{{ true and not false ? "y" : "n" }}');
+        $this->assertSame('y', self::render('op_tern_composed'));
+    }
+
+    /**
+     * Hoisting the keyword test must not capture a name that merely CONTAINS a
+     * keyword, nor one that uses a keyword as a member name.
+     *
+     * `nullable` has identifier characters either side of `null`; `obj:true`
+     * reads a key literally named `true`. A keyword rule that looked only at the
+     * token would break both, which is why the check is bounded by identifier
+     * characters on both sides.
+     */
+    public function testKeywordLookalikesAreNotCaptured(): void
+    {
+        self::tpl('op_kw_lookalike', '[{{ nullable ?? "MISS" }}]');
+        $this->assertSame('[MISS]', self::render('op_kw_lookalike'));
+
+        self::tpl('op_kw_lookalike_val', '[{{ nullable }}]');
+        $this->assertSame('[SET]', self::render('op_kw_lookalike_val', ['nullable' => 'SET']));
+
+        self::tpl('op_kw_as_key', '[{{ obj:true }}|{{ obj:null }}]');
+        $this->assertSame(
+            '[MEMBER|OTHER]',
+            self::render('op_kw_as_key', ['obj' => ['true' => 'MEMBER', 'null' => 'OTHER']])
+        );
+    }
+
     public function testIsEmpty(): void
     {
         self::tpl('op_empty', '{% if items is empty %}Y{% else %}N{% endif %}');

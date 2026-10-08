@@ -218,8 +218,8 @@ $engine->addModule(new TranslationModule([
     'locale'            => 'de_DE',
     'fallback_locale'   => 'en_US',
     'translations_path' => __DIR__ . '/locales',
-    'default_domain'    => 'messages',   // optional
-    'cache_path'        => sys_get_temp_dir(), // optional, for compiled YAML/JSON caches
+    'default_domain'    => 'messages',
+    'cache_path'        => sys_get_temp_dir(),
 ]));
 ```
 
@@ -368,8 +368,8 @@ Every filter accepts an optional trailing `locale` parameter to override the act
 
 #### Number Filters
 
-| Filter            | Signature                               | Description                           |
-| ----------------- | --------------------------------------- | ------------------------------------- |
+| Filter            | Signature                                  | Description                           |
+| ----------------- | ------------------------------------------ | ------------------------------------- |
 | `format_number`   | `format_number(decimals:2, locale?)`       | Locale-aware decimal number           |
 | `format_currency` | `format_currency(currency:"EUR", locale?)` | Locale-aware currency amount          |
 | `currency_name`   | `currency_name(displayLocale?, locale?)`   | `"USD"` → `"US Dollar"`               |
@@ -400,8 +400,8 @@ Styles for `format_date`, `format_time`, and `format_datetime`: `none`, `short`,
 
 Input values can be a Unix timestamp (int), a `DateTimeInterface`, or a date string accepted by `strtotime()`.
 
-| Filter            | Signature                                                            | Description                           |
-| ----------------- | -------------------------------------------------------------------- | ------------------------------------- |
+| Filter            | Signature                                                               | Description                           |
+| ----------------- | ----------------------------------------------------------------------- | ------------------------------------- |
 | `format_date`     | `format_date(style:"medium", locale?, tz?)`                             | Locale-aware date                     |
 | `format_time`     | `format_time(style:"medium", locale?, tz?)`                             | Locale-aware time                     |
 | `format_datetime` | `format_datetime(dateStyle:"medium", timeStyle:"medium", locale?, tz?)` | Date + time                           |
@@ -421,8 +421,8 @@ Input values can be a Unix timestamp (int), a `DateTimeInterface`, or a date str
 
 #### Locale Information Filters
 
-| Filter          | Signature                             | Description                      |
-| --------------- | ------------------------------------- | -------------------------------- |
+| Filter          | Signature                                | Description                      |
+| --------------- | ---------------------------------------- | -------------------------------- |
 | `country_name`  | `country_name(displayLocale?, locale?)`  | ISO country code → display name  |
 | `language_name` | `language_name(displayLocale?, locale?)` | ISO language code → display name |
 | `locale_name`   | `locale_name(displayLocale?, locale?)`   | Locale identifier → display name |
@@ -447,8 +447,8 @@ Input values can be a Unix timestamp (int), a `DateTimeInterface`, or a date str
 
 #### ICU MessageFormat
 
-| Filter           | Signature                       | Description                             |
-| ---------------- | ------------------------------- | --------------------------------------- |
+| Filter           | Signature                          | Description                             |
+| ---------------- | ---------------------------------- | --------------------------------------- |
 | `format_message` | `format_message(vars:[], locale?)` | ICU MessageFormat (plurals, selects, …) |
 
 ```twig

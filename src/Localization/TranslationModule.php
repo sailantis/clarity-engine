@@ -103,7 +103,8 @@ class TranslationModule implements ModuleInterface
         }
         $this->cachePath = rtrim($cachePath, '/\\');
 
-        $this->loader = $config['loader'] ?? new FileTranslationLoader(
+        $this->loader = $config['loader']
+            ?? new FileTranslationLoader(
                 $this->translationsPath ?? '',
                 $this->cachePath
             );
@@ -170,9 +171,9 @@ class TranslationModule implements ModuleInterface
     {
         return $locale
             ?? $this->localeService?->current()
-            ?? $this->configuredLocale
-            ?? $this->localeService?->defaultLocale()
-            ?? $this->detectedLocale;
+                ?? $this->configuredLocale
+                    ?? $this->localeService?->defaultLocale()
+                        ?? $this->detectedLocale;
     }
 
     /**

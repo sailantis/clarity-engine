@@ -451,6 +451,81 @@ class LocalizationTest extends BaseTestCase
         $this->assertStringContainsString('1,234.56', $result);
     }
 
+    /**
+     * `currency_name` and `currency_symbol` read their data out of ICU's
+     * `ICUDATA-curr` bundle.
+     *
+     * Both used to throw `Cannot use object of type ResourceBundle as array`:
+     * an ICU currency entry is itself a `ResourceBundle`, and `ResourceBundle`
+     * implements `Countable`/`Traversable` but NOT `ArrayAccess` — so the
+     * `isset($entry[1])` guard they used as a presence check is a fatal error
+     * rather than a false. The read that follows it is fine; it is specifically
+     * `isset()` on an offset that throws.
+     */
+    public function testCurrencyNameResolvesThroughIcuData(): void
+    {
+        if (!\extension_loaded('intl')) {
+            $this->markTestSkipped('intl extension required');
+        }
+        $engine = new ClarityEngine();
+        $engine->setViewPath(TestEnvironment::viewDir())->setCachePath(TestEnvironment::cacheDir());
+        $engine->addModule(new \Clarity\Localization\IntlFormatModule(['locale' => 'en_US']));
+
+        self::tpl('lmod_currency_name', '{{ currency_name("USD") }}');
+        $this->assertSame('US Dollar', $engine->renderPartial('lmod_currency_name'));
+
+        // A per-call locale selects that locale's name for the same currency.
+        self::tpl('lmod_currency_name_loc', '{{ currency_name("USD", locale: "de_DE") }}');
+        $this->assertSame('US-Dollar', $engine->renderPartial('lmod_currency_name_loc'));
+    }
+
+    public function testCurrencySymbolResolvesThroughIcuData(): void
+    {
+        if (!\extension_loaded('intl')) {
+            $this->markTestSkipped('intl extension required');
+        }
+        $engine = new ClarityEngine();
+        $engine->setViewPath(TestEnvironment::viewDir())->setCachePath(TestEnvironment::cacheDir());
+        $engine->addModule(new \Clarity\Localization\IntlFormatModule(['locale' => 'en_US']));
+
+        self::tpl('lmod_currency_symbol', '{{ currency_symbol("USD") }}|{{ currency_symbol("EUR") }}');
+        $this->assertSame('$|€', $engine->renderPartial('lmod_currency_symbol'));
+    }
+
+    /**
+     * An unknown code has no ICU entry, so the filter falls back to the code
+     * itself rather than throwing or rendering an empty string.
+     */
+    public function testCurrencyNameFallsBackToTheCodeWhenUnknown(): void
+    {
+        if (!\extension_loaded('intl')) {
+            $this->markTestSkipped('intl extension required');
+        }
+        $engine = new ClarityEngine();
+        $engine->setViewPath(TestEnvironment::viewDir())->setCachePath(TestEnvironment::cacheDir());
+        $engine->addModule(new \Clarity\Localization\IntlFormatModule(['locale' => 'en_US']));
+
+        self::tpl('lmod_currency_name_unknown', '{{ currency_name("ZZZ") }}|{{ currency_symbol("ZZZ") }}');
+        $this->assertSame('ZZZ|ZZZ', $engine->renderPartial('lmod_currency_name_unknown'));
+    }
+
+    /**
+     * A regional locale with no entry of its own must resolve through its base:
+     * ICU is asked with `fallback = true`, so `de_AT` can still name `EUR`.
+     */
+    public function testCurrencyNameResolvesRegionalLocaleThroughItsBase(): void
+    {
+        if (!\extension_loaded('intl')) {
+            $this->markTestSkipped('intl extension required');
+        }
+        $engine = new ClarityEngine();
+        $engine->setViewPath(TestEnvironment::viewDir())->setCachePath(TestEnvironment::cacheDir());
+        $engine->addModule(new \Clarity\Localization\IntlFormatModule(['locale' => 'en_US']));
+
+        self::tpl('lmod_currency_name_regional', '{{ currency_name("EUR", locale: "de_AT") }}');
+        $this->assertNotSame('EUR', $engine->renderPartial('lmod_currency_name_regional'));
+    }
+
     public function testWithLocaleBlockChangesLocale(): void
     {
         if (!\extension_loaded('intl')) {

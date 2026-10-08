@@ -147,6 +147,64 @@ class IntlFormatModule implements ModuleInterface
     }
 
     // =========================================================================
+    // Currency data
+    // =========================================================================
+
+    /**
+     * Look up a currency's `[symbol, display name]` pair in a locale's ICU data.
+     *
+     * Returns an empty array when the currency or the ICU data is unavailable, so
+     * callers fall back to the code itself by `??`-ing the element they want.
+     *
+     * An ICU currency entry is itself a `ResourceBundle`, not an array, and
+     * `ResourceBundle` implements neither `ArrayAccess` nor — in PHP 8.1+ —
+     * `ArrayObject`'s offset behaviour, so `isset($entry[1])` throws
+     * "Cannot use object of type ResourceBundle as array". The entry's *read*
+     * must therefore go through `get()`, and the presence check through the
+     * returned value rather than `isset()` on an offset.
+     *
+     * @return array{0?: string, 1?: string} Index 0 is the symbol, 1 the name.
+     */
+    private static function currencyEntry(string $locale, string $code): array
+    {
+        static $cache = [];
+
+        $key = $locale . '|' . $code;
+        if (isset($cache[$key])) {
+            return $cache[$key];
+        }
+
+        if (!\extension_loaded('intl') || !\class_exists(\ResourceBundle::class)) {
+            return $cache[$key] = [];
+        }
+
+        // `fallback = true` so a regional locale such as `de_AT` resolves through
+        // `de` instead of returning nothing for a currency it does define.
+        $bundle = \ResourceBundle::create($locale, 'ICUDATA-curr', true);
+        if ($bundle === null || $bundle === false) {
+            return $cache[$key] = [];
+        }
+
+        $currencies = $bundle->get('Currencies');
+        if ($currencies === null || $currencies === false) {
+            return $cache[$key] = [];
+        }
+
+        $entry = $currencies->get($code);
+        if (!$entry instanceof \ResourceBundle) {
+            return $cache[$key] = [];
+        }
+
+        $symbol = $entry->get(0);
+        $name   = $entry->get(1);
+
+        return $cache[$key] = [
+            \is_scalar($symbol) ? (string) $symbol : $code,
+            \is_scalar($name) ? (string) $name : $code,
+        ];
+    }
+
+    // =========================================================================
     // Number formatters
     // =========================================================================
 
@@ -183,54 +241,19 @@ class IntlFormatModule implements ModuleInterface
             }
         );
 
-        // Proper currency_name using ResourceBundle if available
         $engine->addFilter(
             'currency_name',
-            function (string $code, ?string $locale = null) use ($localeService, $intl): string {
-                static $cache = [];
-                $dl  = $this->localeFor($locale, $localeService);
-                $key = $dl . '|' . $code;
-                if ($intl && \class_exists(\ResourceBundle::class)) {
-                    if (isset($cache[$key])) {
-                        return $cache[$key];
-                    }
-                    $bundle = \ResourceBundle::create($dl, 'ICUDATA-curr', true);
-                    if ($bundle !== null && $bundle !== false) {
-                        $currencies = $bundle->get('Currencies');
-                        if ($currencies !== null) {
-                            $entry = $currencies->get($code);
-                            if ($entry !== null && isset($entry[1])) {
-                                return $cache[$key] = (string) $entry[1];
-                            }
-                        }
-                    }
-                }
-                return $code;
+            function (string $code, ?string $locale = null) use ($localeService): string {
+                $dl = $this->localeFor($locale, $localeService);
+                return self::currencyEntry($dl, $code)[1] ?? $code;
             }
         );
 
         $engine->addFilter(
             'currency_symbol',
-            function (string $code, ?string $locale = null) use ($localeService, $intl): string {
-                static $cache = [];
-                $l   = $this->localeFor($locale, $localeService);
-                $key = $l . '|' . $code;
-                if ($intl && \class_exists(\ResourceBundle::class)) {
-                    if (isset($cache[$key])) {
-                        return $cache[$key];
-                    }
-                    $bundle = \ResourceBundle::create($l, 'ICUDATA-curr', true);
-                    if ($bundle !== null && $bundle !== false) {
-                        $currencies = $bundle->get('Currencies');
-                        if ($currencies !== null) {
-                            $entry = $currencies->get($code);
-                            if ($entry !== null && isset($entry[0])) {
-                                return $cache[$key] = (string) $entry[0];
-                            }
-                        }
-                    }
-                }
-                return $code;
+            function (string $code, ?string $locale = null) use ($localeService): string {
+                $l = $this->localeFor($locale, $localeService);
+                return self::currencyEntry($l, $code)[0] ?? $code;
             }
         );
 

@@ -36,6 +36,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   same PHP literal, so it is a shorter spelling rather than a second value, and
   it shadows a passed variable of the same name exactly as `null` always has.
 
+### Fixed
+
+- **`true`, `false` and `null` had stopped being keywords.** They were dropped
+  from the tokenizer's keyword map when `nil` was added to it — the map is one
+  array literal, and the edit re-listed its entries without `true`, `false` or
+  `null`. A bare `{{ true }}`, `{{ null }}` or `{{ flag ? a : b }}` in a
+  template then threw `Variable "true" is not defined in this context`;
+  `{% if true %}` kept working, because that path tests the token separately.
+
+  All three are restored, and a test now pins them: the loss survived a
+  full-suite run precisely because nothing asserted a bare literal outside a
+  directive.
+
+- **A keyword now resolves in a ternary condition.** The identifier's
+  continuation gate hands `a ? b : c` to the chain parser, and the condition is
+  exactly where a literal sits — so the keyword test, which ran behind that
+  gate, never fired for `{{ true ? 'y' : 'n' }}`. It reported `true` as an
+  undefined variable while `{% if true %}` worked. The keyword test now runs
+  before the gate, still bounded by identifier characters on both sides so that
+  `nullable` stays a variable and `obj:true` still reads a key named `true`.
+
+- **`currency_name` and `currency_symbol` threw instead of resolving.** Both
+  read ICU's `ICUDATA-curr` bundle and used `isset($entry[1])` as a presence
+  check. An ICU currency entry is itself a `ResourceBundle`, which implements
+  `Countable` and `Traversable` but **not** `ArrayAccess`, so `isset()` on an
+  offset is a fatal `Cannot use object of type ResourceBundle as array` — a
+  working `{{ currency_name("USD") }}` was impossible. The entry is now read
+  through `get(0)`/`get(1)`, and an unknown code falls back to the code itself.
+
 ### Changed
 
 - **Every locale parameter is now named `locale`.** The intl filters had split

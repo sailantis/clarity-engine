@@ -109,16 +109,21 @@ trait ExpressionCoreTrait
     public function convertVarsAndOps(string $expr): string
     {
         static $keywordMap = [
-            'and'  => '&&',
-            'or'   => '||',
-            'not'  => '!',
-            'bor'  => '|',
-            'band' => '&',
-            'bxor' => '^',
-            'bnot' => '~',
-            'blsh' => '<<',
-            'brsh' => '>>',
-            'nil'  => 'null',
+            'and'   => '&&',
+            'or'    => '||',
+            'not'   => '!',
+            'bor'   => '|',
+            'band'  => '&',
+            'bxor'  => '^',
+            'bnot'  => '~',
+            'blsh'  => '<<',
+            'brsh'  => '>>',
+            'true'  => 'true',
+            'false' => 'false',
+            'null'  => 'null',
+            // `nil` is the same value under a shorter spelling. Both compile to
+            // the PHP literal, so there is no runtime cost to preferring either.
+            'nil'   => 'null',
         ];
 
         $len      = \strlen($expr);
@@ -619,30 +624,46 @@ trait ExpressionCoreTrait
                     continue;
                 }
 
+                // A KEYWORD is an identifier the language reserves, so it takes
+                // precedence over every chain reading and is resolved before the
+                // continuation gate below. That gate excludes `?` to hand
+                // `a ? b : c` to the chain parser, but the ternary's CONDITION is
+                // exactly where a literal like `true` or `null` sits — gating the
+                // keyword test behind it made `{{ true ? 'y' : 'n' }}` fall
+                // through to the variable resolver and report the keyword as an
+                // undefined variable. `{% if true %}` never showed it, because
+                // that path tests the token separately.
+                //
+                // The lookarounds keep a name that merely CONTAINS a keyword
+                // intact: `nullable` has an identifier character on either side
+                // of `null` and so is not a keyword. `$obj.true` and `obj:true`
+                // never arrive here — a chain read is consumed by the parser
+                // before the operator loop sees the member.
+                $kwToken = \substr($expr, $start, $idEnd - $start);
+                $kwLower = \strtolower($kwToken);
+                if (
+                    isset($keywordMap[$kwLower])
+                        && !self::isIdentifierChar($start > 0 ? $expr[$start - 1] : '')
+                        && !self::isIdentifierChar($nextAfterIdent)
+                ) {
+                    $out .= $keywordMap[$kwLower];
+                    $i = $idEnd;
+                    continue;
+                }
+
                 if (
                     $contChar !== '.' && $contChar !== '['
                         && $contChar !== '{' && $contChar !== ':'
                         && $contChar !== '?' && $contTwo !== '->'
                 ) {
-                    // Plain identifier â€” may be a keyword or a cacheable single-segment chain
+                    // Plain identifier — a cacheable single-segment chain
                     $token = \substr($expr, $start, $idEnd - $start);
                     $i     = $idEnd;
-
-                    $prevChar = ($start - 1 >= 0) ? $expr[$start - 1] : null;
-                    $nextChar = $nextAfterIdent !== '' ? $nextAfterIdent : null;
-                    $prevIsId = $prevChar !== null && self::isIdentifierChar($prevChar);
-                    $nextIsId = $nextChar !== null && self::isIdentifierChar($nextChar);
-                    $lower    = \strtolower($token);
 
                     // The `::` and namespace forms were already handled above,
                     // where the identifier's tail was visible: both either emit
                     // and `continue`, or throw. Reaching here means neither tail
-                    // applied, so this is an ordinary name or a keyword.
-                    if (!$prevIsId && !$nextIsId && isset($keywordMap[$lower])) {
-                        $out .= $keywordMap[$lower];
-                        continue;
-                    }
-
+                    // applied, so this is an ordinary name.
                     // Function-call syntax: allowed only for explicitly registered functions.
                     $j = $i;
                     while ($j < $len && \ctype_space($expr[$j])) {

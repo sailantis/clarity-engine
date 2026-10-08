@@ -45,14 +45,16 @@ trait OperatorTestTrait
         'divisible_by' => ['binary' => true, 'tolerates' => false, 'call' => 'divisible_by'],
         'same_as'      => ['binary' => true, 'tolerates' => false, 'call' => 'same_as'],
         // `value is <test>` — no right operand.
-        'defined'  => ['binary' => false, 'tolerates' => true, 'call' => 'defined'],
-        'null'     => ['binary' => false, 'tolerates' => true, 'call' => 'is_null'],
-        'none'     => ['binary' => false, 'tolerates' => true, 'call' => 'is_null'],
-        'nil'      => ['binary' => false, 'tolerates' => true, 'call' => 'is_null'],
-        'empty'    => ['binary' => false, 'tolerates' => true, 'call' => 'is_empty'],
-        'iterable' => ['binary' => false, 'tolerates' => false, 'call' => 'iterable'],
-        'even'     => ['binary' => false, 'tolerates' => false, 'call' => 'is_even'],
-        'odd'      => ['binary' => false, 'tolerates' => false, 'call' => 'is_odd'],
+        'defined'   => ['binary' => false, 'tolerates' => true, 'call' => 'defined'],
+        'null'      => ['binary' => false, 'tolerates' => true, 'call' => 'is_null'],
+        // `none` and `nil` are accepted as spellings of the same test. They are
+        // tests rather than values, so a variable of either name stays readable.
+        'none'      => ['binary' => false, 'tolerates' => true, 'call' => 'is_null'],
+        'nil'       => ['binary' => false, 'tolerates' => true, 'call' => 'is_null'],
+        'empty'     => ['binary' => false, 'tolerates' => true, 'call' => 'is_empty'],
+        'iterable'  => ['binary' => false, 'tolerates' => false, 'call' => 'iterable'],
+        'even'      => ['binary' => false, 'tolerates' => false, 'call' => 'is_even'],
+        'odd'       => ['binary' => false, 'tolerates' => false, 'call' => 'is_odd'],
     ];
 
     /**
