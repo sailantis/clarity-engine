@@ -3,7 +3,12 @@
 .vscode/
 temp/
 /vendor/
-/composer.lock
+# `composer.lock` is deliberately TRACKED. This is a library, but the lock is
+# only ever consumed by this repository's own CI and dev installs — Composer
+# ignores a dependency's lock file entirely, so committing it costs consumers
+# nothing. It keeps the three PHP versions in CI on one known-good dependency
+# set instead of resolving fresh (and differently) on every run.
+# It is kept out of the dist archive via `.gitattributes`.
 .phpunit.result.cache
 /conversation.txt
 /cache/

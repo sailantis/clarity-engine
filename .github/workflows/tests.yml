@@ -30,8 +30,11 @@ jobs:
       - name: Install dependencies
         run: composer install --prefer-dist --no-progress
 
-      - name: Validate composer.json
-        run: composer validate --strict --no-check-lock
+      # `composer.lock` is tracked, so validate it too: without this, a
+      # composer.json edit that was never re-locked would pass, and CI would
+      # silently test a dependency set that no longer matches the manifest.
+      - name: Validate composer.json and composer.lock
+        run: composer validate --strict
 
       - name: Run test suite
         run: composer test

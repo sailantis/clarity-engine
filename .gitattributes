@@ -4,6 +4,12 @@
 
 # Dev-only files are not shipped in the Composer archive.
 # `docs/` is intentionally KEPT: the README links into it.
+#
+# `composer.lock` IS tracked, so dev installs and CI resolve the same versions.
+# Composer never reads a dependency's lock file, so this costs consumers
+# nothing — but it must still be kept out of the archive, where it would look
+# like authoritative advice for the consumer's own resolution.
+/composer.lock export-ignore
 /tests/ export-ignore
 /scripts/ export-ignore
 /phpunit.xml export-ignore
