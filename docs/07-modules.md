@@ -366,12 +366,12 @@ $engine->addModule(new TranslationModule([
 
 Clarity includes four translation loaders:
 
-| Loader                     | Purpose                                                                     |
-| -------------------------- | --------------------------------------------------------------------------- |
-| `FileTranslationLoader`    | Default; reads `{domain}.{locale}.{php,json,yaml}` files and compiles a PHP cache |
-| `ArrayTranslationLoader`   | Loads in-memory catalogs from a PHP array                                      |
-| `ChainTranslationLoader`   | Combines loaders; later loaders override earlier ones                         |
-| `RedisCachingLoader`       | Caches results from another loader in Redis                                    |
+| Loader                   | Purpose                                                                           |
+| ------------------------ | --------------------------------------------------------------------------------- |
+| `FileTranslationLoader`  | Default; reads `{domain}.{locale}.{php,json,yaml}` files and compiles a PHP cache |
+| `ArrayTranslationLoader` | Loads in-memory catalogs from a PHP array                                         |
+| `ChainTranslationLoader` | Combines loaders; later loaders override earlier ones                             |
+| `RedisCachingLoader`     | Caches results from another loader in Redis                                       |
 
 #### ArrayTranslationLoader
 
@@ -627,8 +627,10 @@ Input values can be a Unix timestamp (int), a `DateTimeInterface`, or a date str
 | `format_message` | `format_message(vars:[], locale?)` | ICU MessageFormat (plurals, selects, …) |
 
 ```twig
-{{ "{count, plural, one{# item} other{# items}}" |> format_message({count: n}) }}
-{{ "{gender, select, male{He} female{She} other{They}} liked your post." |> format_message({gender: user.gender}) }}
+{{ "{count, plural, one{# item} other{# items}}"
+    |> format_message({count: n}) }}
+{{ "{gender, select, male{He} female{She} other{They}} liked your post."
+    |> format_message({gender: user.gender}) }}
 ```
 
 ### Overriding Locale per Call

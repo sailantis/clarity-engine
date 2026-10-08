@@ -38,7 +38,7 @@ Policy::default();        // the default, plus whatever you grant
 
 The three ready-made modes differ only in their rules. This table is the complete difference between them.
 
-| Rule          | `restricted()` | `trusted()` | `unrestricted()` |
+| Rule                | `restricted()` | `trusted()` | `unrestricted()` |
 | ------------------- | -------------- | ----------- | ---------------- |
 | `variableVariables` | ✓              | ✓           | ✓                |
 | `strictTypes`       | ✓              | ✓           | ✓                |
@@ -58,8 +58,8 @@ do not restrict names; see [The rule for allowlists](#the-rule-for-allowlists).
 | Preset           | In one line                                                         | Appropriate when                                                                      |
 | ---------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | `restricted()`   | The template's scope and registered filters and functions.          | The default, especially for templates selected by a request.                          |
-| `trusted()`      | Adds PHP function calls, method calls, superglobals and PHP locals.                     | Templates you write that need object access.                                          |
-| `unrestricted()` | Every rule: the full power of PHP.                            | Templates never chosen by a request, as a parity mode with Blade, Stempler or Plates. |
+| `trusted()`      | Adds PHP function calls, method calls, superglobals and PHP locals. | Templates you write that need object access.                                          |
+| `unrestricted()` | Every rule: the full power of PHP.                                  | Templates never chosen by a request, as a parity mode with Blade, Stempler or Plates. |
 | `default()`      | `restricted()`, plus the grants you name.                           | Most applications: a narrow, explicit set of allowances.                              |
 
 ### `Policy::restricted()`
@@ -103,7 +103,7 @@ Every rule is enabled; both allowlists are empty and no function is denied.
 Templates have the full power of PHP. This is the engine's former PHP mode and
 supports template languages that expect inline PHP.
 
-Use it only for templates that are never chosen by a request.
+Use it only for templates where you trust the source completely.
 
 ### `Policy::default()`
 
@@ -125,7 +125,7 @@ your templates need.
 
 ### Rules
 
-| Rule          | Default | What it grants                                                                                          |
+| Rule                | Default | What it grants                                                                                          |
 | ------------------- | ------- | ------------------------------------------------------------------------------------------------------- |
 | `phpFunctions`      | `false` | bare calls (`strtoupper(name)`) and filter steps that resolve to a PHP function                         |
 | `rawPhp`            | `false` | `{% php CODE %}` tags                                                                                   |
@@ -141,10 +141,10 @@ Deny `strictTypes` to opt a template back into PHP's weak-mode coercion.
 
 ### Allowlists
 
-| Allowlist   | Default | What it governs                                                                 |
-| ----------- | ------- | ------------------------------------------------------------------------------- |
-| `functions` | `[]`    | names the `phpFunctions` rule may resolve to a PHP function                     |
-| `filters`   | `[]`    | names accepted after `\|>`, which need not be functions                         |
+| Allowlist   | Default | What it governs                                             |
+| ----------- | ------- | ----------------------------------------------------------- |
+| `functions` | `[]`    | names the `phpFunctions` rule may resolve to a PHP function |
+| `filters`   | `[]`    | names accepted after `\|>`, which need not be functions     |
 
 ### The rule for allowlists
 
@@ -166,31 +166,71 @@ PHP function calls resolved from template expressions, but does not inspect raw
 `{% php %}` blocks:
 
 ```php
-$engine->setPolicy(Policy::unrestricted()->denyFunctions('exec', 'system', 'proc_open'));
+$engine->setPolicy(Policy::trusted()->denyFunctions('exec', 'system', 'proc_open'));
 ```
 
 `denyFunctions()` only narrows. It never turns the `phpFunctions` rule on, so
 `Policy::restricted()->denyFunctions('exec')` remains sandboxed — the denial only
 means something where another rule has already made a PHP function reachable.
 
-### `methodCalls` and `phpVariables` are independent
+### `methodCalls`
 
 `methodCalls` permits method calls on objects in the scope. It works with either
-`obj.method()` or `$obj->method()` syntax; both use the same rule. Method
-calls do not require `phpVariables`, which exposes the scope as PHP locals. See
-[Template Syntax → Method calls](01-template-syntax.md#method-calls).
+`obj.method()` or `$obj->method()` syntax; both use the same rule. See [Template Syntax → Method calls](01-template-syntax.md#method-calls).
+
+```twig
+{# Example usage of methodCalls #}
+{{ obj.method() }}
+{{ $obj->method() }} {# PHP syntax #}
+```
+
+### `phpVariables`
+
+`phpVariables` seeds the render scope into PHP locals. When it is granted,
+each scope value becomes a real PHP variable named after its scope key, so
+`{{ title }}` in a template and `$title` in `{% php %}` code are one variable:
+a `{% set %}` and a PHP assignment land in the same place, and either side
+sees the other's writes.
+
+```twig
+{% set title = 'Hello' %}
+{{ title }} {# reads $title #}
+{% php $title = 'Grace'; %}
+{{ title }} {# reads $title #}
+```
+
+Without the rule, nothing is seeded. Template expressions still read scope
+values — reads need no grant — but those values are not available as PHP
+locals, so `{% php %}` code has no `$title` to reach them by.
+
+```twig
+{% set title = 'Hello' %}
+{{ title }} {# reads $__c_va['title'] #}
+{% php $title = 'Grace'; %}
+{{ title }} {# reads $__c_va['title'] #}
+```
+
+The `{% php %}` block requires the separate `rawPhp` rule.
 
 ### `variableVariables`
 
-`$$name` and `${expr}` resolve against the render scope and loop locals under
-every policy. They cannot access the engine's protected `__c_` variables, so
-disabling this rule does not change what a template can reach. It is not
-counted as "reaching PHP" for [policy inspection](#inspecting-a-policy).
+`variableVariables` allows dynamic variables — `$$name` and `${expr}` — to resolve against the render scope and loop locals. Protected `__c_` variables are not accessible. Disabling this rule does not change the reach of PHP from the template.
+
+```twig
+{# Example usage of variableVariables #}
+{% set name = 'foo' %}
+{# Dynamically set a variable based on the value of `name` #}
+{% set $$name = 'Grace' %}
+{% set ${name} = 'Grace' %} {# alternative syntax #}
+{{ foo }} {# reads the dynamically set variable #}
+```
 
 ### `superglobals`
 
-Without `superglobals`, `{{ _SERVER }}` is a scope read and throws if the scope
-does not contain that name. This remains true when `phpVariables` is enabled:
+`superglobals` exposes PHP's built-in superglobal arrays to the template. When granted, the following names refer to PHP's own variables rather than scope reads. Names are: `GLOBALS`, `_SERVER`, `_GET`, `_POST`, `_FILES`,
+`_COOKIE`, `_SESSION`, `_REQUEST` and `_ENV`
+
+Without `superglobals` enabled, `{{ _SERVER }}` is a scope read and throws if the scope does not contain that name. This remains true when `phpVariables` is enabled:
 
 ```php
 // Refused without 'superglobals': a scope read of an absent name
@@ -200,110 +240,70 @@ $engine->setPolicy(Policy::default()->allowRule('phpVariables'));
 $engine->setPolicy(Policy::default()->allowRule('superglobals'));
 ```
 
-The rule recognizes only `GLOBALS`, `_SERVER`, `_GET`, `_POST`, `_FILES`,
-`_COOKIE`, `_SESSION`, `_REQUEST` and `_ENV`. Other names, such as `_SERVERX`,
-are ordinary variables.
-
-### `newExpressions` and `staticCalls`
-
-Both compile class names as fully qualified names; for example,
-`new DateTime()` becomes `new \DateTime`. Compiled templates have no `use`
-statements, so this avoids resolving names based on the importing file.
-
-`instanceof` works under every policy because it checks an object's class without
-constructing or accessing one:
-
 ```twig
-{% if order instanceof App\Order %}…{% endif %}
+{# Example usage of superglobals #}
+{{ _SERVER }}
 ```
 
-Class names in other positions, such as `{{ Foo\Bar }}`, are rejected.
+### `newExpressions`
+
+`newExpressions` allows the use of `new` to create objects within the template.
+
+```twig
+{# Example usage of newExpressions #}
+{% new Foo() %}
+```
+
+### `staticCalls`
+
+`staticCalls` allows static method calls, constant access, class name resolution, and static property access within the template.
+
+```twig
+{# Example usage of staticCalls #}
+{{ Foo::method(args) }}
+{{ Foo::CONST }}
+{{ Foo::class }}
+{{ Foo::$prop }}
+```
+
+> **Note:** A class name is accepted only where one is expected: after new, before ::, and as the right operand of instanceof. In any other position, such as {{ Foo\Bar }}, it is rejected at compile time — under every policy, including unrestricted(), because the name is not a value the expression grammar can emit.
 
 ### `strictTypes`
 
-**On by default.** The compiled template file begins with
-`declare(strict_types=1);`, so the template is held to the types it declares at
-every call boundary. Deny it with `denyRule('strictTypes')` to get PHP's
-weak-mode coercion back.
+With `strictTypes` enabled, the compiled template file begins with
+`declare(strict_types=1);`, so the types a template declares are enforced at
+every call boundary.
 
-This rule exists because the declaration is **per-file** and the engine
-emits the file: a caller cannot opt a template into strict types by declaring
-them in their own code, and every compiled template is a separate file whose
-`<?php` Clarity writes. The rule is the only place a template can carry the
-declaration.
-
-It is on in every preset, `restricted()` included — not because it makes a
-template reach less, but because the alternative to a type error is not safety,
-it is silence. Weak mode coerces `'1abc'` to `1`, a `null` to `''`, and a
-fractional float to a truncated `int`, and nothing reports that a type was
-wrong. See [Why strict by default](#why-strict-by-default).
-
-What it changes is the contract at a **call boundary**. A registered filter or
-function that declares a parameter type now throws `TypeError` — reported as a
-`ClarityException` naming the template line — instead of receiving a coerced
-value:
+The rule changes the contract at a **call boundary**. A filter or function with
+a declared parameter type throws `TypeError` — reported as a `ClarityException`
+naming the template line — instead of receiving a coerced value:
 
 ```php
 $engine->addFilter('shout', fn(string $s): string => strtoupper($s) . '!');
 
 // Default: a ClarityException at the template line.
-// After denyRule('strictTypes'): '42!' — the int was coerced, silently.
+// After denyRule('strictTypes'): '42!' — the int was silently coerced.
 $engine->setPolicy(Policy::default()->denyRule('strictTypes'));
 ```
 
 ```twig
-{{ 42 |> shout }}    {# TypeError under strictTypes: int given, string expected #}
+{# TypeError under strictTypes: int given, string expected #}
+{{ 42 |> shout }}
 ```
 
-It also makes a fractional float passed to an `int` parameter throw, rather than
-being truncated, and stops numeric strings coercing to `int` / `float` — a
-numeric string reaching `round`, `ceil` or `floor` (which take `int|float`) is a
-type error rather than a silently formatted number.
+It also makes a fractional float passed to an `int` parameter throw rather than
+be truncated, and stops numeric strings coercing to `int` / `float`: a numeric
+string reaching `round`, `ceil` or `floor` (which take `int|float`) is a type
+error rather than a silently formatted number.
 
-**What it does not change.** `strictTypes` is not a reach rule: it grants no
-construct and names no class, so it is not counted by
-[`allowsPhp()`](#inspecting-a-policy) and a strict template is no less sandboxed
-than a weak one — `Policy::restricted()` is strict *and* sandboxed at once. It
-hardens the boundary; it does not move it.
+**Why strict by default.** The rationale for enabling `strictTypes` by default is that it prevents subtle bugs caused by silent type coercion. In weak mode, a template might receive a value of an unexpected type and still operate without errors, leading to unpredictable behavior. By enforcing strict types, the engine ensures that type mismatches are caught immediately, making templates more robust and easier to debug.
 
-Nor does it remove the engine's **output** cast. `{{ … }}` compiles to
-`\htmlspecialchars((string)(<expr>), …)`, and that is how any non-string is
-printed at all — `{{ 42 }}`, `{{ items |> length }}`, `{{ price }}`. Stripping it
-would break most real templates rather than catch a mistake, so the cast stays:
-the rule governs the type of an argument passed *into* a filter or function,
-not the stringification of a value on its way out.
-
-```twig
-{{ 42 }}              {# still renders "42" under strictTypes #}
-{{ items |> length }} {# still renders "3" #}
-```
-
-Latte offers the same declaration, scoped the same way: it governs the signatures
-at the call boundary, not the engine's own output handling.
-
-#### Why strict by default
-
-Because the failure it replaces is invisible. A cast that succeeds silently and a
-type error are the same event as far as the template author is concerned, except
-that only one of them can be debugged:
-
-| Template                 | Weak mode          | `strictTypes`      |
-| ------------------------ | ------------------ | ------------------ |
-| `{{ 42 \|> upper }}`     | `'42'`             | `TypeError`        |
-| `{{ null \|> upper }}`   | `''` + deprecation | `TypeError`        |
-| `{{ ' 3.14 ' \|> round(1) }}` | `'3.1'`       | `TypeError`        |
-| `{{ 42 }}`               | `'42'`             | `'42'` (unchanged) |
-
-The third row is the one that matters: a numeric string from a form field or a
-query parameter formatted as if it were a number. It looked right and was not,
-and only strict types say so — `round`, `ceil` and `floor` take `int|float`, so a
-string is a type error there, unlike the filters that take a `string`.
-
-**What it costs.** A template that relied on coercion — most often a value that
-may be `null` arriving at a string filter — now throws. That is the intended
-trade, and it is why the rule is a *rule*: `denyRule('strictTypes')` gives a
-project weak mode back for one engine, or for the whole application, without
-touching anything else.
+| Template                      | Weak mode          | `strictTypes`      |
+| ----------------------------- | ------------------ | ------------------ |
+| `{{ 42 \|> upper }}`          | `'42'`             | `TypeError`        |
+| `{{ null \|> upper }}`        | `''` + deprecation | `TypeError`        |
+| `{{ ' 3.14 ' \|> round(1) }}` | `'3.1'`            | `TypeError`        |
+| `{{ 42 }}`                    | `'42'`             | `'42'` (unchanged) |
 
 ---
 
@@ -366,11 +366,11 @@ name.
 
 Use these methods for a summary without inspecting individual rules:
 
-| Method                   | True when                                                     |
-| ------------------------ | ------------------------------------------------------------- |
+| Method                      | True when                                                |
+| --------------------------- | -------------------------------------------------------- |
 | `$policy->isUnrestricted()` | every rule is on **and** nothing is restricted or denied |
-| `$policy->isSandboxed()` | no rule that reaches PHP is on                          |
-| `$policy->allowsPhp()`   | a rule that reaches PHP is on                           |
+| `$policy->isSandboxed()`    | no rule that reaches PHP is on                           |
+| `$policy->allowsPhp()`      | a rule that reaches PHP is on                            |
 
 `allowsPhp()` is on when the `phpFunctions` rule is on, or when a rule that makes
 another PHP construct reachable is on. A **filter** allowlist alone does not
@@ -399,13 +399,13 @@ Errors name the required change and report the template location through
 `getFile()` / `getLine()` and `templateName` / `templateLine`. See
 [Error Handling](04-advanced-topics.md#error-handling).
 
-| Situation                         | Message                                                                                                                                                                                                                               |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| unregistered **function**         | `Call to unregistered function 'x()' in context '…'. Grant the 'phpFunctions' rule to allow PHP function calls, then add the name with allowFunctions().`                                                                              |
+| Situation                         | Message                                                                                                                                                                                                                             |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| unregistered **function**         | `Call to unregistered function 'x()' in context '…'. Grant the 'phpFunctions' rule to allow PHP function calls, then add the name with allowFunctions().`                                                                           |
 | unregistered **filter step**      | `Filter 'x' is not registered, and this policy does not allow PHP function calls, so there is nothing for it to resolve to. Register it with addFilter(), or grant the 'phpFunctions' rule and add the name with allowFunctions().` |
-| a **denied or unlisted** function | `Function 'x' is not allowed by this policy: it is not in the function allowlist, or it is denied. Add it with allowFunctions().`                                                                                                     |
-| an **unlisted filter**            | `Filter 'x' is not registered and is not in the policy's filter allowlist. Add it with allowFilters(), or register it with addFilter().`                                                                                              |
-| a **denied rule**           | `'{% php %}' is not allowed by this policy. Grant the 'rawPhp' rule to allow it.`                                                                                                                                               |
+| a **denied or unlisted** function | `Function 'x' is not allowed by this policy: it is not in the function allowlist, or it is denied. Add it with allowFunctions().`                                                                                                   |
+| an **unlisted filter**            | `Filter 'x' is not registered and is not in the policy's filter allowlist. Add it with allowFilters(), or register it with addFilter().`                                                                                            |
+| a **denied rule**                 | `'{% php %}' is not allowed by this policy. Grant the 'rawPhp' rule to allow it.`                                                                                                                                                   |
 
 ### A policy change invalidates the compiled cache
 
@@ -468,15 +468,15 @@ Other template engines organize these controls differently:
 Earlier versions used a `sandbox` boolean and a denied-functions list. `Policy`
 replaces both.
 
-| Old API                           | Express with                                                                |
-| --------------------------------- | --------------------------------------------------------------------------- |
-| `setSandboxMode(true)`            | `setPolicy(Policy::restricted())` — or just the default                     |
-| `setSandboxMode(false)`           | `setPolicy(Policy::unrestricted())`                                         |
-| `['sandbox' => true/false]`       | `['policy' => Policy::restricted()/unrestricted()]`                         |
+| Old API                           | Express with                                                                        |
+| --------------------------------- | ----------------------------------------------------------------------------------- |
+| `setSandboxMode(true)`            | `setPolicy(Policy::restricted())` — or just the default                             |
+| `setSandboxMode(false)`           | `setPolicy(Policy::unrestricted())`                                                 |
+| `['sandbox' => true/false]`       | `['policy' => Policy::restricted()/unrestricted()]`                                 |
 | `isSandboxed()`                   | kept on the engine; `getPolicy()->isSandboxed()` / `isUnrestricted()` for the parts |
-| `setDeniedFunctions(['exec', …])` | `setPolicy(Policy::unrestricted()->denyFunctions('exec', …))`               |
-| `getDeniedFunctions()`            | `getPolicy()->deniedFunctions()`                                            |
-| `['deniedFunctions' => [...]]`    | `['policy' => ['deniedFunctions' => [...]]]`                                |
+| `setDeniedFunctions(['exec', …])` | `setPolicy(Policy::unrestricted()->denyFunctions('exec', …))`                       |
+| `getDeniedFunctions()`            | `getPolicy()->deniedFunctions()`                                                    |
+| `['deniedFunctions' => [...]]`    | `['policy' => ['deniedFunctions' => [...]]]`                                        |
 
 Removing `setSandboxMode()` is the only breaking change. Replace each call with
 `setPolicy()`; no alias is provided.
