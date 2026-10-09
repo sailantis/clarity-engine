@@ -18,9 +18,9 @@ trait ExpressionSupportTrait
      * Normalize bare | to |> so that both act as the filter pipe operator.
      *
      * Rules (applied only at the top nesting level, outside quoted strings):
-     *   ||  â†’ passed through unchanged  (PHP logical OR)
-     *   |>  â†’ passed through unchanged  (already the canonical pipe)
-     *   |   â†’ rewritten to |>           (Twig/Svelte-compatible shorthand)
+     *   ||  → passed through unchanged  (PHP logical OR)
+     *   |>  → passed through unchanged  (already the canonical pipe)
+     *   |   → rewritten to |>           (Twig/Svelte-compatible shorthand)
      *
      * This runs before splitPipeline() so that the rest of the pipeline logic
      * only ever sees |> as the delimiter.
@@ -83,22 +83,22 @@ trait ExpressionSupportTrait
                 continue;
             }
 
-            // Pipe handling â€” only at top level
+            // Pipe handling — only at top level
             if ($depth === 0 && $ch === '|') {
                 $next = $expr[$i + 1] ?? '';
                 if ($next === '|') {
-                    // || â†’ logical OR, pass through
+                    // || → logical OR, pass through
                     $out .= '||';
                     $i += 2;
                     continue;
                 }
                 if ($next === '>') {
-                    // |> â†’ already canonical, pass through
+                    // |> → already canonical, pass through
                     $out .= '|>';
                     $i += 2;
                     continue;
                 }
-                // bare | â†’ normalize to |>
+                // bare | → normalize to |>
                 $out .= '|>';
                 $i++;
                 continue;
@@ -116,7 +116,7 @@ trait ExpressionSupportTrait
      *
      * Returns [expressionString, [filterSegment, ...]].
      * The expression string may still contain quoted strings, so we cannot
-     * simply explode â€” we split only on |> that are not inside quotes.
+     * simply explode — we split only on |> that are not inside quotes.
      *
      * @return array{0: string, 1: string[]}
      */
@@ -341,11 +341,8 @@ trait ExpressionSupportTrait
     }
 
     /**
-     * Whether the whole string is one PHP variable name.
-     *
-     * Callers that VALIDATE a name (rather than scan for one) must use this so
-     * their accepted set can never drift from what the scanner above will
-     * tokenize back out.
+     * Whether the whole string is one PHP variable name. Validate names with this,
+     * which matches {@see \Clarity\Engine\Tokenizer::IDENT_RE}.
      */
     public static function isIdentifier(string $name): bool
     {
@@ -370,10 +367,9 @@ trait ExpressionSupportTrait
     }
 
     /**
-     * Whether a chain operator is GLUED to the value on its left. Meaningful
-     * only for `?`, the one chain operator that shares its character with a
-     * spaced operator (`a ? b : c`): a spaced `?` is a ternary, so it must not
-     * open an optional access.
+     * Whether a chain operator is glued to the value on its left, which only
+     * matters for `?`. While a ternary is open, `?` followed by whitespace is the
+     * ternary operator and must not open an optional access.
      */
     private function isGlued(string $subject, int $nextPos, bool $ternaryOpen): bool
     {
@@ -384,14 +380,13 @@ trait ExpressionSupportTrait
      * Whether the `:` at $pos starts an array-key continuation rather than the
      * separator of a ternary.
      *
-     * The colon must be followed by a key. Whitespace is allowed on either side,
-     * with ONE exception: while a ternary is pending, a colon only reads as a
-     * key when it is glued on both sides. Only the glued both-sides form is
-     * unambiguous â€” every other spacing belongs to a ternary:
+     * Outside a ternary, a colon followed by an identifier is always a key. While
+     * a ternary is open, the colon is a key only when it has no whitespace on
+     * either side. Other spacing belongs to the ternary:
      *
-     *   config:version    key        a:b:c        key chain
-     *   config : version  key        config: version   key
-     *   cond ? x : y      ternary    cond ? x: y  ternary
+     *   config:version    key        a:b:c             key chain
+     *   config : version  key        config: version  key
+     *   cond ? x : y      ternary    cond ? x: y      ternary
      *   cond ? a:b : c    key (then) + separator
      */
     private function isChainColon(string $subject, int $pos, bool $ternaryOpen = false): bool

@@ -4,20 +4,20 @@
 
 TemplateLoader that tries multiple loaders in sequence until one returns a result.
 
-Useful for layering multiple sources of templates, e.g. an ArrayLoader for dynamic templates
-on top of a FilesystemLoader for static templates.
+Suited to layering several template sources, e.g. an ArrayLoader for dynamic templates
+on top of a FileLoader for static templates.
 
 ```php
 $loader = new CompositeLoader(
     new ArrayLoader(['dynamic' => '<p>{{ message }}</p>']),
-    new FilesystemLoader('/path/to/static/templates'),
+    new FileLoader('/path/to/static/templates'),
 );
 $engine->setLoader($loader);
 
 // Resolves to the ArrayLoader template
 echo $engine->render('dynamic', ['message' => 'Hello!']);
 
-// Resolves to /path/to/static/templates/home.html
+// Resolves to /path/to/static/templates/home.clarity.html
 echo $engine->render('home');
 ```
 
@@ -44,9 +44,11 @@ echo $engine->render('home');
 
 `public function load(string $name): Clarity\Template\TemplateSource|null`
 
-Load a template by its logical name and return source with revision metadata.
+Load a template by its logical name and return its source with revision metadata.
 
-The revision ({@see \TemplateSource::$revision}) must be available immediately with minimal I/O (e.g. a filemtime() call for file-based loaders); the actual template source could be fetched lazily via [`TemplateSource::getCode()`](Clarity_Template_TemplateSource.md#getcode) only when the engine determines compilation is needed.
+The revision ({@see \TemplateSource::$revision}) must be cheap to obtain, for example
+a filemtime() call for file-based loaders. The source is fetched lazily through
+[`TemplateSource::getCode()`](Clarity_Template_TemplateSource.md#getcode), and only when the engine needs to compile.
 
 **Parameters**
 
@@ -57,10 +59,11 @@ The revision ({@see \TemplateSource::$revision}) must be available immediately w
 **Return value**
 
 - Type: [TemplateSource](Clarity_Template_TemplateSource.md)|`null`
+- Description: The template source, or null if this loader does not provide the template.
 
 **Throws**
 
-- RuntimeException  If the template cannot be found or loaded.
+- RuntimeException  If the name is invalid for this loader or the lookup fails, e.g. for an unknown domain.
 
 
 ---
@@ -69,14 +72,15 @@ The revision ({@see \TemplateSource::$revision}) must be available immediately w
 
 `public function getSubLoaders(): array`
 
-Return the list of loaders wrapped by this loader, if any.
+Return the loaders wrapped by this loader.
 
-Used by the engine to traverse loader hierarchies (e.g. DomainRouterLoader → FileLoader) and apply configuration changes like setExtension() to all relevant loaders.
+The engine uses this to traverse loader hierarchies, for example to apply setExtension()
+to every FileLoader beneath a DomainRouterLoader.
 
 **Return value**
 
 - Type: `array`
-- Description: List of loaders wrapped by this loader, or an empty array if this loader is not a wrapper.
+- Description: The wrapped loaders, or an empty array for a leaf loader.
 
 
 

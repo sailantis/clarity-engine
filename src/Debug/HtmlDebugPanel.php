@@ -5,17 +5,19 @@ declare(strict_types=1);
 namespace Clarity\Debug;
 
 /**
- * Collects DebugEvents and renders a self-contained floating HTML panel
- * appended to the page bottom-right corner.
+ * Collects DebugEvents and renders a floating HTML panel, fixed to the
+ * bottom-right corner of the page.
  *
- * Register it via enableDebug(new DumpOptions(showPanel: true)) or subscribe
- * it manually to a DebugEventBus and call getHtml() after rendering.
+ * The engine adds the panel when debug mode is enabled with
+ * setDebugMode(new DumpOptions(showPanel: true)). Alternatively, subscribe it
+ * to a DebugEventBus yourself and call getHtml() after rendering.
  */
 final class HtmlDebugPanel implements DebugListener
 {
     /** @var list<DebugEvent> */
     private array $events = [];
 
+    /** Zero point for event times: REQUEST_TIME_FLOAT if set, otherwise the time the panel was created. */
     private float $startTime;
 
     public function __construct()

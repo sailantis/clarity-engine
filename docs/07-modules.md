@@ -230,7 +230,7 @@ $engine->addModule(new TranslationModule([
 | `fallback_locale`   | string                       | `'en_US'`       | Used when a key is not found in the active locale                                                                                                                                                        |
 | `translations_path` | string                       | `null`          | Directory containing translation files                                                                                                                                                                   |
 | `default_domain`    | string                       | `'messages'`    | Domain used when none is specified in the template                                                                                                                                                       |
-| `cache_path`        | string                       | system temp dir | Where compiled YAML/JSON caches are stored                                                                                                                                                               |
+| `cache_path`        | string                       | `sys_get_temp_dir()/clarity_translations/<md5 of translations_path>` | Where compiled YAML/JSON caches are stored                                                                                                                                                               |
 | `loader`            | `TranslationLoaderInterface` | `null`          | Loader used to resolve keys. Defaults to a `FileTranslationLoader` over `translations_path` and `cache_path`, which are otherwise not used for loading. See [Translation Loaders](#translation-loaders). |
 
 ### File Naming Convention
@@ -438,16 +438,17 @@ loader; a miss queries it and stores the result.
 use Clarity\Localization\RedisCachingLoader;
 
 $inner  = new FileTranslationLoader(__DIR__ . '/locales');
-$loader = new RedisCachingLoader($inner, $redis, /* ttl */ 3600);
+$loader = new RedisCachingLoader($inner, $redis, /* ttl */ 3600, /* keyPrefix */ 'myapp:translations');
 ```
 
-Keys use `translations:{domain}:{locale}` and are stored with `SETEX` for the
-configured TTL. Values are PHP-serialized. Invalidate entries explicitly:
+Keys use `{keyPrefix}:{domain}:{locale}`, with `translations` as the default prefix.
+Give each application its own prefix when several share one Redis instance. Entries are
+stored with `SETEX` for the configured TTL. Values are PHP-serialized. Invalidate entries explicitly:
 
 ```php
 $loader->invalidate('messages', 'de_DE');  // one key
 $loader->invalidate('messages');           // every locale of one domain
-$loader->invalidate();                     // everything under translations:*
+$loader->invalidate();                     // everything under the prefix
 ```
 
 Requirements and invalidation:

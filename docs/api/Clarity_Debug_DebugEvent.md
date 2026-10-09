@@ -2,9 +2,9 @@
 
 **Full name:** [Clarity\Debug\DebugEvent](../../src/Debug/DebugEvent.php)
 
-DebugEvent represents a single debug event emitted on the DebugEventBus.
+An immutable debug event: a type, a payload and the time it was emitted.
 
-It contains a type, an optional payload, and a timestamp of when it was emitted.
+The timestamp is microtime(true): seconds since the Unix epoch, with a fractional part.
 
 ## Public Properties
 
@@ -14,7 +14,7 @@ It contains a type, an optional payload, and a timestamp of when it was emitted.
 
 ## Public methods
 
-### __construct() · <small>[🗎](../../src/Debug/DebugEvent.php#L13)</small>
+### __construct() · <small>[🗎](../../src/Debug/DebugEvent.php#L14)</small>
 
 `public function __construct(string $type, array $payload, float $timestamp): mixed`
 

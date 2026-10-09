@@ -9,7 +9,7 @@ filename is derived deterministically from `md5($templateName)` so lookups
 never require reading the directory.
 
 Cache filename : md5($templateName).php
-Class name     : __Clarity_<md5($templateName)>_<uniqid>   (versioned per compile)
+Class name     : __Clarity_<md5($templateName)>_<12-char uniqid suffix>   (versioned per compile)
 
 Versioned class names allow multiple compiled versions of the same template
 to coexist in memory across recompilations — eliminating redeclaration
@@ -22,7 +22,7 @@ In-process class name registry
 --------------------------------
 `Cache::$classNames` maps templateName → loaded class name for the current
 process.  This lets warm-path calls to `isFresh()` and `load()` operate
-purely from memory (OPcache + static array) with zero file I/O.
+from memory (OPcache + static array). `isFresh()` still makes one `is_file()` check first.
 
 Compiled class static properties
 ---------------------------------
@@ -98,7 +98,7 @@ Freshness rules
    as recorded at compile time, as determined by calling $revisionFor.
 
 On warm paths the class is already in memory; the static properties are
-read directly — zero file I/O from this method.
+read directly. The only file access is the `is_file()` check before `load()`.
 
 **Parameters**
 

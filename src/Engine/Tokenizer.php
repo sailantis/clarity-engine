@@ -27,9 +27,10 @@ use Clarity\ClarityException;
  *
  * Segment types (constants on this class)
  * ----------------------------------------
- * TEXT        â€“ raw HTML/text passed through verbatim
- * OUTPUT_TAG  â€“ {{ expression }} â€“ rendered (auto-escaped by default)
- * BLOCK_TAG   â€“ {% directive %}  â€“ control structures / directives
+ * TEXT     – raw HTML/text passed through verbatim
+ * OUTPUT   – {{ expression }}, rendered (escaped by default)
+ * BLOCK    – {% directive %}, control structures and directives
+ * COMMENT  – {# comment #}, dropped from the output
  *
  * Expression processing
  * ---------------------
@@ -39,22 +40,22 @@ use Clarity\ClarityException;
  * do not perform a full grammar check here.
  *
  * Conversions performed
- * â€¢ var-chains (foo.bar[x].baz) â†’ $__c_va['foo']['bar'][$__c_va['x']]['baz']
- * â€¢ logical operators:  and â†’ &&,  or â†’ ||,  not â†’ !
- * â€¢ bitwise operators:  bor â†’ |,  band â†’ &,  bxor â†’ ^,  bnot â†’ ~,  blsh â†’ <<,  brsh â†’ >>
- * â€¢ concat operator:    ~   â†’ .
- * â€¢ all other tokens pass through unchanged (PHP validates them)
+ * • var-chains (foo.bar[x].baz) → $__c_va['foo']['bar'][$__c_va['x']]['baz']
+ * • logical operators:  and → &&,  or → ||,  not → !
+ * • bitwise operators:  bor → |,  band → &,  bxor → ^,  bnot → ~,  blsh → <<,  brsh → >>
+ * • concat operator:    ~   → .
+ * • all other tokens pass through unchanged (PHP validates them)
  *
  * Pipeline (| or |>)
- * â€¢ Both | and |> act as the filter pipe operator (| is normalized to |> before processing)
- * â€¢ Each step after the pipe is a filter: name  or  name(arg1, arg2)
- * â€¢ Arguments are themselves processed as expressions
- * â€¢ Result: nested $__c_fn['name']($__c_fn['name']($expr, arg), â€¦)
+ * • Both | and |> act as the filter pipe operator (| is normalized to |> before processing)
+ * • Each step after the pipe is a filter: name  or  name(arg1, arg2)
+ * • Arguments are themselves processed as expressions
+ * • Result: nested $__c_fn['name']($__c_fn['name']($expr, arg), …)
  *
  * Named arguments
- * â€¢ Clarity uses `=` syntax: filter(precision=2) or fn(from="system")
- * â€¢ These are emitted directly as PHP named arguments: `precision: 2`, `from: 'system'`
- * â€¢ PHP itself validates parameter names and arity at runtime â€” no reflection needed
+ * • Clarity uses `:` syntax: filter(precision: 2) or fn(from: "system")
+ * • These are emitted directly as PHP named arguments: `precision: 2`, `from: 'system'`
+ * • PHP validates parameter names and arity at runtime
  */
 class Tokenizer
 {
@@ -86,13 +87,13 @@ class Tokenizer
     private ?Registry $registry = null;
 
     /**
-     * A BARE root dereference: `$__c_va['name']`. These are special because
-     * isset() on them reports an ABSENT ROOT as false with no warning, which is
-     * exactly the tolerance `?` promises.
+     * A bare root dereference, `$__c_va['name']`. `isset()` on it reports an
+     * absent root as false without a warning, which is the tolerance the `?`
+     * operator grants.
      *
-     * Deliberately excludes anything with `->` or a second key: isset() would
-     * suppress a missing PROPERTY or an intermediate missing KEY too, turning a
-     * mistyped strict segment into a silent null.
+     * Excludes anything with `->` or a second key: `isset()` would also suppress
+     * a missing property or an intermediate missing key, turning a strict
+     * segment into a silent null.
      */
     private const BARE_ROOT_RE = '/^\$__c_va\[\'[A-Za-z_][A-Za-z0-9_]*\'\]$/';
 
@@ -113,7 +114,7 @@ class Tokenizer
     private array $varChainCache = [];
 
     /**
-     * Compile-time local variable context: templateVarName â†’ PHP variable string.
+     * Compile-time local variable context: templateVarName → PHP variable string.
      * Set by the Compiler when entering/leaving loop scopes so that expressions
      * inside loops resolve loop variables to direct PHP local variables instead
      * of $__c_va['name'] lookups.
@@ -126,12 +127,11 @@ class Tokenizer
      * Compile-time names bound to a PHP local that is NOT an entry of
      * `$__c_va`: a `{% for %}` variable, or a macro parameter.
      *
-     * Deliberately NOT the keys of {@see $localVars}.  A `{% set %}` root is in
-     * that map too, but it writes THROUGH `$__c_va` (`$__c_va['a'] = 1`, or `$a`
-     * in open mode, which is the render scope seeded by `extract()`), so its
-     * value IS in `$__c_va` and already appears in a scope snapshot.  These names
-     * are different: nothing puts a loop variable or a macro parameter into
-     * `$__c_va`, so `vars()` has to read them off the local to see them at all.
+     * These are not the keys of {@see $localVars}. A `{% set %}` root is in that
+     * map too, but it writes through `$__c_va` (or the local `$a` in open mode,
+     * since the render scope is seeded by `extract()`). Its value is therefore
+     * already in a scope snapshot. Loop variables and macro parameters are not
+     * stored in `$__c_va`, so `vars()` must read them from their locals.
      *
      * @var array<string, true>
      */
@@ -140,23 +140,21 @@ class Tokenizer
     /**
      * PHP's variable-name grammar, byte-wise:
      *
-     *     ^[a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*$
+     *     ^[a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*\z
      *
-     * This is the grammar from the PHP manual ("the bytes from 128 through
-     * 255"), which is exactly what the PHP lexer accepts, so a name this
-     * class accepts always compiles to a real PHP variable.  The high range is
-     * what makes `$Ã¶Ã¤` / `$tÃ¤yte` work in UTF-8: every byte of a multi-byte
-     * sequence falls inside it.
+     * This matches the byte set the PHP lexer accepts for variable names, so an
+     * accepted name always compiles to a real PHP variable. The `\z` anchor
+     * matters: `$` would also match before a trailing newline. The high range
+     * allows `$öä` and `$täyte` in UTF-8, because every byte of a multi-byte
+     * sequence falls in that range.
      *
-     * Deliberate divergence from Twig: Twig's lexer uses `\x7f-\xff`, i.e. it
-     * also accepts DEL (0x7F), which PHP's own documented range excludes.  A
-     * DEL in a template identifier is never intentional, so this follows PHP.
+     * The range excludes DEL (0x7F), which PHP's documented range also excludes.
      *
-     * Byte comparison, not `/u`: PHP compares variable names as BYTES and never
-     * validates their encoding, so an invalid-UTF-8 name is a legal variable
-     * that a `\p{L}`-style class would wrongly reject.
+     * Byte comparison, not `/u`: PHP compares variable names as bytes and does not
+     * validate their encoding. A `\p{L}`-style class would wrongly reject a legal
+     * name that is not valid UTF-8.
      */
-    private const IDENT_RE = '/^[a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*$/';
+    private const IDENT_RE = '/^[a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*\z/';
 
     /**
      * Filters whose first argument must be a lambda expression or a filter
@@ -202,7 +200,7 @@ class Tokenizer
      * emits `extract($__c_va, EXTR_SKIP)` at the top of render()), so a chain root
      * is emitted as a plain local variable instead of a `$__c_va` lookup.
      *
-     * This is what lets one name work in both worlds â€” `{{ title }}` and
+     * This is what lets one name work in both worlds — `{{ title }}` and
      * `{% php echo $title; %}` are then the same variable, not two.
      *
      * No guard expression is emitted with the read: an unknown name raises PHP's
@@ -213,18 +211,17 @@ class Tokenizer
     private bool $localRoots = false;
 
     /**
-     * Stack of lambda PARAMETER frames, innermost LAST.
+     * Stack of lambda parameter frames, innermost last.
      *
      * A lambda is emitted as an arrow function (`fn(…) => …`), so the render
-     * scope's locals are not in scope inside it: a root must keep reading
-     * `$__c_va`. A lambda PARAMETER, however, IS a real local — and because
-     * lambdas NEST (`map(rows, r => map(r.vals, v => v ~ r.name))`), a parameter
-     * of an enclosing lambda stays visible to the body being compiled.
+     * scope's locals are not in scope inside it, and a root keeps reading
+     * `$__c_va`. A lambda parameter is a real PHP local. Lambdas can nest
+     * (`map(rows, r => map(r.vals, v => v ~ r.name))`), so a parameter of an
+     * enclosing lambda remains visible to the body being compiled.
      *
-     * So a root name matching a parameter of ANY enclosing frame is emitted as
-     * the bare `$name`: the arrow function that declares it is the enclosing
-     * one, and PHP binds it lexically. An empty stack means "not inside a
-     * lambda", which is also what the former `inLambda` boolean expressed.
+     * A root name that matches a parameter of any enclosing frame is emitted as
+     * the bare `$name`. PHP binds it lexically through the arrow function that
+     * declares it. An empty stack means the expression is not inside a lambda.
      *
      * @var list<array<string, true>>
      */
@@ -303,9 +300,8 @@ class Tokenizer
     ];
 
     /**
-     * Built from the engine's policy before any compilation.  A Tokenizer that
-     * was handed no policy compiles as {@see Policy::restricted()}, so the default
-     * is safe even for a hand-built tokenizer.
+     * Starts with {@see Policy::restricted()}. The engine applies its own policy
+     * through {@see setPolicy()}.
      */
     public function __construct()
     {
@@ -354,11 +350,11 @@ class Tokenizer
     }
 
     /**
-     * Set the policy every rule question is answered from.
+     * Set the policy that compile-time rule checks consult.
      *
-     * Also mirrors the deny-list into the flat map the call sites read, so the
-     * policy stays the single source of truth while the hot paths keep a plain
-     * array lookup.
+     * The policy's deny-list is copied into a flat map at call time, so the
+     * function-call hot path can use a plain array lookup. Later changes to
+     * the policy are not seen until setPolicy() is called again.
      */
     public function setPolicy(Policy $policy): void
     {
@@ -377,9 +373,8 @@ class Tokenizer
     }
 
     /**
-     * Whether a rule is granted.  The one question every compile-time
-     * check in the tokenizer asks, so a check can name what it guards instead of
-     * inferring it from a single flag.
+     * Whether a policy rule is granted. Compile-time checks call this with the
+     * rule they guard, rather than inferring it from a single flag.
      */
     private function allows(string $rule): bool
     {
@@ -399,23 +394,11 @@ class Tokenizer
     }
 
     /**
-     * Replace the open-mode function guardrails.  Keys are lowercase function
-     * names; empty (the default) allows every PHP function.
-     *
-     * @param array<string, true> $names
-     */
-    public function setDeniedFunctions(array $names): void
-    {
-        $this->deniedFunctions = $names;
-    }
-
-    /**
      * Whether a PHP function may be called under the effective policy.
      *
-     * The policy is asked, so the allowlist and the deny-list are decided in one
-     * place rather than at each call site.  PHP function names are
-     * case-insensitive and may be written with a leading namespace separator, so
-     * both are normalised before the lookup.
+     * Both the policy's function check and the deny-list must allow the call.
+     * PHP function names are case-insensitive and may start with a namespace
+     * separator, so both are normalised before the deny-list lookup.
      */
     private function isFunctionCallAllowed(string $name): bool
     {
@@ -435,7 +418,7 @@ class Tokenizer
      * variable resolution inside the loop uses direct PHP local variables
      * (e.g. `$item`) rather than $__c_va['item'] array lookups.
      *
-     * @param array<string, string> $localVars  templateVarName â†’ PHP variable string
+     * @param array<string, string> $localVars  templateVarName → PHP variable string
      */
     public function setLocalVars(array $localVars): void
     {

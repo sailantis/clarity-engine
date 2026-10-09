@@ -5,9 +5,9 @@ namespace Clarity\Template;
  * Where a template construct sits: the logical name it was compiled under, the
  * line within it, and the physical file that name resolved to.
  *
- * A custom directive handler receives one of these as its second argument, so it
- * can raise a {@see \Clarity\ClarityException} that is COMPLETE — naming the
- * template AND the file an editor can open — instead of only the logical name:
+ * A custom directive handler receives one of these as its second argument. It can
+ * pass this to a {@see \Clarity\ClarityException} so the error names both the
+ * template and the file:
  *
  * ```php
  * $engine->addDirective('cache', function (string $rest, TemplateLocation $at, callable $processExpr): string {
@@ -18,20 +18,18 @@ namespace Clarity\Template;
  * });
  * ```
  *
- * The handler cannot derive this itself: the active loader is the only authority
- * on the physical path, and the compiler is the only layer holding it. Carrying
- * the path here is what keeps a handler's exception from being re-wrapped with
- * information the handler was never given.
+ * The handler cannot derive the path itself, because only the active loader knows
+ * the physical file.
  *
  * `$path` is `''` when the active loader has no file to name ({@see ArrayLoader},
- * {@see StringLoader}, a database loader). The logical name is then all there is,
- * exactly as in {@see \Clarity\ClarityException}.
+ * {@see StringLoader}, a database loader). In that case the logical name is all
+ * that is available, as with {@see \Clarity\ClarityException} alone.
  */
 final class TemplateLocation
 {
     /**
-     * @param string $name Logical template name being compiled (`host`, `part`, or
-     *                     `<owner>#macro#<macro>` for a macro body).
+     * @param string $name Logical name being compiled: the root template, an included
+     *                     template, or `<owner>#macro#<macro>` for a macro body.
      * @param int    $line 1-based line within that template.
      * @param string $path Physical file the name resolved to, or `''` when the
      *                     active loader named none.

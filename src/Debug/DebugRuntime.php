@@ -7,23 +7,14 @@ namespace Clarity\Debug;
 use Clarity\Engine\Registry;
 
 /**
- * The one place that knows how debug output is produced.
+ * Holds the debug state of an engine: the dump renderers, the DumpOptions, the
+ * event bus and the optional HTML panel.
  *
- * Clarity used to have two debug entry points that disagreed: a low-level
- * `setDebugMode(true)` that merely let `dump()` resolve, and `enableDebug()`
- * that also installed the renderers, the event bus and the HTML panel.  The
- * first was a degraded form of the second — and, because the fallback formatter
- * used `print_r`, a documented public method that printed secrets the masking
- * renderer would have hidden.
- *
- * There is only one debug state now, and this object is it.  The engine builds
- * a DebugRuntime when debug is switched on and hands it to the
- * {@see Registry}, which is what every `dump()`/`dd()` call and every
- * `{{ x |> dump }}` probe actually reaches.
- *
- * The registry deliberately owns no debug behaviour of its own: the renderers
- * and the {@see DumpOptions} live here, so there is no second code path that
- * could render a value without masking it.
+ * The engine creates a DebugRuntime when debug is enabled and registers its
+ * handlers on the {@see Registry}. Every `dump()` and `dd()` call and every
+ * `{{ x |> dump }}` probe is routed through this object, so all debug output
+ * is produced by the renderers in this namespace. The registry holds no debug
+ * behaviour of its own.
  */
 final class DebugRuntime
 {
@@ -32,10 +23,10 @@ final class DebugRuntime
     private JsDumpRenderer $js;
     private CssDumpRenderer $css;
 
-    /** The event bus, present whenever debug is on. */
+    /** The event bus. */
     public readonly DebugEventBus $bus;
 
-    /** The panel, subscribed to the bus only when DumpOptions::showPanel() is on. */
+    /** The HTML panel, or null unless the showPanel option is enabled. When set, it is subscribed to $bus. */
     public readonly ?HtmlDebugPanel $panel;
 
     public function __construct(public readonly DumpOptions $options)
@@ -53,10 +44,11 @@ final class DebugRuntime
     }
 
     /**
-     * Install this runtime's formatters on a registry.
+     * Registers this runtime's dump and dd handlers on a registry.
      *
-     * `dump` goes through exactly one formatter, which renders according to the
-     * compile-time context and masks the keys listed in {@see DumpOptions::maskKeys()}.
+     * `dump()` goes through one formatter. It renders for the escape context
+     * ('html', 'js' or 'css') that the compiler passes as the first argument,
+     * and it masks the keys listed in {@see DumpOptions::maskKeys()}.
      */
     public function register(Registry $registry): void
     {
@@ -69,7 +61,9 @@ final class DebugRuntime
     }
 
     /**
-     * The body of `dump(…)` and of the `{{ x |> dump }}` probe: rendered output.
+     * Renders a value for the given escape context. Used by `dump()` and by the
+     * `{{ x |> dump }}` probe. A single argument is rendered as-is; several
+     * arguments are rendered as one list.
      *
      * @param list<mixed> $args
      */
@@ -85,14 +79,14 @@ final class DebugRuntime
     }
 
     /**
-     * The pass-through probe behind the FILTER form `{{ x |> dump }}`: emit the
-     * dump at the pipe position, then RETURN the piped value so a following
-     * step still sees the original value.
+     * Pass-through probe behind the filter form `{{ x |> dump }}`. Emits the
+     * dump at the pipe position and returns the piped value unchanged, so later
+     * filters still receive the original value.
      *
-     * The dump is emitted (not returned) because the filter RESULT is the
-     * value: `{{ x |> dump |> length }}` must measure x. Emitting keeps the
-     * debug output visible at the pipe position, including as comments in JS
-     * and CSS contexts, exactly where `dump(x)` puts it.
+     * The dump is echoed rather than returned, because the return value is what
+     * continues down the pipe: `{{ x |> dump |> length }}` must measure x. In JS
+     * and CSS contexts the dump appears as a comment at the same position where
+     * `dump(x)` places it.
      */
     public function probe(string $ctx, mixed $value, mixed ...$args): mixed
     {
@@ -102,19 +96,37 @@ final class DebugRuntime
     }
 
     /**
-     * The body of `dd(…)`: render, then end the request.
+     * Behind `dd()`: renders the value, then ends the request with exit code 1.
      *
-     * `dd()` is never pruned, so it is reachable even in production; the
-     * registry therefore only binds this handler while debug is on.
+     * On the CLI, output goes to STDERR, the same stream `dump()` uses, so STDOUT
+     * stays free for program output.
+     *
+     * With {@see DumpOptions::haltWithException()} set, the value is rendered for
+     * the context and thrown as a {@see DumpHaltException} instead, on every SAPI.
+     * The process keeps running, so the host decides what to do with the output.
+     *
+     * The compiler does not prune `dd()`, so the call remains in production
+     * templates. This handler is bound only while debug is on; otherwise the
+     * registry raises an error.
      *
      * @param list<mixed> $args
      */
     public function dumpAndDie(string $ctx, array $args): never
     {
+        if ($this->options->getHaltWithException()) {
+            throw new DumpHaltException(
+                match ($ctx) {
+                    'js', 'css' => $ctx,
+                    default     => 'html',
+                },
+                $this->render($ctx, $args)
+            );
+        }
+
         $value = \count($args) === 1 ? $args[0] : $args;
 
         if (\PHP_SAPI === 'cli' || \PHP_SAPI === 'phpdbg') {
-            \fwrite(\STDOUT, $this->cli->renderForced($value, $this->options));
+            \fwrite(\STDERR, $this->cli->renderForced($value, $this->options));
         } elseif ($ctx === 'js') {
             echo $this->js->render($value, $this->options);
         } elseif ($ctx === 'css') {

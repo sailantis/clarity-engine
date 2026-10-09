@@ -28,6 +28,8 @@ Each compiled template becomes exactly one PHP class:
   class __Clarity_<slug>_<hash> {
       public static array $dependencies = ['name' => revision, ...];
       public static string $sourceMap   = 'lineDelta,fileIdx,tplDelta;...';
+      // ... plus $sourceFiles, $sourcePaths, $debugCompiled, $policyDigest,
+      // $compilerVersion and $renderBodyLine
       public function __construct(private array $functions, private array $services) }
       public function render(array $__c_va): string { ... }
   }
@@ -41,33 +43,30 @@ heard of it.  See Compiler::INTERNAL_PREFIX.
 $dependencies and $sourceMap are read via reflection for cache invalidation
 and error mapping — no file I/O needed on warm paths (OPcache serves them).
 
-The source map is stored in the compact packed form of [`SourceMap`](Clarity_Engine_SourceMap.md):
-as nested var_export() arrays it cost ~2.3x the render body it annotates,
-while the packed string is ~9% of that.
+The source map is stored in the packed form of [`SourceMap`](Clarity_Engine_SourceMap.md). Nested
+var_export() arrays would cost more than the render body they annotate.
 
-Nothing in the emitted code is a doc comment.  Annotations are written as
-`//` line comments instead, because OPcache keeps doc comments
-(opcache.save_comments) but discards line comments: a docblock is retained
-in shared memory for every cached template, while a line comment costs
-nothing once the file is cached.  The metadata is reflected, not documented,
-so the annotation form is free to choose.
+The emitted metadata properties are annotated with `//` line comments, not
+docblocks. OPcache keeps docblocks when `opcache.save_comments` is on, so
+each cached template would hold them in shared memory, while line comments
+are dropped at compile time. The constructor and render() are the exception
+and keep their docblocks. The metadata is read by reflection, so its
+annotation form does not affect behaviour.
 
 Buffer safety
 -------------
-render() opens one output buffer and must hand back the buffer LEVEL it
-received.  A bare `ob_end_clean()` in the catch block unwinds only the
-innermost buffer, so a template that opened one of its own (e.g. a custom
-directive doing `ob_start()`) and then threw would strand that buffer -- and
-the partial output inside it -- above the caller's.  The catch therefore
-drains in a loop down to the level captured immediately AFTER `ob_start()`,
-which releases clarity's buffer and everything the template stacked on top of
-it, while never reaching the caller's own buffers.
+render() opens one output buffer and must restore the buffer level it found.
+A bare `ob_end_clean()` in the catch block removes only the innermost buffer.
+A template that opened its own buffer (for example, a custom directive
+calling `ob_start()`) and then threw would leave that buffer, and its partial
+output, above the caller's. The catch therefore drains buffers in a loop down
+to the level recorded just after `ob_start()`. This releases clarity's buffer
+and any buffers the template stacked on it, and never reaches the caller's.
 
-There is deliberately NO finally block.  On the happy path the terminal
-`return ob_get_clean()` has already closed clarity's buffer, so a finally
-clause would only ever observe its own start level and unwind nothing; the
-only finally that could do work is an unconditional unwind, which would
-discard the caller's buffer when a template illegally closed clarity's.
+There is deliberately no finally block. On the success path `ob_get_clean()`
+has already closed clarity's buffer, so a finally block would have nothing to
+unwind. An unconditional unwind in a finally block would also discard the
+caller's buffer if a template closed clarity's buffer illegally.
 
 ## Public Constants
 
@@ -76,7 +75,7 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ## Public methods
 
-### __construct() · <small>[🗎](../../src/Engine/Compiler.php#L301)</small>
+### __construct() · <small>[🗎](../../src/Engine/Compiler.php#L286)</small>
 
 `public function __construct(): mixed`
 
@@ -87,7 +86,7 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ---
 
-### default() · <small>[🗎](../../src/Engine/Compiler.php#L306)</small>
+### default() · <small>[🗎](../../src/Engine/Compiler.php#L291)</small>
 
 `public static function default(): static`
 
@@ -98,7 +97,7 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ---
 
-### setRegistry() · <small>[🗎](../../src/Engine/Compiler.php#L318)</small>
+### setRegistry() · <small>[🗎](../../src/Engine/Compiler.php#L303)</small>
 
 `public function setRegistry(Clarity\Engine\Registry $registry): static`
 
@@ -115,7 +114,7 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ---
 
-### setDebugMode() · <small>[🗎](../../src/Engine/Compiler.php#L325)</small>
+### setDebugMode() · <small>[🗎](../../src/Engine/Compiler.php#L310)</small>
 
 `public function setDebugMode(bool $debug): static`
 
@@ -132,15 +131,14 @@ discard the caller's buffer when a template illegally closed clarity's.
 
 ---
 
-### setPolicy() · <small>[🗎](../../src/Engine/Compiler.php#L351)</small>
+### setPolicy() · <small>[🗎](../../src/Engine/Compiler.php#L335)</small>
 
 `public function setPolicy(Clarity\Engine\Policy $policy): static`
 
 Set what compiled templates are allowed to reach.
 
-The tokenizer is given the same object rather than a copy of the flag it
-used to receive, so a rule can never be granted in one half of the
-compiler and denied in the other.
+The tokenizer is given the same object rather than a copy of the flag, so a
+rule can never be granted in one half of the compiler and denied in the other.
 
 **Parameters**
 
@@ -186,11 +184,11 @@ Compile a template and return a CompiledTemplate value object.
 Register a local variable in the compile-time context.
 
 This is the extension point a custom directive uses to bind a variable it
-emits itself — so the name is a PHP LOCAL that nothing writes back into the
-scope array, exactly like a loop variable. It is therefore also recorded as
-a dynamic binding, which is what lets a `vars()` snapshot inside the
-directive's scope include it. A directive that binds a name it also stores
-in `$__c_va` will simply see that entry win in the snapshot.
+emits itself. The name is a PHP local that nothing writes back into the
+scope array, like a loop variable. It is also recorded as a dynamic
+binding, so a `vars()` snapshot inside the directive's scope includes it.
+If the same name is also stored in `$__c_va`, the snapshot shows the
+`$__c_va` entry.
 
 **Parameters**
 

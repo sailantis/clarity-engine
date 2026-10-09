@@ -15,18 +15,6 @@ trait ExpressionCoreTrait
     // -------------------------------------------------------------------------
 
     /**
-     * Convert a Clarity expression string to a PHP expression string.
-     *
-     * The pipeline (|>) is processed first; the leftmost segment is the
-     * expression and each subsequent segment is a filter call.
-     *
-     * @param string $expression Raw expression from inside {{ ... }} or the
-     *                           right-hand side of {% set var = ... %}.
-     * @param bool   $autoEscape When true and there is no |> raw at the end,
-     *                           wraps the whole result in htmlspecialchars().
-     * @return string PHP expression (no leading <?= or trailing ?>).
-     */
-    /**
      * Set the output-escaping context for the next processExpression() call.
      * Called by the Compiler as it tracks the current position in the template.
      *
@@ -37,6 +25,20 @@ trait ExpressionCoreTrait
         $this->escapeContext = $context;
     }
 
+    /**
+     * Convert an output expression, `{{ ... }}`, to a PHP expression string.
+     *
+     * The pipeline (`|>`) is processed first. The leftmost segment is the
+     * expression, and each following segment is a filter call. Unless the
+     * pipeline ends in `raw` (the filter form that disables escaping), the result
+     * is escaped for the current context set by {@see setEscapeContext()}:
+     *   - html: `htmlspecialchars()`
+     *   - js:   `json_encode()` with HEX flags, safe for inline script
+     *   - css:  cast to string, no escaping
+     *
+     * @param string $expression Raw expression from inside `{{ ... }}`.
+     * @return string PHP expression (no leading `<?=` or trailing `?>`).
+     */
     public function processExpression(string $expression): string
     {
         $this->autoEscape = true;
@@ -44,7 +46,7 @@ trait ExpressionCoreTrait
 
         $phpExpr = $this->convertVarsAndOps($expr);
 
-        // Wrap in filter calls (innermost first â†’ outermost last)
+        // Wrap in filter calls (innermost first → outermost last)
         foreach ($filters as $filterSegment) {
             $phpExpr = $this->buildFilterCall($filterSegment, $phpExpr);
         }
@@ -52,7 +54,7 @@ trait ExpressionCoreTrait
         if ($this->autoEscape) {
             $phpExpr = match ($this->escapeContext) {
                 'js'    => '\\json_encode(' . $phpExpr . ', 271)', // HEX_TAG|HEX_AMP|HEX_APOS|HEX_QUOT|UNESCAPED_UNICODE
-                'css'   => '(string)(' . $phpExpr . ')',           // raw â€” CSS values are not HTML-escaped
+                'css'   => '(string)(' . $phpExpr . ')',           // raw — CSS values are not HTML-escaped
                 default => "\\htmlspecialchars((string)({$phpExpr}), 11, 'UTF-8')",
             };
         }
@@ -61,7 +63,7 @@ trait ExpressionCoreTrait
     }
 
     /**
-     * Convert a Clarity expression without pipeline â€” used for control
+     * Convert a Clarity expression without pipeline — used for control
      * structure conditions (if, for, set) where auto-escape is meaningless.
      *
      * @param string $expression Raw Clarity expression.
@@ -83,10 +85,10 @@ trait ExpressionCoreTrait
      * Convert a Clarity variable chain to its PHP lvalue equivalent, for the
      * left-hand side of {% set var = ... %}.
      *
-     * Scope-aware by construction: open mode seeds the render scope into locals,
-     * so `{% set a = â€¦ %}` compiles to a plain `$a = â€¦` and both worlds read the
-     * SAME slot.  Sandbox mode targets `$__c_va['a']` exactly as before.  The
-     * choice lives in the chain emitter, so it cannot drift from the read path.
+     * Scope-aware by construction. In open mode the render scope is seeded into
+     * locals, so `{% set a = … %}` compiles to a plain `$a = …`, and reads of `a`
+     * use the same variable. In sandbox mode the target is `$__c_va['a']`. The
+     * choice is made in the chain emitter, so it matches the read path.
      *
      * @param string $var Clarity variable name (e.g. 'user.name', 'items[0]').
      * @return string PHP lvalue (e.g. '$user', or '$__c_va[\'user\'][\'name\']').
@@ -100,8 +102,9 @@ trait ExpressionCoreTrait
      * Convert a Clarity expression (no pipeline) to PHP by:
      * 1. Replacing var-chains with $__c_va[...] accesses
      * 2. Replacing logical/string operators with PHP equivalents
-     * 3. Rejecting function-call syntax: any identifier followed by '(' throws
-     *    a ClarityException at compile time â€” use the |> filter pipeline instead.
+     * 3. Resolving function calls: a registered name, or a PHP function the policy
+     *    allows, compiles. Any other name throws a ClarityException at compile
+     *    time. Use the `|>` filter pipeline for filters.
      *
      * Strategy: tokenize the expression into atoms (quoted strings, numbers,
      * identifiers/var-chains, operators, punctuation) and process each atom.
@@ -147,8 +150,8 @@ trait ExpressionCoreTrait
         // PHP rejects a ternary CHAINED in an else position
         // (`a ? b : c ? d : e`) while accepting the nested then-branch form
         // (`a ? b ? c : d : e`). Catching that here turns a fatal PHP parse
-        // error â€” which happens when the generated class is loaded and cannot be
-        // caught â€” into a normal compile error with a line number.
+        // error — which happens when the generated class is loaded and cannot be
+        // caught — into a normal compile error with a line number.
         $ternarySeen     = false;
         $ternaryPhases   = [];
         $ternaryOpenedAt = [];
@@ -178,10 +181,10 @@ trait ExpressionCoreTrait
             if ($inSingle || $inDouble) {
                 // A string literal is TEXT, never PHP interpolation.  A `$`
                 // inside a double-quoted string would otherwise be interpolated
-                // by PHP (`"$name"`, and the deprecated `"${name}"`) â€” a leak of
-                // PHP semantics into a template literal, and the reason
-                // `{{ "${x}" }}` used to emit a deprecation instead of the
-                // literal text.  Escaping the dollar keeps the literal literal.
+                // by PHP (`"$name"`, and the deprecated `"${name}"`). That would
+                // leak PHP semantics into a template literal, so `{{ "${x}" }}`
+                // would emit a deprecation instead of the literal text. Escaping
+                // the dollar keeps the text literal.
                 if ($inDouble && $ch === '$') {
                     $out .= '\\$';
                     $i++;
@@ -218,7 +221,7 @@ trait ExpressionCoreTrait
                         }
 
                         // `cond ? cond2 ? x : y : z` nests in the THEN branch,
-                        // which PHP accepts and this engine already supported.
+                        // which PHP accepts.
                         $ternarySeen = true;
                         $ternaryPhases[] = 'then';
                         $ternaryOpenedAt[] = $i;
@@ -233,8 +236,8 @@ trait ExpressionCoreTrait
             // A ternary colon may be spaced on either side (`x : y`, `x: y`,
             // `x :y`) because an open ternary makes the reading unambiguous. Two
             // spellings are errors rather than ambiguity:
-            //   â€¢ `?:` glued both sides is the optional-key operator.
-            //   â€¢ a colon glued to a following identifier would read as a key
+            //   • `?:` glued both sides is the optional-key operator.
+            //   • a colon glued to a following identifier would read as a key
             //     chain, which is the trap this whole rule exists to avoid.
             if ($ch === ':' && $ternarySeen && !$this->isChainColon($expr, $i, true)) {
                 $phase  = array_pop($ternaryPhases) ?? 'then';
@@ -277,7 +280,7 @@ trait ExpressionCoreTrait
                 // The `else` branch may not itself be an unparenthesised ternary:
                 // PHP rejects `a ? b : c ? d : e` outright. `a ? b ? c : d : e`
                 // is fine (then-branch), and a parenthesised else-branch starts a
-                // fresh scope where a new ternary is legal â€” this call recurses
+                // fresh scope where a new ternary is legal — this call recurses
                 // for it via processCondition(), so the tracked phase there is
                 // independent.
                 //
@@ -314,7 +317,7 @@ trait ExpressionCoreTrait
 
             // A `?->` that reaches here has no `$` sigil, so it is a plain
             // expression. Left alone it would be copied through as raw PHP
-            // nullsafe syntax â€” a leak the sigil rule exists to prevent â€” and a
+            // nullsafe syntax — a leak the sigil rule exists to prevent — and a
             // SPACED `? ->` is a syntax error in PHP rather than a nullsafe read.
             if ($ch === '?' && ($expr[$i + 1] ?? '') === '-') {
                 $afterArrow = $expr[$i + 2] ?? '';
@@ -364,7 +367,7 @@ trait ExpressionCoreTrait
                 $sigilStart = $i + 1;
                 $next       = $expr[$sigilStart] ?? '';
 
-                // `${expr}` â€” and its shorthand `$$name` â€” read the variable
+                // `${expr}` — and its shorthand `$$name` — read the variable
                 // whose NAME is produced by an expression.  The two spellings
                 // are the same construct (`$$name` is `${name}`) and compile to
                 // the same lookup.
@@ -374,7 +377,6 @@ trait ExpressionCoreTrait
                 // superglobal nor an engine internal: a name such as `__c_fn` is
                 // simply absent from the scope.  An absent name is STRICT unless
                 // a `??` follows, in which case the absent branch yields null so
-                // the operator can supply the fallback â€” exactly the behaviour of
                 // a literal `{{ name }}` / `{{ name ?? 'x' }}`.
                 if ($next === '{' || $next === '$') {
                     if ($next === '{') {
@@ -435,7 +437,7 @@ trait ExpressionCoreTrait
                 $token    = \substr($expr, $sigilStart, $i - $sigilStart);
 
                 // A `(` that survives chain parsing is a call on the ROOT value
-                // (e.g. `$fn()`), not a method call â€” method calls are consumed
+                // (e.g. `$fn()`), not a method call — method calls are consumed
                 // into their property segment.  Root invocation stays rejected:
                 // a variable-driven callable is the function-level equivalent of
                 // variable-variable expansion.  That rule is INDEPENDENT of the
@@ -642,7 +644,7 @@ trait ExpressionCoreTrait
                 // precedence over every chain reading and is resolved before the
                 // continuation gate below. That gate excludes `?` to hand
                 // `a ? b : c` to the chain parser, but the ternary's CONDITION is
-                // exactly where a literal like `true` or `null` sits — gating the
+                // where a literal like `true` or `null` sits — gating the
                 // keyword test behind it made `{{ true ? 'y' : 'n' }}` fall
                 // through to the variable resolver and report the keyword as an
                 // undefined variable. `{% if true %}` never showed it, because
@@ -718,24 +720,25 @@ trait ExpressionCoreTrait
                         continue;
                     }
 
-                    if (isset($this->varChainCache[$token])) {
-                        $out .= $this->varChainCache[$token];
+                    $cacheKey = $this->varChainCacheKey($token);
+                    if (isset($this->varChainCache[$cacheKey])) {
+                        $out .= $this->varChainCache[$cacheKey];
                     } else {
                         $parsed = $this->parseVarChainAt($expr, $start, false, $ternarySeen);
                         $php    = $parsed !== null
                             ? $this->varChainToPhpWithSegments($token, $parsed['segments'])
                             : $token;
                         if ($parsed !== null) {
-                            $this->varChainCache[$token] = $php;
+                            $this->varChainCache[$cacheKey] = $php;
                         }
                         $out .= $php;
                     }
                     continue;
                 }
 
-                // Identifier followed by a chain continuation â€” full chain parsing required.
+                // Identifier followed by a chain continuation — full chain parsing required.
                 // `allowArrow` stays FALSE (a bare `a->b` is rejected below), but the
-                // call flag is the policy's, exactly as on the `$`-sigil path: the
+                // call flag is the policy's, as on the `$`-sigil path: the
                 // rule, not the sigil, is what decides whether a method may be
                 // called.  A bare `obj.m()` therefore compiles to the same PHP as
                 // `$obj.m()`.
@@ -754,13 +757,14 @@ trait ExpressionCoreTrait
                 if (\count($segments) === 1) {
                     $token = $segments[0]['value'];
                     $i     = $idEnd;
+                    $cacheKey = $this->varChainCacheKey($token);
                     if (isset($this->localVars[$token])) {
                         $out .= $this->localVars[$token];
-                    } elseif (isset($this->varChainCache[$token])) {
-                        $out .= $this->varChainCache[$token];
+                    } elseif (isset($this->varChainCache[$cacheKey])) {
+                        $out .= $this->varChainCache[$cacheKey];
                     } else {
                         $php = $this->varChainToPhpWithSegments($token, $segments);
-                        $this->varChainCache[$token] = $php;
+                        $this->varChainCache[$cacheKey] = $php;
                         $out .= $php;
                     }
                     continue;
@@ -770,7 +774,7 @@ trait ExpressionCoreTrait
                 $token = \substr($expr, $start, $i - $start);
 
                 // A call left over here follows the whole chain, so it is a call on a
-                // KEY or INDEX read (`a:b(...)`, `a[b](...)`) â€” a call may attach only
+                // KEY or INDEX read (`a:b(...)`, `a[b](...)`) — a call may attach only
                 // to a property or dynamic-property segment, which the parser consumes
                 // into the segment itself.  When the policy does not grant method
                 // calls, that is the reason to report instead.
@@ -844,7 +848,7 @@ trait ExpressionCoreTrait
      *
      * Each argument is compiled as a full Clarity expression (pipelines and
      * nested function calls work inside arguments). Named arguments use the
-     * Clarity `name=expression` syntax and are emitted as PHP named arguments
+     * Clarity `identifier: expression` syntax and are emitted as PHP named arguments
      * (`name: phpExpr`).
      *
      * Generated code: $__c_fn['name']($phpArg1, name2: $phpArg2, ...)
@@ -978,50 +982,36 @@ trait ExpressionCoreTrait
     /**
      * Emit `vars()`: a snapshot of the template variables visible at this point.
      *
-     * The two modes store variables differently, so the snapshot is built
-     * differently — and both forms are chosen at COMPILE time:
+     * The form is chosen at compile time, based on how the mode stores variables:
      *
-     *  • Sandbox — `$__c_va` IS the variable store. A `{% set %}` writes through
-     *    it (even inside a loop), so the scope array is returned untouched.
+     *  • Sandbox: `$__c_va` is the variable store, so it is returned as is.
+     *  • Open mode (`phpVariables`): the scope is seeded into PHP locals with
+     *    `extract()`, and later writes land in locals. `$__c_va` is only a snapshot
+     *    of the seed, so `get_defined_vars()` is used instead. Names starting with
+     *    `__c_` are engine internals and are filtered out.
      *
-     *  • Open mode (`phpVariables`) — the scope is seeded into PHP locals with
-     *    `extract()`, and every later write (a `{% set %}`, a `{% php %}`
-     *    assignment, a loop variable) lands in a LOCAL. `$__c_va` is a snapshot of
-     *    the seed, so it goes stale the moment anything is assigned; the locals
-     *    are the store. `get_defined_vars()` is precisely "what is in scope
-     *    here", which is what a variable dump should show — and it is exactly
-     *    what a `{% php %}` block sees. `__c_`-prefixed names are engine internals
-     *    and are filtered out.
+     * In both modes, `{% for %}` variables and macro parameters exist only as PHP
+     * locals (see {@see $dynamicBindings}). They are merged over the base scope so
+     * `vars()` includes them. A name already in the scope array keeps precedence,
+     * so the snapshot matches what printing the name reads.
      *
-     * In BOTH modes a `{% for %}` variable and a macro parameter live only in a
-     * PHP local (see {@see $dynamicBindings}) — nothing puts them into
-     * `$__c_va`, so `{{ vars().v }}` inside `{% for v in … %}` would be absent
-     * without gathering them. They are merged over the base scope, so a name that
-     * is genuinely in the scope array keeps precedence: the snapshot must never
-     * disagree with what printing the name reads.
+     * The merge is a copy (`array_replace`) and is never assigned back into the
+     * scope. Assigning it back would break a self-referential
+     * `{% set n = vars()|length %}`, because the later write to `$__c_va['n']`
+     * would land in the copy.
      *
-     * The merged array is a fresh COPY (`array_replace`), never assigned back into
-     * the scope, so a `{% set %}` after this point writes the array every later
-     * read sees. Assigning the merge back into `$__c_va` would break a
-     * self-referential `{% set n = vars()|length %}`: the later `$__c_va['n'] = …`
-     * would land in the copy the merge had already replaced.
-     *
-     * The locals are staged in `$__c_dyn` — a reserved name the render body
-     * declares only when the template actually contains such a call, so the
-     * `str_contains(…, '$__c_dyn')` probe in the emitter is a reliable signal.
-     * That write is safe when the result is only read: a template may never bind a
-     * `__c_`-prefixed name, and only one `vars()` call is in flight at a time.
-     *
-     * A plain scope read stays the bare `$__c_va` in sandbox mode — that case pays
-     * nothing, exactly as a plain scope read does.
+     * The extra locals are staged in `$__c_dyn`. The render body declares it only
+     * when a template contains such a call, so the `str_contains(…, '$__c_dyn')`
+     * check in the emitter is reliable. The write cannot collide: a template cannot
+     * bind a `__c_`-prefixed name, and only one `vars()` call is in flight at a time.
      */
     private function buildVarsCall(): string
     {
         // Open mode seeds the scope into PHP locals (`extract()`), and every later
         // write — a `{% set %}`, a `{% php %}` assignment, a loop variable — lands
-        // in a LOCAL, so `$__c_va` stops being the variable store once anything is
-        // assigned. There the locals ARE the scope, and `get_defined_vars()` is
-        // exactly "what is in scope at this point". A `__c_`-prefixed name is an
+        // in a local, so `$__c_va` stops being the variable store once anything is
+        // assigned. There the locals are the scope, and `get_defined_vars()` returns
+        // the names in scope at this point. A `__c_`-prefixed name is an
         // engine internal and never a template variable, so those are dropped.
         //
         // Sandbox mode seeds nothing, so `$__c_va` IS the scope and is returned
@@ -1049,7 +1039,7 @@ trait ExpressionCoreTrait
      * Emit the lookup for `${expr}` / `$$name`: read the variable whose NAME is
      * produced by a runtime expression.
      *
-     * The lookup uses the SAME variable model as a literal `{{ name }}`:
+     * The lookup uses the same variable model as a literal `{{ name }}`:
      *
      *  • sandbox mode     → `$__c_va[$name]`
      *  • open mode        → the render-frame LOCALS (`extract()` seeded the
@@ -1062,20 +1052,20 @@ trait ExpressionCoreTrait
      * snapshot.  Reading `$__c_va` alone would make `${'x'}` disagree with a
      * literal `{{ x }}` whenever `x` was assigned rather than passed in.
      *
-     * Presence is tested with `array_key_exists`, NOT `isset`: a NULL value is
-     * PRESENT, exactly as a literal `{{ name }}` treats it (isset would report it
-     * absent and trigger the strict throw).
+     * Presence is tested with `array_key_exists`, not `isset`: a null value is
+     * present, as it is for a literal `{{ name }}`. `isset` would report it
+     * absent and trigger the strict throw.
      *
      * Security: the name only ever indexes `$__c_va` or the filtered locals /
      * compile-time known locals map.  It is never emitted as a PHP dynamic
      * variable, so it can reach neither a superglobal nor an engine internal.
-     * The open-mode locals are filtered through the SAME predicate
+     * The open-mode locals are filtered through the same predicate
      * {@see buildVarsCall()} uses for `vars()` — every `__c_`-prefixed key is
      * dropped — and a template can never bind such a name
      * (see Compiler::assertBindableName()), so `__c_fn` / `$this` stay
      * unreachable.  `get_defined_vars()` contains no superglobals.
      *
-     * Absent names are STRICT (a line-numbered ClarityException) unless a `??`
+     * Absent names are strict (a line-numbered ClarityException) unless a `??`
      * follows the lookup, in which case the absent branch is `null` so the
      * operator supplies the fallback — mirroring a literal `{{ name ?? 'x' }}`.
      *
@@ -1086,7 +1076,7 @@ trait ExpressionCoreTrait
         // When a `??` follows, the NAME expression is made null-safe too, so
         // `${ref} ?? 'x'` behaves like a literal `{{ name ?? 'x' }}`: absence in
         // either the name or the looked-up variable yields the fallback.  Without
-        // this, an absent `ref` would warn while the name is evaluated â€” and that
+        // this, an absent `ref` would warn while the name is evaluated — and that
         // happens INSIDE the guarding ternary, so the outer `??` would not
         // suppress it.
         $nameExpr = $coalesces
@@ -1101,7 +1091,7 @@ trait ExpressionCoreTrait
 
         if ($this->localRoots) {
             // Open mode: the store is the render frame's locals, so the lookup
-            // has to read them — filtered exactly as `vars()` is, so an engine
+            // has to read them, filtered the same way as `vars()`, so an engine
             // internal can never be named.  A name PHP keeps under a
             // `__c_`-prefixed local (a macro parameter, `$__c_m_p`) is necessarily
             // dropped by that filter, so the compile-time map supplies it.

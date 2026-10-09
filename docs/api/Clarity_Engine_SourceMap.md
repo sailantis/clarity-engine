@@ -18,10 +18,8 @@ Line numbers are delta-encoded because the map is appended in ascending line
 order, so the deltas stay in single digits however long the template is; the
 file index is left absolute since it is already tiny.
 
-Measured on a 1000-range map (see temp/probe-meta-representation.php):
-
-  var_export nested arrays   65,348 B source   236,536 B memory
-  packed string              10,450 B source    12,288 B memory   (-95%)
+For a 1000-range map the packed string uses about 95% less memory than the
+equivalent nested arrays.
 
 The decode cost (~0.1 ms per 500 ranges) is paid only on the error path,
 which is the only place the map is read.
@@ -31,7 +29,7 @@ Invariant: decode(encode($map)) === $map for any map the compiler produces
 
 ## Public methods
 
-### encode() · <small>[🗎](../../src/Engine/SourceMap.php#L46)</small>
+### encode() · <small>[🗎](../../src/Engine/SourceMap.php#L44)</small>
 
 `public static function encode(array $map): string`
 
@@ -51,7 +49,7 @@ Encode a source map as the compact string form.
 
 ---
 
-### decode() · <small>[🗎](../../src/Engine/SourceMap.php#L78)</small>
+### decode() · <small>[🗎](../../src/Engine/SourceMap.php#L76)</small>
 
 `public static function decode(string $packed): array`
 
@@ -71,7 +69,7 @@ Decode the compact string form back into the list-of-ranges shape.
 
 ---
 
-### normalise() · <small>[🗎](../../src/Engine/SourceMap.php#L119)</small>
+### normalise() · <small>[🗎](../../src/Engine/SourceMap.php#L117)</small>
 
 `public static function normalise(mixed $packed): array`
 
@@ -99,7 +97,7 @@ the safe answer (an absent line number beats a wrong one).
 
 ---
 
-### packedLiteral() · <small>[🗎](../../src/Engine/SourceMap.php#L146)</small>
+### packedLiteral() · <small>[🗎](../../src/Engine/SourceMap.php#L144)</small>
 
 `public static function packedLiteral(array $map): string`
 
@@ -126,7 +124,7 @@ which keeps compiled files readable and avoids pathological line counts.
 
 ---
 
-### normalisePaths() · <small>[🗎](../../src/Engine/SourceMap.php#L163)</small>
+### normalisePaths() · <small>[🗎](../../src/Engine/SourceMap.php#L161)</small>
 
 `public static function normalisePaths(mixed $paths): array`
 

@@ -12,10 +12,9 @@ into a construct whose structure the compiler can check:
     {% cacheelse %} branch   — optional, at most once between open and close
   {% endcache %}   close     — pops the construct
 
-The checks are the ones a template author actually trips over, and each one
-would otherwise emit corrupted PHP that is often still syntactically valid —
-a missing close leaks an output buffer into the next render, a stray close
-swallows the engine's own buffer:
+Each check rejects output that would be wrong but may still be valid PHP. For
+example, a missing close leaks an output buffer into the next render, and a
+stray close can end the engine's own buffer:
 
   - a close/branch tag with no construct open
   - a close/branch tag whose construct is not the innermost open one
@@ -24,11 +23,11 @@ swallows the engine's own buffer:
   - a close that crosses an include/macro boundary
   - a branch tag appearing more than its declared maximum
 
-Crossing detection is depth-based: the opener snapshots the built-in nesting
+Crossing detection is depth-based. The opener records the built-in nesting
 counters ({@see \Compiler::$ifDepth}, {@see \Compiler::$forStack}, and the
-compile-unit stack) and the close re-checks them, which distinguishes a legal
-close from one that leaps over a still-open built-in block WITHOUT touching
-the built-in for-else machinery.
+compile-unit stack), and the close compares them. A close that skips over a
+still-open built-in block is therefore rejected. The check only reads these
+counters and does not change how built-in for-else blocks are compiled.
 
 A construct may not span a template unit boundary.  An include is inlined into
 the same render body, so an opener in the host and its close in the include

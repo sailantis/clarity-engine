@@ -281,6 +281,45 @@ class CallSyntaxTest extends BaseTestCase
         $this->assertSame('6', self::render('cs_reduce_lambda', ['nums' => [1, 2, 3]]));
     }
 
+    // A lambda parameter and a scope variable can share a name. The chain cache
+    // must keep the two apart, whichever is compiled first.
+    public function testLambdaParamDoesNotReuseOuterScopeCacheEntry(): void
+    {
+        self::tpl('cs_cache_outer_first', '{{ x }}|{{ map(items, x => x ~ "!") |> join(",") }}');
+        $this->assertSame(
+            'OUTER|a!,b!',
+            self::render('cs_cache_outer_first', ['x' => 'OUTER', 'items' => ['a', 'b']])
+        );
+    }
+
+    public function testOuterScopeDoesNotReuseLambdaParamCacheEntry(): void
+    {
+        self::tpl('cs_cache_lambda_first', '{{ map(items, x => x ~ "!") |> join(",") }}|{{ x }}');
+        $this->assertSame(
+            'a!,b!|OUTER',
+            self::render('cs_cache_lambda_first', ['x' => 'OUTER', 'items' => ['a', 'b']])
+        );
+    }
+
+    public function testChainCacheKeyHandlesNulInQuotedKey(): void
+    {
+        $view = self::tpl('cs_nul_key', "{{ x[\"a\0b\"] }}|{{ map(items, b => x[\"a\0b\"]) |> join(\",\") }}");
+        $this->assertSame(
+            'NUL|NUL,NUL',
+            self::render($view, ['x' => ["a\0b" => 'NUL'], 'items' => ['p', 'q']])
+        );
+    }
+
+    public function testDottedChainCacheRespectsLambdaParam(): void
+    {
+        self::tpl('cs_cache_dotted', '{{ x.name }}|{{ map(items, x => x.name) |> join(",") }}');
+        $vars = [
+            'x'     => (object) ['name' => 'OUTER'],
+            'items' => [(object) ['name' => 'a'], (object) ['name' => 'b']],
+        ];
+        $this->assertSame('OUTER|a,b', self::render('cs_cache_dotted', $vars));
+    }
+
     // =========================================================================
     // Inline filter references: an inline filter is CODEGEN, so referencing it
     // compiles a closure — for filter/reduce too, not just map

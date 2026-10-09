@@ -256,7 +256,7 @@ class SecurityErrorMappingTest extends BaseTestCase
 
     public function testTypeErrorOnFilterArgumentIsMappedToTemplateLine(): void
     {
-        // A typed filter parameter rejects the piped value â†’ TypeError.  This is
+        // A typed filter parameter rejects the piped value → TypeError.  This is
         // an Error (not an E_* diagnostic), so it can only be mapped by catching
         // it around the render call.
         TestEnvironment::engine()->addFilter('wants_string', static fn(string $v): string => $v);

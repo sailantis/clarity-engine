@@ -2,16 +2,19 @@
 
 **Full name:** [Clarity\Debug\JsDumpRenderer](../../src/Debug/JsDumpRenderer.php)
 
-Renders debug values as a JS comment: ;/* DEBUG_DUMP: {json} *\/
+Renders debug values as a JavaScript block comment: ;/* DEBUG_DUMP: {json} *\/
 
-The output is valid JavaScript in any statement position and does not
-interfere with surrounding script logic.  Sensitive keys are masked in the
-JSON payload.  Any '*\/' sequence inside the JSON is escaped to '*\\\/' to
-prevent comment injection.
+The output starts with an empty statement (;) followed by the comment, so it
+can be placed where a JavaScript statement is allowed. Sensitive keys are
+replaced with '***', and values nested deeper than maxDepth with '…'. The
+comment-closing sequence in the JSON is escaped by inserting a backslash
+before the slash, so it cannot end the comment early. '<' and '>' are
+written as \u003C and \u003E, so the output cannot close a surrounding
+<script> element.
 
 ## Public methods
 
-### render() · <small>[🗎](../../src/Debug/JsDumpRenderer.php#L17)</small>
+### render() · <small>[🗎](../../src/Debug/JsDumpRenderer.php#L22)</small>
 
 `public function render(mixed $value, Clarity\Debug\DumpOptions $opts): string`
 

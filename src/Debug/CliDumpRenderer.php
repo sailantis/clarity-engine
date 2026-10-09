@@ -5,23 +5,27 @@ declare(strict_types=1);
 namespace Clarity\Debug;
 
 /**
- * Renders debug values as an ANSI-colored (or plain-text) tree on STDERR.
+ * Renders debug values as an indented tree for the terminal.
  *
- * By default, output goes to STDERR (pipeline-safe: does not corrupt stdout).
- * Set DumpOptions::forceToTemplate(true) to receive the string instead.
+ * By default, dump() writes the tree to STDERR and returns ''. With
+ * DumpOptions::forceToTemplate(true), render() returns the text instead.
+ * renderForced() always returns the text; dd() uses it and writes the result to
+ * STDERR (see {@see DebugRuntime::dumpAndDie()}).
  *
- * Associative arrays → {key: value}, sequential arrays → [item, …].
- * Sensitive keys are replaced with ***.
+ * Associative arrays and objects are shown as {key: value} and sequential
+ * arrays as [item, item], one item per line. Sensitive keys and property names
+ * are replaced with ***. ANSI colors are used when the stream the output goes
+ * to supports them: VT100 on Windows, a TTY elsewhere.
  */
 final class CliDumpRenderer implements DumpRenderer
 {
+    use DumpMaskingTrait;
+
     public function render(mixed $value, DumpOptions $opts): string
     {
-        $isTty = \PHP_SAPI === 'cli'
-            && \function_exists('posix_isatty')
-            && @\posix_isatty(\STDIN);
+        $ansi = self::supportsColor(\STDERR);
 
-        $output = '[DUMP] ' . $this->renderValue($value, $opts, 0, $isTty) . "\n";
+        $output = '[DUMP] ' . $this->renderValue($value, $opts, 0, $ansi) . "\n";
 
         if (!$opts->getForceToTemplate()) {
             \fwrite(\STDERR, $output);
@@ -31,13 +35,34 @@ final class CliDumpRenderer implements DumpRenderer
         return $output;
     }
 
+    /**
+     * Returns the rendered text whatever forceToTemplate is set to. dd() uses this.
+     */
     public function renderForced(mixed $value, DumpOptions $opts): string
     {
-        $isTty = \PHP_SAPI === 'cli'
-            && \function_exists('posix_isatty')
-            && @\posix_isatty(\STDIN);
+        $ansi = self::supportsColor(\STDERR);
 
-        return '[DUMP] ' . $this->renderValue($value, $opts, 0, $isTty) . "\n";
+        return '[DUMP] ' . $this->renderValue($value, $opts, 0, $ansi) . "\n";
+    }
+
+    /**
+     * Windows needs VT100 support enabled on the console, so it is checked
+     * with sapi_windows_vt100_support(). Other systems check for a TTY.
+     *
+     * @param resource $stream
+     */
+    private static function supportsColor(mixed $stream): bool
+    {
+        if (\PHP_SAPI !== 'cli') {
+            return false;
+        }
+
+        if (\PHP_OS_FAMILY === 'Windows') {
+            return \function_exists('sapi_windows_vt100_support')
+                && @\sapi_windows_vt100_support($stream);
+        }
+
+        return \function_exists('stream_isatty') && @\stream_isatty($stream);
     }
 
     private function renderValue(mixed $value, DumpOptions $opts, int $depth, bool $ansi): string
@@ -68,14 +93,18 @@ final class CliDumpRenderer implements DumpRenderer
             return $ansi ? "\e[36m{$value}\e[0m" : (string) $value;
         }
 
+        if ($this->isExpandableObject($value)) {
+            return $this->renderArray($this->objectProperties($value), $opts, $depth, $ansi);
+        }
+
         $repr = \print_r($value, true);
         return $ansi ? "\e[35m{$repr}\e[0m" : $repr;
     }
 
     private function renderArray(array $arr, DumpOptions $opts, int $depth, bool $ansi): string
     {
-        $isAssoc = \array_keys($arr) !== \range(0, \count($arr) - 1);
         $count = \count($arr);
+        $isAssoc = $count > 0 && \array_keys($arr) !== \range(0, $count - 1);
         $indent = \str_repeat('  ', $depth);
         $inner = \str_repeat('  ', $depth + 1);
         $open = $isAssoc ? '{' : '[';
@@ -113,16 +142,5 @@ final class CliDumpRenderer implements DumpRenderer
         }
 
         return $open . "\n" . \implode(",\n", $items) . "\n" . $indent . $close;
-    }
-
-    private function isMasked(string $key, DumpOptions $opts): bool
-    {
-        $lower = \strtolower($key);
-        foreach ($opts->getMaskKeys() as $mask) {
-            if (\str_contains($lower, \strtolower((string) $mask))) {
-                return true;
-            }
-        }
-        return false;
     }
 }

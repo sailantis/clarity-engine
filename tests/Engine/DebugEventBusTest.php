@@ -247,4 +247,31 @@ class DebugEventBusTest extends TestCase
         // No bus = no events; assert bus is null
         $this->assertNull($engine->getDebugBus());
     }
+
+    public function testBusKeepsOnlyTheMostRecentEvents(): void
+    {
+        $bus = new DebugEventBus(3);
+
+        for ($i = 1; $i <= 5; $i++) {
+            $bus->emit('event.' . $i);
+        }
+
+        $types = \array_map(static fn(DebugEvent $e): string => $e->type, $bus->getEvents());
+        $this->assertSame(['event.3', 'event.4', 'event.5'], $types);
+    }
+
+    public function testListenersStillReceiveEventsDroppedFromHistory(): void
+    {
+        $bus = new DebugEventBus(1);
+        $received = 0;
+        $bus->subscribe(function () use (&$received): void {
+            $received++;
+        });
+
+        $bus->emit('a');
+        $bus->emit('b');
+
+        $this->assertSame(2, $received);
+        $this->assertCount(1, $bus->getEvents());
+    }
 }

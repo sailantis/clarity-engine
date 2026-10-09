@@ -9,68 +9,42 @@ use Clarity\ClarityException;
  *
  * The PHP cast prefix: `(int) x`, `(string) (a + b)`, `(float) user.price`.
  *
- * A cast is GRAMMAR, not a capability. It needs no policy rule and adds
- * nothing to `Policy::RULES`, exactly like `instanceof` — whose class-name
- * operand is likewise grammar rather than a reach. Consequently a cast changes
- * no policy digest and invalidates no compiled cache.
+ * Casts are grammar, not a policy rule: they add nothing to `Policy::RULES`.
  *
  * The hard part is telling a cast from a parenthesised sub-expression, because
- * `(int)` and `(a)` are lexically the same shape. The rule is what follows the
- * closing paren: whitespace is OPTIONAL, and the cast is decided by whether the
- * character after the `)` can OPEN an operand.
+ * `(int)` and `(a)` have the same shape. A cast is recognised by a fixed cast
+ * name (see CAST_TYPES) followed by an operand, so the character after the `)`
+ * must be able to open one.
  *
- *   `(int) x`   — a cast: whitespace, then a character that can OPEN an operand.
- *   `(int)x`    — a cast: the glued form is accepted too. A call, an index or a
- *                 subtraction is what the text would otherwise have been, and
- *                 naming a variable `int` to reach one is a collision rather than
- *                 a reading, so the cast wins.
- *   `(a) + b`   — a parenthesised expression: `+` cannot open an operand, so
- *                 this stays arithmetic. Likewise `(a) ? b : c` and `(a) foo`.
- *   `(a)`       — a parenthesised expression: nothing follows at all.
+ *   `(int) x`   a cast: whitespace, then an operand opener.
+ *   `(int)x`    a cast: whitespace is optional.
+ *   `(a) + b`   not a cast: `a` is not a cast name, and `+` cannot open an operand.
+ *   `(a)`       not a cast: nothing follows.
  *
- * `(int) (x)` and `(int)(x)` are the same reading — a cast of the parenthesised
- * `x`. Neither is a call, because a call needs a CALLABLE name before the `(`
- * and a cast name is not one.
+ * `(int) (x)` and `(int)(x)` are both a cast of the parenthesised `x`. Neither is
+ * a call, because a call needs a callable name before the `(`.
  *
- * Whitespace is not what makes a cast; the cast NAME is. Gluing is therefore
- * accepted, at the cost of three spellings that change meaning for a template
- * that holds a variable named after a cast type:
+ * Gluing is accepted, which has a cost. For a template that holds a variable named
+ * after a cast type, these spellings change meaning:
  *
- *   `(int)(x)`   a call on the variable `int`  → a cast of the grouped `x`
+ *   `(int)(x)`   a call on the variable `int`     → a cast of the grouped `x`
  *   `(int)[0]`   an index into the variable `int` → a cast of `[0]`
- *   `(int)-5`    the variable `int` minus 5    → a cast of `-5`
+ *   `(int)-5`    the variable `int` minus 5       → a cast of `-5`
  *
- * The matcher still returns null on EVERY other doubt and never throws, so the
- * ordinary parenthesised path in {@see ExpressionCoreTrait::convertVarsAndOps()}
- * stays the default for a name that is not a cast type.
+ * The matcher returns null on any doubt and never throws, so the ordinary
+ * parenthesised path in {@see ExpressionCoreTrait::convertVarsAndOps()} still
+ * handles any name that is not a cast type.
  */
 trait CastTrait
 {
     /**
      * The cast types, as `lowercase spelling => the PHP form to emit`.
      *
-     * Every key is the CANONICAL spelling, so there is exactly one way to write
-     * each cast. That is deliberate: a second spelling of the same cast is a
-     * second name for an author to learn and for a reader to puzzle over, with no
-     * behaviour to justify it.
+     * Each cast has one spelling.
+     * `(integer)`, `(boolean)` and `(double)` are absent because `int`, `bool` and `float` are the same casts under their short names.
      *
-     * `(real)` and `(unset)` are absent because PHP removed both in 8.0 — emitting
-     * either would inject a fatal parse error into the compiled template. PHP's own
-     * diagnostic names the replacement: "The (real) cast has been removed, use
-     * (float) instead".
-     *
-     * `(binary)` is absent because it does nothing. It is a legacy alias for
-     * `(string)` and produces byte-identical output for every input — an integer,
-     * a bool, `null`, an array, a string. It is NOT a base-2 conversion.
-     *
-     * `(integer)`, `(boolean)` and `(double)` are absent as a set: `int`, `bool` and
-     * `float` spell the same cast more briefly and do not collide with names a
-     * template plausibly holds as data. Refusing them keeps a cast from ever
-     * shadowing a scope name.
-     *
-     * A name that is not a cast falls through to the parenthesised-expression path,
-     * so `(integer) x` is an ordinary syntax error rather than a silently different
-     * construct.
+     * A name that is not in this map is not a cast. It falls through to the
+     * parenthesised-expression path, so `(integer) x` is a syntax error rather than a silently different construct.
      *
      * @var array<string, string>
      */
@@ -130,8 +104,7 @@ trait CastTrait
             return null;
         }
 
-        // `(int)` closes directly; allow whitespace INSIDE the parens (`( int ) x`)
-        // because it costs nothing and reads as deliberate.
+        // `(int)` closes directly; whitespace INSIDE the parens (`( int ) x`) is also allowed.
         while ($p < $len && \ctype_space($expr[$p])) {
             $p++;
         }
@@ -140,20 +113,10 @@ trait CastTrait
         }
         $p++;
 
-        // The discriminating character. Whitespace here means the type name was
-        // followed by an operand — `(a) + b` can never look like this. Whitespace
-        // is OPTIONAL, though: the cast is decided by the operand opener, not by
-        // the space, so the glued form `(int)x` reads as a cast too. Gluing costs
-        // the three shapes noted in the trait doc-block, all of which need a
-        // variable named after a cast type to have meant anything before.
-        //
-        //   `(a) + b`   the `+` is a binary operator, so this is NOT a cast.
-        //   `(a) b`     two values in a row is not valid PHP either, unless the
-        //               whitespace is a chain continuation (`a b` reads `a`).
-        //
-        // So a cast needs an operand opener, optionally after whitespace.
-        // `(int) -5` is the one spellable case with a leading operator, and it is
-        // accepted explicitly.
+        // The discriminating character is the operand opener. Whitespace is optional,
+        // so `(int)x` and `(int) x` are both casts. A binary operator such as `+`
+        // cannot open an operand, so `(int) + b` is not a cast.
+        // `(int) -5` is the one case with a leading operator, and it is accepted explicitly.
         $q = $p;
         while ($q < $len && \ctype_space($expr[$q])) {
             $q++;
@@ -178,11 +141,11 @@ trait CastTrait
 
     /**
      * Whether a `-` at $p opens a NUMERIC operand rather than being a binary
-     * minus — the difference between `(int) -5` and `(a) - 5`.
+     * minus: `(int) -5` is a cast, while `(a) - 5` is a subtraction.
      *
-     * A sign is unary when a digit or a `.` follows it directly, since `(a) - 5`
-     * and `(a) -5` would otherwise be indistinguishable and the whitespace-glued
-     * form is overwhelmingly the subtraction.
+     * The sign is unary only when a digit or `.` follows it directly. Without that
+     * test `(int) -5` and `(a) -5` would look the same, and the glued form is
+     * usually a subtraction.
      */
     private function castOperandStartsAfterSign(string $expr, int $p, int $len): bool
     {
@@ -191,18 +154,18 @@ trait CastTrait
     }
 
     /**
-     * Compile exactly ONE operand after a cast prefix, starting at $p.
+     * Compile a single operand after a cast prefix, starting at $p.
      *
      * The forms, and why each is the right reading:
      *
      *   `(`  one balanced group, recursed so `(int) (float) x` nests and
      *        `(string) (a + b)` compiles the sum as a value.
-     *   `[' / '{'`  a collection literal, via the same emitter the bare form uses.
+     *   `[` / `{`  a collection literal, via the same emitter the bare form uses.
      *   `$name`  a PHP-sigil read, through the same chain parser the bare form
      *        uses. A cast cannot be the left-hand side of an assignment, so this
      *        is only ever a read.
      *   `'` / `"` / digit  a scalar literal, passed through verbatim.
-     *   identifier  a var-chain read, through the SAME parser the bare form uses,
+     *   identifier  a var-chain read, through the same parser the bare form uses,
      *        so `(int) user:age`, `(int) items[0]` and `(int) loop.index` all work.
      *        A call that follows the whole operand is dispatched by
      *        {@see compileCastOperandCall()}, which applies the same policy the bare
@@ -329,11 +292,11 @@ trait CastTrait
             $token = \substr($expr, $p, $end - $p);
 
             // A `(` that survives chain parsing is a call on the whole operand:
-            // `(array) foo()` and `(int) obj.m()` — the second because the chain
-            // parser CONSUMES `m()` into its property segment when the
+            // `(array) foo()` and `(int) obj.m()`. The second case arises because the
+            // chain parser consumes `m()` into its property segment when the
             // `methodCalls` rule is on. Both are forwarded to the same emitters the
-            // bare form uses, so the policy answers (and the error messages teach)
-            // exactly as they do outside a cast.
+            // bare form uses, so policy checks and error messages match those outside
+            // a cast.
             $j = $end;
             while ($j < $len && \ctype_space($expr[$j])) {
                 $j++;
@@ -354,11 +317,12 @@ trait CastTrait
                 if (isset($this->localVars[$value])) {
                     return '(' . $this->localVars[$value] . ')';
                 }
-                if (isset($this->varChainCache[$value])) {
-                    return '(' . $this->varChainCache[$value] . ')';
+                $cacheKey = $this->varChainCacheKey($value);
+                if (isset($this->varChainCache[$cacheKey])) {
+                    return '(' . $this->varChainCache[$cacheKey] . ')';
                 }
                 $php = $this->varChainToPhpWithSegments($value, $segments);
-                $this->varChainCache[$value] = $php;
+                $this->varChainCache[$cacheKey] = $php;
                 return '(' . $php . ')';
             }
 
@@ -373,7 +337,7 @@ trait CastTrait
     /**
      * Compile `name(...)` where `name` is the whole operand of a cast.
      *
-     * The branch is chosen by the SAME precedence the bare expression loop uses,
+     * The branch is chosen by the same precedence the bare expression loop uses,
      * so a name behaves identically inside and outside a cast:
      *
      *   - a registered function (inline or callable) is dispatched through the
@@ -381,11 +345,9 @@ trait CastTrait
      *   - an unregistered name needs the `phpFunctions` rule, and is refused with
      *     that rule's message when the policy does not grant it.
      *
-     * That second point is the reason this helper exists rather than a pass-through:
-     * `{{ (int) foo(bar) }}` must report the same compile-time policy error as
-     * `{{ foo(bar) }}`. Without the check it compiled to a direct `\foo(...)` call
-     * and the failure surfaced later as an uncaught `Error: Call to undefined
-     * function` escaping the runtime error handler.
+     * The second check is needed because `(int) foo(bar)` would otherwise compile to
+     * a direct `\foo(...)` call. An unregistered function would then fail at run time
+     * with an uncaught `Error` instead of the compile-time policy error.
      *
      * @return array{0: string, 1: int}  The PHP call, and the index after its `)`.
      */

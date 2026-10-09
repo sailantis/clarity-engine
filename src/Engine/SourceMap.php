@@ -18,10 +18,8 @@ namespace Clarity\Engine;
  * order, so the deltas stay in single digits however long the template is; the
  * file index is left absolute since it is already tiny.
  *
- * Measured on a 1000-range map (see temp/probe-meta-representation.php):
- *
- *   var_export nested arrays   65,348 B source   236,536 B memory
- *   packed string              10,450 B source    12,288 B memory   (-95%)
+ * For a 1000-range map the packed string uses about 95% less memory than the
+ * equivalent nested arrays.
  *
  * The decode cost (~0.1 ms per 500 ranges) is paid only on the error path,
  * which is the only place the map is read.

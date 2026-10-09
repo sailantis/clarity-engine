@@ -39,6 +39,8 @@ use Clarity\Engine\Registry;
  *   class __Clarity_<slug>_<hash> {
  *       public static array $dependencies = ['name' => revision, ...];
  *       public static string $sourceMap   = 'lineDelta,fileIdx,tplDelta;...';
+ *       // ... plus $sourceFiles, $sourcePaths, $debugCompiled, $policyDigest,
+ *       // $compilerVersion and $renderBodyLine
  *       public function __construct(private array $functions, private array $services) {}
  *       public function render(array $__c_va): string { ... }
  *   }
@@ -52,33 +54,30 @@ use Clarity\Engine\Registry;
  * $dependencies and $sourceMap are read via reflection for cache invalidation
  * and error mapping — no file I/O needed on warm paths (OPcache serves them).
  *
- * The source map is stored in the compact packed form of {@see SourceMap}:
- * as nested var_export() arrays it cost ~2.3x the render body it annotates,
- * while the packed string is ~9% of that.
+ * The source map is stored in the packed form of {@see SourceMap}. Nested
+ * var_export() arrays would cost more than the render body they annotate.
  *
- * Nothing in the emitted code is a doc comment.  Annotations are written as
- * `//` line comments instead, because OPcache keeps doc comments
- * (opcache.save_comments) but discards line comments: a docblock is retained
- * in shared memory for every cached template, while a line comment costs
- * nothing once the file is cached.  The metadata is reflected, not documented,
- * so the annotation form is free to choose.
+ * The emitted metadata properties are annotated with `//` line comments, not
+ * docblocks. OPcache keeps docblocks when `opcache.save_comments` is on, so
+ * each cached template would hold them in shared memory, while line comments
+ * are dropped at compile time. The constructor and render() are the exception
+ * and keep their docblocks. The metadata is read by reflection, so its
+ * annotation form does not affect behaviour.
  *
  * Buffer safety
  * -------------
- * render() opens one output buffer and must hand back the buffer LEVEL it
- * received.  A bare `ob_end_clean()` in the catch block unwinds only the
- * innermost buffer, so a template that opened one of its own (e.g. a custom
- * directive doing `ob_start()`) and then threw would strand that buffer -- and
- * the partial output inside it -- above the caller's.  The catch therefore
- * drains in a loop down to the level captured immediately AFTER `ob_start()`,
- * which releases clarity's buffer and everything the template stacked on top of
- * it, while never reaching the caller's own buffers.
+ * render() opens one output buffer and must restore the buffer level it found.
+ * A bare `ob_end_clean()` in the catch block removes only the innermost buffer.
+ * A template that opened its own buffer (for example, a custom directive
+ * calling `ob_start()`) and then threw would leave that buffer, and its partial
+ * output, above the caller's. The catch therefore drains buffers in a loop down
+ * to the level recorded just after `ob_start()`. This releases clarity's buffer
+ * and any buffers the template stacked on it, and never reaches the caller's.
  *
- * There is deliberately NO finally block.  On the happy path the terminal
- * `return ob_get_clean()` has already closed clarity's buffer, so a finally
- * clause would only ever observe its own start level and unwind nothing; the
- * only finally that could do work is an unconditional unwind, which would
- * discard the caller's buffer when a template illegally closed clarity's.
+ * There is deliberately no finally block. On the success path `ob_get_clean()`
+ * has already closed clarity's buffer, so a finally block would have nothing to
+ * unwind. An unconditional unwind in a finally block would also discard the
+ * caller's buffer if a template closed clarity's buffer illegally.
  */
 class Compiler
 {
@@ -99,39 +98,27 @@ class Compiler
      * filter, say — is what the version is for, because it is not a policy
      * difference and no digest can express it.
      *
-     * Version 27 renamed the generated class's constructor properties from
-     * `__c_fn`/`__c_sv` to `functions`/`services`.  Every compiled class carries
-     * that signature, so the bump is what recompiles the cache instead of
-     * instantiating a stale class against the new argument names.
-     *
-     * Version 29 emits lambda bodies and quoted filter references as non-static
-     * arrow functions instead of `static` closures, so `$this` stays bound and a
-     * directive/inline-filter snippet works in every emitted position.
-     *
-     * Version 31 adds the cast grammar (`(int) x`) and the cast filters, so a
-     * template that previously could not compile at all now emits a cast — and,
-     * more importantly, a template cached under version 30 must not be reused
-     * against a tokenizer that reads `( … )` differently.
-     *
-     * Version 32 lets a cast be GLUED to its operand (`(int)x`), so the operand
-     * opener alone decides and the whitespace is optional. Reading a cast out of
-     * `(int)(x)`, `(int)[0]` and `(int)-5` changes the meaning of three
-     * expressions that a template holding a variable named `int` used to compile
-     * to a call, an index and a subtraction, so cached classes from version 31
-     * must not be reused.
+     * Past bumps:
+     * - 27: renamed the constructor properties `__c_fn`/`__c_sv` to
+     *   `functions`/`services`. Older classes would be instantiated with the new
+     *   argument names.
+     * - 29: emits arrow functions instead of `static` closures, so `$this` stays
+     *   bound in every position where a directive or filter snippet is emitted.
+     * - 31: adds the cast grammar `(int) x`. Classes from version 30 must not be
+     *   reused against the new tokenizer.
+     * - 32: allows a cast to be glued to its operand (`(int)x`). `(int)(x)`,
+     *   `(int)[0]` and `(int)-5` now parse as casts, so version 31 classes are
+     *   stale for templates that use a variable named `int`.
      */
     public const COMPILER_VERSION = 32;
 
     /**
-     * Prefix owned by the engine for every PHP variable it binds into the render
-     * frame: `__c_va`, `__c_fn`, `__c_sv`, `__c_tmp`, `__c_val`,
-     * `__c_ob_level`, `__c_e`, `__c_m_<macro param>`.
+     * Prefix for every PHP variable the engine binds into the render frame, for
+     * example `__c_va`, `__c_fn`, `__c_sv`, `__c_dyn` and `__c_m_<macro param>`.
      *
-     * This is a PREFIX rule rather than a name list so it stays correct as the
-     * engine grows: a new internal is protected by being spelled with this
-     * prefix, with no second place to update.  Everything else starting with
-     * underscores — `__foo`, `_c_foo`, `___foo` — is an ordinary template
-     * variable in both modes.
+     * The rule is a prefix, not a list of names, so a new internal is protected
+     * by its spelling alone. Names with other underscore patterns, such as
+     * `__foo`, `_c_foo` and `___foo`, are ordinary template variables.
      */
     public const INTERNAL_PREFIX = '__c_';
 
@@ -156,9 +143,7 @@ class Compiler
 
     /**
      * `{% parent %}` inlines the parent block's content in a child override.
-     *
-     * The `@`-prefixed spelling this engine once accepted is gone, and `@` now
-     * marks nothing: a stray `{% @parent %}` fails as an unknown directive.
+     * Only the bare form is recognised. `{% @parent %}` is an unknown directive.
      */
     private const PARENT_PLACEHOLDER_RE = '/\{%-?\s*parent\s*-?%\}/s';
 
@@ -189,10 +174,10 @@ class Compiler
     private ?TemplateLoader $loader = null;
 
     /**
-     * Stack tracking loop types, the if-depth a loop opened at, the generated
-     * line holding its header (patched on `{% else %}`), and the compiler-scope
-     * variable bindings to restore on endfor.
-     * @var list<array{type:string, restore:array<string,string|null>, ifDepth:int, headerLine:int, hasElse:bool}>
+     * Open loops. Each entry records the loop type, the compiler-scope bindings
+     * to restore at endfor, the if-depth the loop opened at, the index of its
+     * header line (patched on `{% else %}`), and whether it has an `{% else %}`.
+     * @var list<array{type:string, restore:array<string,array{var:string|null,dyn:bool}>, ifDepth:int, headerLine:int, hasElse:bool}>
      */
     private array $forStack = [];
 
@@ -344,9 +329,8 @@ class Compiler
     /**
      * Set what compiled templates are allowed to reach.
      *
-     * The tokenizer is given the same object rather than a copy of the flag it
-     * used to receive, so a rule can never be granted in one half of the
-     * compiler and denied in the other.
+     * The tokenizer is given the same object rather than a copy of the flag, so a
+     * rule can never be granted in one half of the compiler and denied in the other.
      */
     public function setPolicy(Policy $policy): static
     {

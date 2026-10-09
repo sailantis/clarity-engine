@@ -69,11 +69,11 @@ trait DirectiveSupportTrait
      * Register a local variable in the compile-time context.
      *
      * This is the extension point a custom directive uses to bind a variable it
-     * emits itself — so the name is a PHP LOCAL that nothing writes back into the
-     * scope array, exactly like a loop variable. It is therefore also recorded as
-     * a dynamic binding, which is what lets a `vars()` snapshot inside the
-     * directive's scope include it. A directive that binds a name it also stores
-     * in `$__c_va` will simply see that entry win in the snapshot.
+     * emits itself. The name is a PHP local that nothing writes back into the
+     * scope array, like a loop variable. It is also recorded as a dynamic
+     * binding, so a `vars()` snapshot inside the directive's scope includes it.
+     * If the same name is also stored in `$__c_va`, the snapshot shows the
+     * `$__c_va` entry.
      *
      * @param string   $name    The name of the variable to register.
      * @param int|null $tplLine Line of the directive that requested the
@@ -137,16 +137,16 @@ trait DirectiveSupportTrait
      * Directive keywords a macro may not be named after.
      *
      * `{% call name() %}` puts the macro name in the keyword namespace, so a name
-     * that is itself a tag keyword would make `{% call if(…) %}` ambiguous —
+     * that is itself a tag keyword would make `{% call if(…) %}` ambiguous, and
      * {@see BodyCompilerTrait::compileBlock()} dispatches on the first keyword and
      * never reaches `call`. The registry is checked for its own keywords
      * (`hasDirective()`) rather than mirrored here, so a module-added directive
-     * cannot be shadowed — except by a built-in keyword, which this list is.
+     * cannot be shadowed. This list covers only the built-in keywords.
      *
      * `extends`, `block` and `endblock` are included even though they are consumed
-     * before that dispatch: a macro body is spliced inside a layout's structure,
-     * never able to provide one, so naming a macro after them reads as a promise
-     * the engine cannot keep.
+     * before that dispatch. A macro body is spliced inside a layout's structure
+     * and cannot provide one, so naming a macro after them would promise something
+     * the engine cannot deliver.
      */
     private const RESERVED_MACRO_NAMES = [
         'if', 'elseif', 'else', 'endif',
@@ -230,11 +230,10 @@ trait DirectiveSupportTrait
      *
      * A definition at this level is removed from the text: its body is recorded as
      * a macro, and nothing is left where it stood. The text before it is appended
-     * to $body with the trims that apply to it — a definition is an ordinary
-     * `{% %}` tag, so it eats nothing before it, and only the `-%}` that closes
-     * `{% endmacro %}` reaches forward. The one exception is the closing tag's own
-     * `{%`, a tag boundary, so a definition whose `{% endmacro %}` is the last
-     * thing in the source still eats the break after it.
+     * to $body unchanged. Only the trims on the closing tag apply: a definition is
+     * an ordinary `{% %}` tag, so it does not trim the text before it. The
+     * closing `{% endmacro %}` may trim forward, and a definition whose
+     * `{% endmacro %}` is the last thing in the source still eats the break after it.
      *
      * The body's leading line break is kept: it belongs to the body, and the body
      * is spliced in at the call site, so it lands between the call's own two tags
@@ -545,8 +544,7 @@ trait DirectiveSupportTrait
      * or '' when it reported none.
      *
      * Paths travel with the source ({@see TemplateSource::$path}) and are recorded
-     * by {@see readWithDep()}, so this is a lookup rather than a re-derivation —
-     * the compiler has no loader of its own and must not grow one.
+     * by {@see readWithDep()}, so this is a lookup rather than a re-derivation.
      *
      * @param string $templateName Logical name, or a `<name>#macro#<macro>` unit.
      */
@@ -639,13 +637,6 @@ trait DirectiveSupportTrait
      *
      * Without this the tag dies as "Unknown directive 'card'", which sends the
      * author looking for a directive that was never meant to exist. Returns null
-     * when $keyword names no macro, so the caller keeps the ordinary error.
-     */
-    /**
-     * Explain a bare `{% name(args) %}` that names a macro, suggesting `call`.
-     *
-     * Without this the tag dies as "Unknown directive 'card'", which sends the
-     * author looking for a directive that was never meant to exist. Returns null
      * when the tag names no macro, so the caller keeps the ordinary error.
      *
      * The name is read from the raw tag, not from the lowercased keyword: a macro
@@ -665,12 +656,11 @@ trait DirectiveSupportTrait
     }
 
     /**
-     * Explain a `{% macro … %}` tag that reached directive dispatch — either a
+     * Explain a `{% macro … %}` tag that reached directive dispatch: either a
      * definition with no `{% endmacro %}`, or the removed `@`-prefixed spelling.
      * The pre-scan handles the well-formed case, so neither shape can be parsed
      * here; this only has to say which mistake it was.
      */
-    /** A macro definition that reached directive dispatch: unclosed, or legacy. */
     private function macroDefinitionError(string $content): string
     {
         return \str_contains($content, '@')

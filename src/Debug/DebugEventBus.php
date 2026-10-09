@@ -5,8 +5,9 @@ declare(strict_types=1);
 namespace Clarity\Debug;
 
 /**
- * DebugEventBus is a simple event bus for emitting and subscribing to debug events.
- * It allows listeners to receive events with a type, payload, and timestamp.
+ * Passes debug events to listeners and keeps emitted events in memory,
+ * available through getEvents(). A listener is a DebugListener or any callable.
+ * Only the most recent $maxEvents events are kept; older ones are dropped.
  */
 final class DebugEventBus
 {
@@ -15,6 +16,10 @@ final class DebugEventBus
 
     /** @var list<DebugEvent> */
     private array $events = [];
+
+    public function __construct(private readonly int $maxEvents = 1000)
+    {
+    }
 
     public function subscribe(DebugListener|callable $listener): void
     {
@@ -25,6 +30,9 @@ final class DebugEventBus
     {
         $event = new DebugEvent($type, $payload, \microtime(true));
         $this->events[] = $event;
+        while (\count($this->events) > $this->maxEvents) {
+            \array_shift($this->events);
+        }
         foreach ($this->listeners as $listener) {
             if ($listener instanceof DebugListener) {
                 $listener->onEvent($event);

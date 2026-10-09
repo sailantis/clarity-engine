@@ -2,17 +2,17 @@
 
 **Full name:** [Clarity\Debug\DumpRenderer](../../src/Debug/DumpRenderer.php)
 
+Renders a value as debug output.
+
+Implementations may have side effects: the CLI renderer writes to STDERR.
+render() returns the string to insert into the template output, or '' when
+the output was written directly to STDERR.
+
 ## Public methods
 
-### render() · <small>[🗎](../../src/Debug/DumpRenderer.php#L18)</small>
+### render() · <small>[🗎](../../src/Debug/DumpRenderer.php#L16)</small>
 
 `public function render(mixed $value, Clarity\Debug\DumpOptions $opts): string`
-
-Render $value for display.
-
-May have side effects (e.g. writing to STDERR for the CLI renderer).
-Returns a string to be concatenated into the template output; returns ''
-when the output was sent directly to STDERR.
 
 **Parameters**
 

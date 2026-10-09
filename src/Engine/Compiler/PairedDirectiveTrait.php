@@ -16,10 +16,9 @@ use Clarity\Template\TemplateLocation;
  *     {% cacheelse %} branch   — optional, at most once between open and close
  *   {% endcache %}   close     — pops the construct
  *
- * The checks are the ones a template author actually trips over, and each one
- * would otherwise emit corrupted PHP that is often still syntactically valid —
- * a missing close leaks an output buffer into the next render, a stray close
- * swallows the engine's own buffer:
+ * Each check rejects output that would be wrong but may still be valid PHP. For
+ * example, a missing close leaks an output buffer into the next render, and a
+ * stray close can end the engine's own buffer:
  *
  *   - a close/branch tag with no construct open
  *   - a close/branch tag whose construct is not the innermost open one
@@ -28,11 +27,11 @@ use Clarity\Template\TemplateLocation;
  *   - a close that crosses an include/macro boundary
  *   - a branch tag appearing more than its declared maximum
  *
- * Crossing detection is depth-based: the opener snapshots the built-in nesting
+ * Crossing detection is depth-based. The opener records the built-in nesting
  * counters ({@see Compiler::$ifDepth}, {@see Compiler::$forStack}, and the
- * compile-unit stack) and the close re-checks them, which distinguishes a legal
- * close from one that leaps over a still-open built-in block WITHOUT touching
- * the built-in for-else machinery.
+ * compile-unit stack), and the close compares them. A close that skips over a
+ * still-open built-in block is therefore rejected. The check only reads these
+ * counters and does not change how built-in for-else blocks are compiled.
  *
  * A construct may not span a template unit boundary.  An include is inlined into
  * the same render body, so an opener in the host and its close in the include
@@ -104,15 +103,14 @@ trait PairedDirectiveTrait
      * Dispatch a registered directive, applying paired-construct validation when
      * the keyword takes part in a construct.
      *
-     * The whole dispatch runs inside {@see withLocation()}.  A compiler step has
-     * always had that safety net ({@see directiveProcessExpr()}, the loop and `set`
-     * headers, …), but the registry dispatch did not: an author's
-     * `throw new ClarityException('…')` with no location escaped naming the
-     * closure's own file and line — `Handler.php:37` — instead of the template.
-     * Wrapping here fixes that for every directive, paired or not, and for the
-     * placement errors this trait raises itself.  `withLocation()` fills only the
-     * missing fields, so a handler that DOES pass `$path`/`$line` keeps them, and a
-     * non-{@see ClarityException} throwable still passes straight through.
+     * The whole dispatch runs inside {@see withLocation()}. Compiler steps such as
+     * {@see directiveProcessExpr()} and the loop and `set` headers already use
+     * it. Without it, an exception thrown by a directive handler with no location
+     * names the handler's own file and line instead of the template. Wrapping
+     * here covers every registry directive, paired or not, and the placement
+     * errors this trait raises. withLocation() fills only the missing fields, so
+     * a handler that passes `$path` or `$line` keeps them. A throwable that is
+     * not a {@see ClarityException} passes through unchanged.
      *
      * @param array $lines Accumulator, reserved for parity with compileBlock()'s
      *                     signature (constructs need no line patching).
@@ -144,9 +142,9 @@ trait PairedDirectiveTrait
         $owner    = $registry->getDirectiveOwner($keyword);
 
         if ($owner === null) {
-            // An ordinary directive, or an opener.  An opener is pushed BEFORE its
-            // handler runs, so the handler's own body (rare, but possible) already
-            // sees the construct as open.
+            // An ordinary directive, or an opener. An opener is pushed before its
+            // handler runs, so a handler that compiles nested content sees the
+            // construct as open.
             if (!$registry->isDirectiveOpener($keyword)) {
                 return $this->dispatchDirectiveHandler($keyword, $rest, $sourcePath, $tplLine);
             }
@@ -342,8 +340,9 @@ trait PairedDirectiveTrait
     /**
      * Fail when the render body ends with a construct still open.
      *
-     * Called after the merged body has been compiled, so an opener whose close
-     * lives in another template (or nowhere) is reported at the opener's own line.
+     * Called after the merged body has been compiled. An opener with no close in
+     * the body is reported at the opener's own line. A close in another template
+     * fails earlier, at the close site, with "belongs to a different template".
      */
     private function assertDirectiveStackClosed(): void
     {
@@ -368,8 +367,7 @@ trait PairedDirectiveTrait
     }
 
     /**
-     * The ` (opened on line N)` suffix, naming the file when it differs from the
-     * tag being reported.  Empty for an entry with no recorded line.
+     * The ` (opened on line N)` suffix. Empty for an entry with no recorded line.
      *
      * @param array{tplLine: int, sourcePath: string} $entry
      */

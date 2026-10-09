@@ -7,25 +7,23 @@ namespace Clarity\Debug;
 /**
  * Renders debug values as a collapsible HTML tree using <details>/<summary>.
  *
- * Associative arrays are displayed using object notation {key: value}.
- * Sequential arrays are displayed as lists [item, …].
- * All scalar output is HTML-escaped.  Sensitive keys are masked.
- * A minimal inline <style> block is injected once per page.
+ * Each array is labelled with its type and size: "object (n)" for a non-empty
+ * associative array, showing key: value entries, and "array (n)" for a
+ * sequential array. Empty arrays render as []. Objects are shown by their
+ * properties, like associative arrays. The top-level array is expanded and
+ * nested arrays are collapsed. Scalar values are HTML-escaped. Values under
+ * masked keys or property names are shown as ***.
+ *
+ * Every render includes the inline <style> block, so each dump is
+ * self-contained.
  */
 final class HtmlDumpRenderer implements DumpRenderer
 {
-    /** Ensures the CSS block is injected only once per process/request. */
-    private static bool $cssInjected = false;
+    use DumpMaskingTrait;
 
     public function render(mixed $value, DumpOptions $opts): string
     {
-        $css = '';
-        if (!self::$cssInjected) {
-            self::$cssInjected = true;
-            $css = self::css();
-        }
-
-        return $css . '<div class="clarity-dump">' . $this->renderValue($value, $opts, 0) . '</div>';
+        return self::css() . '<div class="clarity-dump">' . $this->renderValue($value, $opts, 0) . '</div>';
     }
 
     private function renderValue(mixed $value, DumpOptions $opts, int $depth): string
@@ -58,6 +56,10 @@ final class HtmlDumpRenderer implements DumpRenderer
                 . '&quot;</span>';
         }
 
+        if ($this->isExpandableObject($value)) {
+            return $this->renderArray($this->objectProperties($value), $opts, $depth);
+        }
+
         return '<span class="cd-other">'
             . \htmlspecialchars(\print_r($value, true), \ENT_QUOTES | \ENT_SUBSTITUTE, 'UTF-8')
             . '</span>';
@@ -65,8 +67,8 @@ final class HtmlDumpRenderer implements DumpRenderer
 
     private function renderArray(array $arr, DumpOptions $opts, int $depth): string
     {
-        $isAssoc = \array_keys($arr) !== \range(0, \count($arr) - 1);
         $count   = \count($arr);
+        $isAssoc = $count > 0 && \array_keys($arr) !== \range(0, $count - 1);
         $open    = $isAssoc ? '{' : '[';
         $close   = $isAssoc ? '}' : ']';
         $label   = $isAssoc ? "object ({$count})" : "array ({$count})";
@@ -104,17 +106,6 @@ final class HtmlDumpRenderer implements DumpRenderer
                 <ul>{$items}</ul>
             </details>
         HTML;
-    }
-
-    private function isMasked(string $key, DumpOptions $opts): bool
-    {
-        $lower = \strtolower($key);
-        foreach ($opts->getMaskKeys() as $mask) {
-            if (\str_contains($lower, \strtolower((string) $mask))) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private static function css(): string

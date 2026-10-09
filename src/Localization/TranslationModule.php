@@ -11,7 +11,8 @@ use Clarity\Template\TemplateLocation;
 /**
  * Translation module for the Clarity template engine.
  *
- * Registers a single `t` filter that looks up translation strings from
+ * Registers the `t` filter, the `with_t_domain` / `endwith_t_domain` block
+ * directives, and the `t` service. Translation strings are read from
  * domain-separated locale files (PHP, JSON, or YAML).
  *
  * File naming convention
@@ -34,7 +35,7 @@ use Clarity\Template\TemplateLocation;
  *     'fallback_locale'   => 'en_US',
  *     'translations_path' => __DIR__ . '/locales',
  *     'default_domain'    => 'messages',   // optional, default: 'messages'
- *     'cache_path'        => sys_get_temp_dir(), // optional, where JSON/YAML caches go
+ *     'cache_path'        => sys_get_temp_dir(), // optional, directory for caches of all file formats
  *     'loader'            => null,  // optional, any TranslationLoaderInterface
  * ]));
  * ```
@@ -52,7 +53,7 @@ use Clarity\Template\TemplateLocation;
  * {{ "title" |> t({}, domain:"common") }}
  * {{ "overview" |> t(domain:"books") }}
  *
- * {# Locale switch block (requires LocaleService or auto-bootstrapped) #}
+ * {# Locale switch block (LocaleService is bootstrapped automatically) #}
  * {% with_locale user.locale %}
  *     {{ "welcome" |> t }}
  * {% endwith_locale %}
@@ -69,6 +70,26 @@ class TranslationModule implements ModuleInterface
     private TranslationLoaderInterface $loader;
     private ?LocaleService $localeService = null;
 
+    /**
+     * Create a translation module.
+     *
+     * When `loader` is given, `translations_path` and `cache_path` are ignored.
+     * Otherwise a `FileTranslationLoader` reads from `translations_path`, which
+     * must be an existing directory, or the constructor throws.
+     *
+     * Without `cache_path`, the loader caches under `sys_get_temp_dir()/clarity_translations`,
+     * in a subdirectory named by the MD5 hash of `translations_path`.
+     *
+     * @param array{
+     *     locale?: string|null,
+     *     fallback_locale?: string,
+     *     default_domain?: string,
+     *     translations_path?: string|null,
+     *     cache_path?: string|null,
+     *     loader?: TranslationLoaderInterface|null
+     * } $config
+     * @throws \InvalidArgumentException When `loader` is not a TranslationLoaderInterface or `translations_path` is not a directory.
+     */
     public function __construct(array $config = [])
     {
         $this->configuredLocale = $config['locale'] ?? null;
@@ -94,21 +115,10 @@ class TranslationModule implements ModuleInterface
             }
         }
 
-        $cachePath = $config['cache_path'] ?? null;
-        if ($cachePath === null) {
-            $cachePath = \sys_get_temp_dir() . \DIRECTORY_SEPARATOR . 'clarity_translations';
-            if ($translationsPath !== null) {
-                $cachePath .= \DIRECTORY_SEPARATOR;
-                $cachePath .= md5($translationsPath);
-            }
-        }
-        $cachePath = rtrim($cachePath, '/\\');
-
         $this->loader = new FileTranslationLoader(
             $translationsPath ?? '',
-            $cachePath
+            $config['cache_path'] ?? null
         );
-
     }
 
     public function register(ClarityEngine $engine): void
@@ -161,9 +171,10 @@ class TranslationModule implements ModuleInterface
     /**
      * Return the loader this module resolves keys with.
      *
-     * The loader is injectable, and a decorator such as `RedisCachingLoader`
-     * has an `invalidate()` that is not reachable any other way. The module is
-     * registered as the `t` service, so:
+     * Use this to reach the loader when the module was registered without
+     * keeping a reference, for example via `getService('t')`. A decorator such
+     * as `RedisCachingLoader` has an `invalidate()` method that is only
+     * reachable through this accessor or the injected instance:
      *
      * ```php
      * $loader = $engine->getService('t')->getLoader();
@@ -197,6 +208,10 @@ class TranslationModule implements ModuleInterface
 
     /**
      * Look up a translation key with optional placeholder substitution.
+     *
+     * The message is taken from the requested locale. If it is missing, the
+     * fallback locale is tried. If it is missing there too, the key itself is
+     * returned.
      *
      * @param string              $key    Translation key.
      * @param ?array<string,mixed> $vars   Placeholder values for `{name}` substitution.
@@ -243,11 +258,17 @@ class TranslationModule implements ModuleInterface
         return \strtr($msg, $pairs);
     }
 
-    /** =========================================================================
-     * Domain stack (for with_t_domain blocks)
-     * =========================================================================
+    // Domain stack for with_t_domain blocks; see pushDomain().
+
+    /**
+     * Push a domain onto the stack, making it the current domain.
      *
-     * The domain stack allows nested overrides of the current domain, e.g.:
+     * Null or an empty string pushes the current domain, so the block changes
+     * nothing. Every call adds one entry, which keeps it paired with `popDomain()`.
+     *
+     * Blocks nest. In this example the first `t` looks up `welcome_subject` in
+     * the `emails` domain, and the second looks up `reset_subject` in the nested
+     * `passwords` domain:
      *
      * {% with_t_domain "emails" %}
      *     {{ "welcome_subject" |> t }}
@@ -257,17 +278,11 @@ class TranslationModule implements ModuleInterface
      *     {% endwith_t_domain %}
      *
      * {% endwith_t_domain %}
-     *
-     * In this example, the first `t` filter looks up `welcome_subject` in the
-     * `emails` domain, while the second looks up `reset_subject` in the nested
-     * `passwords` domain.
      */
     public function pushDomain(?string $domain): void
     {
-        if ($domain !== null && $domain !== '') {
-            $this->domainStack[] = $domain;
-            $this->currentDomain = $domain;
-        }
+        $this->domainStack[] = ($domain !== null && $domain !== '') ? $domain : $this->currentDomain;
+        $this->currentDomain = \end($this->domainStack);
     }
 
     /** Pop the most recently pushed domain off the stack. */

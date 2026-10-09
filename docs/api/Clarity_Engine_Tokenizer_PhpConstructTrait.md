@@ -4,20 +4,15 @@
 
 Extracted from Clarity\Engine\Tokenizer to keep each file small. See that class for docs.
 
-The three constructs that name a PHP CLASS rather than a template value:
-`new Foo(...)`, `Foo::member`, and the right operand of `instanceof`.
+Three constructs name a PHP CLASS rather than a template value: `new Foo(...)`,
+`Foo::member`, and the right operand of `instanceof`.
 
-All three are gated on a policy rule (`newExpressions`, `staticCalls`)
-and all three compile the name to a FULLY QUALIFIED form with a leading `\`.
+`new` and `Foo::member` are gated by the `newExpressions` and `staticCalls`
+policy rules. `instanceof` is not gated by a rule.
 
-That leading separator is the whole point.  A compiled template is a plain
-class in the global namespace with no `use` statements, so an unqualified
-`new DateTime()` would be resolved as `\DateTime` by luck and as
-`\Clarity\Engine\DateTime`-style names by nobody's intention.  Emitting `\`
-makes the resolution explicit and independent of where the engine lives —
-which is also why leaving the name bare (the bug this replaced) produced
-`unexpected fully qualified name "\DateTime"` from PHP: a `\` was reaching
-the output with no name attached to it.
+All three compile the class name to a fully qualified form with a leading `\`,
+so the name resolves as a global class name regardless of the namespace the
+compiled template is emitted in.
 
 
 

@@ -48,15 +48,12 @@ Whether the character (a single BYTE) can appear inside an identifier.
 
 ---
 
-### isIdentifier() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionSupportTrait.php#L350)</small>
+### isIdentifier() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionSupportTrait.php#L347)</small>
 
 `public static function isIdentifier(string $name): bool`
 
-Whether the whole string is one PHP variable name.
-
-Callers that VALIDATE a name (rather than scan for one) must use this so
-their accepted set can never drift from what the scanner above will
-tokenize back out.
+Whether the whole string is one PHP variable name. Validate names with this,
+which matches [`Tokenizer::IDENT_RE()`](Clarity_Engine_Tokenizer.md#ident_re).
 
 **Parameters**
 

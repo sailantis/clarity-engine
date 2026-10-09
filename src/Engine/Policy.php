@@ -69,9 +69,9 @@ use Clarity\ClarityException;
  *
  * It is on in every preset, including {@see restricted()}. Coercion is a silent
  * success: `'1abc'` becomes `1`, a `null` becomes `''`, and nothing anywhere says
- * a type was wrong.  A type error says so.  The cost is a diagnostic, and the
- * alternative is not safety but invisibility — so the strict behaviour is what a
- * template gets unless its application opts out with `denyRule('strictTypes')`.
+ * a type was wrong.  A type error says so.  The cost is a diagnostic, so a
+ * template gets strict behaviour unless its application opts out with
+ * `denyRule('strictTypes')`.
  *
  * It is not an `allowsPhp()` rule: it grants no construct, and it decides
  * nothing about what a template can name.  What it changes is the *contract at a
@@ -162,10 +162,10 @@ final class Policy
     /**
      * Everything on, no allowlist: templates have the full power of PHP.
      *
-     * This is the engine's former PHP mode (`setSandboxMode(false)`), and it is
-     * exactly as dangerous.  Intended for templates written by trusted authors
-     * (Blade / Stempler / Plates parity), never for templates a request can
-     * choose.
+     * This is the engine's former PHP mode (`setSandboxMode(false)`), with no
+     * restrictions applied.  It is intended for templates written by trusted
+     * authors (Blade / Stempler / Plates parity), not for templates a request
+     * can choose.
      */
     public static function unrestricted(): self
     {

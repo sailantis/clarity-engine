@@ -4,16 +4,15 @@ declare(strict_types=1);
 
 namespace Clarity\Debug;
 
+/**
+ * Renders a value as debug output.
+ *
+ * Implementations may have side effects: the CLI renderer writes to STDERR.
+ * render() returns the string to insert into the template output, or '' when
+ * the output was written directly to STDERR.
+ */
 interface DumpRenderer
 {
-    /**
-     * Render $value for display.
-     *
-     * May have side effects (e.g. writing to STDERR for the CLI renderer).
-     * Returns a string to be concatenated into the template output; returns ''
-     * when the output was sent directly to STDERR.
-     * @param mixed $value
-     * @param DumpOptions $opts
-     */
     public function render(mixed $value, DumpOptions $opts): string;
 }
+

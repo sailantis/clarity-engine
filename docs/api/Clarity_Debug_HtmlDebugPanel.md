@@ -2,15 +2,16 @@
 
 **Full name:** [Clarity\Debug\HtmlDebugPanel](../../src/Debug/HtmlDebugPanel.php)
 
-Collects DebugEvents and renders a self-contained floating HTML panel
-appended to the page bottom-right corner.
+Collects DebugEvents and renders a floating HTML panel, fixed to the
+bottom-right corner of the page.
 
-Register it via enableDebug(new DumpOptions(showPanel: true)) or subscribe
-it manually to a DebugEventBus and call getHtml() after rendering.
+The engine adds the panel when debug mode is enabled with
+setDebugMode(new DumpOptions(showPanel: true)). Alternatively, subscribe it
+to a DebugEventBus yourself and call getHtml() after rendering.
 
 ## Public methods
 
-### __construct() · <small>[🗎](../../src/Debug/HtmlDebugPanel.php#L21)</small>
+### __construct() · <small>[🗎](../../src/Debug/HtmlDebugPanel.php#L23)</small>
 
 `public function __construct(): mixed`
 
@@ -21,7 +22,7 @@ it manually to a DebugEventBus and call getHtml() after rendering.
 
 ---
 
-### onEvent() · <small>[🗎](../../src/Debug/HtmlDebugPanel.php#L26)</small>
+### onEvent() · <small>[🗎](../../src/Debug/HtmlDebugPanel.php#L28)</small>
 
 `public function onEvent(Clarity\Debug\DebugEvent $event): void`
 
@@ -38,7 +39,7 @@ it manually to a DebugEventBus and call getHtml() after rendering.
 
 ---
 
-### getHtml() · <small>[🗎](../../src/Debug/HtmlDebugPanel.php#L31)</small>
+### getHtml() · <small>[🗎](../../src/Debug/HtmlDebugPanel.php#L33)</small>
 
 `public function getHtml(): string`
 

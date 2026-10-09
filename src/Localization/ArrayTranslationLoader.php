@@ -5,29 +5,28 @@ namespace Clarity\Localization;
 /**
  * In-memory translation loader backed by a plain PHP array.
  *
- * Useful for unit tests, translations shipped as code rather than as files, and
- * overlaying a small set of programmatic overrides onto a
- * {@see FileTranslationLoader} through a {@see ChainTranslationLoader}:
+ * Useful for unit tests, for translations shipped as code, and for overriding
+ * selected messages of a {@see FileTranslationLoader} through a
+ * {@see ChainTranslationLoader}:
  *
  * ```php
- * $loader = new ArrayTranslationLoader([
- *     'messages' => [
- *         'de_DE' => ['greeting' => 'Hallo', 'nav' => ['home' => 'Startseite']],
- *         'en_US' => ['greeting' => 'Hello'],
- *     ],
- * ]);
+ * $loader = new ChainTranslationLoader(
+ *     new FileTranslationLoader($translationsPath),
+ *     new ArrayTranslationLoader([
+ *         'messages' => [
+ *             'de_DE' => ['greeting' => 'Hallo', 'nav' => ['home' => 'Startseite']],
+ *         ],
+ *     ]),
+ * );
  * $engine->addModule(new TranslationModule(['loader' => $loader]));
  * ```
  *
- * Keys may be nested; they are flattened with dot separators, so the `nav` entry
- * above resolves as `{{ "nav.home" |> t }}`. No file I/O takes place, and a
- * missing domain or locale yields an empty array rather than an error, which is
- * how the module distinguishes "nothing here" from "look elsewhere".
+ * Nested keys are flattened with dot separators, so the `nav` entry above resolves
+ * as `{{ "nav.home" |> t }}`. No file I/O takes place. A missing domain or locale
+ * yields an empty array rather than an error.
  *
- * Flattening happens once, in the constructor, and `load()` returns the map as
- * stored — a lookup is an array read and nothing else. A loader that flattened
- * on every `load()` would have to un-flatten on every write, which is the same
- * work twice and makes a single-key write rewrite its whole branch.
+ * Nested tables are flattened once, in the constructor. `load()` returns the stored
+ * map, so each lookup is a plain array read.
  */
 final class ArrayTranslationLoader implements TranslationLoaderInterface
 {

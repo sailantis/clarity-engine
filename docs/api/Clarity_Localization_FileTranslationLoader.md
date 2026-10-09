@@ -12,12 +12,15 @@ Supported formats:
   - JSON: flat or nested key → message mappings (nested keys flattened to dot notation).
   - PHP: flat or nested key → message mappings (nested keys flattened to dot notation).
 
-For all files, the loader generates a cached PHP file containing
-the parsed translations for faster subsequent loading. The cache is automatically invalidated when the source file changes.
+Only the first existing file for a domain and locale is loaded, in the order
+`.yaml`, `.yml`, `.json`, `.php`.
+
+Each source file is compiled to a PHP cache file. The cache is reused while it is
+at least as new as its source and is regenerated when the source file is newer.
 
 ## Public methods
 
-### __construct() · <small>[🗎](../../src/Localization/FileTranslationLoader.php#L22)</small>
+### __construct() · <small>[🗎](../../src/Localization/FileTranslationLoader.php#L30)</small>
 
 `public function __construct(string $translationsPath, string|null $cachePath = null): mixed`
 
@@ -25,8 +28,8 @@ the parsed translations for faster subsequent loading. The cache is automaticall
 
 | Name | Type | Default | Description |
 |---|---|---|---|
-| `$translationsPath` | string | - |  |
-| `$cachePath` | string\|null | `null` |  |
+| `$translationsPath` | string | - | Directory containing the translation files. |
+| `$cachePath` | string\|null | `null` | Directory for generated caches. Defaults to<br>`sys_get_temp_dir()/clarity_translations/<md5 of translationsPath>`. |
 
 **Return value**
 
@@ -35,7 +38,7 @@ the parsed translations for faster subsequent loading. The cache is automaticall
 
 ---
 
-### load() · <small>[🗎](../../src/Localization/FileTranslationLoader.php#L30)</small>
+### load() · <small>[🗎](../../src/Localization/FileTranslationLoader.php#L46)</small>
 
 `public function load(string $domain, string $locale): array`
 
@@ -49,6 +52,11 @@ the parsed translations for faster subsequent loading. The cache is automaticall
 **Return value**
 
 - Type: `array`
+
+**Throws**
+
+- RuntimeException  If a source file is unreadable or yields no message table.
+- JsonException  If a JSON source file is malformed.
 
 
 

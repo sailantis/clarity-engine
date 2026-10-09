@@ -5,9 +5,8 @@
 ICU / intl formatting module for the Clarity template engine.
 
 Provides locale-aware number, currency, date, time, and text formatting
-filters backed by PHP's `intl` extension. Every filter degrades gracefully
-when `intl` is unavailable, falling back to a PHP-native equivalent or
-returning the value unmodified.
+filters backed by PHP's `intl` extension. Each filter has a fallback when
+`intl` is unavailable: a PHP-native equivalent, or the unmodified value.
 
 Registration
 ------------
@@ -27,7 +26,7 @@ Registered filters
 |-------------------|--------------------------------------------------------|--------------------------------------------------|
 | `format_number`   | `format_number($v [, $decimals=2] [, $locale])`        | Locale-aware decimal number                      |
 | `format_currency` | `format_currency($v [, $currency='EUR'] [, $locale])`  | Locale-aware currency amount                     |
-| `currency_name`   | `currency_name($code [, $displayLocale] [, $locale])`  | Currency code → display name (e.g. "US Dollar")  |
+| `currency_name`   | `currency_name($code [, $locale])`                     | Currency code → display name (e.g. "US Dollar")  |
 | `currency_symbol` | `currency_symbol($code [, $locale])`                   | Currency code → symbol (e.g. "$")                |
 | `percent`         | `percent($v [, $decimals=0] [, $locale])`              | Locale-aware percentage                          |
 | `scientific`      | `scientific($v [, $locale])`                           | Scientific notation (e.g. "1.23E4")              |
@@ -38,7 +37,7 @@ Registered filters
 | `format_datetime` | `format_datetime($v [, $ds='medium'] [, $ts='medium'] [, $locale] [, $tz])` | Date + time       |
 | `format_relative` | `format_relative($v [, $locale])`                      | Relative time ("3 minutes ago")                  |
 | `transliterate`   | `transliterate($v [, $rules='Any-Latin; Latin-ASCII'])` | Transliterate text                               |
-| `format_message`  | `format_message($pattern [, $vars=[]] [, $locale])`    | ICU MessageFormat (plurals, selects, …)          |
+| `format_message`  | `format_message($pattern [, $vars] [, $locale])`       | ICU MessageFormat (plurals, selects, …)          |
 
 Registered functions
 --------------------
@@ -61,7 +60,7 @@ Template usage
 {{ order.created_at |> format_relative }}
 {{ "Hëllo Wörld" |> transliterate }}
 {{ "{count, plural, one{# item} other{# items}}" |> format_message({count: n}) }}
-{{ currency_name("USD") }}
+{{ "USD" |> currency_name }}
 {{ country_name("DE") }}
 {{ language_name("de") }}
 {{ locale_name("en_US") }}
@@ -70,25 +69,17 @@ Template usage
 
 ## Public methods
 
-### __construct() · <small>[🗎](../../src/Localization/IntlFormatModule.php#L102)</small>
+### __construct() · <small>[🗎](../../src/Localization/IntlFormatModule.php#L91)</small>
 
 `public function __construct(array $config = []): mixed`
 
 Create a new IntlFormatModule instance.
 
-```php
-Config options: {
-    string|null $locale   Locale for formatting (e.g. "en_US"). Falls back to the
-                          LocaleService default, then the detected environment locale.
-    string|null $timezone Default timezone (e.g. "UTC" or "Europe/Berlin").
-}
-```
-
 **Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
-| `$config` | array | `[]` | Configuration options for the module. |
+| `$config` | array | `[]` | `locale`: locale for formatting (e.g. "en_US"). Falls back to the<br>LocaleService default, then the detected environment locale.<br>`timezone`: default timezone (e.g. "UTC" or "Europe/Berlin"). Falls back<br>to `date_default_timezone_get()`. |
 
 **Return value**
 
@@ -97,15 +88,16 @@ Config options: {
 
 ---
 
-### register() · <small>[🗎](../../src/Localization/IntlFormatModule.php#L111)</small>
+### register() · <small>[🗎](../../src/Localization/IntlFormatModule.php#L100)</small>
 
 `public function register(Clarity\ClarityEngine $engine): void`
 
 Register all filters, functions, services, and directives that
 this module provides into the given engine instance.
 
-This method is called once by [`ClarityEngine::addModule()`](Clarity_ClarityEngine.md#addmodule) at engine
-setup time, before any templates are compiled or rendered.
+[`ClarityEngine::addModule()`](Clarity_ClarityEngine.md#addmodule) calls this method immediately. Call
+addModule() before rendering templates so the module's filters and
+directives are available.
 
 **Parameters**
 

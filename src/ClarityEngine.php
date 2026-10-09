@@ -1,26 +1,24 @@
 <?php
 namespace Clarity;
 
-use Clarity\Engine\Policy;
-
 /**
  * Clarity Template Engine
  *
- * A fast, secure, and expressive PHP template engine for `.clarity.html` templates.
- * Templates are sandboxed by default — they can only use variables passed to
- * render() and registered filters/functions — or run in PHP mode (sandbox disabled)
- * with the full power of PHP. Both modes deliver maximum performance.
+ * A PHP template engine for `.clarity.html` templates.
+ * Templates are sandboxed by default: they can use only variables passed to
+ * render() and registered filters and functions. A policy can instead grant
+ * templates access to PHP.
  *
  * Key Features
  * ------------
- * - **Compiled & Cached**: Templates compile to PHP classes, leveraging OPcache for performance
- * - **Secure Sandbox**: No arbitrary PHP execution, strict variable access control
- * - **Opt-In PHP Mode**: A policy can grant templates the full power of PHP
- *   (any function, method calls, raw `{% php %}` tags)
- * - **Auto-escaping**: Built-in XSS protection with automatic HTML escaping
+ * - **Compiled & Cached**: Templates compile to PHP classes that are cached on disk and can benefit from OPcache
+ * - **Sandbox**: By default, templates cannot execute arbitrary PHP code and have strict variable access control
+ * - **Policy-Based Access Control**: Fine-grained control over what templates can access (for example PHP functions, method calls, raw `{% php %}` tags)
+ * - **Debugging**: Integrated debug tools for development
+ * - **Auto-escaping**: Output is HTML-escaped by default
  * - **Template Inheritance**: Reusable layouts via extends/blocks
  * - **Filter Pipeline**: Transform data with chainable filters (|>)
- * - **Unicode Support**: Full multibyte string handling with NFC normalization
+ * - **Unicode Support**: Multibyte string handling with NFC normalization
  *
  * Basic Usage
  * -----------
@@ -28,10 +26,10 @@ use Clarity\Engine\Policy;
  * use Clarity\ClarityEngine;
  *
  * $engine = new ClarityEngine([
- *    'viewPath' => __DIR__ . '/templates',
- *    'cachePath' => __DIR__ . '/cache',
+ *     'viewPath' => __DIR__ . '/templates',
+ *     'cachePath' => __DIR__ . '/cache',
  * ]);
- * # or configure via setters:
+ * // or configure with setters:
  * $engine = ClarityEngine::create()
  *    ->setViewPath(__DIR__ . '/templates')
  *    ->setCachePath(__DIR__ . '/cache');
@@ -99,12 +97,12 @@ use Clarity\Engine\Policy;
  * - Execute arbitrary code (no eval, backticks, etc.)
  * - Call methods on objects
  *
- * What a template may reach is decided by a {@see \Clarity\Engine\Policy}: a set
- * of rules plus two allowlists, resolved entirely at compile time.  An
- * application that needs one PHP function grants it without giving up the
- * sandbox (see Policy::default()); granting the rules that reach PHP at
- * all (rawPhp, phpVariables, methodCalls) is equivalent to executing arbitrary
- * PHP and is intended for templates written by trusted authors only.
+ * A {@see \Clarity\Engine\Policy} decides what a template may reach. It consists
+ * of rules and two allowlists, resolved at compile time. An application that
+ * needs one PHP function can grant only that function and keep the sandbox
+ * (see Policy::default()). Granting `rawPhp`, `phpVariables`, or `methodCalls`
+ * gives templates broad PHP access, so limit these to templates written by
+ * trusted authors.
  *
  * @see https://github.com/clarity/engine Documentation and examples
  */

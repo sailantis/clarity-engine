@@ -43,8 +43,8 @@ use Stringable;
  * - `striptags [$allowed]`      : Strip HTML/PHP tags
  * - `truncate($length [, $ellipsis='…'])`: Truncate string to length
  * - `sprintf(...$args)`         : sprintf-style string formatting (alias: `format`)
- * - `escape` (alias: `esc`)     : HTML-escape (htmlspecialchars) — rarely needed, auto-escaping enabled
- * - `raw`                       : Disable auto-escaping for this output (DANGEROUS with user input)
+ * - `escape` (alias: `esc`)     : HTML-escape (htmlspecialchars) — explicit escaping; output is already auto-escaped unless `raw` is used
+ * - `raw`                       : Disable auto-escaping for this output; untrusted input is rendered as-is
  *
  * **Numbers**
  * - `number($decimals=2)`       : Format number with decimal places (number_format)
@@ -133,20 +133,15 @@ class Registry
      * `functions` allowlist is the same idea stated positively and works in every
      * policy rather than only where the sandbox is already off.
      *
-     * It is kept as a named constant because applications set it and because
-     * `Policy::denyFunctions()` is the replacement for the guardrails it used to
-     * describe:
+     * It is kept as a named constant for compatibility.  `Policy::denyFunctions()`
+     * is the replacement for the guardrails it once described:
      *
      *     $engine->setPolicy(Policy::unrestricted()->denyFunctions('exec', 'system'));
      *
-     * What remains out of reach in every policy is the engine's own render-frame
-     * namespace: a template may not BIND a `__c_`-prefixed name (it would swap an
-     * internal for the rest of the render).  `$$name` / `${expr}` variable-variable
-     * expansion is an ordinary scope lookup in every policy (it resolves against
-     * the render scope and loop locals, so it can reach neither a superglobal nor
-     * an engine internal), and a policy's dynamic dereference is likewise a plain
-     * local lookup — strictly weaker than the literal `$_SERVER` spelling a
-     * `superglobals` grant already permits.
+     * No policy lets a template BIND a `__c_`-prefixed name, which would replace an
+     * engine internal for the rest of the render.  Variable-variable access
+     * (`$$name`, `${expr}`) is an ordinary scope lookup in every policy and reaches
+     * neither a superglobal nor an engine internal.
      *
      * @var array<string, true>
      */
@@ -302,11 +297,10 @@ class Registry
      *
      * The separation is deliberate: a name's reachability under the pipe is a
      * compile-time fact, while the callable that implements it is runtime data.
-     * Keeping them apart makes the failure mode that used to exist here — a name
-     * marked filterable with nothing to call — structurally visible: it would be
-     * a key in this table with no entry in {@see $callables}, which
-     * {@see hasFilter()} alone cannot hide because the runtime entry is the
-     * whole point of being listed.
+     * Keeping them apart makes a name marked filterable with nothing to call
+     * structurally visible: it would be a key in this table with no entry in
+     * {@see $callables}, which {@see hasFilter()} alone cannot hide because the
+     * runtime entry is the whole point of being listed.
      *
      * A name here is NOT callable under call syntax (`slug(x)` is a compile
      * error): these filters exist only through the pipe. Names with an inline
@@ -400,7 +394,7 @@ class Registry
         // ── Inline filter templates (compiled to PHP, zero runtime dispatch) ──
         //
         // `{1}` is the piped value; `{2}`, `{3}`, … are the declared `params`.
-        // Entries whose value param does not lead declare `valueParam` (Phase 2).
+        // Entries whose value param does not lead declare `valueParam`.
         $this->inlineDefinitions += [
             'abs' => [
                 'php' => '\abs({1} + 0)',
@@ -1074,9 +1068,8 @@ class Registry
      * filtering or rebuilding step: {@see $callables} IS the table, so this
      * returns it directly and costs nothing.
      *
-     * The engine rebinds the `dump`/`dd` entries to the debug formatter before
-     * handing the table to a template — see
-     * {@see \Clarity\ClarityEngine::runtimeCallables()}.
+     * The `dump`/`dd` entries are returned as registered. Their output follows
+     * the debug handler set on the registry.
      *
      * @return array<string, callable>
      */

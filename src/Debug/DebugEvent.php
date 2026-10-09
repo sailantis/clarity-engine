@@ -5,8 +5,9 @@ declare(strict_types=1);
 namespace Clarity\Debug;
 
 /**
- * DebugEvent represents a single debug event emitted on the DebugEventBus.
- * It contains a type, an optional payload, and a timestamp of when it was emitted.
+ * An immutable debug event: a type, a payload and the time it was emitted.
+ *
+ * The timestamp is microtime(true): seconds since the Unix epoch, with a fractional part.
  */
 final class DebugEvent
 {

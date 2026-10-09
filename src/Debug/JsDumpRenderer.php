@@ -5,21 +5,29 @@ declare(strict_types=1);
 namespace Clarity\Debug;
 
 /**
- * Renders debug values as a JS comment: ;/* DEBUG_DUMP: {json} *\/
+ * Renders debug values as a JavaScript block comment: ;/* DEBUG_DUMP: {json} *\/
  *
- * The output is valid JavaScript in any statement position and does not
- * interfere with surrounding script logic.  Sensitive keys are masked in the
- * JSON payload.  Any '*\/' sequence inside the JSON is escaped to '*\\\/' to
- * prevent comment injection.
+ * The output starts with an empty statement (;) followed by the comment, so it
+ * can be placed where a JavaScript statement is allowed. Sensitive keys are
+ * replaced with '***', and values nested deeper than maxDepth with '…'. The
+ * comment-closing sequence in the JSON is escaped by inserting a backslash
+ * before the slash, so it cannot end the comment early. '<' and '>' are
+ * written as \u003C and \u003E, so the output cannot close a surrounding
+ * <script> element.
  */
 final class JsDumpRenderer implements DumpRenderer
 {
+    use DumpMaskingTrait;
+
     public function render(mixed $value, DumpOptions $opts): string
     {
         $masked = $this->maskValue($value, $opts, 0);
         $json = (string) \json_encode(
             $masked,
-            \JSON_UNESCAPED_UNICODE | \JSON_UNESCAPED_SLASHES | \JSON_PARTIAL_OUTPUT_ON_ERROR
+            \JSON_UNESCAPED_UNICODE
+                | \JSON_UNESCAPED_SLASHES
+                | \JSON_PARTIAL_OUTPUT_ON_ERROR
+                | \JSON_HEX_TAG
         );
 
         // Escape any '*/' to prevent closing the JS comment early
@@ -32,6 +40,14 @@ final class JsDumpRenderer implements DumpRenderer
     {
         if ($depth >= $opts->getMaxDepth()) {
             return '…';
+        }
+
+        if ($value instanceof \JsonSerializable) {
+            $value = $value->jsonSerialize();
+        }
+
+        if ($this->isExpandableObject($value)) {
+            $value = $this->objectProperties($value);
         }
 
         if (!\is_array($value)) {
@@ -47,16 +63,5 @@ final class JsDumpRenderer implements DumpRenderer
             }
         }
         return $result;
-    }
-
-    private function isMasked(string $key, DumpOptions $opts): bool
-    {
-        $lower = \strtolower($key);
-        foreach ($opts->getMaskKeys() as $mask) {
-            if (\str_contains($lower, \strtolower((string) $mask))) {
-                return true;
-            }
-        }
-        return false;
     }
 }

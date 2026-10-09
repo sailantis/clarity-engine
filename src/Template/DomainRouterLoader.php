@@ -4,25 +4,28 @@ namespace Clarity\Template;
 /**
  * TemplateLoader that dispatches to different loaders based on a domain prefix in the template name.
  *
- * The template name is expected to be in the format "domain::localName".  The loader looks up the
+ * The template name is expected to be in the format "domain::localName". The loader looks up the
  * domain in its map and forwards the load request to the corresponding loader with the localName.
  *
  * If no "::" is present, the entire name is treated as localName and passed to a fallback loader if configured.
+ * Without a fallback, such a name resolves to null.
+ *
+ * An unregistered domain throws a RuntimeException.
  *
  * ```php
  * $loader = new DomainRouterLoader([
- *     'app' => new FilesystemLoader('/path/to/app/templates'),
- *     'lib' => new FilesystemLoader('/path/to/lib/templates'),
- * ], fallback: new FilesystemLoader('/path/to/default/templates'));
+ *     'app' => new FileLoader('/path/to/app/templates'),
+ *     'lib' => new FileLoader('/path/to/lib/templates'),
+ * ], fallback: new FileLoader('/path/to/default/templates'));
  * $engine->setLoader($loader);
  *
- * // Resolves to /path/to/app/templates/home.html
+ * // Resolves to /path/to/app/templates/home.clarity.html
  * echo $engine->render('app::home');
  *
- * // Resolves to /path/to/lib/templates/widget.html
+ * // Resolves to /path/to/lib/templates/widget.clarity.html
  * echo $engine->render('lib::widget');
  *
- * // Resolves to /path/to/default/templates/other.html
+ * // Resolves to /path/to/default/templates/other.clarity.html
  * echo $engine->render('other');
  * ```
  */

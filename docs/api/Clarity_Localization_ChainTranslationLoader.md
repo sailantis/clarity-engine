@@ -5,9 +5,9 @@
 Composite translation loader that chains multiple loaders together.
 
 The `ChainTranslationLoader` accepts multiple `TranslationLoaderInterface`
-instances and queries them in order when loading translations for a
-given domain and locale. The results from all loaders are merged, with
-later loaders overriding earlier ones in case of key conflicts.
+instances and queries each of them, in order, for a given domain and locale.
+Every loader is called; there is no short-circuit. The results are merged, and
+later loaders override earlier ones on key conflicts.
 
 This allows you to combine different loading strategies, such as a
 `FileTranslationLoader` for disk-based translations and an `ArrayTranslationLoader`

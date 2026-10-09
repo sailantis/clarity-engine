@@ -13,8 +13,6 @@ trait OperatorTestTrait
     // -------------------------------------------------------------------------
     // Twig-style operator tests
     // -------------------------------------------------------------------------
-    // Twig-style operator tests
-    // -------------------------------------------------------------------------
 
     /**
      * Operator tests, keyed by the (underscored) test name as written after
@@ -486,9 +484,9 @@ trait OperatorTestTrait
      * The probe is a presence test that never warns, and the value read sits
      * behind a short-circuit `||`, so an absent name is never read.
      *
-     * `isset()` reports a present-but-null name as absent, deliberately: that is
-     * the one answer a PHP local can give, so it is the only answer both modes
-     * can give together. See {@see presenceProbeFor()}.
+     * `isset()` reports a present-but-null name as absent. A PHP local cannot
+     * distinguish the two either, so both modes give the same answer. See
+     * {@see presenceProbeFor()}.
      */
     private function buildPresenceTest(string $value, string $call): string
     {
@@ -508,17 +506,13 @@ trait OperatorTestTrait
      * A presence probe for a compiled access expression, or a `null` comparison
      * for anything that cannot appear inside isset().
      *
-     * `isset()` is the probe for EVERY form, one spelling in both modes. An
-     * earlier version special-cased a bare `$__c_va['name']` with
-     * `array_key_exists()` so that a scope entry holding an explicit `null`
-     * counted as defined. That special case is gone: open mode emits a bare
-     * PHP local for the same name, and no O(1) existence test for a local can
-     * see through null — so the two modes could not agree, and `x is defined`
-     * meant something different depending on a setting the template cannot see.
+     * `isset()` is the probe for every form, in both modes. Using
+     * `array_key_exists()` for a bare `$__c_va['name']` would count an explicit
+     * null as defined, but open mode emits a plain PHP local, and no cheap existence
+     * test for a local can see through null. Using `isset()` everywhere keeps the
+     * two modes in agreement, so a template never has to know which mode it runs in.
      *
-     * The contract is now one sentence: a name counts as defined when it holds a
-     * value other than null. That is also what a local can answer, so both modes
-     * compile to the same expression and a template never has to know the mode.
+     * The contract: a name counts as defined when it holds a value other than null.
      */
     private function presenceProbeFor(string $php): string
     {

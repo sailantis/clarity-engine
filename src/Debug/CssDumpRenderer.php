@@ -5,13 +5,17 @@ declare(strict_types=1);
 namespace Clarity\Debug;
 
 /**
- * Renders debug values as a CSS comment: /* DEBUG_DUMP: {json} *\/
+ * Renders debug values as a CSS block comment: /* DEBUG_DUMP: {json} *\/
  *
- * Closing comment sequences in the JSON are escaped, and tag delimiters are
- * encoded to protect the surrounding <style> element.
+ * Sensitive keys are replaced with '***', and values nested deeper than
+ * maxDepth with '…'. The comment-closing sequence in the JSON is escaped by
+ * inserting a backslash before the slash. '<' and '>' are written as \u003C
+ * and \u003E, so the output cannot close a surrounding <style> element.
  */
 final class CssDumpRenderer implements DumpRenderer
 {
+    use DumpMaskingTrait;
+
     public function render(mixed $value, DumpOptions $opts): string
     {
         $masked = $this->maskValue($value, $opts, 0);
@@ -34,6 +38,14 @@ final class CssDumpRenderer implements DumpRenderer
             return '…';
         }
 
+        if ($value instanceof \JsonSerializable) {
+            $value = $value->jsonSerialize();
+        }
+
+        if ($this->isExpandableObject($value)) {
+            $value = $this->objectProperties($value);
+        }
+
         if (!\is_array($value)) {
             return $value;
         }
@@ -47,16 +59,5 @@ final class CssDumpRenderer implements DumpRenderer
             }
         }
         return $result;
-    }
-
-    private function isMasked(string $key, DumpOptions $opts): bool
-    {
-        $lower = \strtolower($key);
-        foreach ($opts->getMaskKeys() as $mask) {
-            if (\str_contains($lower, \strtolower((string) $mask))) {
-                return true;
-            }
-        }
-        return false;
     }
 }

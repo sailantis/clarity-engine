@@ -2,29 +2,28 @@
 
 **Full name:** [Clarity\Debug\DumpOptions](../../src/Debug/DumpOptions.php)
 
-Configuration options for the Clarity dump renderers.
+Options for the dump renderers used by dump() and dd().
 
-Pass this to [`ClarityEngineTrait::setDebugMode()`](Clarity_ClarityEngineTrait.md#setdebugmode) to customise
-how dump() and dd() display values.  Every option is set both by the
-constructor and by a fluent method of the same name, so the two styles
-compose and a value can be adjusted after the object exists:
+Pass an instance to [`ClarityEngineTrait::setDebugMode()`](Clarity_ClarityEngineTrait.md#setdebugmode). Each
+option can be set through the constructor or through a fluent method of the
+same name, so both styles can be combined:
 
 ```php
-// Named arguments in one expression…
+// Named arguments
 $engine->setDebugMode(new DumpOptions(
     maxDepth: 4,
     maskKeys: ['password', 'token'],
     showPanel: true,
 ));
 
-// …or a chain of calls, on a fresh instance or a shared one:
+// Method chain
 $engine->setDebugMode((new DumpOptions())->maxDepth(4)->maskKeys(['password']));
-$opts->showPanel();
 ```
 
-A chain is MUTABLE: each method changes this instance and returns it, so
-`$opts->maxDepth(4)` is visible to every holder of `$opts` — which is what
-makes a `DumpOptions` handed to the engine earlier reconfigurable later.
+Each fluent method changes the instance and returns it. Changes to maxDepth,
+maxItems, maskKeys, forceToTemplate and haltWithException therefore apply to
+the engine after the DumpOptions was passed in. showPanel is read only when
+debug is enabled, so call setDebugMode() again to change it.
 
 ## Public Properties
 
@@ -33,12 +32,13 @@ makes a `DumpOptions` handed to the engine earlier reconfigurable later.
 - `public` array `$maskKeys` · <small>[🗎](../../src/Debug/DumpOptions.php)</small>
 - `public` bool `$forceToTemplate` · <small>[🗎](../../src/Debug/DumpOptions.php)</small>
 - `public` bool `$showPanel` · <small>[🗎](../../src/Debug/DumpOptions.php)</small>
+- `public` bool `$haltWithException` · <small>[🗎](../../src/Debug/DumpOptions.php)</small>
 
 ## Public methods
 
-### __construct() · <small>[🗎](../../src/Debug/DumpOptions.php#L34)</small>
+### __construct() · <small>[🗎](../../src/Debug/DumpOptions.php#L33)</small>
 
-`public function __construct(int $maxDepth = 5, int $maxItems = 50, array $maskKeys = [], bool $forceToTemplate = false, bool $showPanel = false): mixed`
+`public function __construct(int $maxDepth = 5, int $maxItems = 50, array $maskKeys = [], bool $forceToTemplate = false, bool $showPanel = false, bool $haltWithException = false): mixed`
 
 **Parameters**
 
@@ -49,6 +49,7 @@ makes a `DumpOptions` handed to the engine earlier reconfigurable later.
 | `$maskKeys` | array | `[]` |  |
 | `$forceToTemplate` | bool | `false` |  |
 | `$showPanel` | bool | `false` |  |
+| `$haltWithException` | bool | `false` |  |
 
 **Return value**
 
@@ -57,11 +58,11 @@ makes a `DumpOptions` handed to the engine earlier reconfigurable later.
 
 ---
 
-### create() · <small>[🗎](../../src/Debug/DumpOptions.php#L60)</small>
+### create() · <small>[🗎](../../src/Debug/DumpOptions.php#L63)</small>
 
 `public static function create(): self`
 
-Create a new instance with default options.
+Creates an instance with default options.
 
 **Return value**
 
@@ -70,11 +71,11 @@ Create a new instance with default options.
 
 ---
 
-### maxDepth() · <small>[🗎](../../src/Debug/DumpOptions.php#L68)</small>
+### maxDepth() · <small>[🗎](../../src/Debug/DumpOptions.php#L71)</small>
 
 `public function maxDepth(int $maxDepth): self`
 
-Maximum nesting depth rendered before values are replaced by '…'.
+Sets the maximum nesting depth rendered.
 
 **Parameters**
 
@@ -89,11 +90,11 @@ Maximum nesting depth rendered before values are replaced by '…'.
 
 ---
 
-### maxItems() · <small>[🗎](../../src/Debug/DumpOptions.php#L77)</small>
+### maxItems() · <small>[🗎](../../src/Debug/DumpOptions.php#L80)</small>
 
 `public function maxItems(int $maxItems): self`
 
-Maximum number of array items shown at any one level.
+Sets the maximum number of array items shown per level.
 
 **Parameters**
 
@@ -108,12 +109,12 @@ Maximum number of array items shown at any one level.
 
 ---
 
-### maskKeys() · <small>[🗎](../../src/Debug/DumpOptions.php#L89)</small>
+### maskKeys() · <small>[🗎](../../src/Debug/DumpOptions.php#L92)</small>
 
 `public function maskKeys(array $maskKeys): self`
 
-Replace the mask-key list.  A key is hidden when its name contains one
-of these substrings, case-insensitively.
+Replaces the mask list. A key is masked when its name contains one of
+these substrings, case-insensitively. Array keys and object property names are checked.
 
 **Parameters**
 
@@ -128,11 +129,11 @@ of these substrings, case-insensitively.
 
 ---
 
-### maskKey() · <small>[🗎](../../src/Debug/DumpOptions.php#L98)</small>
+### maskKey() · <small>[🗎](../../src/Debug/DumpOptions.php#L101)</small>
 
 `public function maskKey(string $maskKey): self`
 
-Add a key substring to mask, leaving the current list in place.
+Adds a substring to the mask list.
 
 **Parameters**
 
@@ -147,11 +148,11 @@ Add a key substring to mask, leaving the current list in place.
 
 ---
 
-### unmaskKey() · <small>[🗎](../../src/Debug/DumpOptions.php#L107)</small>
+### unmaskKey() · <small>[🗎](../../src/Debug/DumpOptions.php#L110)</small>
 
 `public function unmaskKey(string $maskKey): self`
 
-Stop masking a key substring, leaving the rest of the list in place.
+Removes a substring from the mask list.
 
 **Parameters**
 
@@ -166,13 +167,13 @@ Stop masking a key substring, leaving the rest of the list in place.
 
 ---
 
-### forceToTemplate() · <small>[🗎](../../src/Debug/DumpOptions.php#L120)</small>
+### forceToTemplate() · <small>[🗎](../../src/Debug/DumpOptions.php#L124)</small>
 
 `public function forceToTemplate(bool $forceToTemplate = true): self`
 
-CLI renderer: when true, return the value as a string (useful for dd()).
-
-When false (default), write to STDERR and return ''.
+CLI only. When true, dump() returns the rendered string instead of
+writing it to STDERR. When false (default), dump() writes to STDERR and
+returns ''. dd() always writes to STDERR and ignores this option.
 
 **Parameters**
 
@@ -187,11 +188,11 @@ When false (default), write to STDERR and return ''.
 
 ---
 
-### showPanel() · <small>[🗎](../../src/Debug/DumpOptions.php#L129)</small>
+### showPanel() · <small>[🗎](../../src/Debug/DumpOptions.php#L133)</small>
 
 `public function showPanel(bool $showPanel = true): self`
 
-Whether to render the HTML debug panel along with the output.
+Shows or hides the HTML debug panel. Takes effect when debug is enabled.
 
 **Parameters**
 
@@ -206,7 +207,30 @@ Whether to render the HTML debug panel along with the output.
 
 ---
 
-### getMaxDepth() · <small>[🗎](../../src/Debug/DumpOptions.php#L135)</small>
+### haltWithException() · <small>[🗎](../../src/Debug/DumpOptions.php#L146)</small>
+
+`public function haltWithException(bool $haltWithException = true): self`
+
+dd() only. When true, dd() throws a [`DumpHaltException`](Clarity_Debug_DumpHaltException.md) with the
+rendered dump instead of calling exit(1). Use it in hosts that keep the
+PHP process alive between requests, such as RoadRunner, so that one dd()
+ends one request and not the worker. The exception is thrown on every
+SAPI, including the CLI.
+
+**Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$haltWithException` | bool | `true` |  |
+
+**Return value**
+
+- Type: `self`
+
+
+---
+
+### getMaxDepth() · <small>[🗎](../../src/Debug/DumpOptions.php#L152)</small>
 
 `public function getMaxDepth(): int`
 
@@ -217,7 +241,7 @@ Whether to render the HTML debug panel along with the output.
 
 ---
 
-### getMaxItems() · <small>[🗎](../../src/Debug/DumpOptions.php#L140)</small>
+### getMaxItems() · <small>[🗎](../../src/Debug/DumpOptions.php#L157)</small>
 
 `public function getMaxItems(): int`
 
@@ -228,7 +252,7 @@ Whether to render the HTML debug panel along with the output.
 
 ---
 
-### getMaskKeys() · <small>[🗎](../../src/Debug/DumpOptions.php#L148)</small>
+### getMaskKeys() · <small>[🗎](../../src/Debug/DumpOptions.php#L165)</small>
 
 `public function getMaskKeys(): array`
 
@@ -239,7 +263,7 @@ Whether to render the HTML debug panel along with the output.
 
 ---
 
-### getForceToTemplate() · <small>[🗎](../../src/Debug/DumpOptions.php#L153)</small>
+### getForceToTemplate() · <small>[🗎](../../src/Debug/DumpOptions.php#L170)</small>
 
 `public function getForceToTemplate(): bool`
 
@@ -250,9 +274,20 @@ Whether to render the HTML debug panel along with the output.
 
 ---
 
-### getShowPanel() · <small>[🗎](../../src/Debug/DumpOptions.php#L158)</small>
+### getShowPanel() · <small>[🗎](../../src/Debug/DumpOptions.php#L175)</small>
 
 `public function getShowPanel(): bool`
+
+**Return value**
+
+- Type: `bool`
+
+
+---
+
+### getHaltWithException() · <small>[🗎](../../src/Debug/DumpOptions.php#L180)</small>
+
+`public function getHaltWithException(): bool`
 
 **Return value**
 

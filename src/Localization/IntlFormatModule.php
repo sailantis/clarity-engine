@@ -10,9 +10,8 @@ use MessageFormatter;
  * ICU / intl formatting module for the Clarity template engine.
  *
  * Provides locale-aware number, currency, date, time, and text formatting
- * filters backed by PHP's `intl` extension. Every filter degrades gracefully
- * when `intl` is unavailable, falling back to a PHP-native equivalent or
- * returning the value unmodified.
+ * filters backed by PHP's `intl` extension. Each filter has a fallback when
+ * `intl` is unavailable: a PHP-native equivalent, or the unmodified value.
  *
  * Registration
  * ------------
@@ -32,7 +31,7 @@ use MessageFormatter;
  * |-------------------|--------------------------------------------------------|--------------------------------------------------|
  * | `format_number`   | `format_number($v [, $decimals=2] [, $locale])`        | Locale-aware decimal number                      |
  * | `format_currency` | `format_currency($v [, $currency='EUR'] [, $locale])`  | Locale-aware currency amount                     |
- * | `currency_name`   | `currency_name($code [, $displayLocale] [, $locale])`  | Currency code → display name (e.g. "US Dollar")  |
+ * | `currency_name`   | `currency_name($code [, $locale])`                     | Currency code → display name (e.g. "US Dollar")  |
  * | `currency_symbol` | `currency_symbol($code [, $locale])`                   | Currency code → symbol (e.g. "$")                |
  * | `percent`         | `percent($v [, $decimals=0] [, $locale])`              | Locale-aware percentage                          |
  * | `scientific`      | `scientific($v [, $locale])`                           | Scientific notation (e.g. "1.23E4")              |
@@ -43,7 +42,7 @@ use MessageFormatter;
  * | `format_datetime` | `format_datetime($v [, $ds='medium'] [, $ts='medium'] [, $locale] [, $tz])` | Date + time       |
  * | `format_relative` | `format_relative($v [, $locale])`                      | Relative time ("3 minutes ago")                  |
  * | `transliterate`   | `transliterate($v [, $rules='Any-Latin; Latin-ASCII'])` | Transliterate text                               |
- * | `format_message`  | `format_message($pattern [, $vars=[]] [, $locale])`    | ICU MessageFormat (plurals, selects, …)          |
+ * | `format_message`  | `format_message($pattern [, $vars] [, $locale])`       | ICU MessageFormat (plurals, selects, …)          |
  *
  * Registered functions
  * --------------------
@@ -66,7 +65,7 @@ use MessageFormatter;
  * {{ order.created_at |> format_relative }}
  * {{ "Hëllo Wörld" |> transliterate }}
  * {{ "{count, plural, one{# item} other{# items}}" |> format_message({count: n}) }}
- * {{ currency_name("USD") }}
+ * {{ "USD" |> currency_name }}
  * {{ country_name("DE") }}
  * {{ language_name("de") }}
  * {{ locale_name("en_US") }}
@@ -80,24 +79,14 @@ class IntlFormatModule implements ModuleInterface
     private ?string $timezone;
     private bool $intlAvailable;
 
-    private static array $styleMap = [
-        'none'   => \IntlDateFormatter::NONE,
-        'short'  => \IntlDateFormatter::SHORT,
-        'medium' => \IntlDateFormatter::MEDIUM,
-        'long'   => \IntlDateFormatter::LONG,
-        'full'   => \IntlDateFormatter::FULL,
-    ];
-
     /**
      * Create a new IntlFormatModule instance.
-     * ```php
-     * Config options: {
-     *     string|null $locale   Locale for formatting (e.g. "en_US"). Falls back to the
- *                           LocaleService default, then the detected environment locale.
-     *     string|null $timezone Default timezone (e.g. "UTC" or "Europe/Berlin").
-     * }
-     * ```
-     * @param array $config Configuration options for the module.
+     *
+     * @param array{locale?: string|null, timezone?: string|null} $config
+     *     `locale`: locale for formatting (e.g. "en_US"). Falls back to the
+     *     LocaleService default, then the detected environment locale.
+     *     `timezone`: default timezone (e.g. "UTC" or "Europe/Berlin"). Falls back
+     *     to `date_default_timezone_get()`.
      */
     public function __construct(array $config = [])
     {
@@ -156,12 +145,9 @@ class IntlFormatModule implements ModuleInterface
      * Returns an empty array when the currency or the ICU data is unavailable, so
      * callers fall back to the code itself by `??`-ing the element they want.
      *
-     * An ICU currency entry is itself a `ResourceBundle`, not an array, and
-     * `ResourceBundle` implements neither `ArrayAccess` nor — in PHP 8.1+ —
-     * `ArrayObject`'s offset behaviour, so `isset($entry[1])` throws
-     * "Cannot use object of type ResourceBundle as array". The entry's *read*
-     * must therefore go through `get()`, and the presence check through the
-     * returned value rather than `isset()` on an offset.
+     * An ICU currency entry is a `ResourceBundle`, not an array. `ResourceBundle`
+     * does not implement `ArrayAccess`, so read its elements with `get()`.
+     * Offset access such as `isset($entry[1])` throws an `Error`.
      *
      * @return array{0?: string, 1?: string} Index 0 is the symbol, 1 the name.
      */
@@ -506,16 +492,18 @@ class IntlFormatModule implements ModuleInterface
          * Format an ICU MessageFormat pattern with variable substitution.
          *
          * Falls back to simple `{placeholder}` replacement when the `intl`
-         * extension is unavailable or MessageFormatter fails to parse the pattern.
+         * extension is unavailable, or when MessageFormatter fails to parse or
+         * format the pattern.
          *
          * @param string $pattern ICU pattern or simple string with {placeholders}
-         * @param ?array<string,mixed> $vars e.g. ['name'=>'Joe','count'=>2]
+         * @param ?array<string,mixed> $vars e.g. ['name'=>'Joe','count'=>2]; null means none
          * @param ?string $locale e.g. 'en_US'
          * @return string
          */
         $formatMessage = function (string $pattern, ?array $vars = null, ?string $locale = null) use ($intl, $localeService): string {
             static $cache = [];
             $locale = $this->localeFor($locale, $localeService);
+            $vars ??= [];
 
             // Try intl first (cached per locale+pattern)
             if ($intl) {
@@ -591,12 +579,28 @@ class IntlFormatModule implements ModuleInterface
     // Internal helpers
     // =========================================================================
 
+    /**
+     * Map a style name to an IntlDateFormatter constant. Resolved on demand so
+     * the class loads without the intl extension.
+     */
+    private static function dateStyleType(string $style): int|string
+    {
+        return match ($style) {
+            'none'   => \IntlDateFormatter::NONE,
+            'short'  => \IntlDateFormatter::SHORT,
+            'medium' => \IntlDateFormatter::MEDIUM,
+            'long'   => \IntlDateFormatter::LONG,
+            'full'   => \IntlDateFormatter::FULL,
+            default  => $style,
+        };
+    }
+
     private function intlDate(mixed $v, string $dateStyle, string $timeStyle, string $locale, ?string $tz): string
     {
         static $cache = [];
 
-        $dateType = self::$styleMap[$dateStyle] ?? $dateStyle;
-        $timeType = self::$styleMap[$timeStyle] ?? $timeStyle;
+        $dateType = self::dateStyleType($dateStyle);
+        $timeType = self::dateStyleType($timeStyle);
 
         $ts = $this->toTimestamp($v);
         $dt = new \DateTime('@' . $ts);

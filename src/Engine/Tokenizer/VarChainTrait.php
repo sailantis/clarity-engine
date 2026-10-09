@@ -32,20 +32,19 @@ trait VarChainTrait
      *
      * Whitespace
      * ---------
-     * A chain continuation may be separated from the value it continues by ANY
+     * A chain continuation may be separated from the value it continues by any
      * amount of whitespace, including newlines, so a long chain can wrap
-     * Go-style (`user.\naddress.\ncity`, `config:\nversion`). This is safe
-     * precisely because `.` is NOT the concatenation operator â€” it always means
-     * property access, so `a . b` has one reading and no ambiguity to preserve.
+     * Go-style (`user.\naddress.\ncity`, `config:\nversion`). `.` always means
+     * property access here, never concatenation, so `a . b` has one reading.
      *
      * Two operators must stay GLUED to the value on their left, because a
      * spaced spelling would collide with the ternary operator:
-     *   â€¢ `?`  â€” a spaced `?` is a ternary; `? .` / `?[` / `?:` / `?->` written
+     *   • `?`  — a spaced `?` is a ternary; `? .` / `?[` / `?:` / `?->` written
      *            with a gap are therefore NOT optional access.
-     *   â€¢ a `.` or `->` with no member after it is an authoring ERROR, not a
+     *   • a `.` or `->` with no member after it is an authoring ERROR, not a
      *     value: there is nothing else it could mean.
      *
-     * `:` â€” the ternary problem
+     * `:` — the ternary problem
      * -------------------------
      * A key colon is `:key`. Whitespace on either side is allowed
      * (`config : version` is the same read as `config:version`), EXCEPT while a
@@ -110,7 +109,7 @@ trait VarChainTrait
             // chain may wrap Go-style (`user.\naddress.\ncity`,
             // `config:\nversion`). Look past it, but ONLY when a continuation
             // really follows: if the next non-space character is an operator
-            // (`+`, `?`, `and`, â€¦) the whitespace separates operands and the
+            // (`+`, `?`, `and`, …) the whitespace separates operands and the
             // chain ends here.
             if (\ctype_space($ch)) {
                 $k = $i;
@@ -145,7 +144,7 @@ trait VarChainTrait
                     // after `?` never matches it.
                     throw new ClarityException(
                         "PHP-style property access ('->') requires the \$ sigil: "
-                            . "write \${$root['value']}?->â€¦ or {$root['value']}?.â€¦ instead of {$root['value']}?->â€¦"
+                            . "write \${$root['value']}?->… or {$root['value']}?.… instead of {$root['value']}?->…"
                     );
                 }
 
@@ -168,7 +167,7 @@ trait VarChainTrait
                 $opLen = $ch === '-' ? 2 : 1;
 
                 // A SPACED `.` or `->` after a ternary `?` is not a chain
-                // continuation â€” `cond ? a : b` and `x ? .5 : 1` rely on this.
+                // continuation — `cond ? a : b` and `x ? .5 : 1` rely on this.
                 if (!$this->isGlued($subject, $i + $opLen, $ternaryOpen)) {
                     break;
                 }
@@ -183,7 +182,7 @@ trait VarChainTrait
                     if (!$allowArrow) {
                         throw new ClarityException(
                             "PHP-style property access ('->') requires the \$ sigil: "
-                                . "write \${$root['value']}->â€¦ (or {$root['value']}?.â€¦) instead of {$root['value']}->â€¦"
+                                . "write \${$root['value']}->… (or {$root['value']}?.…) instead of {$root['value']}->…"
                         );
                     }
                 }
@@ -195,7 +194,7 @@ trait VarChainTrait
                 }
 
                 // Dynamic property/method name after `->`: `$obj->{$m}` and
-                // `$obj->{$m}(...)`.  Emitted as a `dyn` segment, exactly like
+                // `$obj->{$m}(...)`.  Emitted as a `dyn` segment, the same as
                 // the standalone `a{k}` form.
                 if ($j < $len && $subject[$j] === '{') {
                     [$inner, $end] = $this->extractBalancedSegment($subject, $j);
@@ -346,7 +345,7 @@ trait VarChainTrait
             // ---- static array key: `:key` ----------------------------------
             // Whitespace may sit on either side of the colon, so the key may be
             // on the next line. While a ternary is pending, the colon must be
-            // GLUED on both sides to count as a key read â€” that is what leaves
+            // GLUED on both sides to count as a key read — that is what leaves
             // `cond ? x : y` as a ternary.
             if ($ch === ':' && $this->isChainColon($subject, $i, $ternaryOpen)) {
                 $idStart = $i + 1;
@@ -384,11 +383,9 @@ trait VarChainTrait
      *  prop  a.b / a->b -> ->b          (object property, strict)
      *  dyn   a{k}       -> ->{$k}       (object dynamic property, strict)
      *
-     * A segment flagged `optional` is emitted through the matching Access::*
-     * guard, so an absent key/property yields null instead of raising. The
-     * guard is only ever used for the OPTIONAL forms â€” a strict read is plain
-     * PHP indexing/property access, which is what makes the strict contract
-     * cost nothing at runtime.
+     * A segment flagged `optional` is emitted with a null guard, so an absent
+     * receiver yields null instead of raising. The guard is used only for the
+     * optional forms. A strict read is plain PHP indexing or property access.
      *
      * @param array<int,array{type:string,value:string,optional?:bool}> $segments
      */
@@ -416,11 +413,10 @@ trait VarChainTrait
     /**
      * Emit one chain continuation onto an existing PHP expression.
      *
-     * A `prop`/`dyn` segment may carry an optional `call` (its raw argument
-     * list) and `dynName` (the compiled PHP for a computed method name), which
-     * together emit `->method(args)` / `->{$expr}(args)`.
+     * A `prop` or `dyn` segment may carry an optional `call` (its raw argument
+     * list), which emits `->method(args)` or `->{$expr}(args)`.
      *
-     * @param array{type:string,value:string,optional?:bool,call?:string,dynName?:string} $seg
+     * @param array{type:string,value:string,optional?:bool,call?:string} $seg
      */
     private function appendChainSegmentPhp(string $php, array $seg): string
     {
@@ -436,27 +432,20 @@ trait VarChainTrait
                 return $php . '[' . $key . ']';
             }
 
-            // `?` guards the RECEIVER only â€” the read itself stays STRICT. An
-            // absent receiver yields null, but a missing KEY still raises
-            // "Undefined array key". `$receiver[$k] ?? null` would swallow both
-            // and silently hide a mistyped key, which is the exact failure mode
-            // the strict-access design exists to prevent.
+            // `?` guards the receiver only. The read itself stays strict, so a
+            // missing key still raises "Undefined array key". Wrapping the read in
+            // `$receiver[$k] ?? null` would also hide a mistyped key.
             //
             // Two forms:
-            //   bare root    -> (isset($a)           ? $a['k']           : null)
-            //   anything else-> (($t = RECV) === null ? null : $t['k'])
-            // The first is preferred where it is CORRECT: isset() reports an
-            // absent ROOT as false without a warning, which is precisely the
-            // tolerance asked for. It is wrong anywhere else, because isset()
-            // would also swallow a missing property or an intermediate missing
-            // key. The second form binds the receiver ONCE, so a nested optional
-            // chain stays linear instead of duplicating its receiver (the
-            // duplication is what made an earlier revision grow as 2^N â€” six
-            // optional segments emitted 2 245 characters for one read). Both
-            // forms keep the expression nestable.
+            //   bare root     -> (isset($a)           ? $a['k']           : null)
+            //   anything else -> (($t = RECV) === null ? null : $t['k'])
+            // The first is used only when it is correct. isset() reports an absent
+            // root as false without a warning, but it would also hide a missing
+            // property or an intermediate missing key. The second form binds the
+            // receiver once, so nested optional segments stay linear in size.
             //
-            // The guarded subject is the SHORT root (no `?? â€¦` tail): wrapping an
-            // already-coalesced root in isset() is invalid PHP.
+            // The guarded subject is the short root (no `?? …` tail), because
+            // wrapping a coalesced root in isset() is invalid PHP.
             $subject = $this->toLocalSubject($php);
             if (\preg_match(self::BARE_ROOT_RE, $subject)) {
                 return '(isset(' . $subject . ') ? ' . $subject . '[' . $key . '] : null)';
@@ -486,12 +475,12 @@ trait VarChainTrait
 
         // `?->` tolerates a NULL receiver while leaving the PROPERTY READ strict,
         // so a present object lacking the property still raises "Undefined
-        // property" â€” the feedback we want. It short-circuits the rest of the
+        // property" — the feedback we want. It short-circuits the rest of the
         // chain and nests without any guard expression.
         //
         // An ABSENT root is a separate case: `$__c_va['a']?->b` still raises
         // "Undefined array key 'a'", so the receiver is guarded with isset()
-        // there â€” the same tolerance the array side gets, which keeps `?.` and
+        // there — the same tolerance the array side gets, which keeps `?.` and
         // `?:` consistent about an absent root. (Emitting `?? null` instead would
         // additionally swallow a missing property.)
         $subject = $this->toLocalSubject($php);
@@ -546,13 +535,34 @@ trait VarChainTrait
      */
     private function varChainToPhpWithSegments(string $chain, array $segments): string
     {
-        if (isset($this->varChainCache[$chain])) {
-            return $this->varChainCache[$chain];
+        $cacheKey = $this->varChainCacheKey($chain);
+        if (isset($this->varChainCache[$cacheKey])) {
+            return $this->varChainCache[$cacheKey];
         }
 
         $php = $this->buildVarChainPhp($segments);
-        $this->varChainCache[$chain] = $php;
+        $this->varChainCache[$cacheKey] = $php;
         return $php;
+    }
+
+    /**
+     * Inside a lambda the same text can resolve to a closure parameter or to a
+     * scope lookup, so the parameters in scope are part of the key.
+     */
+    private function varChainCacheKey(string $chain): string
+    {
+        if ($this->lambdaFrames === []) {
+            return $chain;
+        }
+
+        $names = [];
+        foreach ($this->lambdaFrames as $frame) {
+            foreach (\array_keys($frame) as $name) {
+                $names[] = $name;
+            }
+        }
+        // Length-prefixed so the chain's end is unambiguous, even if the chain holds a NUL byte inside a quoted key.
+        return 'L' . \strlen($chain) . ':' . $chain . '|' . \implode(',', $names);
     }
 
     /**
@@ -581,14 +591,14 @@ trait VarChainTrait
      * No guard expression is emitted: an unknown name then raises PHP's own
      * "Undefined variable" warning, which {@see ClarityEngineTrait::buildErrorHandler()}
      * already maps to a ClarityException carrying the template line. That keeps
-     * the strict-access contract identical to sandbox mode â€” and a `?? $__c_va[â€¦]`
+     * the strict-access contract identical to sandbox mode — and a `?? $__c_va[…]`
      * fallback would silently suppress it, which is the failure strict access
      * exists to prevent.
      *
-     * Read and write are therefore the SAME text (`$name`), so no lvalue flag is
+     * Read and write are therefore the same text (`$name`), so no lvalue flag is
      * needed in either mode.
      *
-     * A name matching an enclosing lambda's PARAMETER is emitted bare as well:
+     * A name matching an enclosing lambda's parameter is emitted bare as well:
      * that parameter is a real local of the enclosing closure, so reading it
      * through `$__c_va` would report it absent. See {@see $lambdaFrames}.
      */
@@ -598,16 +608,15 @@ trait VarChainTrait
             return '$' . $name;
         }
 
-        // A superglobal name is a special case in BOTH directions, and the two
-        // must be stated together or the rule is a lie:
+        // A superglobal name is handled in both directions, and both rules are
+        // needed to keep them separate:
         //
         //   granted     -> PHP's own `$_SERVER`, whatever the scope holds
         //   not granted -> an ordinary scope read, which is absent and therefore
         //                  throws
         //
-        // The second half is the load-bearing one.  Without it a template could
-        // reach every superglobal through the seeded-local form the moment
-        // `phpVariables` was granted, and the two rules would be one.
+        // Without the second rule, a template could reach every superglobal
+        // through the seeded-local form once `phpVariables` was granted.
         if (self::isSuperglobalName($name)) {
             return $this->allows('superglobals')
                 ? '$' . $name
@@ -646,7 +655,7 @@ trait VarChainTrait
     }
 
     /**
-     * `$__c_va['a']` â†’ `$a` in open mode.  The guard helpers only care about the
+     * `$__c_va['a']` → `$a` in open mode.  The guard helpers only care about the
      * subject, so the emitted form must match what rootPhp() produces for a
      * bare root.  A root that is not a bare `$__c_va[...]` (an already-guarded
      * expression, or a nested chain) is returned unchanged.
@@ -680,14 +689,16 @@ trait VarChainTrait
     }
 
     /**
-     * Convert a Clarity var-chain string to a PHP $__c_va[...] expression.
+     * Convert a Clarity var-chain string to PHP.
      *
-     * Supports:
-     *   foo           â†’ $__c_va['foo']
-     *   foo.bar       â†’ $__c_va['foo']['bar']
-     *   items[0]      â†’ $__c_va['items'][0]
-     *   items[index]  â†’ $__c_va['items'][$__c_va['index']]
-     *   a.b[c.d].e    â†’ $__c_va['a']['b'][$__c_va['c']['d']]['e']
+     * The root is a `$__c_va[...]` lookup, or a PHP local in open mode (see
+     * {@see rootPhp()}). The examples show the sandbox-mode output:
+     *
+     *   foo           → $__c_va['foo']
+     *   foo.bar       → $__c_va['foo']['bar']
+     *   items[0]      → $__c_va['items'][0]
+     *   items[index]  → $__c_va['items'][$__c_va['index']]
+     *   a.b[c.d].e    → $__c_va['a']['b'][$__c_va['c']['d']]['e']
      */
     public function varChainToPhp(string $chain): string
     {
@@ -695,14 +706,15 @@ trait VarChainTrait
             return '';
         }
 
-        // Whitespace between a value and its chain operator is not significant,
-        // so `user . name` and `user.name` must not occupy separate cache
-        // entries (and must not produce different PHP).
-        $key = \preg_replace('/\s+/', '', $chain);
+        // Whitespace outside quoted keys is insignificant, so `user . name` and
+        // `user.name` share one cache entry. Quoted keys are kept verbatim, so
+        // `x['a b']` and `x['ab']` do not collide.
+        $key = \preg_replace('/(\'(?:[^\'\\\\]|\\\\.)*\'|"(?:[^"\\\\]|\\\\.)*")|\s+/', '$1', $chain);
 
         // Memoization
-        if (isset($this->varChainCache[$key])) {
-            return $this->varChainCache[$key];
+        $cacheKey = $this->varChainCacheKey($key);
+        if (isset($this->varChainCache[$cacheKey])) {
+            return $this->varChainCache[$cacheKey];
         }
 
         $parsed = $this->parseVarChainAt($chain, 0);
@@ -710,8 +722,8 @@ trait VarChainTrait
             return $chain;
         }
 
-        // Keep legacy behavior for malformed tails by returning original chain
-        // when parsing does not consume the full input.
+        // Malformed tails are returned unchanged when parsing does not consume the
+        // whole input.
         if ($parsed['end'] !== \strlen($chain)) {
             return $chain;
         }

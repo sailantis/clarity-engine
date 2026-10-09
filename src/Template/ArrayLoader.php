@@ -4,11 +4,11 @@ namespace Clarity\Template;
 /**
  * In-memory template loader backed by a plain PHP array.
  *
- * Ideal for unit testing, dynamic/generated templates, and small applications
- * that keep all templates in code rather than on the filesystem.
+ * Suited to unit tests, generated templates, and small applications that define
+ * all templates in code rather than on the filesystem.
  *
- * Cache revision is derived from the source string via hash('fnv1a64', $code).
- * No file I/O takes place at any point.
+ * The cache revision is the fnv1a64 hash of the source, computed via
+ * hash('fnv1a64', $code). The loader performs no file I/O.
  *
  * ```php
  * $loader = new ArrayLoader([
@@ -57,8 +57,8 @@ final class ArrayLoader implements TemplateLoader
     /**
      * Add or replace a template definition.
      *
-     * The cache for the template will be invalidated on the next render because
-     * the fnv1a64 revision of the new code will differ from the stored revision.
+     * The revision is computed from the source on each load, so the next render
+     * recompiles the template if its source has changed.
      */
     public function set(string $name, string $code): static
     {

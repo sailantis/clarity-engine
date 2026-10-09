@@ -2,23 +2,14 @@
 
 **Full name:** [Clarity\Debug\DebugRuntime](../../src/Debug/DebugRuntime.php)
 
-The one place that knows how debug output is produced.
+Holds the debug state of an engine: the dump renderers, the DumpOptions, the
+event bus and the optional HTML panel.
 
-Clarity used to have two debug entry points that disagreed: a low-level
-`setDebugMode(true)` that merely let `dump()` resolve, and `enableDebug()`
-that also installed the renderers, the event bus and the HTML panel.  The
-first was a degraded form of the second — and, because the fallback formatter
-used `print_r`, a documented public method that printed secrets the masking
-renderer would have hidden.
-
-There is only one debug state now, and this object is it.  The engine builds
-a DebugRuntime when debug is switched on and hands it to the
-[`Registry`](Clarity_Engine_Registry.md), which is what every `dump()`/`dd()` call and every
-`{{ x |> dump }}` probe actually reaches.
-
-The registry deliberately owns no debug behaviour of its own: the renderers
-and the [`DumpOptions`](Clarity_Debug_DumpOptions.md) live here, so there is no second code path that
-could render a value without masking it.
+The engine creates a DebugRuntime when debug is enabled and registers its
+handlers on the [`Registry`](Clarity_Engine_Registry.md). Every `dump()` and `dd()` call and every
+`{{ x |> dump }}` probe is routed through this object, so all debug output
+is produced by the renderers in this namespace. The registry holds no debug
+behaviour of its own.
 
 ## Public Properties
 
@@ -28,7 +19,7 @@ could render a value without masking it.
 
 ## Public methods
 
-### __construct() · <small>[🗎](../../src/Debug/DebugRuntime.php#L41)</small>
+### __construct() · <small>[🗎](../../src/Debug/DebugRuntime.php#L32)</small>
 
 `public function __construct(Clarity\Debug\DumpOptions $options): mixed`
 
@@ -45,14 +36,15 @@ could render a value without masking it.
 
 ---
 
-### register() · <small>[🗎](../../src/Debug/DebugRuntime.php#L61)</small>
+### register() · <small>[🗎](../../src/Debug/DebugRuntime.php#L53)</small>
 
 `public function register(Clarity\Engine\Registry $registry): void`
 
-Install this runtime's formatters on a registry.
+Registers this runtime's dump and dd handlers on a registry.
 
-`dump` goes through exactly one formatter, which renders according to the
-compile-time context and masks the keys listed in [`DumpOptions::maskKeys()`](Clarity_Debug_DumpOptions.md#maskkeys).
+`dump()` goes through one formatter. It renders for the escape context
+('html', 'js' or 'css') that the compiler passes as the first argument,
+and it masks the keys listed in [`DumpOptions::maskKeys()`](Clarity_Debug_DumpOptions.md#maskkeys).
 
 **Parameters**
 
@@ -67,11 +59,13 @@ compile-time context and masks the keys listed in [`DumpOptions::maskKeys()`](Cl
 
 ---
 
-### render() · <small>[🗎](../../src/Debug/DebugRuntime.php#L76)</small>
+### render() · <small>[🗎](../../src/Debug/DebugRuntime.php#L70)</small>
 
 `public function render(string $ctx, array $args): string`
 
-The body of `dump(…)` and of the `{{ x |> dump }}` probe: rendered output.
+Renders a value for the given escape context. Used by `dump()` and by the
+`{{ x |> dump }}` probe. A single argument is rendered as-is; several
+arguments are rendered as one list.
 
 **Parameters**
 
@@ -87,18 +81,18 @@ The body of `dump(…)` and of the `{{ x |> dump }}` probe: rendered output.
 
 ---
 
-### probe() · <small>[🗎](../../src/Debug/DebugRuntime.php#L97)</small>
+### probe() · <small>[🗎](../../src/Debug/DebugRuntime.php#L91)</small>
 
 `public function probe(string $ctx, mixed $value, mixed ...$args): mixed`
 
-The pass-through probe behind the FILTER form `{{ x |> dump }}`: emit the
-dump at the pipe position, then RETURN the piped value so a following
-step still sees the original value.
+Pass-through probe behind the filter form `{{ x |> dump }}`. Emits the
+dump at the pipe position and returns the piped value unchanged, so later
+filters still receive the original value.
 
-The dump is emitted (not returned) because the filter RESULT is the
-value: `{{ x |> dump |> length }}` must measure x. Emitting keeps the
-debug output visible at the pipe position, including as comments in JS
-and CSS contexts, exactly where `dump(x)` puts it.
+The dump is echoed rather than returned, because the return value is what
+continues down the pipe: `{{ x |> dump |> length }}` must measure x. In JS
+and CSS contexts the dump appears as a comment at the same position where
+`dump(x)` places it.
 
 **Parameters**
 
@@ -115,14 +109,22 @@ and CSS contexts, exactly where `dump(x)` puts it.
 
 ---
 
-### dumpAndDie() · <small>[🗎](../../src/Debug/DebugRuntime.php#L112)</small>
+### dumpAndDie() · <small>[🗎](../../src/Debug/DebugRuntime.php#L114)</small>
 
 `public function dumpAndDie(string $ctx, array $args): never`
 
-The body of `dd(…)`: render, then end the request.
+Behind `dd()`: renders the value, then ends the request with exit code 1.
 
-`dd()` is never pruned, so it is reachable even in production; the
-registry therefore only binds this handler while debug is on.
+On the CLI, output goes to STDERR, the same stream `dump()` uses, so STDOUT
+stays free for program output.
+
+With [`DumpOptions::haltWithException()`](Clarity_Debug_DumpOptions.md#haltwithexception) set, the value is rendered for
+the context and thrown as a [`DumpHaltException`](Clarity_Debug_DumpHaltException.md) instead, on every SAPI.
+The process keeps running, so the host decides what to do with the output.
+
+The compiler does not prune `dd()`, so the call remains in production
+templates. This handler is bound only while debug is on; otherwise the
+registry raises an error.
 
 **Parameters**
 

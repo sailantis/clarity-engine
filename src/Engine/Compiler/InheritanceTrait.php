@@ -77,9 +77,9 @@ trait InheritanceTrait
     /**
      * Split a template into a leading set preamble and the remaining body.
      *
-     * Only leading {% set ... %} directives are preserved across inheritance.
-     * Rendered content outside blocks remains unsupported and is left in the
-     * body, where it continues to be ignored for child templates.
+     * Only leading {% set ... %} directives are kept across inheritance. Content
+     * outside blocks in a layout is rendered. Content outside blocks in a child
+     * template is ignored, because only the child's blocks are extracted.
      *
      * @param bool $preservePadding When true, keep leading whitespace/comments as-is.
      *                              Child templates pass false so ignored content stays ignored.
@@ -173,8 +173,7 @@ trait InheritanceTrait
      *
      * Uses the same iterative nesting-aware approach as extractBlocks() so
      * that layout blocks which themselves contain inner blocks are matched
-     * correctly.  The previous lazy-regex approach stopped at the first
-     * {% endblock %} regardless of nesting depth.
+     * correctly.
      *
      * @param array<string, array{content: string, file: string, line: int}> $childBlocks
      */

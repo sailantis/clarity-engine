@@ -83,6 +83,41 @@ class LocalizationTest extends BaseTestCase
         $this->assertSame(null, $locale->current());
     }
 
+    public function testEmptyLocalePushKeepsPopBalanced(): void
+    {
+        $locale = new \Clarity\Localization\LocaleService();
+        $locale->push('de_DE');
+        $locale->push(null);
+        $this->assertSame('de_DE', $locale->current());
+
+        $locale->pop();
+        $this->assertSame('de_DE', $locale->current());
+
+        $locale->pop();
+        $this->assertSame(null, $locale->current());
+    }
+
+    public function testEmptyDomainPushKeepsPopBalanced(): void
+    {
+        $loader = new class implements \Clarity\Localization\TranslationLoaderInterface {
+            public function load(string $domain, string $locale): array
+            {
+                return ['k' => $domain];
+            }
+        };
+        $module = new \Clarity\Localization\TranslationModule(['loader' => $loader, 'locale' => 'en_US']);
+
+        $module->pushDomain('emails');
+        $module->pushDomain(null);
+        $this->assertSame('emails', $module->get('k'));
+
+        $module->popDomain();
+        $this->assertSame('emails', $module->get('k'));
+
+        $module->popDomain();
+        $this->assertSame('messages', $module->get('k'));
+    }
+
     public function testLocaleServiceIsAModule(): void
     {
         $this->assertInstanceOf(\Clarity\ModuleInterface::class, new \Clarity\Localization\LocaleService());
@@ -398,6 +433,20 @@ class LocalizationTest extends BaseTestCase
         self::tpl('lmod_t_missing', '{{ "missing.key" |> t }}');
         $result = $engine->renderPartial('lmod_t_missing');
         $this->assertSame('missing.key', $result);
+    }
+
+    public function testFormatMessageWithoutVarsReturnsThePattern(): void
+    {
+        $engine = new ClarityEngine();
+        $engine->setViewPath(TestEnvironment::viewDir())->setCachePath(TestEnvironment::cacheDir());
+        $engine->addModule(new \Clarity\Localization\IntlFormatModule(['locale' => 'en_US']));
+
+        // With no vars, the intl path used to receive null and throw a TypeError.
+        self::tpl('lmod_format_message_novars', '{{ "No placeholders here" |> format_message }}');
+        $this->assertSame(
+            'No placeholders here',
+            $engine->renderPartial('lmod_format_message_novars')
+        );
     }
 
     /**

@@ -427,6 +427,17 @@ class PolicyRuleTest extends BaseTestCase
         $this->assertSame('DateTime', $engine->renderPartial('pc_st_const'));
     }
 
+    public function testStaticAccessWithoutMemberNameIsAClarityException(): void
+    {
+        self::tpl('pc_st_empty', '{{ DateTime:: }}');
+
+        $engine = self::engine(Policy::default()->allowRule('staticCalls'));
+
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches("/Expected a member name after '\\\\?DateTime::'/");
+        $engine->renderPartial('pc_st_empty');
+    }
+
     public function testStaticCallOnANamespacedClass(): void
     {
         self::tpl('pc_st_ns', '{{ \Clarity\Tests\Engine\PolicyRuleFixture::label() }}');

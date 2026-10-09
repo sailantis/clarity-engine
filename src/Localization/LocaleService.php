@@ -33,12 +33,13 @@ use Locale;
  *
  * | Option   | Type   | Default | Description                          |
  * | -------- | ------ | ------- | ------------------------------------ |
- * | `locale` | string | `null`  | Application-wide default locale, used only when neither the stack nor a module's own `locale` supplies one. It is **not** pushed onto the stack |
+ * | `locale` | string | `null`  | Application-wide default locale, used only when neither the stack nor a module's own `locale` supplies one. It is **not** pushed onto the stack. |
  *
- * The configured default is deliberately kept *off* the stack: a stack entry
- * outranks every module's `locale` option, so seeding the stack would silently
- * discard the modules' configuration. Kept beside the stack it acts as the
- * lowest-precedence fallback instead, and each module keeps its own locale.
+ * The configured default is kept off the stack. A stack entry outranks every
+ * module's `locale` option, so seeding the stack would override the modules'
+ * own configuration. Stored separately, the default is consulted after the
+ * stack and each module's `locale` option, and before the detected environment
+ * locale.
  *
  * A later registration does not replace an already installed locale service,
  * but its configured default is still adopted when the installed one has none,
@@ -100,10 +101,8 @@ class LocaleService implements ModuleInterface
     /**
      * Adopt a default locale, unless one is already configured.
      *
-     * Used by {@see self::register()} when a `LocaleService` is registered after
-     * the service was already bootstrapped: the first configured default wins
-     * and later ones are ignored, so `{% with_locale %}` blocks and module
-     * locales stay untouched.
+     * Used by {@see self::register()} when the service was bootstrapped before
+     * this explicit registration. The first configured default wins.
      */
     private function adoptDefaultLocale(?string $locale): void
     {
@@ -115,15 +114,23 @@ class LocaleService implements ModuleInterface
     /**
      * Return the application-wide default locale, or null when none was configured.
      *
-     * This is the lowest-precedence fallback consulted by the localization
-     * modules; it is not part of the `{% with_locale %}` stack, so `current()`
-     * stays null until a block pushes a locale.
+     * The localization modules consult this value after the stack and their own
+     * `locale` option, and before the detected environment locale. It is not part
+     * of the `{% with_locale %}` stack, so `current()` stays null until a block
+     * pushes a locale.
      */
     public function defaultLocale(): ?string
     {
         return $this->defaultLocale;
     }
 
+    /**
+     * Detect the environment locale.
+     *
+     * Checks, in order: the intl default locale, the process C locale (skipped
+     * when it is `C`), the `LC_ALL`, `LANG` and `LANGUAGE` environment variables,
+     * and finally `en_US`.
+     */
     public static function detectLocale(): string
     {
         // 1. intl
@@ -154,15 +161,13 @@ class LocaleService implements ModuleInterface
     /**
      * Push a locale onto the stack.
      *
-     * Passing null or an empty string is a no-op so that template variables
-     * that may be null do not corrupt the stack.
+     * Null or an empty string pushes the current locale, so the block changes
+     * nothing. Every call adds one entry, which keeps it paired with `pop()`.
      */
     public function push(?string $locale): void
     {
-        if ($locale !== null && $locale !== '') {
-            $this->localeStack[] = $locale;
-            $this->currentLocale = $locale;
-        }
+        $this->localeStack[] = ($locale !== null && $locale !== '') ? $locale : $this->currentLocale;
+        $this->currentLocale = \end($this->localeStack);
     }
 
     /**
@@ -194,8 +199,8 @@ class LocaleService implements ModuleInterface
     /**
      * Register `with_locale` / `endwith_locale` block handlers on the engine.
      *
-     * Called internally by `register()`, and also by `TranslationModule`
-     * and `IntlFormatModule` when they need to self-bootstrap the service.
+     * Called by `register()` and by `bootstrap()`, which `TranslationModule`
+     * and `IntlFormatModule` use to self-bootstrap the service.
      */
     public static function registerBlocks(ClarityEngine $engine): void
     {
@@ -230,8 +235,9 @@ class LocaleService implements ModuleInterface
      * Called by `TranslationModule` and `IntlFormatModule` to
      * self-bootstrap when `LocaleService` was not explicitly registered.
      *
-     * Registering the module does NOT go through here: it installs the
-     * instance it was called on, keeping its configured default off the stack.
+     * A service created here has no configured default. Registering the module
+     * does not go through here: it installs the instance it was called on,
+     * keeping its configured default.
      *
      * @return static The shared locale stack instance.
      */

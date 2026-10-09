@@ -117,7 +117,8 @@ trait CollectionLiteralTrait
     }
 
     /**
-     * Consume chained property/index access after a compiled expression.
+     * Consume chained access after a compiled literal. Supported forms:
+     * `.name`, `[index]`, `{dynamic}`, `:key`, each optionally prefixed with `?`.
      *
      * @return array{0:string,1:int}
      */
@@ -152,7 +153,7 @@ trait CollectionLiteralTrait
             }
 
             if ($expr[$i] === '.') {
-                // Whitespace after `.` is allowed, exactly as in parseVarChainAt.
+                // Whitespace after `.` is allowed, as in parseVarChainAt.
                 $nameStart = $i + 1;
                 while ($nameStart < $len && \ctype_space($expr[$nameStart])) {
                     $nameStart++;

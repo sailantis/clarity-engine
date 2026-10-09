@@ -2,17 +2,21 @@
 
 **Full name:** [Clarity\Debug\CliDumpRenderer](../../src/Debug/CliDumpRenderer.php)
 
-Renders debug values as an ANSI-colored (or plain-text) tree on STDERR.
+Renders debug values as an indented tree for the terminal.
 
-By default, output goes to STDERR (pipeline-safe: does not corrupt stdout).
-Set DumpOptions::forceToTemplate(true) to receive the string instead.
+By default, dump() writes the tree to STDERR and returns ''. With
+DumpOptions::forceToTemplate(true), render() returns the text instead.
+renderForced() always returns the text; dd() uses it and writes the result to
+STDERR (see [`DebugRuntime::dumpAndDie()`](Clarity_Debug_DebugRuntime.md#dumpanddie)).
 
-Associative arrays → {key: value}, sequential arrays → [item, …].
-Sensitive keys are replaced with ***.
+Associative arrays and objects are shown as {key: value} and sequential
+arrays as [item, item], one item per line. Sensitive keys and property names
+are replaced with ***. ANSI colors are used when the stream the output goes
+to supports them: VT100 on Windows, a TTY elsewhere.
 
 ## Public methods
 
-### render() · <small>[🗎](../../src/Debug/CliDumpRenderer.php#L18)</small>
+### render() · <small>[🗎](../../src/Debug/CliDumpRenderer.php#L24)</small>
 
 `public function render(mixed $value, Clarity\Debug\DumpOptions $opts): string`
 
@@ -30,9 +34,11 @@ Sensitive keys are replaced with ***.
 
 ---
 
-### renderForced() · <small>[🗎](../../src/Debug/CliDumpRenderer.php#L34)</small>
+### renderForced() · <small>[🗎](../../src/Debug/CliDumpRenderer.php#L41)</small>
 
 `public function renderForced(mixed $value, Clarity\Debug\DumpOptions $opts): string`
+
+Returns the rendered text whatever forceToTemplate is set to. dd() uses this.
 
 **Parameters**
 

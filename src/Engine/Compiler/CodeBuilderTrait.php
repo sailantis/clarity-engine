@@ -9,11 +9,6 @@ use Clarity\Engine\SourceMap;
  */
 trait CodeBuilderTrait
 {
-
-    /**
-     * Compile {% endfor %} → the correct PHP closing keyword based on the
-     * matching opening loop (native `for` vs `foreach`).
-     */
     /**
      * Scan a TEXT segment for <script>/<style> open/close tags and update $this->context
      * to reflect the escaping context that applies AFTER this text block.
@@ -63,15 +58,9 @@ trait CodeBuilderTrait
      *
      * Produces a **single-line** PHP double-quoted string literal by escaping
      * all control characters (including newlines), backslashes, double-quotes,
-     * and dollar signs via addcslashes().  This avoids three problems the
-     * previous nowdoc approach had:
-     *
-     *  1. PHP 7.3+ indented nowdoc: the 8-space class-body indentation added
-     *     by buildClass() was silently stripped from the start of every content
-     *     line, mangling template text that relied on leading spaces.
-     *  2. Marker escape: a time-derived uniqid() marker could theoretically
-     *     collide with content the template author controls.
-     *  3. Per-segment uniqid() syscall overhead.
+     * and dollar signs via addcslashes().  A single-line literal needs no heredoc
+     * or nowdoc, so indentation handling cannot alter the text, and there is no
+     * marker that template content could collide with.
      *
      * addcslashes() escapes:
      *   \x00–\x1F  control chars (incl. \n → \n, \r → \r, \t → \t, others → octal)
@@ -86,51 +75,20 @@ trait CodeBuilderTrait
     }
 
     /**
-     * Remove ONE line break from the start of a text segment that directly
+     * Remove one line break from the start of a text segment that directly
      * follows a `{% … %}` or `{# … #}` tag.
      *
-     * WHY THIS EXISTS: a directive alone on its own line used to leave a blank
-     * line in the output. Compiling
+     * Without this, a tag alone on its own line leaves a blank line in the
+     * output: the tag's trailing newline and the next segment's leading newline
+     * both reach the output. Only one break is removed, so a deliberate blank
+     * line survives as a single newline. CRLF counts as one break.
      *
-     *     X
-     *     {% for j in 0..2 %}
-     *       <s>{{ j }}</s>
-     *     {% endfor %}
-     *     Y
+     * Spaces and tabs are not trimmed. A space before the line break keeps it
+     * ("\n" is removed, " \n" is kept), which gives authors a way to keep it.
      *
-     * emitted `X\n` + `\n  <s>` per iteration; the tag's own trailing newline
-     * doubled up with the next iteration's leading newline into a
-     * whitespace-only line. On the competition's 200-item benchmark page that
-     * was 2403 blank lines — 44% of the output's 5418 lines — for a page whose
-     * visible content is the leanest of the six engines compared.
-     *
-     * WHY A LINE BREAK AND NOT A DEFAULT: Twig and Stempler both get this for
-     * free and neither uses a whitespace-control operator to do it. Twig's lexer
-     * ends its block-tag pattern with `%}\n?` and its comment pattern with
-     * `#}\n?` — unconditional, exactly ONE newline. Stempler inherits the same
-     * effect from PHP itself, whose `?>` consumes one following line break
-     * (`?>` is compiled by PHP's lexer as `?>` followed by an optional line
-     * break). Both were measured, not assumed: PHP eats a single `\n`/`\r\n`
-     * after `?>`, leaves a second newline, and is BLOCKED by a space first, so
-     * `" \n"` is untouched. This mirrors that rule so a Clarity template needs
-     * no edits and no operator to match the ecosystem's expectation.
-     *
-     * WHY `{{ … }}` IS EXCLUDED: neither `?>`'s rule nor Twig's applies after an
-     * output tag (`}}` has no `\n?` in Twig's lexer, and Stempler emits a call
-     * there rather than a tag boundary). Applying it to prints would silently
-     * delete line breaks the other engines keep, trading one divergence for
-     * another.
-     *
-     * WHAT IT DOES NOT DO: it does not trim spaces or tabs, so indentation before
-     * a `{%` is preserved and an author can keep the line break by putting a
-     * space in front of it ("\n" is eaten, " \n" is not) — the same escape hatch
-     * PHP and Twig provide. It also only ever removes one break, so a deliberate
-     * blank line survives as one newline.
-     *
-     * This changes the PHP that templates compile to, so COMPILER_VERSION is
-     * bumped and Cache::isFresh() recompiles every existing template.
+     * `{{ … }}` is not affected: the caller applies this only after a block or
+     * comment tag.
      */
-
     private static function stripOneLineBreakAfterTag(string $text): string
     {
         if ($text === '') {
@@ -148,11 +106,12 @@ trait CodeBuilderTrait
     }
 
     /**
-     * Wrap the compiled render body in a class with docblock.
+     * Wrap the compiled render body in the generated class.
      *
      * @param string $className Generated class name.
      * @param string $body      PHP render body statements.
-     * @return string Complete PHP class code (without leading <?php).
+     * @return string Complete PHP source for the class file, without the leading
+     *                `<?php`. It ends with `return '{className}';`.
      */
     private function buildClass(string $className, string $body): string
     {
@@ -217,8 +176,7 @@ trait CodeBuilderTrait
         // prefix rule and the ordering are both needed.
         //
         // extract() on the parameter itself needs no copy — `$__c_va` stays a valid
-        // array for the explicit `$__c_va['x']` escape hatch — and costs ~180 ns
-        // once per render.
+        // array for the explicit `$__c_va['x']` escape hatch — and runs once per render.
         if ($this->seedsScope) {
             $unpacks .= "                extract(\$__c_va, EXTR_SKIP);\n";
         }
@@ -297,8 +255,9 @@ trait CodeBuilderTrait
      * and are counted correctly. A file that declared strict types only after the
      * body had shifted would map every runtime error to the wrong template line.
      *
-     * The declaration must be the first statement, so it goes above the generated
-     * comment — PHP only allows whitespace (and `<?php`) before it, not a comment.
+     * The declaration must be the first statement, so it is placed before the
+     * generated class. PHP allows a comment before it, so only its position
+     * relative to other code matters.
      */
     private function withStrictTypes(string $code): string
     {

@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`RedisCachingLoader` takes a key prefix.** The optional fourth constructor
+  argument, `$keyPrefix`, replaces the fixed `translations` in every key, so two
+  applications sharing one Redis instance no longer read each other's catalogues.
+  The default is unchanged, and existing keys still match.
 - **Type casts — `{{ x |> int }}` and `{{ (int) x }}`.** A conversion between
   the scalar types and `array`, available in both syntaxes:
 
@@ -145,6 +149,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A `push` of an empty locale or domain unbalanced the stack.** `{% with_locale %}`
+  and `{% with_t_domain %}` always pop on exit, but `push()` skipped a null or
+  empty argument and so pushed nothing. The matching `pop()` then removed an
+  enclosing entry, so an empty `with_locale ''` block silently changed the locale
+  of the code around it. A null or empty argument now pushes the current value,
+  which keeps the block a no-op and the stack balanced.
+
+- **`format_message` no longer throws on a missing `vars` argument.** A null
+  `vars` reached `MessageFormatter::format()`, which accepts only an array, and
+  raised a `TypeError`. The filter now treats null as an empty array.
+
+- **`IntlFormatModule` could not be instantiated without the intl extension.**
+  Its date-style map was a static property that referenced `\IntlDateFormatter`
+  constants, and PHP resolves those when the class is first used. The map is now
+  a `dateStyleType()` helper, so the module loads and reports intl as unavailable.
+
+- **A failed cache write no longer leaves a temp file behind.**
+  `FileTranslationLoader` ignored the return value of `rename()`. A failure now
+  removes the temp file and skips the cache; the source file still loads.
 - **`true`, `false` and `null` had stopped being keywords.** They were dropped
   from the tokenizer's keyword map when `nil` was added to it — the map is one
   array literal, and the edit re-listed its entries without `true`, `false` or
@@ -192,6 +215,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`cache_path` has one default, owned by `FileTranslationLoader`.**
+  `TranslationModule` used to compute its own default, which duplicated the
+  loader's. Both now use `sys_get_temp_dir()/clarity_translations/<md5 of
+  translations_path>`. Without `translations_path`, the cache moves from
+  `clarity_translations` to `clarity_translations/<md5 of ''>`. Caches are
+  regenerated on demand, so nothing needs migrating.
 - **Every locale parameter is now named `locale`.** The intl filters had split
   between `locale` (12 of them) and `loc` (`country_name`, `language_name`,
   `locale_name`, `format_message`), and the module docs abbreviated all sixteen

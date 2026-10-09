@@ -17,6 +17,8 @@
 - [DebugEventBus](Clarity_Debug_DebugEventBus.md) `Clarity\Debug\DebugEventBus`
 - [DebugListener](Clarity_Debug_DebugListener.md) `Clarity\Debug\DebugListener`
 - [DebugRuntime](Clarity_Debug_DebugRuntime.md) `Clarity\Debug\DebugRuntime`
+- [DumpHaltException](Clarity_Debug_DumpHaltException.md) `Clarity\Debug\DumpHaltException`
+- [DumpMaskingTrait](Clarity_Debug_DumpMaskingTrait.md) `Clarity\Debug\DumpMaskingTrait`
 - [DumpOptions](Clarity_Debug_DumpOptions.md) `Clarity\Debug\DumpOptions`
 - [DumpRenderer](Clarity_Debug_DumpRenderer.md) `Clarity\Debug\DumpRenderer`
 - [HtmlDebugPanel](Clarity_Debug_HtmlDebugPanel.md) `Clarity\Debug\HtmlDebugPanel`

@@ -5,14 +5,14 @@ namespace Clarity;
 /**
  * Contract for Clarity engine modules.
  *
- * A module bundles a cohesive set of filters, functions, and directives
- * and registers them all in one call via {@see ClarityEngine::addModule()}.
+ * A module bundles related filters, functions, and directives and registers them
+ * in one call via {@see ClarityEngine::addModule()}.
  *
  * Example
  * -------
  * ```php
  * $clarity->addModule(new IntlFormatModule([
- *     'locale'            => 'jp_JP',
+ *     'locale'            => 'ja_JP',
  * ]));
  * ```
  *
@@ -35,8 +35,9 @@ interface ModuleInterface
      * Register all filters, functions, services, and directives that
      * this module provides into the given engine instance.
      *
-     * This method is called once by {@see ClarityEngine::addModule()} at engine
-     * setup time, before any templates are compiled or rendered.
+     * {@see ClarityEngine::addModule()} calls this method immediately. Call
+     * addModule() before rendering templates so the module's filters and
+     * directives are available.
      *
      * @param ClarityEngine $engine The engine to register into.
      */

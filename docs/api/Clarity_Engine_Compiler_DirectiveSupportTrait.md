@@ -13,11 +13,11 @@ Extracted from Clarity\Engine\Compiler to keep each file small. See that class f
 Register a local variable in the compile-time context.
 
 This is the extension point a custom directive uses to bind a variable it
-emits itself — so the name is a PHP LOCAL that nothing writes back into the
-scope array, exactly like a loop variable. It is therefore also recorded as
-a dynamic binding, which is what lets a `vars()` snapshot inside the
-directive's scope include it. A directive that binds a name it also stores
-in `$__c_va` will simply see that entry win in the snapshot.
+emits itself. The name is a PHP local that nothing writes back into the
+scope array, like a loop variable. It is also recorded as a dynamic
+binding, so a `vars()` snapshot inside the directive's scope includes it.
+If the same name is also stored in `$__c_va`, the snapshot shows the
+`$__c_va` entry.
 
 **Parameters**
 

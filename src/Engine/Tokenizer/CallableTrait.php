@@ -19,18 +19,20 @@ trait CallableTrait
      *   'filterName' / "filterName"         reference to a registered filter or
      *                                        to an inline built-in filter, which
      *                                        is compiled into a closure (see
-     *                                        {@see shouldInlineCallableFilterReference()})
+     *                                        {@see shouldInlineCallableFilterReference()}),
+     *                                        or to a PHP function name when the
+     *                                        policy's `phpFunctions` rule is on
      *
-     * Anything else (bare variable names, function calls, …) is rejected.
+     * Anything else (bare variable names, unquoted function calls, …) is rejected.
      *
-     * Emitted closures are NON-static so that `$this` stays bound: that is what
-     * a directive or inline-filter snippet can then read services through
-     * (`$this->services['key']`), wherever the compiler has to wrap it in a
-     * closure — a lambda body or a quoted filter reference.
+     * Emitted closures are non-static, so `$this` stays bound. A directive or
+     * inline-filter snippet can then read services through `$this->services['key']`,
+     * wherever the compiler wraps it in a closure: a lambda body or a quoted
+     * filter reference.
      */
     private function compileCallableArg(string $arg, string $filterName): string
     {
-        // â”€â”€ Filter reference: 'name' or "name" â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Filter reference: 'name' or "name" ───────────────────────────────
         $trimmed = \trim($arg);
         if (\strlen($trimmed) >= 2) {
             $first = $trimmed[0];
@@ -62,8 +64,8 @@ trait CallableTrait
                 }
 
                 // A registered filter (inline template or runtime callable) is
-                // dispatched through the ONE runtime table, `$__c_fn`. Whether a
-                // name may be used as a filter at all is decided HERE, at compile
+                // dispatched through the single runtime table, `$__c_fn`. Whether a
+                // name may be used as a filter at all is decided here, at compile
                 // time, so the runtime table stays a plain callable map.
                 //
                 // `dump` has no callable form that can serve as a filter: `map`
@@ -117,7 +119,7 @@ trait CallableTrait
             }
         }
 
-        // â”€â”€ Lambda: param => expression / acc, item => expression â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Lambda: param => expression / acc, item => expression ───────────
         $arrowPos = $this->findLambdaArrow($arg);
         if ($arrowPos !== false) {
             return $this->compileLambda($arg, $arrowPos, $filterName);
@@ -132,13 +134,12 @@ trait CallableTrait
     /**
      * Decide how a quoted filter reference (`map(items, "upper")`) compiles.
      *
-     * An INLINE-only filter has no runtime entry — it is codegen, not a
-     * callable — so it must be compiled into a closure right here, exactly as
-     * the compiler does for any other inline filter use. Emitting a registry
-     * lookup for it would produce code that can never resolve. Callable
-     * filters (`slug`) are the opposite: they live in the runtime table and are
-     * dispatched as `$__c_fn['slug']`, which keeps the registry as the one
-     * source of callables and avoids re-emitting an equivalent closure.
+     * An INLINE-only filter has no runtime entry. It is codegen, not a callable,
+     * so it must be compiled into a closure here, as the compiler does for any
+     * other inline filter use. A registry lookup would produce code that can
+     * never resolve. Callable filters (`slug`) live in the runtime table and are
+     * dispatched as `$__c_fn['slug']`, which keeps the registry as the single
+     * source of callables and avoids emitting an equivalent closure.
      */
     private function shouldInlineCallableFilterReference(string $referenceName): bool
     {
@@ -205,9 +206,9 @@ trait CallableTrait
      *   pipelines) with the parameter name(s) treated as local variables,
      *   while all other identifiers are resolved from `$__c_va`, which the
      *   emitted arrow function captures by value.
-     * - The arrow function binds implicitly, so no `use` clause is needed: it
-     *   sees `$__c_va`, `$__c_fn`, `$__c_sv` and `$this` — and an enclosing
-     *   lambda's parameter — exactly when the body references them.
+     * - The arrow function captures outer variables implicitly, so no `use`
+     *   clause is needed: it sees `$__c_va`, `$__c_fn`, `$__c_sv` and `$this`, and
+     *   an enclosing lambda's parameter, whenever the body references them.
      *
      * @param string $arg      The full lambda string (e.g. 'item => item.name').
      * @param int    $arrow    Position of '=>' in $arg.
@@ -239,9 +240,9 @@ trait CallableTrait
         // needed, and a NESTED lambda's inner body can reference the outer
         // lambda's parameter directly, because that name is still on the stack.
         //
-        // The stack (not a boolean) is what makes nesting work: `inLambda` alone
-        // only said "not the render scope", which turned an outer parameter into
-        // an absent `$__c_va[...]` read.
+        // The stack (not a boolean) is what makes nesting work. A flag such as
+        // `inLambda` only records that the compiler is outside the render scope,
+        // so an outer parameter would compile to an absent `$__c_va[...]` read.
         $params = [$first => true];
         if (isset($second)) {
             $params[$second] = true;
@@ -270,13 +271,13 @@ trait CallableTrait
             );
         }
 
-        // Emitted as a non-static arrow function, so the closure INHERITS `$this`
-        // from the render frame: a directive or inline-filter snippet the body
-        // reaches then still resolves `$this->services['key']`.  `fn()` binds its
-        // captures implicitly — `$__c_va` because the body reads outer variables
-        // through it, `$__c_fn` / `$__c_sv` when the body reaches a registry, an
-        // enclosing lambda's parameter because the body names it, and `$this`
-        // always at call time — so no `use` clause has to be computed here.
+        // Emitted as a non-static arrow function, so the closure inherits `$this`
+        // from the render frame. A directive or inline-filter snippet that the body
+        // reaches can then resolve `$this->services['key']`. The arrow function
+        // captures each outer variable it uses by value when the closure is
+        // created: `$__c_va`, `$__c_fn` and `$__c_sv` when the body reads them, and
+        // an enclosing lambda's parameter when the body names it. No `use` clause
+        // has to be computed here.
         return "fn({$signature}): mixed => {$phpBody}";
     }
 }

@@ -6,45 +6,40 @@ use Clarity\ClarityException;
 /**
  * Filesystem-backed template loader.
  *
- * Converts logical template names to file paths UNDER the configured base path.
- * Dots and slashes are interchangeable as directory separators, and the result
- * can never leave the base path:
+ * Converts logical template names to file paths under the configured base path.
+ * Dots, slashes, and backslashes are interchangeable as directory separators. A name
+ * cannot resolve outside the base path by its spelling (symbolic links inside the base
+ * are not checked):
  *
  *   'home'               → {basePath}/home{ext}
  *   'layouts/base'       → {basePath}/layouts/base{ext}
  *   'layouts.base'       → {basePath}/layouts/base{ext}   (same thing)
  *   'admin.user.profile' → {basePath}/admin/user/profile{ext}
- *   'admin::dashboard'   → {namespaces[admin]}/dashboard{ext}
  *
- * Names are validated rather than merely sanitized, because a template name can
- * originate OUTSIDE the application: `render()` is often handed a name derived
- * from a request, and a template may be stored in a database. Two classes of
- * name are therefore rejected outright, with a ClarityException:
+ * Names are validated, not merely sanitized, because a name can come from outside
+ * the application (for example a request parameter). Names that would resolve outside
+ * the base path are rejected with a ClarityException, in two forms:
  *
- *   - **Absolute paths** (leading `/`, a Windows drive, or a UNC share). A
- *     template name locates a template; it is not a general-purpose file read.
- *     This was previously accepted for convenience, which made a template
- *     name — and a host that forwards user input into one — an arbitrary file
- *     reader.
- *   - **Parent references** (any `.` or `..` segment, e.g. `../secret` or
- *     `a/../../b`). A template is addressed from the base path downward.
- *     Reaching a sibling tree is what namespaces (`addNamespace()`) are for,
- *     and an explicit namespace is visible in the configuration rather than
- *     buried in a template.
+ *   - **Absolute paths** (leading `/`, a Windows drive, or a UNC share). A template
+ *     name locates a template; it is not a file read.
+ *   - **Parent references** (any name containing `..`, e.g. `../secret` or `a/../../b`).
+ *     Templates are addressed downward from the base path. To read another tree,
+ *     register it as a namespace with `addNamespace()`.
  *
- * `load()` calls filemtime() eagerly (cheap metadata syscall) and defers
- * file_get_contents() until getCode() is called — zero I/O on warm cache paths.
+ * Empty segments (such as `a//b`) and control characters are also rejected.
+ *
+ * `load()` calls filemtime() eagerly, a cheap metadata lookup, and defers
+ * file_get_contents() until getCode(). When the compiled cache is fresh, getCode()
+ * is never called, so no template content is read.
  */
+
 final class FileLoader implements TemplateLoader
 {
     public const DEFAULT_EXTENSION = '.clarity.html';
 
     /**
-     * Shared phrase for the message shown when a name leaves the base path.
-     *
-     * A constant so the wording cannot drift between the absolute-path and
-     * parent-segment branches, which are the same failure from an author's
-     * point of view — the name pointed somewhere the templates are not.
+     * Shared message fragment for names that would resolve outside the base path,
+     * used by both the absolute-path and parent-reference errors.
      */
     public const OUTSIDE_BASE_MESSAGE = 'resolves outside the view path';
 
@@ -52,12 +47,12 @@ final class FileLoader implements TemplateLoader
 
     private string $extension;
 
-    /** @var array<string,string> logical name → resolved absolute path */
+    /** @var array<string,string> logical name → resolved path */
     private array $resolvedNameCache = [];
 
     /**
-     * @param string               $basePath   Base directory for template resolution.
-     * @param ?string               $extension  File extension with or without leading dot.
+     * @param string  $basePath  Base directory for template resolution.
+     * @param ?string $extension File extension with or without leading dot.
      */
     public function __construct(
         string $basePath,
@@ -75,13 +70,12 @@ final class FileLoader implements TemplateLoader
     /**
      * Set the view file extension for this instance.
      *
-     * @param string $extension Extension with or without a leading dot.
+     * @param string $extension Extension with or without a leading dot. An empty
+     *                          string disables extension appending.
      * @return $this
      */
     public function setExtension(string $extension): static
     {
-        // The extension is normalized to always include a leading dot. An empty
-        // string disables extension appending entirely.
         if ($extension !== '' && $extension[0] !== '.') {
             $extension = '.' . $extension;
         }
@@ -152,11 +146,10 @@ final class FileLoader implements TemplateLoader
     /**
      * Resolve a logical template name to a path under the base path.
      *
-     * Public so it can be used for diagnostic/debugging purposes.
+     * Public for diagnostic use.
      *
-     * @throws ClarityException When the name is absolute or contains a `.`/`..`
-     *                          segment, i.e. when it would resolve outside the
-     *                          base path.
+     * @throws ClarityException When the name is absolute, has an empty segment (including
+     *                          one produced by a `..` reference), or contains a control character.
      */
     public function resolveName(string $name): string
     {
@@ -172,27 +165,20 @@ final class FileLoader implements TemplateLoader
     /**
      * Reduce a template name to a safe `dir/dir/file` path.
      *
-     * Dots and backslashes are read as separators, so `admin.user`, `admin/user`
-     * and `admin\\user` are the same name. The rejections below are what
-     * guarantee the result cannot leave the base path — the check is on the
-     * OUTCOME, not on a list of dangerous spellings, so a spelling nobody
-     * anticipated is refused rather than trusted.
+     * Dots, slashes, and backslashes separate segments, so `admin.user`, `admin/user`
+     * and `admin\user` are equivalent. Each segment is checked, so unexpected forms are
+     * rejected rather than passed through.
      *
-     * Because `.` IS a separator, `..` splits into two EMPTY segments rather
-     * than arriving as a `..` segment. That is why the empty-segment branch
-     * names the parent-reference cause: it is the same input, and a message
-     * about an "empty segment" would send an author hunting for a typo in a
-     * separator they never doubled.
+     * A `..` produces empty segments and fails the empty-segment check. The error
+     * message names the parent reference in that case.
      *
-     * @throws ClarityException When the name is absolute, empty, or contains an
-     *                          empty or parent segment.
+     * @throws ClarityException When the name is absolute, has an empty segment, or contains a control character.
      */
     private static function normalizeTemplateName(string $name): string
     {
-        // A leading `/`, a drive letter (`C:`) or a leading `\\` denotes an
-        // absolute location. Note the drive check must tolerate both separators
-        // (`C:\x` and `C:/x`); a bare `C:foo` is a drive-RELATIVE path, and the
-        // `:` fails the allowed-character check below.
+        // A leading `/` or `\`, or a drive prefix (`C:`), denotes an absolute
+        // location. The drive prefix is refused even without a following separator,
+        // so `C:foo` is rejected too.
         $isAbsolute = ($name !== '' && ($name[0] === '/' || $name[0] === '\\'))
             || (\strlen($name) >= 2 && \ctype_alpha($name[0]) && $name[1] === ':');
 
@@ -206,7 +192,7 @@ final class FileLoader implements TemplateLoader
             ));
         }
 
-        $segments  = \explode('/', \str_replace(['.', '\\'], '/', $name));
+        $segments  = \explode('/', \strtr($name, './\\', '///'));
         $hasParent = \str_contains($name, '..');
 
         foreach ($segments as $segment) {
@@ -224,13 +210,6 @@ final class FileLoader implements TemplateLoader
                             . '(check for a leading or doubled separator).',
                         $name
                     ));
-            }
-
-            if ($segment === '.') {
-                throw new ClarityException(\sprintf(
-                    "Template name '%s' is not valid: '.' is a path separator, so it cannot be a segment.",
-                    $name
-                ));
             }
 
             if (\preg_match('/[\x00-\x1F]/', $segment) === 1) {

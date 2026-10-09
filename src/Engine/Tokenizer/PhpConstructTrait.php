@@ -7,20 +7,15 @@ use Clarity\ClarityException;
 /**
  * Extracted from Clarity\Engine\Tokenizer to keep each file small. See that class for docs.
  *
- * The three constructs that name a PHP CLASS rather than a template value:
- * `new Foo(...)`, `Foo::member`, and the right operand of `instanceof`.
+ * Three constructs name a PHP CLASS rather than a template value: `new Foo(...)`,
+ * `Foo::member`, and the right operand of `instanceof`.
  *
- * All three are gated on a policy rule (`newExpressions`, `staticCalls`)
- * and all three compile the name to a FULLY QUALIFIED form with a leading `\`.
+ * `new` and `Foo::member` are gated by the `newExpressions` and `staticCalls`
+ * policy rules. `instanceof` is not gated by a rule.
  *
- * That leading separator is the whole point.  A compiled template is a plain
- * class in the global namespace with no `use` statements, so an unqualified
- * `new DateTime()` would be resolved as `\DateTime` by luck and as
- * `\Clarity\Engine\DateTime`-style names by nobody's intention.  Emitting `\`
- * makes the resolution explicit and independent of where the engine lives —
- * which is also why leaving the name bare (the bug this replaced) produced
- * `unexpected fully qualified name "\DateTime"` from PHP: a `\` was reaching
- * the output with no name attached to it.
+ * All three compile the class name to a fully qualified form with a leading `\`,
+ * so the name resolves as a global class name regardless of the namespace the
+ * compiled template is emitted in.
  */
 trait PhpConstructTrait
 {
@@ -29,8 +24,7 @@ trait PhpConstructTrait
      * `[rawName, endIndex]`.  The raw name still carries whatever leading `\` the
      * author wrote; {@see qualifyClassName()} normalises it.
      *
-     * Returns null when no identifier starts at $p, so a caller can tell "not a
-     * class name" from "a class name I do not like" and report the right thing.
+     * Returns null when no identifier starts at $p.
      */
     private function readQualifiedName(string $expr, int $p, int $len): ?array
     {
@@ -62,8 +56,8 @@ trait PhpConstructTrait
 
     /**
      * Turn a raw class name into the fully qualified form the compiled template
-     * uses.  `Foo`, `\Foo` and `\Foo\Bar` all already mean a global name; only
-     * the leading separator is guaranteed to be present on the way out.
+     * uses. `Foo`, `\Foo` and `\Foo\Bar` all name a global class, and the output
+     * always has exactly one leading `\`.
      */
     private function qualifyClassName(string $raw): string
     {
@@ -140,7 +134,8 @@ trait PhpConstructTrait
     }
 
     /**
-     * Compile `Foo::member`, `Foo::method(args)`, `Foo::CONST` or `Foo::$prop`.
+     * Compile `Foo::member`, `Foo::method(args)`, `Foo::CONST`, `Foo::$prop` or
+     * `Foo::class`.
      *
      * @param int $start Index of the first character of the class name.
      * @return array{php: string, end: int}|null Null when this is not a static
@@ -164,14 +159,14 @@ trait PhpConstructTrait
 
         // `::class` is a compile-time string, not a member read.
         if (
-            $expr[$p] === 'c' && \substr($expr, $p, 5) === 'class'
+            ($expr[$p] ?? '') === 'c' && \substr($expr, $p, 5) === 'class'
                 && !self::isIdentifierChar($expr[$p + 5] ?? '')
         ) {
             return ['php' => $class . '::class', 'end' => $p + 5];
         }
 
         // `Foo::$property`.
-        if ($expr[$p] === '$') {
+        if (($expr[$p] ?? '') === '$') {
             $nameStart = $p + 1;
             if (!self::isIdentifierStart($expr[$nameStart] ?? '')) {
                 throw new ClarityException("Expected a property name after '{$class}::' in '{$expr}'.");

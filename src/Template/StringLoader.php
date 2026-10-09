@@ -2,10 +2,10 @@
 namespace Clarity\Template;
 
 /**
- * Single-template loader that wraps one hardcoded template string.
+ * Single-template loader that wraps one template string.
  *
- * Useful for rendering one dynamically-built or user-supplied template
- * without touching the filesystem.
+ * Suited to rendering one dynamically built or user-supplied template
+ * without filesystem access.
  *
  * ```php
  * $loader = new StringLoader('dynamic', '<p>{{ message }}</p>');
@@ -56,7 +56,7 @@ final class StringLoader implements TemplateLoader
     /**
      * Replace the template source.
      *
-     * The revision changes automatically so the next render triggers recompilation.
+     * The revision is recomputed, so the next render recompiles the template if the source changed.
      */
     public function update(string $code): static
     {

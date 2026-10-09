@@ -13,17 +13,19 @@ Implementations:
  - [`ArrayLoader`](Clarity_Template_ArrayLoader.md)  — serves templates from an in-memory array
  - [`StringLoader`](Clarity_Template_StringLoader.md) — wraps a single hardcoded template string
 
-Custom loaders may source templates from databases, remote APIs, PHAR archives, etc.
+Custom loaders can read from databases, remote APIs, PHAR archives, and similar sources.
 
 ## Public methods
 
-### load() · <small>[🗎](../../src/Template/TemplateLoader.php#L29)</small>
+### load() · <small>[🗎](../../src/Template/TemplateLoader.php#L32)</small>
 
 `public function load(string $name): Clarity\Template\TemplateSource|null`
 
-Load a template by its logical name and return source with revision metadata.
+Load a template by its logical name and return its source with revision metadata.
 
-The revision ({@see \TemplateSource::$revision}) must be available immediately with minimal I/O (e.g. a filemtime() call for file-based loaders); the actual template source could be fetched lazily via [`TemplateSource::getCode()`](Clarity_Template_TemplateSource.md#getcode) only when the engine determines compilation is needed.
+The revision ({@see \TemplateSource::$revision}) must be cheap to obtain, for example
+a filemtime() call for file-based loaders. The source is fetched lazily through
+[`TemplateSource::getCode()`](Clarity_Template_TemplateSource.md#getcode), and only when the engine needs to compile.
 
 **Parameters**
 
@@ -34,26 +36,28 @@ The revision ({@see \TemplateSource::$revision}) must be available immediately w
 **Return value**
 
 - Type: [TemplateSource](Clarity_Template_TemplateSource.md)|`null`
+- Description: The template source, or null if this loader does not provide the template.
 
 **Throws**
 
-- RuntimeException  If the template cannot be found or loaded.
+- RuntimeException  If the name is invalid for this loader or the lookup fails, e.g. for an unknown domain.
 
 
 ---
 
-### getSubLoaders() · <small>[🗎](../../src/Template/TemplateLoader.php#L38)</small>
+### getSubLoaders() · <small>[🗎](../../src/Template/TemplateLoader.php#L42)</small>
 
 `public function getSubLoaders(): array`
 
-Return the list of loaders wrapped by this loader, if any.
+Return the loaders wrapped by this loader.
 
-Used by the engine to traverse loader hierarchies (e.g. DomainRouterLoader → FileLoader) and apply configuration changes like setExtension() to all relevant loaders.
+The engine uses this to traverse loader hierarchies, for example to apply setExtension()
+to every FileLoader beneath a DomainRouterLoader.
 
 **Return value**
 
 - Type: `array`
-- Description: List of loaders wrapped by this loader, or an empty array if this loader is not a wrapper.
+- Description: The wrapped loaders, or an empty array for a leaf loader.
 
 
 

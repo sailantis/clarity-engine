@@ -13,12 +13,13 @@ Extracted from Clarity\Engine\Tokenizer to keep each file small. See that class 
 Split a raw template source into an ordered array of segments.
 
 Tag boundaries are located by a quote-aware, brace-depth-aware scanner
-rather than a single flat regex. A closing delimiter may legitimately
-appear inside a string literal (`{{ '}}' }}`) or next to a literal brace
-(`{{ v }}}`, `{{ { a: 1 } }}`, `{{ user{k}}}`), none of which a naive
-lazy match can handle.
+rather than a single flat regex. A closing delimiter can appear inside a
+string literal (`{{ '}}' }}`), or a brace in the expression can contain
+one (`{{ user{k}}}` closes after `user{k}`, not after `user{k`).
 
-Each element is:  ['type' => TEXT|OUTPUT|BLOCK, 'content' => string, 'line' => int]
+Each element is an array keyed by the KEY_TYPE, KEY_CONTENT and KEY_LINE
+constants. The type is TEXT, OUTPUT, BLOCK or COMMENT. The line is the
+1-based line where the segment starts.
 
 **Parameters**
 
@@ -32,9 +33,8 @@ Each element is:  ['type' => TEXT|OUTPUT|BLOCK, 'content' => string, 'line' => i
 
 **Throws**
 
-- [ClarityException](Clarity_ClarityException.md)  When a tag is opened and never closed. A stray
-delimiter is almost always an authoring bug, so
-it is reported rather than emitted as text.
+- [ClarityException](Clarity_ClarityException.md)  When a tag is opened and never closed. Stray
+closing delimiters in text are emitted as text.
 
 
 

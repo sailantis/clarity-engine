@@ -13,27 +13,31 @@ namespace Clarity\Template;
  *  - {@see ArrayLoader}  — serves templates from an in-memory array
  *  - {@see StringLoader} — wraps a single hardcoded template string
  *
- * Custom loaders may source templates from databases, remote APIs, PHAR archives, etc.
+ * Custom loaders can read from databases, remote APIs, PHAR archives, and similar sources.
  */
 interface TemplateLoader
 {
     /**
-     * Load a template by its logical name and return source with revision metadata.
+     * Load a template by its logical name and return its source with revision metadata.
      *
-     * The revision ({@see TemplateSource::$revision}) must be available immediately with minimal I/O (e.g. a filemtime() call for file-based loaders); the actual template source could be fetched lazily via {@see TemplateSource::getCode()} only when the engine determines compilation is needed.
+     * The revision ({@see TemplateSource::$revision}) must be cheap to obtain, for example
+     * a filemtime() call for file-based loaders. The source is fetched lazily through
+     * {@see TemplateSource::getCode()}, and only when the engine needs to compile.
      *
      * @param string $name Logical template name, e.g. 'home', 'admin::dashboard',
      *                     'layouts/base'. Must not be empty.
-     * @throws \RuntimeException If the template cannot be found or loaded.
+     * @return TemplateSource|null The template source, or null if this loader does not provide the template.
+     * @throws \RuntimeException If the name is invalid for this loader or the lookup fails, e.g. for an unknown domain.
      */
     public function load(string $name): ?TemplateSource;
 
     /**
-     * Return the list of loaders wrapped by this loader, if any.
+     * Return the loaders wrapped by this loader.
      *
-     * Used by the engine to traverse loader hierarchies (e.g. DomainRouterLoader → FileLoader) and apply configuration changes like setExtension() to all relevant loaders.
+     * The engine uses this to traverse loader hierarchies, for example to apply setExtension()
+     * to every FileLoader beneath a DomainRouterLoader.
      *
-     * @return TemplateLoader[] List of loaders wrapped by this loader, or an empty array if this loader is not a wrapper.
+     * @return TemplateLoader[] The wrapped loaders, or an empty array for a leaf loader.
      */
     public function getSubLoaders(): array;
 }

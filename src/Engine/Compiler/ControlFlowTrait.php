@@ -14,9 +14,9 @@ trait ControlFlowTrait
      * `{% for %} … ` header: `name in expr`, `key, value in expr`, or
      * `var in start..end [step n]`.
      *
-     * The bound names use PHP's variable-name grammar (high bytes included), so
-     * a non-ASCII loop variable parses here and is then validated by
-     * registerVar()/Tokenizer::isIdentifier().
+     * The bound names use the variable-name characters, high bytes included, so a
+     * non-ASCII loop variable matches here. The first name also matches `.`.
+     * registerVar() and Tokenizer::isIdentifier() check the names afterwards.
      */
     private const RE_FOR_IN = '/^([a-zA-Z_\x80-\xff][a-zA-Z0-9_.\x80-\xff]*)(?:\s*,\s*([a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*))?\s+in\s+(.+?)(?:(\.\.\.?)(.+?)(?:\s+step\s+(.+))?)?$/s';
 
@@ -25,8 +25,7 @@ trait ControlFlowTrait
      * Compile {% for key, item in list %} → PHP foreach.
      * Compile {% for i in start..end %} / {% for i in start...end [step N] %} → native PHP for.
      *
-     * Two-variable form: the FIRST name is the KEY and the SECOND is the VALUE,
-     * matching Twig's `{% for key, user in users %}`.
+     * Two-variable form: the FIRST name is the KEY and the SECOND is the VALUE.
      *
      * Range syntax:
      *   ..   inclusive upper bound  (start ≤ i ≤ end)
@@ -90,9 +89,9 @@ trait ControlFlowTrait
         $firstName = trim($m[1]);
         $hasSecond = isset($m[2]) && $m[2] !== '';
 
-        // The two-variable form is (key, value) — Twig order — so the FIRST name
-        // binds the key and the SECOND binds the value. With a single name it is
-        // the value, matching {% for item in items %}.
+        // The two-variable form is (key, value), so the FIRST name binds the key
+        // and the SECOND binds the value. With a single name it is the value,
+        // matching {% for item in items %}.
         $keyTplName  = $hasSecond ? $firstName : null;
         $itemTplName = $hasSecond ? trim($m[2]) : $firstName;
 
@@ -158,9 +157,9 @@ trait ControlFlowTrait
     /**
      * Compile `{% elseif expr %}`.
      *
-     * An `{% elseif %}` inside a loop is always the author's if-chain; a loop
-     * cannot have a second branch.  The guard turns the resulting PHP parse
-     * error into a compile-time message that names the template line.
+     * Refused when the innermost open construct is a loop at the current depth,
+     * because a loop has no second branch. The refusal is a compile-time message
+     * that names the template line, not a PHP parse error.
      */
     private function compileElseIf(string $rest, string $sourcePath, int $tplLine): string
     {
@@ -180,17 +179,16 @@ trait ControlFlowTrait
     /**
      * Compile `{% else %}`.
      *
-     * Twig gives `{% else %}` two meanings inside a loop: a branch tag whose
-     * innermost open construct is the loop means "the sequence was empty",
-     * while a branch tag belonging to an `{% if %}` inside the loop means the
-     * ordinary conditional fallback.  {@see innermostLoopAtCurrentDepth()}
-     * separates the two.
+     * Inside a loop, `{% else %}` can belong to the loop or to an `{% if %}`
+     * nested in it. If the innermost open construct is the loop, it means the
+     * sequence was empty. Otherwise it is the ordinary conditional fallback.
+     * {@see innermostLoopAtCurrentDepth()} tells the two apart.
      *
      * A for-else is compiled by making the loop header record whether it
-     * iterated, closing the loop, and opening an `if` on the negation.  PHP has
-     * no `for … else`, so this is the only way to express it; and because the
-     * `endforeach`/`endfor` keyword depends on the loop type, that choice is
-     * deferred to `{% endfor %}` via the entry's `hasElse` marker.
+     * iterated, closing the loop, and opening an `if` on the negation. PHP has no
+     * `for … else`, so the loop is rewritten this way. The closing keyword depends
+     * on the loop type, so `{% endfor %}` emits it, guided by the entry's
+     * `hasElse` marker.
      *
      * @param array $lines Accumulator, needed to patch the loop's header line.
      */
@@ -212,15 +210,13 @@ trait ControlFlowTrait
             );
         }
 
-        // Decide the flag name now and rewrite the loop header, which is the only
-        // emitted line this touches.  This is the whole point of the lazy
-        // strategy: a loop WITHOUT an else is left byte-for-byte as it was, and
-        // no line is inserted, so the source map needs no renumbering.
+        // Rewrite the loop header, the only emitted line this touches. A loop
+        // without an else is left unchanged, and no line is inserted, so the
+        // source map needs no renumbering.
         //
-        // The flag is initialised immediately BEFORE the loop, not just set
-        // inside it, so that a loop which runs more than once -- a nested loop
-        // re-entered by an outer iteration -- starts each pass with a clean flag
-        // instead of inheriting `true` from the previous pass.
+        // The flag is initialised before the loop as well as set inside it. A
+        // nested loop re-entered by an outer iteration then starts each pass with
+        // a clean flag instead of inheriting `true` from the previous pass.
         $flag = self::INTERNAL_PREFIX . 'e' . $this->forElseSeq++;
         $lines[$entry['headerLine']] =
             '$' . $flag . ' = false; '
@@ -229,8 +225,8 @@ trait ControlFlowTrait
 
         $this->forStack[$index]['hasElse'] = true;
 
-        // Twig hides the loop variable in the else branch, so restore the
-        // bindings the loop introduced before it, not at `{% endfor %}`.
+        // The loop variables must not be visible in the else branch, so restore
+        // the bindings the loop introduced here rather than at `{% endfor %}`.
         $this->restoreLoopVars($entry['restore']);
 
         // The loop is closed HERE rather than at `{% endfor %}`: the else body
@@ -342,8 +338,7 @@ trait ControlFlowTrait
      * Index in $lines of the most recently appended line.
      *
      * The accumulator holds every statement emitted so far, so an earlier line
-     * is patched in place by index; a branch token has always seen at least the
-     * line that produced it.
+     * can be patched by its index.
      */
     private function currentLineIndex(array &$lines): int
     {
@@ -363,10 +358,10 @@ trait ControlFlowTrait
         }
 
         // Validate the ROOT of the lvalue, not its segments: `items[0].name` is a
-        // legitimate target, but its root still has to be bindable.  Without this
-        // `{% set this = … %}` reached PHP and died with an uncatchable
-        // "Cannot re-assign $this", and `{% set __c_fn = … %}` silently swapped
-        // the callable registry for the rest of the render.
+        // legitimate target, but its root still has to be bindable. Without this
+        // check, `{% set this = … %}` reached PHP and failed with a fatal error,
+        // and `{% set __c_fn = … %}` replaced the callable registry for the rest
+        // of the render.
         if (!\preg_match('/^\$?([a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*)/', \trim($m[1]), $rootMatch)) {
             throw new ClarityException("Invalid assignment target: '{$m[1]}'", $sourcePath, $tplLine);
         }

@@ -94,7 +94,7 @@ final class Directive
 
     /**
      * The tag may appear ONLY directly inside `$owner`, and is otherwise an
-     * ordinary leaf: it opens/bloses nothing and carries no cardinality.
+     * ordinary leaf: it opens/closes nothing and carries no cardinality.
      */
     public static function inside(string $owner): self
     {

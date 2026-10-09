@@ -4,20 +4,20 @@ namespace Clarity\Template;
 /**
  * TemplateLoader that tries multiple loaders in sequence until one returns a result.
  *
- * Useful for layering multiple sources of templates, e.g. an ArrayLoader for dynamic templates
- * on top of a FilesystemLoader for static templates.
+ * Suited to layering several template sources, e.g. an ArrayLoader for dynamic templates
+ * on top of a FileLoader for static templates.
  *
  * ```php
  * $loader = new CompositeLoader(
  *     new ArrayLoader(['dynamic' => '<p>{{ message }}</p>']),
- *     new FilesystemLoader('/path/to/static/templates'),
+ *     new FileLoader('/path/to/static/templates'),
  * );
  * $engine->setLoader($loader);
  *
  * // Resolves to the ArrayLoader template
  * echo $engine->render('dynamic', ['message' => 'Hello!']);
  *
- * // Resolves to /path/to/static/templates/home.html
+ * // Resolves to /path/to/static/templates/home.clarity.html
  * echo $engine->render('home');
  * ```
  */

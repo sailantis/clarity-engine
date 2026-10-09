@@ -663,6 +663,7 @@ $opts->maxDepth(2);                      // still applies, next render onward
 | `$maskKeys` | `maskKeys(array)`, `maskKey(string)`, `unmaskKey(string)` | `password`, `token`, `secret`, `apikey`, `api_key` | Key substrings whose values are hidden, case-insensitively |
 | `$forceToTemplate` | `forceToTemplate(bool)` | `false` | CLI renderer returns the string instead of writing to STDERR |
 | `$showPanel` | `showPanel(bool)` | `false` | Subscribe the HTML debug panel to the event bus |
+| `$haltWithException` | `haltWithException(bool)` | `false` | `dd()` throws `DumpHaltException` instead of exiting; see [dd() and halt mode](#dd-and-halt-mode) |
 
 The boolean setters take no argument as shorthand for `true`, so
 `->showPanel()` reads as a command; `->showPanel(false)` turns it off.
@@ -692,8 +693,8 @@ $engine->isDebugMode(); // bool
 
 `getDebugBus()` returns the active bus (or `null` when debug mode is off).
 Subscribe either a callable or a `DebugListener`; listeners run synchronously
-when an event is emitted. Every event is also retained in `getEvents()` until
-the bus is discarded. A `DebugEvent` has a `type`, a metadata `payload`, and a
+when an event is emitted. The bus keeps the 1000 most recent events in
+`getEvents()`; older events are dropped. A `DebugEvent` has a `type`, a metadata `payload`, and a
 Unix timestamp:
 
 | Event              | Payload                                           |
@@ -716,18 +717,49 @@ format.
 
 | Renderer | Output |
 | -------- | ------ |
-| HTML | A collapsible `<details>` tree, with escaped scalar text and inline CSS injected on the first HTML dump in the process. |
-| JavaScript | JSON inside a `;/* DEBUG_DUMP: … */` comment, safe to place between script statements; closing `*/` sequences in values are escaped. |
+| HTML | A collapsible `<details>` tree, with escaped scalar text. Each render includes the inline CSS. |
+| JavaScript | JSON inside a `;/* DEBUG_DUMP: … */` comment, safe to place between script statements; closing `*/` sequences in values are escaped, and `<` and `>` are written as `\u003C` and `\u003E`. |
 | CSS | JSON inside a `/* DEBUG_DUMP: … */` comment; closing `*/` is escaped and tag delimiters are JSON-hex-encoded to protect the surrounding `<style>` element. |
-| CLI | A nested text tree, ANSI-colored when writing to a terminal and plain otherwise. `dd()` uses this renderer under CLI/phpdbg, writes to standard output, and exits; `CliDumpRenderer::render()` writes to standard error by default, or returns the string when `forceToTemplate(true)` is set. |
+| CLI | A nested text tree, ANSI-colored when the output stream supports it (VT100 on Windows, a TTY elsewhere) and plain otherwise. `dd()` uses this renderer under CLI/phpdbg, writes to standard error, and exits (or throws in halt mode); `CliDumpRenderer::render()` writes to standard error by default, or returns the string when `forceToTemplate(true)` is set. |
 
 HTML and CLI output truncate nested values at `maxDepth` and limit each array
 to `maxItems`. JavaScript output also truncates at `maxDepth`, but serializes
 all array items. CSS comments also truncate at `maxDepth` and serialize all
-array items. Matching mask keys are case-insensitive string keys in arrays:
-this is not general redaction for arbitrary object properties. The list itself
+array items. Matching mask keys are case-insensitive substrings of array keys
+and object property names. Objects are shown by their properties, and
+`JsonSerializable` values in JavaScript and CSS output are masked on their
+serialized data. Closures and enums are not expanded. The list itself
 is replaced by `maskKeys([…])` and adjusted one entry at a time by `maskKey()`
 and `unmaskKey()`.
+
+### dd() and halt mode
+
+By default `dd()` writes the dump and calls `exit(1)`. That suits a one-shot
+request, but it also ends a long-running worker process (RoadRunner, Swoole,
+Octane-style hosts).
+
+With `haltWithException(true)`, `dd()` throws `Clarity\Debug\DumpHaltException`
+instead. The exception carries the rendered dump:
+
+- `$e->output`: the rendered dump string
+- `$e->context`: `html`, `js` or `css`
+
+Halt mode applies on every SAPI, including CLI. Enable it only in hosts that
+catch the exception:
+
+```php
+$engine->setDebugMode((new DumpOptions())->haltWithException(true));
+```
+
+The RoadRunner adapter (`RoadRunnerHttpWorker` in `azera-roadrunner`) catches
+the exception and returns the dump as a 500 response, with a Content-Type that
+matches the context. Its bootstrap enables halt mode for the HTTP worker
+automatically (`WorkerBootstrap::enableDumpHalt()`). The gRPC worker does not
+enable it, because it does not catch the exception. Other hosts should do the
+same.
+
+> **Warning:** code that catches `Throwable` will also catch
+> `DumpHaltException` and continue running. Rethrow it there.
 
 Everything debug is **compile-time or zero-cost in production**: `dump()` is
 pruned to `''` — including the filter and reference forms, which collapse to the

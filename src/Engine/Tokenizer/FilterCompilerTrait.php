@@ -12,12 +12,12 @@ trait FilterCompilerTrait
 
     /**
      * If $arg is a named argument of the form  identifier:expression  (where
-     * : is not part of ::), return ['name'=>â€¦, 'expr'=>â€¦].
+     * : is not part of ::), return ['name'=>…, 'expr'=>…].
      * Returns null for ordinary positional arguments.
      */
     private function parseNamedArg(string $arg): ?array
     {
-        // identifier followed by = that is not == ; also must not be !=, <=, >=
+        // identifier followed by a single ':' (not '::')
         if (\preg_match('/^\s*([a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*)\s*:(?!:)(.+)$/s', $arg, $m)) {
             return ['name' => $m[1], 'expr' => \trim($m[2])];
         }
@@ -27,7 +27,7 @@ trait FilterCompilerTrait
     /**
      * Compile a list of raw argument strings (already split on `,`) to PHP expressions.
      *
-     * Named arguments (`identifier=expression`) are emitted as PHP named arguments
+     * Named arguments (`identifier: expression`) are emitted as PHP named arguments
      * (`identifier: phpExpr`), letting PHP validate parameter names and arity at
      * runtime. This means function and filter signatures can change without requiring
      * template recompilation.
@@ -145,7 +145,7 @@ trait FilterCompilerTrait
      */
     private function splitCallableArgs(string $args, bool $valueFirst): array
     {
-        // Split top-level commas (your existing helper)
+        // Split top-level commas
         $parts = $this->splitRespectingStrings($args, ',');
 
         if ($parts === []) {
@@ -220,7 +220,7 @@ trait FilterCompilerTrait
      *   - a filter reference:   'filterName' or "filterName"
      * Bare variable names are rejected at compile time.
      *
-     * Named arguments (`identifier=expression`) are emitted directly as PHP named
+     * Named arguments (`identifier: expression`) are emitted directly as PHP named
      * arguments (`identifier: phpExpr`). PHP validates names and arity at runtime.
      *
      * @param string $filterSegment Clarity filter segment e.g. 'number(2)' or 'upper'
@@ -243,9 +243,9 @@ trait FilterCompilerTrait
         // rather than its dispatch subject — `x |> dump` must yield x so that
         // `… |> dump |> length` still measures x.
         //
-        // In production the whole step is eliminated to the identity, exactly as
-        // the call form is pruned to '': that is what keeps a debug chain free of
-        // runtime cost (and of extra arguments' side effects).
+        // In production the whole step is eliminated to the identity, as the call
+        // form is pruned to ''. A debug chain therefore has no runtime cost and no
+        // side effects from extra arguments.
         if (isset($this->filterProbes[$name])) {
             if (isset($this->prunedFunctions[$name])) {
                 return $trailing !== ''
@@ -298,11 +298,11 @@ trait FilterCompilerTrait
         }
 
         // An unregistered filter name can only resolve to a PHP function, so it is
-        // rejected HERE, at compile time, when the policy does not let a template
-        // reach PHP at all. It used to compile to a `$__c_fn[...]` lookup and fail
-        // on the first render, which reported `Variable "strtoupper" is not
-        // defined in this context` — naming a variable the template never wrote,
-        // and surfacing on a request rather than at the deploy that introduced it.
+        // rejected here, at compile time, when the policy does not let a template
+        // reach PHP. Otherwise it would compile to a `$__c_fn[...]` lookup and fail
+        // on the first render with `Variable "strtoupper" is not defined in this
+        // context`. That message names a variable the template never wrote, and it
+        // appears at request time instead of at deploy time.
         //
         // The check can be made here because an empty-handed policy leaves NOTHING
         // for an unregistered name to fall back to: the PHP-function path below is
@@ -352,8 +352,8 @@ trait FilterCompilerTrait
                 }
             }
 
-            // The filter form binds the piped value first (or, when the filter
-            // declares a `valueParam`, in that parameter's slot — Phase 2).
+            // The filter form binds the piped value first, or in the slot of a
+            // declared `valueParam`.
             \array_unshift($compiledArgs, $phpValue);
             $call = $this->buildCall($name, $compiledArgs);
 
@@ -364,21 +364,21 @@ trait FilterCompilerTrait
         }
 
         // Open mode: a filter name that is not registered resolves to a PHP
-        // function of the same name (Blade / Stempler / Plates parity).
+        // function of the same name.
         return $this->buildOpenFilterCall($name, $phpValue, $argList, $trailing);
     }
 
     /**
      * Emit a registry-dispatched call: `$__c_fn['name'](args)`.
      *
-     * This is the ONE place a registered name becomes PHP. Both the pipe form
+     * This is the only place a registered name becomes PHP. Both the pipe form
      * ({@see buildFilterCall()}) and the call-syntax form
-     * ({@see buildFunctionCallInExpr()}) funnel through it after compiling
-     * their own argument lists; the only difference is whether the piped value
-     * leads the arguments (and where the value slot lands — see
-     * {@see resolveInlineFilterSlots()}). There is one runtime table, not two:
-     * a registered name is callable, and whether it may be piped is a separate,
-     * compile-time question ({@see buildFilterCall()}).
+     * ({@see buildFunctionCallInExpr()}) pass through it after compiling their
+     * own argument lists. They differ only in whether the piped value leads the
+     * arguments, and where the value slot lands (see
+     * {@see resolveInlineFilterSlots()}). Registered names are callable at
+     * runtime. Whether a name may be piped is decided separately at compile time
+     * ({@see buildFilterCall()}).
      *
      * @param list<string> $compiledArgs Already-compiled PHP argument expressions.
      */
@@ -412,12 +412,12 @@ trait FilterCompilerTrait
      * Compile a filter segment that resolves to a PHP function (open mode only).
      *
      * By default the piped value becomes the first argument:
-     *   {{ 'ab' |> strtoupper }}               â†’ \strtoupper($value)
-     *   {{ 'a' |> str_replace('a', 'b') }}     â†’ \str_replace($value, 'a', 'b')
+     *   {{ 'ab' |> strtoupper }}               → \strtoupper($value)
+     *   {{ 'a' |> str_replace('a', 'b') }}     → \str_replace($value, 'a', 'b')
      *
      * A single `_` placeholder in the argument list positions the value
      * explicitly, for functions whose value argument is not first:
-     *   {{ 'k' |> array_key_exists(_, $arr) }} â†’ \array_key_exists($value, $arr)
+     *   {{ 'k' |> array_key_exists(_, $arr) }} → \array_key_exists($value, $arr)
      *
      * @param list<string> $argList Raw argument strings (already comma-split).
      * @param string       $phpValue Already-compiled PHP for the piped value.
@@ -527,7 +527,7 @@ trait FilterCompilerTrait
             $rest = \ltrim(\substr($rest, $endPos));
         }
 
-        // Plain filter â€” no trailing comparison operator
+        // Plain filter — no trailing comparison operator
         if (\trim($rest) === '') {
             return ['name' => $name, 'args' => $args, 'trailing' => ''];
         }
@@ -535,7 +535,7 @@ trait FilterCompilerTrait
         // Rest must be an operator followed by a non-empty operand.
         // `??` (null-coalescing) is included so a filter may be followed by a
         // fallback: `{{ items |> length ?? 0 }}`, `{{ x ?? 'fb' }}`.
-        // Note: `??` catches a NULL RETURN only â€” it cannot catch an exception.
+        // Note: `??` catches a NULL RETURN only — it cannot catch an exception.
         if (!\preg_match('/^(===|!==|==|!=|>=|<=|<>|\?\?|>|<)(.+)$/s', $rest, $cm)) {
             return null;
         }
@@ -577,24 +577,6 @@ trait FilterCompilerTrait
         return $this->substituteInlineFilterTemplate($definition['php'], $slots);
     }
 
-    /**
-     * Compile an inline filter's CALL form: `name(a1, a2, …)`.
-     *
-     * The call form is derived from the same `php` template as the filter form;
-     * only the SLOT ASSIGNMENT differs:
-     *   - valueParam UNSET: `arg[0]` is the value (`{1}`), the rest fill `params`.
-     *     This is byte-identical to the filter form, so `round(x, 2)` compiles
-     *     exactly like `x |> round(2)`.
-     *   - valueParam SET: every argument fills its `params` slot in order; the
-     *     value param has no default (e.g. `join`), so calling it without
-     *     supplying it is a loud compile error.
-     *
-     * Returns null when the name has no inline template (callable-only or
-     * unregistered); the caller then falls back to `$__c_fn` dispatch or a
-     * direct PHP call.
-     *
-     * @param string[] $argList Raw, comma-split argument strings.
-     */
     /**
      * Validate a call-only inline function's COMPILED first argument against a
      * named guard.
@@ -646,6 +628,24 @@ trait FilterCompilerTrait
      */
     private const PRESENCE_OPERAND_RE = '/^\$[A-Za-z_\x80-\xff][A-Za-z0-9_\x80-\xff]*(?:(?:\?->|->)[A-Za-z_\x80-\xff][A-Za-z0-9_\x80-\xff]*|\[[^\]]*\])*$/';
 
+    /**
+     * Compile an inline filter's CALL form: `name(a1, a2, …)`.
+     *
+     * The call form is derived from the same `php` template as the filter form;
+     * only the slot assignment differs:
+     *   - valueParam unset: `arg[0]` is the value (`{1}`), and the rest fill
+     *     `params`. This matches the filter form, so `round(x, 2)` compiles to the
+     *     same code as `x |> round(2)`.
+     *   - valueParam set: every argument fills its `params` slot in order. The
+     *     value param has no default (e.g. `join`), so omitting it is a compile
+     *     error.
+     *
+     * Returns null when the name has no inline template (callable-only or
+     * unregistered). The caller then falls back to `$__c_fn` dispatch or a
+     * direct PHP call.
+     *
+     * @param string[] $argList Raw, comma-split argument strings.
+     */
     private function buildInlineCallForm(string $name, array $argList): ?string
     {
         $definition = $this->registry->getInlineFilter($name);

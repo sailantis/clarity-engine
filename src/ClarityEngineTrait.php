@@ -14,7 +14,6 @@ use Clarity\Engine\SourceMap;
 use Clarity\Template\DomainRouterLoader;
 use Clarity\Template\FileLoader;
 use Clarity\Template\TemplateLoader;
-use Clarity\Template\TemplateLocation;
 use ParseError;
 
 trait ClarityEngineTrait
@@ -49,16 +48,15 @@ trait ClarityEngineTrait
     }
 
     /**
-     * Turn debug mode on or off — the single debug switch.
+     * Enable or disable the debug mode for the engine.
      *
      * ```php
-     * $engine->setDebugMode(true);                       // full debug, defaults
-     * $engine->setDebugMode(new DumpOptions(maxDepth: 3));
-     * $engine->setDebugMode(false);                      // production
+     * $engine->setDebugMode(true);                // debug defaults
+     * $engine->setDebugMode(new DumpOptions(showPanel: true, maxDepth: 3));
+     * $engine->setDebugMode(false);               // production
      * ```
      *
-     * Turning it ON installs the whole debug experience in one step, and
-     * turning it OFF removes all of it:
+     * Debug mode affects the following aspects of the engine:
      *
      * - compiler-level runtime assertions (range-loop safety checks);
      * - `dump()` rendered by the context-aware renderers — an HTML tree in HTML,
@@ -66,13 +64,13 @@ trait ClarityEngineTrait
      *   in CSS — with sensitive keys masked;
      * - `{{ x |> dump }}`, which dumps the piped value at the pipe position and
      *   still yields it (`{{ x |> dump |> length }}` measures x);
-     * - a {@see DebugEventBus} emitting `template.resolve`, `template.compile`
-     *   and `template.render`;
+     * - a {@see DebugEventBus} emitting `template.resolve`, `template.compile`,
+     *   `template.cached` and `template.render`;
      * - the HTML debug panel, when `DumpOptions::showPanel()` is set.
      *
-     * Passing {@see DumpOptions} is shorthand for "on, with these options" —
-     * `$debug instanceof DumpOptions` and `$debug === null` both mean "on".
-     * `$debug === false` is exactly {@see disableDebug()}.
+     * `true` enables debug with default options. Passing a {@see DumpOptions}
+     * enables it with those options. `false` and `null` both disable it, and
+     * `false` is equivalent to {@see disableDebug()}.
      *
      * `dd()` is the one exception: it is never pruned, so the registry refuses
      * it while debug is off instead of dumping raw, unmasked values.
@@ -148,10 +146,10 @@ trait ClarityEngineTrait
      *     ->allowFunctions('strtoupper', 'count'));
      * ```
      *
-     * SECURITY: a policy that grants `rawPhp`, `phpVariables` or
-     * `methodCalls` is equivalent to executing arbitrary PHP and is intended for
-     * templates written by trusted authors only.  Templates compiled under one
-     * policy are automatically recompiled under another.
+     * Security: a policy that grants `rawPhp`, `phpVariables` or `methodCalls`
+     * is equivalent to executing arbitrary PHP. Use it only for templates written
+     * by trusted authors. Templates compiled under one policy are recompiled
+     * automatically under another.
      *
      * @param Policy|array $policy A policy.
      * @return $this
@@ -168,10 +166,9 @@ trait ClarityEngineTrait
     /**
      * The policy templates are currently compiled under.
      *
-     * Always a real object: a freshly built engine answers with
-     * {@see Policy::restricted()}.  Use it for coarse questions rather than
-     * keeping a second flag that could disagree with it — `getPolicy()->isSandboxed()`
-     * answers what the old `isSandboxed()` answered.
+     * Always a real object: a freshly built engine returns
+     * {@see Policy::restricted()}. For coarse questions, query it directly, for
+     * example `getPolicy()->isSandboxed()`.
      */
     public function getPolicy(): Policy
     {
@@ -179,10 +176,10 @@ trait ClarityEngineTrait
     }
 
     /**
-     * Whether the current policy lets templates reach PHP at all.
+     * Whether PHP is unreachable under the current policy.
      *
-     * Kept because it reads better than `getPolicy()->allowsPhp()` at a call site
-     * that only wants the coarse answer.
+     * Equivalent to `getPolicy()->isSandboxed()`. Returns true only when the
+     * policy grants no PHP-reaching rule.
      */
     public function isSandboxed(): bool
     {
@@ -190,19 +187,17 @@ trait ClarityEngineTrait
     }
 
     /**
-     * Enable full debug mode.
-     *
-     * @deprecated Use {@see setDebugMode()} — the two debug entry points have
-     *             been unified, and `setDebugMode(true)` (or passing
-     *             {@see DumpOptions}) now installs exactly what this method did.
-     *             Kept as an alias so existing code keeps working.
+     * Enable full debug mode. Equivalent to {@see setDebugMode()}.
      *
      * ```php
      * $engine->enableDebug();   // default options
      * $engine->enableDebug(new DumpOptions(showPanel: true, maxDepth: 4));
      * ```
      *
-     * @param DumpOptions|null $opts Customise depth, masking, panel, etc.
+     * @deprecated Use {@see setDebugMode()}. Passing `true` or a {@see DumpOptions} enables debug the same way.
+     *             Kept as an alias so existing code keeps working.
+     *
+     * @param DumpOptions|null $opts Options for depth, masking, and the panel.
      * @return $this
      */
     public function enableDebug(?DumpOptions $opts = null): static
@@ -232,11 +227,22 @@ trait ClarityEngineTrait
     }
 
     /**
-     * Return the active HtmlDebugPanel, or null when disabled.
+     * Return the active HtmlDebugPanel, or null when debug mode is off or the
+     * panel is not enabled via `DumpOptions::showPanel()`.
      */
     public function getDebugPanel(): ?HtmlDebugPanel
     {
         return $this->debugPanel;
+    }
+
+    /**
+     * Return the DumpOptions in use by the active debug runtime, or null when
+     * debug mode is off. Options are mutable, so changes take effect on the
+     * next `dd()` or `dump()`.
+     */
+    public function getDebugOptions(): ?DumpOptions
+    {
+        return $this->debugRuntime?->options;
     }
 
     /**
@@ -295,13 +301,13 @@ trait ClarityEngineTrait
     }
 
     /**
-     * Get the effective file extension used when resolving templates.
+     * Get the file extension used when resolving templates.
      *
-     * @return string Extension including leading dot or empty string.
+     * @return string Extension including leading dot, or empty string for no extension.
      */
     public function getExtension(): string
     {
-        return $this->extension;
+        return $this->extension ?? FileLoader::DEFAULT_EXTENSION;
     }
 
     /**
@@ -353,7 +359,7 @@ trait ClarityEngineTrait
      * localization set with filters, a locale stack, and `with_locale` directives).
      *
      * ```php
-     * $engine->addModule(new \Clarity\LocalizationModule([
+     * $engine->addModule(new \Clarity\Localization\TranslationModule([
      *     'locale'            => 'de_DE',
      *     'translations_path' => __DIR__ . '/locales',
      * ]));
@@ -370,7 +376,7 @@ trait ClarityEngineTrait
 
     /**
      * Register an inline filter definition that is compiled directly into the
-     * generated PHP render body (zero runtime call overhead).
+     * generated PHP render body, so no runtime call is made.
      *
      * The definition must follow the same format as the built-in inline filters:
      * ```php
@@ -380,14 +386,14 @@ trait ClarityEngineTrait
      * $engine->addInlineFilter('my_substr', [
      *     'php' => '\mb_substr((string) {1}, {2}, {3})',
      *     'params' => ['start', 'length'],
-     *     'defaults' => ['length' => null],
+     *     'defaults' => ['length' => 'null'],
      * ]);
      * ```
-     * Template placeholders: `{1}` for the piped value, `{2}`, `{3}`, … for
-     * additional parameters are declared in `params`.
+     * Placeholders: `{1}` is the piped value, and `{2}`, `{3}`, … are the
+     * parameters declared in `params`, in order.
      *
      * @param string $name       Filter name.
-     * @param array{php?: string, params?: string[], defaults?: array<string, string>, variadic?: bool} $definition
+     * @param array{php: string, params?: string[], defaults?: array<string, string>, variadic?: bool, valueParam?: string, filter?: bool, callGuard?: string} $definition
      * @return $this
      */
     public function addInlineFilter(string $name, array $definition): static
@@ -397,27 +403,27 @@ trait ClarityEngineTrait
     }
 
     /**
-     * Register an inline FUNCTION — codegen that compiles into the template but
-     * is NOT reachable with the pipe operator.
+     * Register an inline function: codegen that compiles into the template but
+     * cannot be used with the pipe operator.
      *
      * `addInlineFunction()` is to `addInlineFilter()` what `addFunction()` is to
      * `addFilter()`: the call form only. The `php` template backs `name(...)`
-     * exactly as it would for a filter, while `value |> name` is a compile-time
+     * the same way it would for a filter, while `value |> name` is a compile-time
      * error.
      *
-     * Use it for a construct whose argument is a piece of SOURCE rather than a
-     * value to transform, so that a piped form has no meaning:
+     * Use it when the argument is source code rather than a value to transform,
+     * so a piped form has no meaning:
      *
      * ```php
      * $engine->addInlineFunction('isset', [
-     *     'php'    => 'isset({1})',
+     *     'php'       => 'isset({1})',
      *     'callGuard' => 'presence',
      * ]);
      * ```
      *
-     * The `callGuard` is what keeps the template honest about the construct's own
-     * restrictions: `presence` requires the first argument to be a bare name or a
-     * chain over one, because PHP's `isset()` accepts nothing else.
+     * `callGuard` enforces the construct's restrictions at compile time. The
+     * `presence` guard requires the first argument to be a bare name or a chain
+     * over one, which is all PHP's `isset()` accepts.
      *
      * @param string $name       Function name used in templates.
      * @param array{php: string, params?: string[], defaults?: array<string, string>, variadic?: bool, valueParam?: string, callGuard?: string} $definition
@@ -433,13 +439,13 @@ trait ClarityEngineTrait
      * Register a handler for a custom directive (e.g. `with_locale`).
      *
      * The handler is a callable that receives the raw text after the keyword, a
-     * {@see TemplateLocation} for error messages, and a `$processExpr` callable
+     * {@see TemplateLocation} for error messages, and a `$expr` callable
      * that converts a Clarity expression string to a PHP expression string.
      * It must return a PHP statement string.
      *
      * ```php
      * $engine->addDirective('with_locale', function(string $rest, TemplateLocation $at, callable $expr): string {
-     *     return "\$__c_sv['locale']->push({$expr(trim($rest))});"
+     *     return "\$__c_sv['locale']->push({$expr(trim($rest))});";
      * });
      * $engine->addDirective('endwith_locale', fn(...) => "\$__c_sv['locale']->pop();");
      * ```
@@ -549,11 +555,11 @@ trait ClarityEngineTrait
      * ```
      *
      * **Built-in filters:**
-     * - Text: `upper`, `lower`, `trim`, `truncate`, `escape`, `raw`
+     * - Text: `upper`, `lower`, `trim`, `truncate`, `escape`, `raw`, `slug`
      * - Numbers: `number`, `abs`, `round`, `ceil`, `floor`
      * - Arrays: `join`, `length`, `first`, `last`, `keys`, `values`, `map`, `filter`, `reduce`
      * - Dates: `date`, `date_modify`, `format_datetime`
-     * - Other: `json`, `default`, `unicode`
+     * - Other: `json`, `default`
      *
      * @param string   $name Filter name used in templates (e.g. 'currency').
      * @param callable $fn   Callable with signature: fn($value, ...$args): mixed
@@ -695,7 +701,7 @@ trait ClarityEngineTrait
      *
      * **Without layout (override):**
      * ```php
-     * $engine->setLayout(null); // Temporarily disable layout
+     * $engine->setLayout(null); // Subsequent renders use no layout
      * $partial = $engine->render('partials/widget', ['data' => $widgetData]);
      * ```
      *
@@ -708,8 +714,8 @@ trait ClarityEngineTrait
      * @param string $view View name to render. Can include namespace prefix (e.g. 'admin::dashboard').
      * @param array $vars Variables to pass to the template. Objects stay objects: `a.b`
      *                    reads a public property while `a:b` reads an array key.
-     * @return string Rendered HTML/output.
-     * @throws ClarityException If template not found or compilation fails.
+     * @return string Rendered HTML/output, with the debug panel HTML appended when the panel is enabled.
+     * @throws ClarityException If the template is not found, fails to compile, or throws at runtime.
      */
     public function render(string $view, array $vars = []): string
     {
@@ -772,17 +778,10 @@ trait ClarityEngineTrait
     /**
      * Build the runtime callable table handed to compiled templates as `$__c_fn`.
      *
-     * This is the registry's table verbatim. `dump`/`dd` live in it already, so
-     * there is one place a template name can resolve to — `{{ dump(x) }}` and a
-     * quoted filter reference such as `map(items, "dump")` reach the SAME
-     * callable.
-     *
-     * That is deliberate. This method used to rebuild `dump` from the engine's
-     * private `__debug_dump` service on every render, which meant the call form
-     * and the reference form did not agree: with debug off, `map(items, "dump")`
-     * still reached the registry's raw formatter and printed unmasked values
-     * into production output, while `{{ dump(x) }}` was pruned. One table, one
-     * behaviour.
+     * This is the registry's table verbatim. `dump` and `dd` live in it already,
+     * so a template name resolves to one callable: `{{ dump(x) }}` and a quoted
+     * filter reference such as `map(items, "dump")` reach the same callable.
+     * With debug off, both forms are no-ops.
      *
      * @return array<string, callable>
      */
@@ -795,7 +794,7 @@ trait ClarityEngineTrait
      * Compile (if needed) and render a single template.
      *
      * @param string $templateName Logical template name (e.g. 'home', 'layouts/base').
-     * @param array  $vars         Already-cast variables array.
+     * @param array  $vars         Variables merged into the template scope.
      * @return string Rendered output.
      * @throws ClarityException On compile or runtime errors.
      */
@@ -877,7 +876,9 @@ trait ClarityEngineTrait
     }
 
     /**
-     * Return an already-loaded class name, compiling & caching as needed.
+     * Return the compiled class name for a template. The class is loaded from
+     * the cache, or compiled and cached first. A cached class is recompiled when
+     * the debug mode or policy it was built with no longer matches.
      *
      * @return class-string
      */
@@ -1280,7 +1281,7 @@ trait ClarityEngineTrait
             $userLevel = match ($errno) {
                 E_NOTICE, E_USER_NOTICE         => E_USER_NOTICE,
                 E_DEPRECATED, E_USER_DEPRECATED => E_USER_DEPRECATED,
-                default                         => E_USER_WARNING,
+                default                         => E_USER_WARNING
             };
 
             $annotated = "$errstr in $tplFile:$tplLine";
@@ -1339,8 +1340,8 @@ trait ClarityEngineTrait
      * template name and line number using the $sourceMap static property on
      * the compiled class — no file I/O required.
      *
-     * The source map is a list of ranges: [phpLineStart, fileIndex, templateLine].
-     * The matching range is the last entry whose phpLineStart ≤ the body-relative
+     * The source map is a list of ranges: [bodyLineStart, fileIndex, templateLine].
+     * The matching range is the last entry whose bodyLineStart ≤ the body-relative
      * line.  Template names are resolved from the parallel $sourceFiles static
      * property, and the body offset comes from $renderBodyLine — both baked into
      * the class at compile time, so this needs neither reflection nor disk access.

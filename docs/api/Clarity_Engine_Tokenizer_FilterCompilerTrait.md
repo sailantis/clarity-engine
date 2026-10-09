@@ -17,7 +17,7 @@ For map / filter / reduce the first argument must be either:
   - a filter reference:   'filterName' or "filterName"
 Bare variable names are rejected at compile time.
 
-Named arguments (`identifier=expression`) are emitted directly as PHP named
+Named arguments (`identifier: expression`) are emitted directly as PHP named
 arguments (`identifier: phpExpr`). PHP validates names and arity at runtime.
 
 **Parameters**

@@ -2,13 +2,31 @@
 
 **Full name:** [Clarity\Debug\DebugEventBus](../../src/Debug/DebugEventBus.php)
 
-DebugEventBus is a simple event bus for emitting and subscribing to debug events.
+Passes debug events to listeners and keeps emitted events in memory,
+available through getEvents(). A listener is a DebugListener or any callable.
 
-It allows listeners to receive events with a type, payload, and timestamp.
+Only the most recent $maxEvents events are kept; older ones are dropped.
 
 ## Public methods
 
-### subscribe() · <small>[🗎](../../src/Debug/DebugEventBus.php#L19)</small>
+### __construct() · <small>[🗎](../../src/Debug/DebugEventBus.php#L20)</small>
+
+`public function __construct(int $maxEvents = 1000): mixed`
+
+**Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$maxEvents` | int | `1000` |  |
+
+**Return value**
+
+- Type: `mixed`
+
+
+---
+
+### subscribe() · <small>[🗎](../../src/Debug/DebugEventBus.php#L24)</small>
 
 `public function subscribe(Clarity\Debug\DebugListener|callable $listener): void`
 
@@ -25,7 +43,7 @@ It allows listeners to receive events with a type, payload, and timestamp.
 
 ---
 
-### emit() · <small>[🗎](../../src/Debug/DebugEventBus.php#L24)</small>
+### emit() · <small>[🗎](../../src/Debug/DebugEventBus.php#L29)</small>
 
 `public function emit(string $type, array $payload = []): void`
 
@@ -43,7 +61,7 @@ It allows listeners to receive events with a type, payload, and timestamp.
 
 ---
 
-### getEvents() · <small>[🗎](../../src/Debug/DebugEventBus.php#L38)</small>
+### getEvents() · <small>[🗎](../../src/Debug/DebugEventBus.php#L46)</small>
 
 `public function getEvents(): array`
 

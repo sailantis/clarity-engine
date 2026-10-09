@@ -4,22 +4,20 @@ namespace Clarity\Localization;
 /**
  * Interface for translation loaders.
  *
- * A translation loader is responsible for loading flat key → message maps for
- * a given domain and locale. The `TranslationModule` uses the loader to fetch
- * translations on demand, once per lookup. Caching is the loader's concern:
- * `FileTranslationLoader` compiles source files to PHP,
- * `RedisCachingLoader` caches any loader in Redis.
+ * A loader supplies the flat key => message map for one domain and locale.
+ * `TranslationModule` calls `load()` on every lookup, and calls it a second time
+ * when the requested locale lacks the key and the fallback locale differs. The module
+ * caches nothing, so expensive loaders should be wrapped in `RedisCachingLoader`.
  *
- * The `FileTranslationLoader` is provided as a convenient implementation that
- * supports multiple file formats (PHP, JSON, YAML) and caching via generated
- * PHP files.
+ * `FileTranslationLoader` reads PHP, JSON, and YAML catalogues and caches them as
+ * PHP files. `RedisCachingLoader` caches the output of any loader in Redis.
  */
 interface TranslationLoaderInterface
 {
     /**
-     * Load flat key => message pairs for a domain+locale.
+     * Load flat key => message pairs for a domain and locale.
      *
-     * @return array<string,string>
+     * @return array<string,string> Empty when no messages exist.
      */
     public function load(string $domain, string $locale): array;
 }

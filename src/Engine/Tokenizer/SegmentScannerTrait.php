@@ -18,18 +18,18 @@ trait SegmentScannerTrait
      * Split a raw template source into an ordered array of segments.
      *
      * Tag boundaries are located by a quote-aware, brace-depth-aware scanner
-     * rather than a single flat regex. A closing delimiter may legitimately
-     * appear inside a string literal (`{{ '}}' }}`) or next to a literal brace
-     * (`{{ v }}}`, `{{ { a: 1 } }}`, `{{ user{k}}}`), none of which a naive
-     * lazy match can handle.
+     * rather than a single flat regex. A closing delimiter can appear inside a
+     * string literal (`{{ '}}' }}`), or a brace in the expression can contain
+     * one (`{{ user{k}}}` closes after `user{k}`, not after `user{k`).
      *
-     * Each element is:  ['type' => TEXT|OUTPUT|BLOCK, 'content' => string, 'line' => int]
+     * Each element is an array keyed by the KEY_TYPE, KEY_CONTENT and KEY_LINE
+     * constants. The type is TEXT, OUTPUT, BLOCK or COMMENT. The line is the
+     * 1-based line where the segment starts.
      *
      * @param string $source Raw template source.
      * @return array<int, array{int, string, int}>
-     * @throws ClarityException When a tag is opened and never closed. A stray
-     *                          delimiter is almost always an authoring bug, so
-     *                          it is reported rather than emitted as text.
+     * @throws ClarityException When a tag is opened and never closed. Stray
+     *                          closing delimiters in text are emitted as text.
      */
     public function tokenize(string $source): array
     {
@@ -203,9 +203,9 @@ trait SegmentScannerTrait
      */
     private static function findTagClose(string $source, int $from, int $len, string $closer): ?int
     {
-        // Fast path: the overwhelming majority of tags contain no quote and no
-        // brace, so the first closer found by strpos is already the answer. One
-        // bulk scan from $from decides that without entering the loop below.
+        // Fast path: most tags contain no quote and no brace, so the first closer
+        // found by strpos is the answer. One bulk scan from $from decides that
+        // without entering the loop below.
         $firstCloser = \strpos($source, $closer, $from);
         if ($firstCloser === false) {
             return null;

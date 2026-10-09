@@ -435,6 +435,20 @@ class TranslationLoaderArchitectureTest extends BaseTestCase
         $this->assertContains('SETEX translations:messages:de_DE 3600', $redis->log);
     }
 
+    public function testRedisLoaderKeysUseTheConfiguredPrefix(): void
+    {
+        $this->requireRedisDouble();
+
+        $redis  = new \Redis();
+        $appA   = new RedisCachingLoader($this->countingLoader(), $redis, 3600, 'app-a:translations');
+        $appB   = new RedisCachingLoader($this->countingLoader(), $redis, 3600, 'app-b:translations');
+
+        $appA->load('messages', 'de_DE');
+        $appB->load('messages', 'de_DE');
+        $appA->invalidate();
+
+        $this->assertSame(['app-b:translations:messages:de_DE'], \array_keys($redis->store));
+    }
     public function testRedisLoaderInvalidatesOneDomainAndLocale(): void
     {
         $this->requireRedisDouble();

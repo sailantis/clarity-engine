@@ -4,33 +4,32 @@
 
 In-memory translation loader backed by a plain PHP array.
 
-Useful for unit tests, translations shipped as code rather than as files, and
-overlaying a small set of programmatic overrides onto a
-[`FileTranslationLoader`](Clarity_Localization_FileTranslationLoader.md) through a [`ChainTranslationLoader`](Clarity_Localization_ChainTranslationLoader.md):
+Useful for unit tests, for translations shipped as code, and for overriding
+selected messages of a [`FileTranslationLoader`](Clarity_Localization_FileTranslationLoader.md) through a
+[`ChainTranslationLoader`](Clarity_Localization_ChainTranslationLoader.md):
 
 ```php
-$loader = new ArrayTranslationLoader([
-    'messages' => [
-        'de_DE' => ['greeting' => 'Hallo', 'nav' => ['home' => 'Startseite']],
-        'en_US' => ['greeting' => 'Hello'],
-    ],
-]);
+$loader = new ChainTranslationLoader(
+    new FileTranslationLoader($translationsPath),
+    new ArrayTranslationLoader([
+        'messages' => [
+            'de_DE' => ['greeting' => 'Hallo', 'nav' => ['home' => 'Startseite']],
+        ],
+    ]),
+);
 $engine->addModule(new TranslationModule(['loader' => $loader]));
 ```
 
-Keys may be nested; they are flattened with dot separators, so the `nav` entry
-above resolves as `{{ "nav.home" |> t }}`. No file I/O takes place, and a
-missing domain or locale yields an empty array rather than an error, which is
-how the module distinguishes "nothing here" from "look elsewhere".
+Nested keys are flattened with dot separators, so the `nav` entry above resolves
+as `{{ "nav.home" |> t }}`. No file I/O takes place. A missing domain or locale
+yields an empty array rather than an error.
 
-Flattening happens once, in the constructor, and `load()` returns the map as
-stored — a lookup is an array read and nothing else. A loader that flattened
-on every `load()` would have to un-flatten on every write, which is the same
-work twice and makes a single-key write rewrite its whole branch.
+Nested tables are flattened once, in the constructor. `load()` returns the stored
+map, so each lookup is a plain array read.
 
 ## Public methods
 
-### __construct() · <small>[🗎](../../src/Localization/ArrayTranslationLoader.php#L47)</small>
+### __construct() · <small>[🗎](../../src/Localization/ArrayTranslationLoader.php#L46)</small>
 
 `public function __construct(array $messages = []): mixed`
 
@@ -47,7 +46,7 @@ work twice and makes a single-key write rewrite its whole branch.
 
 ---
 
-### load() · <small>[🗎](../../src/Localization/ArrayTranslationLoader.php#L56)</small>
+### load() · <small>[🗎](../../src/Localization/ArrayTranslationLoader.php#L55)</small>
 
 `public function load(string $domain, string $locale): array`
 
@@ -65,7 +64,7 @@ work twice and makes a single-key write rewrite its whole branch.
 
 ---
 
-### set() · <small>[🗎](../../src/Localization/ArrayTranslationLoader.php#L74)</small>
+### set() · <small>[🗎](../../src/Localization/ArrayTranslationLoader.php#L73)</small>
 
 `public function set(string $domain, string $locale, string $key, string $message): static`
 
