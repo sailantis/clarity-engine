@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-10
+
 ### Added
 
 - **`RedisCachingLoader` takes a key prefix.** The optional fourth constructor
@@ -801,32 +803,6 @@ allowlist, or it is denied. Add it with allowFunctions().` — and
   `'{% php %}' is not allowed by this policy. Grant the 'rawPhp' rule to
 allow it.` A separate message names an unlisted _filter_, because the remedy
   differs (a filter allowlist, or a registration).
-- `COMPILER_VERSION` 18 → 19, for the new grammar (`new`/`::`/`instanceof`).
-
-- **`is defined` now answers the same in both modes.** A name holding an
-  explicit `null` used to count as **defined** in sandbox mode (the probe used
-  `array_key_exists`) but as **not defined** in PHP mode (the same name compiles
-  to a PHP local, and a local cannot be tested for existence without losing
-  `null`). A template cannot see the mode, so the answer it got depended on a
-  setting it could not read. The probe is now `isset()` everywhere, which makes
-  the contract one sentence: **a name is defined when it holds a value other than
-  `null`**. `is null` still reports a present-but-null name, so the two together
-  separate absent, null, and present. **Behaviour change:** `user is defined` is
-  now `false` when `user` was passed as `null`. See `docs/01-template-syntax.md`
-  and `tests/Engine/OperatorTest.php`.
-
-- **An unregistered filter is now a compile-time error with an actionable
-  message.** In sandbox mode `{{ name |> strtoupper }}` compiled to a lookup in
-  the runtime callable table and failed on the first render, reporting
-  `Variable "strtoupper" is not defined in this context` — naming a variable the
-  template never wrote and surfacing on a request rather than at the deploy. It
-  is now rejected while compiling, with a message that names both remedies:
-  `Filter 'strtoupper' is not registered, and the sandbox is enabled, so there is
-nothing for it to resolve to. Register it with addFilter(), or call
-setSandboxMode(false) to let a PHP function of the same name be used.` The
-  rejection is possible at compile time because sandbox mode leaves nothing for
-  an unregistered name to fall back to — the open-mode branch is the only other
-  resolution path, and it is unreachable while the sandbox is on.
 
 ### Fixed
 
@@ -930,6 +906,113 @@ setSandboxMode(false) to let a PHP function of the same name be used.` The
 
 ### Security
 
+- **`dump()` can no longer print unmasked values, in any form.** The registry
+  carried its own fallback debug formatter — `print_r` inside a `<pre>`, with no
+  masking — and two separate paths reached it. Calling `setDebugMode(true)`
+  instead of `enableDebug()` printed secrets that the renderer would have masked,
+  and a quoted callable reference such as `{{ map(items, "dump") }}` reached it
+  **even with debug off**, printing into production output. The registry now owns
+  no debug formatting: the renderers and their masking live in one place
+  (`Clarity\Debug\DebugRuntime`), `dump()` is a no-op until the engine installs
+  them, and `dd()` — the one form that is never pruned — throws with debug off
+  rather than falling back to an unmasked `var_dump`. Every `dump` form (call,
+  filter step, quoted reference) is eliminated in production. See
+  `tests/Engine/DebugDumpTest.php` and `tests/Engine/CallSyntaxTest.php`.
+
+### Fixed
+
+- **A compile-time policy refusal now points at the template line that contains
+  the offending construct.** `{% php %}` on a policy that denies `rawPhp` was
+  raised during the pre-scan — the pass that runs *before* the source map cursor
+  starts tracking, and the reason the report claimed the engine file
+  (`Compiler/DirectiveSupportTrait.php:222`) with no template at all. The refusal
+  now resolves its position from the `{# @source … #}` markers the merge already
+  emits, so it is correct even when the tag was reached through `{% extends %}`
+  or `{% include %}` — an included template is named as the included file, not as
+  its host.
+- **`ClarityException` mirrors its location onto `$file` / `$line`.** The
+  uncaught-fatal line, xdebug's develop-mode error page and every error handler
+  read `getFile()` / `getLine()`; they now name the template instead of the engine
+  frame, which is what Smarty does for the same reason. The real call path stays
+  in `getTrace()`.
+- **A failure raised by the tokenizer now names the template and line.** The two
+  fixes above both depend on the exception *carrying* a location — and the
+  tokenizer never did. It is constructed without a template (it has no
+  `sourcePath` property), so it could not fill in the name, line or path, and
+  every one of its 90 throws — an unregistered filter, a malformed expression —
+  surfaced as a `ClarityException` naming the engine's own file
+  (`Tokenizer/FilterCompilerTrait.php:295`) with an empty `templateName`. Those
+  are the author's mistakes, and the ones that most need to point at the author's
+  line, so the compiler now attaches the location at the boundary: the calls that
+  cross into the tokenizer, and the loader read of an inlined template, go through
+  a new `withLocation()` helper, which fills in only the fields that are missing.
+  An exception that already names a template came from a nested compile (an
+  inlined macro or include) whose location is the more precise one, and is
+  rethrown untouched; the original throw is kept as `$previous`.
+
+  The scanner's unclosed-tag errors were a special case of the same bug: they
+  passed the correct line but an empty name, so `relocate()` discarded the line
+  and the position survived only as prose inside the message ("opened on template
+  line 3"). Those now carry the line, and the compiler fills in just the name.
+- **The two debug modes are one.** `setDebugMode(bool)` (compiler-level
+  assertions plus a bare `dump()`) and `enableDebug(DumpOptions)` (renderers,
+  bus, panel) were introduced four days apart and had drifted into one feature
+  and its degraded subset, with side effects the other did not undo — calling
+  `enableDebug()` and then `setDebugMode(false)` left the bus and panel wired
+  while `isDebugMode()` reported `false`. `setDebugMode()` is now the single
+  switch and does the whole job in both directions:
+
+  ```php
+  $engine->setDebugMode(true);                       // everything on
+  $engine->setDebugMode(new DumpOptions(maxDepth: 3)); // on, with options
+  $engine->setDebugMode(false);                      // everything off
+  ```
+
+  `enableDebug()` is kept as a deprecated alias. `dump()`/`dd()` are declared
+  once in the registry (so there is one name to resolve, whichever syntax is
+  used), and the debug renderers, masking and `DumpOptions` moved into a new
+  `Clarity\Debug\DebugRuntime` that the engine installs — the registry's own
+  `print_r` fallback is gone. See `docs/04-advanced-topics.md`.
+
+### Benchmarks
+
+- The view-engine harness was re-run for this release. Per-render time,
+  first-render cost and retained memory across seven engines are published in
+  the [benchmark report](docs/08-benchmark.md), with the same data rendered as
+  a page at
+  <https://sailantis.github.io/azera-competition/benchmarks/view-engine.html>.
+
+## [0.2.0] - 2026-09-30
+
+### Fixed
+
+- **`is defined` now answers the same in both modes.** A name holding an
+  explicit `null` used to count as **defined** in sandbox mode (the probe used
+  `array_key_exists`) but as **not defined** in PHP mode (the same name compiles
+  to a PHP local, and a local cannot be tested for existence without losing
+  `null`). A template cannot see the mode, so the answer it got depended on a
+  setting it could not read. The probe is now `isset()` everywhere, which makes
+  the contract one sentence: **a name is defined when it holds a value other than
+  `null`**. `is null` still reports a present-but-null name, so the two together
+  separate absent, null, and present. **Behaviour change:** `user is defined` is
+  now `false` when `user` was passed as `null`. See `docs/01-template-syntax.md`
+  and `tests/Engine/OperatorTest.php`.
+
+- **An unregistered filter is now a compile-time error with an actionable
+  message.** In sandbox mode `{{ name |> strtoupper }}` compiled to a lookup in
+  the runtime callable table and failed on the first render, reporting
+  `Variable "strtoupper" is not defined in this context` — naming a variable the
+  template never wrote and surfacing on a request rather than at the deploy. It
+  is now rejected while compiling, with a message that names both remedies:
+  `Filter 'strtoupper' is not registered, and the sandbox is enabled, so there is
+nothing for it to resolve to. Register it with addFilter(), or call
+setSandboxMode(false) to let a PHP function of the same name be used.` The
+  rejection is possible at compile time because sandbox mode leaves nothing for
+  an unregistered name to fall back to — the open-mode branch is the only other
+  resolution path, and it is unreachable while the sandbox is on.
+
+### Security
+
 - **A template name can no longer address a file outside the view path.**
   `FileLoader::resolveName()` accepted an absolute path (leading `/`, a Windows
   drive, a UNC share) or a `./`-relative path verbatim, and the compiler's
@@ -944,19 +1027,6 @@ setSandboxMode(false) to let a PHP function of the same name be used.` The
   no longer supported; a loader rooted elsewhere is configured as
   `new FileLoader('/their/root')`, where the base path is the root. See
   `docs/09-policy-api.md` and `tests/Engine/LoadPathSecurityTest.php`.
-
-- **`dump()` can no longer print unmasked values, in any form.** The registry
-  carried its own fallback debug formatter — `print_r` inside a `<pre>`, with no
-  masking — and two separate paths reached it. Calling `setDebugMode(true)`
-  instead of `enableDebug()` printed secrets that the renderer would have masked,
-  and a quoted callable reference such as `{{ map(items, "dump") }}` reached it
-  **even with debug off**, printing into production output. The registry now owns
-  no debug formatting: the renderers and their masking live in one place
-  (`Clarity\Debug\DebugRuntime`), `dump()` is a no-op until the engine installs
-  them, and `dd()` — the one form that is never pruned — throws with debug off
-  rather than falling back to an unmasked `var_dump`. Every `dump` form (call,
-  filter step, quoted reference) is eliminated in production. See
-  `tests/Engine/DebugDumpTest.php` and `tests/Engine/CallSyntaxTest.php`.
 
 ### Changed
 
@@ -995,65 +1065,12 @@ setSandboxMode(false) to let a PHP function of the same name be used.` The
 
 ### Fixed
 
-- **A compile-time policy refusal now points at the template line that contains
-  the offending construct.** `{% php %}` on a policy that denies `rawPhp` was
-  raised during the pre-scan — the pass that runs *before* the source map cursor
-  starts tracking, and the reason the report claimed the engine file
-  (`Compiler/DirectiveSupportTrait.php:222`) with no template at all. The refusal
-  now resolves its position from the `{# @source … #}` markers the merge already
-  emits, so it is correct even when the tag was reached through `{% extends %}`
-  or `{% include %}` — an included template is named as the included file, not as
-  its host.
-- **`ClarityException` mirrors its location onto `$file` / `$line`.** The
-  uncaught-fatal line, xdebug's develop-mode error page and every error handler
-  read `getFile()` / `getLine()`; they now name the template instead of the engine
-  frame, which is what Smarty does for the same reason. The real call path stays
-  in `getTrace()`.
-- **A failure raised by the tokenizer now names the template and line.** The two
-  fixes above both depend on the exception *carrying* a location — and the
-  tokenizer never did. It is constructed without a template (it has no
-  `sourcePath` property), so it could not fill in the name, line or path, and
-  every one of its 90 throws — an unregistered filter, a malformed expression —
-  surfaced as a `ClarityException` naming the engine's own file
-  (`Tokenizer/FilterCompilerTrait.php:295`) with an empty `templateName`. Those
-  are the author's mistakes, and the ones that most need to point at the author's
-  line, so the compiler now attaches the location at the boundary: the calls that
-  cross into the tokenizer, and the loader read of an inlined template, go through
-  a new `withLocation()` helper, which fills in only the fields that are missing.
-  An exception that already names a template came from a nested compile (an
-  inlined macro or include) whose location is the more precise one, and is
-  rethrown untouched; the original throw is kept as `$previous`.
-
-  The scanner's unclosed-tag errors were a special case of the same bug: they
-  passed the correct line but an empty name, so `relocate()` discarded the line
-  and the position survived only as prose inside the message ("opened on template
-  line 3"). Those now carry the line, and the compiler fills in just the name.
 - The getting-started guide named the wrong Composer package
   (`clarity/engine`); it now matches the real package name,
   `sailantis/clarity-engine`.
 - The API-reference generator now links a method to the file it is **declared**
   in. A method composed from a trait is declared in the trait's file, so the
   previous class-relative anchor pointed at the wrong line.
-
-- **The two debug modes are one.** `setDebugMode(bool)` (compiler-level
-  assertions plus a bare `dump()`) and `enableDebug(DumpOptions)` (renderers,
-  bus, panel) were introduced four days apart and had drifted into one feature
-  and its degraded subset, with side effects the other did not undo — calling
-  `enableDebug()` and then `setDebugMode(false)` left the bus and panel wired
-  while `isDebugMode()` reported `false`. `setDebugMode()` is now the single
-  switch and does the whole job in both directions:
-
-  ```php
-  $engine->setDebugMode(true);                       // everything on
-  $engine->setDebugMode(new DumpOptions(maxDepth: 3)); // on, with options
-  $engine->setDebugMode(false);                      // everything off
-  ```
-
-  `enableDebug()` is kept as a deprecated alias. `dump()`/`dd()` are declared
-  once in the registry (so there is one name to resolve, whichever syntax is
-  used), and the debug renderers, masking and `DumpOptions` moved into a new
-  `Clarity\Debug\DebugRuntime` that the engine installs — the registry's own
-  `print_r` fallback is gone. See `docs/04-advanced-topics.md`.
 
 ## [0.1.1]
 
@@ -1094,6 +1111,8 @@ setSandboxMode(false) to let a PHP function of the same name be used.` The
   removed the documented-but-unimplemented `loop` object.
 - Removed a stale docblock reference to a `castToArray()` that no longer exists.
 
-[Unreleased]: https://github.com/sailantis/clarity-engine/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/sailantis/clarity-engine/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/sailantis/clarity-engine/releases/tag/v0.3.0
+[0.2.0]: https://github.com/sailantis/clarity-engine/releases/tag/v0.2.0
 [0.1.1]: https://github.com/sailantis/clarity-engine/releases/tag/v0.1.1
 [0.1.0]: https://github.com/sailantis/clarity-engine/releases/tag/v0.1.0
