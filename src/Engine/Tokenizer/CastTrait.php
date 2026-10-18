@@ -181,9 +181,13 @@ trait CastTrait
      * @param int    $p    Index of the operand's first character.
      * @param int    $len  Length of $expr.
      * @param int|null $end Set to the index after the operand on success.
+     * @param bool   $asObject Whether this is the `object` cast, which is what
+     *                        makes a brace literal an OBJECT LITERAL rather than
+     *                        a map — and, inside it, every nested brace literal
+     *                        too. See {@see CollectionLiteralTrait::compileObjectLiteral()}.
      * @return string The compiled PHP operand, already parenthesised where needed.
      */
-    private function compileCastOperand(string $expr, int $p, int $len, ?int &$end): string
+    private function compileCastOperand(string $expr, int $p, int $len, ?int &$end, bool $asObject = false): string
     {
         // Unary sign, glued to its number.
         if ($expr[$p] === '-' && $this->castOperandStartsAfterSign($expr, $p, $len)) {
@@ -214,10 +218,23 @@ trait CastTrait
             $end = $after;
 
             if ($ch === '[' || $ch === '{') {
-                return '(' . $this->processCondition(\substr($expr, $p, $after - $p)) . ')';
+                // Only a `{...}` operand of the `object` cast is an object
+                // literal; `[...]` is a value list at every depth. Every other
+                // cast (`(array) { ... }`, `(string) ...`) keeps map semantics.
+                $literal = \substr($expr, $p, $after - $p);
+                if ($ch === '{' && $asObject) {
+                    // The `(object)` prefix is emitted by the caller, which owns
+                    // the cast operator; this only states that the braces are an
+                    // object literal body rather than a map.
+                    return '(' . $this->compileObjectLiteral(\substr($literal, 1, -1), true) . ')';
+                }
+
+                return '(' . $this->processCondition($literal) . ')';
             }
 
-            return '(' . $this->processCondition($inner) . ')';
+            // A parenthesised group is still the operand of the same cast, so
+            // the object reading follows it inside: `(object) ({ a: { b: 1 } })`.
+            return '(' . $this->processCondition($inner, $asObject) . ')';
         }
 
         if ($ch === "'" || $ch === '"') {

@@ -101,9 +101,17 @@ property access and nothing else.
 Applying the wrong operator is an error, not a silent `null`:
 
 ```twig
-{% set user = { name: "Alice" } %}   {# an ARRAY #}
+{% set user = { name: "Alice" } %}   {# a MAP (PHP array) #}
 {{ user.name }}     {# ERROR: Cannot read property "name" on array #}
 {{ user:name }}     {# CORRECT #}
+```
+
+The same keys can be stated as an object literal when `.` is what you want to
+write — see [Object literals](#collection-literals):
+
+```twig
+{% set user = (object) { name: "Alice" } %}
+{{ user.name }}     {# CORRECT #}
 ```
 
 A missing key or property raises `ClarityException` naming the template and line.
@@ -966,19 +974,56 @@ A `-` is a sign only when a digit or `.` follows it directly. This is why
 
 ### Collection Literals
 
-**Arrays:**
+**Arrays** (lists — `[]` always holds values):
 
 ```twig
 {% set numbers = [1, 2, 3, 4, 5] %}
 {% set mixed = [true, "text", 42, user.name] %}
 ```
 
-**Objects:**
+**Maps** (associative arrays — `{}` is a PHP array, read with `:` or `[...]`):
 
 ```twig
 {% set person = { name: "John", age: 30, active: true } %}
 {% set data = { id: item.id, title: item.title } %}
+
+{{ person:name }} {{ person["age"] }}
 ```
+
+A brace literal is an ARRAY, not an object. `{{ person.name }}` on the map above
+throws `Cannot read property "name" on array` — the strictness described under
+[Variable Access](#variable-access).
+
+**Object literals** — prefix the literal with the `object` cast. Inside it, a
+nested brace literal is another object literal, at any depth:
+
+```twig
+{% set person = (object) { name: "John", address: { city: "Rome" } } %}
+
+{{ person.name }}            {# John                                    #}
+{{ person.address.city }}    {# Rome — no cast needed at the nested level #}
+```
+
+This is a literal, so it costs nothing at runtime. It is also lexical, which
+keeps two neighbouring spellings meaning exactly what they read as:
+
+| Spelling                          | Meaning                                        |
+| --------------------------------- | ---------------------------------------------- |
+| `(object) { a: { b: 1 } }`        | object, with `a` an object                      |
+| `{ a: { b: 1 } }`                 | map, with `a` a map — unchanged                 |
+| `{ a: { b: 1 } } \|> object`      | PHP's shallow cast: `a` stays a map            |
+| `(object) { a: flag ? {b:1} : {} }` | `a` is a map: the literal is not the whole value |
+
+An array element is always a value, even inside an object literal:
+
+```twig
+{% set u = (object) { tags: ["a", "b"] } %}
+{{ u.tags[1] }}              {# b #}
+```
+
+> `{}` must stay an array: `include("x", { title: "Hi" })`, spread, `merge`,
+> `reverse` and `{% set x:key = … %}` all require one. Reach for `(object)`
+> only when `.` is what you want to write.
 
 **Spread operator** in collections:
 
@@ -1094,8 +1139,11 @@ Available contexts:
 
 ### Complex Variable Assignment
 
+A brace literal is a map, so it is read with `:`. Prefix it with `(object)` when
+the dotted spelling reads better:
+
 ```twig
-{% set userData = {
+{% set userData = (object) {
   fullName: user.firstName ~ ' ' ~ user.lastName,
   age: user.birthYear ? (2026 - user.birthYear) : null,
   isAdult: user.birthYear and (2026 - user.birthYear) >= 18
@@ -1106,6 +1154,9 @@ Available contexts:
   <p>Age: {{ userData.age }}</p>
 {% endif %}
 ```
+
+Without the cast, the same literal is a map and `userData.fullName` is an error
+(`Cannot read property "fullName" on array`); `userData:fullName` is the read.
 
 ### Dynamic Includes
 

@@ -172,6 +172,107 @@ class RenderingTest extends BaseTestCase
     }
 
     // =========================================================================
+    // Object literals: `{}` is a MAP, `(object) {}` is an OBJECT LITERAL
+    // =========================================================================
+
+    /**
+     * A brace literal is an associative ARRAY. That is not incidental: `:`, the
+     * array-key operator, is what reads it, and `include()`/`merge()`/`...` all
+     * need an array. `(object)` states the other reading, and inside that
+     * literal a nested brace literal is another object — so `.` reaches every
+     * level without a cast per level.
+     */
+    public function testObjectLiteralNestsThroughEveryDepth(): void
+    {
+        self::tpl(
+            'object_literal_nested',
+            '{% set user = (object) { name: "Alice", address: { city: "Rome", geo: { lat: 1 } } } %}'
+                . '{{ user.name }}|{{ user.address.city }}|{{ user.address.geo.lat }}'
+        );
+
+        $this->assertSame('Alice|Rome|1', self::render('object_literal_nested'));
+    }
+
+    public function testObjectLiteralSerializesAsAnObjectAtEveryDepth(): void
+    {
+        self::tpl(
+            'object_literal_json',
+            '{% set user = (object) { name: "Alice", address: { city: "Rome" } } %}{{ user |> json |> raw }}'
+        );
+
+        $this->assertSame('{"name":"Alice","address":{"city":"Rome"}}', self::render('object_literal_json'));
+    }
+
+    /**
+     * The object reading is LEXICAL, so it stops at `[`: an array element states
+     * that it holds a value, and a map inside it stays a map.
+     */
+    public function testArrayElementsInsideAnObjectLiteralStayArrays(): void
+    {
+        self::tpl(
+            'object_literal_array_value',
+            '{% set u = (object) { tags: ["a", "b"], meta: { n: 1 } } %}'
+                . '{{ u.tags[1] }}|{{ u.meta.n }}|{{ u.tags |> json |> raw }}'
+        );
+
+        $this->assertSame('b|1|["a","b"]', self::render('object_literal_array_value'));
+    }
+
+    /**
+     * A nested literal inside a LARGER expression is not the whole value, so it
+     * keeps its ordinary (array) reading: the object rule is about what the
+     * literal IS, not about how it is spelled.
+     */
+    public function testANestedLiteralInsideALargerExpressionStaysAMap(): void
+    {
+        self::tpl(
+            'object_literal_in_expression',
+            '{% set u = (object) { a: flag ? { b: 1 } : {} } %}{{ u.a |> json |> raw }}'
+        );
+
+        $this->assertSame('{"b":1}', self::render('object_literal_in_expression', ['flag' => true]));
+    }
+
+    /**
+     * The regression that matters most: plain `{}` must be untouched. Every
+     * consumer that needs an array — `:`, `include()`, spread — keeps working,
+     * and `.` keeps failing on it, which is the documented strictness.
+     */
+    public function testPlainBraceLiteralIsStillAnArray(): void
+    {
+        self::tpl(
+            'map_unchanged',
+            '{% set m = { a: { b: 1 } } %}{{ m:a:b }}|{{ m |> json |> raw }}'
+        );
+
+        $this->assertSame('1|{"a":{"b":1}}', self::render('map_unchanged'));
+    }
+
+    public function testPropertyAccessOnAPlainBraceLiteralStillThrows(): void
+    {
+        self::tpl('map_dot_throws', '{% set m = { a: { b: 1 } } %}{{ m.a.b }}');
+
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/Cannot read property "a" on array/');
+        self::render('map_dot_throws');
+    }
+
+    /**
+     * The cast FILTER is a conversion, not a literal: `value |> object` is PHP's
+     * shallow `(object)` and stays that way, so nothing that already round-trips
+     * through it changes meaning.
+     */
+    public function testTheObjectFilterStaysAShallowConversion(): void
+    {
+        self::tpl(
+            'object_filter_shallow',
+            '{% set u = { a: { b: 1 } } |> object %}{{ u |> json |> raw }}'
+        );
+
+        $this->assertSame('{"a":{"b":1}}', self::render('object_filter_shallow'));
+    }
+
+    // =========================================================================
     // Whitespace / Literals
     // =========================================================================
 

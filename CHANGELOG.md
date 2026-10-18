@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Nested object literals.** `(object) { … }` is an object LITERAL, so a brace
+  literal nested in one is another object literal, at any depth:
+
+  ```twig
+  {% set person = (object) { name: "John", address: { city: "Rome" } } %}
+  {{ person.address.city }}   {# Rome #}
+  ```
+
+  Before this, the `object` cast was shallow, so every nesting level needed its
+  own cast — `(object) { address: (object) { city: "Rome" } }` — which is why the
+  documented `Complex Variable Assignment` example threw
+  `Cannot read property "fullName" on array`.
+
+  The reading is LEXICAL, which is what keeps the neighbouring spellings
+  distinct:
+
+  | Spelling                             | Meaning                                |
+  | ------------------------------------ | -------------------------------------- |
+  | `(object) { a: { b: 1 } }`           | object, with `a` an object             |
+  | `{ a: { b: 1 } }`                    | map, with `a` a map — UNCHANGED        |
+  | `{ a: { b: 1 } } \|> object`         | PHP's shallow cast: `a` stays a map    |
+  | `(object) { a: cond ? {b:1} : {} }`  | `a` is a map: the literal is not the value |
+
+  An array element inside an object literal stays a value, because `[` states
+  that its items are values: `(object) { tags: ["a", "b"] }` holds a list.
+
+  `{}` therefore stays an array, which it must: `include(view, {…})`, spread,
+  `merge`, `reverse` and `{% set x:key = … %}` all require one.
+
+### Fixed
+
+- **The docs called a brace literal an "Objects:" literal.** `{ name: "John" }`
+  is a MAP, readable with `:`; the same heading also contradicted the
+  `Variable Access` section of the same file, which correctly said "an ARRAY".
+  `Collection Literals` now separates Arrays, Maps and Object literals, and the
+  `Complex Variable Assignment` example carries the `(object)` cast it needs to
+  run. The mirrored text in the framework's
+  `docs/03b-CLARITY-ENGINE.md` is updated the same way.
+
 ## [0.3.0] - 2026-10-10
 
 ### Added

@@ -67,12 +67,16 @@ trait ExpressionCoreTrait
      * structure conditions (if, for, set) where auto-escape is meaningless.
      *
      * @param string $expression Raw Clarity expression.
+     * @param bool   $asObject  Whether a brace literal in this expression is an
+     *                          OBJECT literal. Set only by the `object` cast's
+     *                          operand path; every other caller leaves it off, so
+     *                          `{ … }` compiles to a map exactly as before.
      * @return string PHP expression.
      */
-    public function processCondition(string $expression): string
+    public function processCondition(string $expression, bool $asObject = false): string
     {
         [$expr, $filters] = $this->splitPipeline($this->normalizePipeOperator($expression));
-        $phpExpr = $this->convertVarsAndOps($expr);
+        $phpExpr = $this->convertVarsAndOps($expr, $asObject);
 
         foreach ($filters as $filterSegment) {
             $phpExpr = $this->buildFilterCall($filterSegment, $phpExpr);
@@ -108,8 +112,12 @@ trait ExpressionCoreTrait
      *
      * Strategy: tokenize the expression into atoms (quoted strings, numbers,
      * identifiers/var-chains, operators, punctuation) and process each atom.
+     *
+     * @param bool $asObject Whether a brace literal here is an object literal.
+     *                       Propagates to the literals AND to parenthesised
+     *                       groups, but not through `[`, whose items are values.
      */
-    public function convertVarsAndOps(string $expr): string
+    public function convertVarsAndOps(string $expr, bool $asObject = false): string
     {
         static $keywordMap = [
             'and'   => '&&',
@@ -484,7 +492,7 @@ trait ExpressionCoreTrait
             }
 
             if ($ch === '[' || $ch === '{') {
-                [$literalPhp, $i] = $this->parseCollectionLiteralAt($expr, $i);
+                [$literalPhp, $i] = $this->parseCollectionLiteralAt($expr, $i, $asObject && $ch === '{');
                 $out .= $literalPhp;
                 continue;
             }
@@ -534,13 +542,14 @@ trait ExpressionCoreTrait
                 $cast = $this->tryCompileCastPrefix($expr, $i, $len);
                 if ($cast !== null) {
                     $end = null;
-                    $out .= '(' . $cast[0] . ') ' . $this->compileCastOperand($expr, $cast[1], $len, $end);
+                    $out .= '(' . $cast[0] . ') '
+                        . $this->compileCastOperand($expr, $cast[1], $len, $end, $cast[0] === 'object');
                     $i = $end ?? $cast[1];
                     continue;
                 }
 
                 [$inner, $end] = $this->extractBalancedSegment($expr, $i);
-                $out .= '(' . $this->processCondition($inner) . ')';
+                $out .= '(' . $this->processCondition($inner, $asObject) . ')';
                 $i = $end;
                 continue;
             }

@@ -13,15 +13,18 @@ trait CollectionLiteralTrait
     /**
      * Parse a Clarity array/object literal and any trailing property/index access.
      *
+     * @param bool $asObject Whether this brace literal is an OBJECT literal, i.e.
+     *                       `{ … }` in the operand of an `object` cast. Ignored
+     *                       for `[ … ]`, whose items are always values.
      * @return array{0:string,1:int}
      */
-    private function parseCollectionLiteralAt(string $expr, int $start): array
+    private function parseCollectionLiteralAt(string $expr, int $start, bool $asObject = false): array
     {
         [$inner, $end] = $this->extractBalancedSegment($expr, $start);
 
         $php = $expr[$start] === '['
             ? $this->compileArrayLiteral($inner)
-            : $this->compileObjectLiteral($inner);
+            : $this->compileObjectLiteral($inner, $asObject);
 
         return $this->compilePostfixAccessChain($expr, $end, $php);
     }
@@ -33,6 +36,10 @@ trait CollectionLiteralTrait
             return '[]';
         }
 
+        // An array element is always a VALUE, never a nested object literal:
+        // `[ {a: 1} ]` holds a map, at every depth. Object-ness is a property of
+        // the literal that was cast, not of the enclosing collection — see
+        // {@see compileObjectLiteral()}.
         $items = [];
         foreach ($this->splitRespectingStrings($inner, ',') as $part) {
             $part = \trim($part);
@@ -54,7 +61,26 @@ trait CollectionLiteralTrait
         return '[' . \implode(', ', $items) . ']';
     }
 
-    private function compileObjectLiteral(string $inner): string
+    /**
+     * Compile a `{ key: value, … }` literal to a PHP array.
+     *
+     * $asObject states what this literal IS, which is the same rule the access
+     * operators follow: `(object) { … }` builds an object, so its values are
+     * object members. A value that is itself a brace literal is then another
+     * object literal, at any depth, which is what makes `.` reachable:
+     *
+     *   `(object) { name: "Alice", address: { city: "Rome" } }`
+     *   → `(object) (['name' => "Alice", 'address' => (object) (['city' => "Rome"])])`
+     *
+     * The wrap is LEXICAL, not a conversion: `(object) $runtimeValue` stays the
+     * shallow PHP cast (a cast of a value is not a literal), and an array
+     * element stays a map even inside an object literal — `{ tags: [{a: 1}] }`
+     * has an ARRAY of arrays, because `[` states that its items are values.
+     *
+     * @param string $inner    The literal body, without the braces.
+     * @param bool   $asObject Whether this literal is an object literal.
+     */
+    private function compileObjectLiteral(string $inner, bool $asObject = false): string
     {
         $inner = \trim($inner);
         if ($inner === '') {
@@ -89,10 +115,39 @@ trait CollectionLiteralTrait
                 throw new ClarityException("Object literal entry is missing a value for key '{$rawKey}'.");
             }
 
-            $items[] = $this->compileObjectKey($rawKey) . ' => ' . $this->processCondition($rawValue);
+            $items[] = $this->compileObjectKey($rawKey) . ' => ' . $this->compileObjectValue($rawValue, $asObject);
         }
 
         return '[' . \implode(', ', $items) . ']';
+    }
+
+    /**
+     * Compile one value slot of an object literal.
+     *
+     * Only a WHOLE brace literal becomes an object; anything else — a chain, a
+     * call, a ternary — compiles unchanged, so a nested literal inside a larger
+     * expression keeps its own (array) meaning. Inside
+     * `(object) { a: { b: 1 } }` the value slot is exactly `{ b: 1 }`, so `a`
+     * becomes an object; inside `(object) { a: cond ? {b:1} : {} }` it is not,
+     * because the literal is only part of the expression.
+     */
+    private function compileObjectValue(string $rawValue, bool $asObject): string
+    {
+        if ($asObject && \str_starts_with($rawValue, '{')) {
+            // Balance check: `{ a: 1 } ~ x` starts with `{` but is an
+            // expression containing a literal, not a literal itself.
+            [$inner, $after] = $this->extractBalancedSegment($rawValue, 0);
+            if (\trim(\substr($rawValue, $after)) === '') {
+                // `{ name }` is dynamic PROPERTY access, not an empty literal, so
+                // only a body with a top-level `:` (or an empty `{}`) is a nested
+                // object literal. Everything else keeps its existing reading.
+                if (\trim($inner) === '' || $this->findTopLevelChar($inner, ':') !== false) {
+                    return '(object) (' . $this->compileObjectLiteral($inner, true) . ')';
+                }
+            }
+        }
+
+        return $this->processCondition($rawValue);
     }
 
     private function compileObjectKey(string $rawKey): string
