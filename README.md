@@ -1,8 +1,11 @@
 ![Clarity Logo](docs/images/clarity-engine-logo.svg)
 
-> **A fast, secure, and expressive PHP template engine** – Start with a restricted policy, then grant templates only the access they need.
-
----
+<h3 style="text-align:center;">
+A fast, secure, and expressive PHP template engine
+</h3>
+<h5 style="text-align:center;" class="">
+Start with a restricted policy, then grant templates only the access they need
+</h5>
 
 ## Features
 

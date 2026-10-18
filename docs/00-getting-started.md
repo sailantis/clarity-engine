@@ -104,8 +104,7 @@ $engine->setPolicy(Policy::default()                // or grant one thing at a t
     ->allowFunctions('strtoupper', 'count'));
 
 // Deny named PHP functions when called from template expressions.
-// This does not inspect calls inside raw `{% php %}` blocks.
-$engine->setPolicy(Policy::unrestricted()->denyFunctions('exec', 'system'));
+$engine->setPolicy(Policy::trusted()->denyFunctions('exec', 'system'));
 ```
 
 Rules grant different levels of PHP access. `rawPhp` and
@@ -420,4 +419,3 @@ Now that you have Clarity up and running, explore these topics:
 - **[Filters and Functions](02-filters-and-functions.md)** — Master data transformation
 - **[Layout Inheritance](03-layout-inheritance.md)** — Build reusable page structures
 - **[Examples](examples/README.md)** — See complete working examples
-
