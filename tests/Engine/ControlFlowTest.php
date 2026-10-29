@@ -897,6 +897,158 @@ class ControlFlowTest extends BaseTestCase
         $this->assertSame('|<hr>|', self::render('macro_no_params'));
     }
 
+    // =========================================================================
+    // Macro default parameter values
+    // =========================================================================
+
+    public function testMacroUsesDefaultWhenTrailingArgOmitted(): void
+    {
+        self::tpl(
+            'macro_default_omitted',
+            '{% macro icon(name = "fa-terminal") %}<i class="{{ name }}"></i>{% endmacro %}'
+                . '{% call icon() %}'
+        );
+
+        $this->assertSame('<i class="fa-terminal"></i>', self::render('macro_default_omitted'));
+    }
+
+    public function testMacroDefaultIsOverriddenByArg(): void
+    {
+        self::tpl(
+            'macro_default_overridden',
+            '{% macro icon(name = "fa-terminal") %}<i class="{{ name }}"></i>{% endmacro %}'
+                . '{% call icon(given) %}'
+        );
+
+        $this->assertSame('<i class="fa-copy"></i>', self::render('macro_default_overridden', ['given' => 'fa-copy']));
+    }
+
+    public function testMacroMixesRequiredAndDefaultedParams(): void
+    {
+        self::tpl(
+            'macro_default_mixed',
+            '{% macro terminal(label, command, icon = "fa-terminal") %}'
+                . '{{ label }}|{{ command }}|{{ icon }}'
+                . '{% endmacro %}'
+                . '{% call terminal("Install", "composer require x") %}'
+        );
+
+        $this->assertSame(
+            'Install|composer require x|fa-terminal',
+            self::render('macro_default_mixed')
+        );
+    }
+
+    public function testMacroDefaultCompilesAtTheCallSite(): void
+    {
+        // The default is spliced where the call is, so it reads the CALLER's
+        // scope — `fallback` is not visible at the definition.
+        self::tpl(
+            'macro_default_caller_scope',
+            '{% macro pick(value = fallback) %}{{ value }}{% endmacro %}{% call pick() %}'
+        );
+
+        $this->assertSame('from-caller', self::render('macro_default_caller_scope', ['fallback' => 'from-caller']));
+    }
+
+    public function testMacroDefaultMayContainAFilterExpression(): void
+    {
+        self::tpl(
+            'macro_default_expression',
+            '{% macro badge(text = "new" |> upper) %}[{{ text }}]{% endmacro %}{% call badge() %}'
+        );
+
+        $this->assertSame('[NEW]', self::render('macro_default_expression'));
+    }
+
+    public function testMacroDefaultMayContainAParenthesizedCall(): void
+    {
+        self::tpl(
+            'macro_default_nested_parens',
+            '{% macro box(width = slice("abc", 0, 1), label = "w") %}{{ width }}{{ label }}{% endmacro %}'
+                . '{% call box() %}'
+        );
+
+        $this->assertSame('aw', self::render('macro_default_nested_parens'));
+    }
+
+    public function testMacroDefaultMayBeADoubleQuotedStringWithCommasAndParens(): void
+    {
+        self::tpl(
+            'macro_default_quoted',
+            '{% macro m(a = "x, y (z)") %}{{ a }}{% endmacro %}{% call m() %}'
+        );
+
+        $this->assertSame('x, y (z)', self::render('macro_default_quoted'));
+    }
+
+    public function testMacroDefaultMayReferenceAnEarlierParameter(): void
+    {
+        // Parameters are bound in order, so `b`'s default sees the already-bound
+        // `a` — the same way a body reference would.
+        self::tpl(
+            'macro_default_earlier_param',
+            '{% macro m(a, b = a ~ "!") %}{{ a }}{{ b }}{% endmacro %}{% call m("hi") %}'
+        );
+
+        $this->assertSame('hihi!', self::render('macro_default_earlier_param'));
+    }
+
+    public function testMacroTooManyArgsStillThrows(): void
+    {
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/expects 2 argument/i');
+        self::tpl(
+            'macro_default_toomany',
+            '{% macro m(a, b = 2) %}{{ a }}{{ b }}{% endmacro %}{% call m(1, 2, 3) %}'
+        );
+        self::render('macro_default_toomany');
+    }
+
+    public function testMacroMissingRequiredArgStillThrows(): void
+    {
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/expects 2 argument/i');
+        self::tpl(
+            'macro_default_missing_required',
+            '{% macro m(a, b = 2) %}{{ a }}{{ b }}{% endmacro %}{% call m() %}'
+        );
+        self::render('macro_default_missing_required');
+    }
+
+    public function testMacroRequiredParamAfterOptionalIsRejected(): void
+    {
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/follows an optional one/i');
+        self::tpl(
+            'macro_default_order',
+            '{% macro m(a = 1, b) %}{{ a }}{{ b }}{% endmacro %}{% call m(1, 2) %}'
+        );
+        self::render('macro_default_order');
+    }
+
+    public function testMacroEmptyDefaultIsRejected(): void
+    {
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/has no default value/i');
+        self::tpl(
+            'macro_default_empty',
+            '{% macro m(a = ) %}{{ a }}{% endmacro %}{% call m() %}'
+        );
+        self::render('macro_default_empty');
+    }
+
+    public function testMacroDefaultWithExpressionUsingComparisonIsNotADefaultSeparator(): void
+    {
+        // `==` must not be read as the name/default separator.
+        $this->expectException(ClarityException::class);
+        self::tpl(
+            'macro_default_comparison',
+            '{% macro m(a == 1) %}{{ a }}{% endmacro %}{% call m(1) %}'
+        );
+        self::render('macro_default_comparison');
+    }
+
     public function testMacroCalledInsideAnIfBranch(): void
     {
         self::tpl(

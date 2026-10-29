@@ -9,6 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Macro parameters may declare a default value.**
+  `{% macro terminal(label, command, icon = "fa-solid fa-terminal") %}` may now
+  be called with the trailing argument omitted, and the default is used:
+
+  ```twig
+  {% call terminal("Install", "composer require x") %}
+  {% call terminal("Install", "composer require x", "fa-bolt") %}
+  ```
+
+  A call that omits a trailing parameter falls back to its default; passing a
+  value overrides it. Optional parameters must come last — a required one after
+  an optional one is refused at compile time, because a call binds positionally
+  and could never omit the optional one before it.
+
+  The default is an ordinary expression, compiled at the CALL SITE rather than
+  at the definition: a macro body is spliced inline and has no scope of its own,
+  so a default reads the caller's variables and the parameters already bound
+  before it (`{% macro m(a, b = a ~ "!") %}` works). Filters and calls work, and
+  a default containing nested parentheses or a quoted comma
+  (`= slice("a,b", 0, 1)`) parses correctly, because the parameter list is now
+  split with the same nesting-aware splitter the argument list uses.
+
+  A definition that is missing its closing `)` no longer swallows the tags after
+  it: the parameter text stops at the first `%}`.
+
 - **Nested object literals.** `(object) { … }` is an object LITERAL, so a brace
   literal nested in one is another object literal, at any depth:
 

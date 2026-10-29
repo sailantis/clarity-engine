@@ -549,10 +549,40 @@ Use `{% call macroName(arg1, arg2) %}` to invoke a macro:
 {% call card(article.title, article.excerpt) %}
 ```
 
+#### Default Parameter Values
+
+A parameter may supply a default, which a call uses when it omits that
+argument. Optional parameters must come last:
+
+```twig
+{% macro terminal(label, command, icon = "fa-solid fa-terminal") %}
+  <i class="{{ icon }}"></i> <span>{{ label }}</span>
+  <pre><code>{{ command }}</code></pre>
+{% endmacro %}
+
+{% call terminal("Install", "composer require x") %}           {# default icon #}
+{% call terminal("Install", "composer require x", "fa-bolt") %} {# own icon #}
+```
+
+A default is an ordinary expression, compiled where the **call** is — a macro
+body is spliced inline and has no scope of its own, so a default sees the
+caller's variables as well as the parameters already bound before it. Filters
+and calls work, and nested parentheses or quoted commas inside the default are
+handled:
+
+```twig
+{% macro badge(text = "new" |> upper) %}[{{ text }}]{% endmacro %}
+{% macro row(label = slice("abcdef", 0, 3)) %}{{ label }}{% endmacro %}
+{% macro titled(a, b = a ~ "!") %}{{ a }}{{ b }}{% endmacro %}  {# b reads a #}
+```
+
 #### Macro Rules
 
 - Define macros with `{% macro name(param1, param2) %}...{% endmacro %}`.
 - Call macros with `{% call name(arg1, arg2) %}`.
+- A parameter may declare a **default value**: `{% macro name(a, b = "fallback") %}`.
+  A call that omits a trailing parameter uses its default; passing a value
+  overrides it. Optional parameters must come last.
 - The definition itself renders nothing; the call expands at its own position.
 - Macros expand **at compile time** and accept expressions available at the call site.
 - Macro names are identifiers, so they are case-sensitive and may not be a
@@ -1195,6 +1225,7 @@ Without the cast, the same literal is a map and `userData.fullName` is an error
 | `{% include "template" %}`                  | Include another template    |
 | `{% macro name(params) %}...{% endmacro %}` | Define a reusable macro     |
 | `{% call name(args) %}`                     | Call a macro                |
+| `{% macro name(a, b = value) %}`            | Macro with a default value  |
 | `{% parent %}`                              | Inline parent block content |
 | `{# comment #}`                             | Template comment            |
 | `{# @context js\|css\|html #}`              | Switch escaping context     |

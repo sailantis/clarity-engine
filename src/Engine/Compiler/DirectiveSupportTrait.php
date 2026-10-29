@@ -165,10 +165,15 @@ trait DirectiveSupportTrait
      * `{% macro @name %}` is the removed spelling, and recognising it here is what
      * lets the scan refuse it with a message naming the replacement.
      *
+     * The parameter list is matched LAZILY, up to the `)` that closes the tag, so
+     * a default value may itself contain a call: `{% macro m(a = url("/x")) %}`
+     * ends at the second `)`, not the first. A `%}` cannot occur inside the list,
+     * which stops a definition missing its `)` from swallowing the tags after it.
+     *
      * The tag is matched by named group rather than by number, because whichever
      * alternative matched leaves the other's groups unset.
      */
-    private const MACRO_TAG_RE = '/\{%-?\s*(?:(?P<end>endmacro)\s*-?%\}|macro(?:\s+(?P<at>@)?(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*\((?P<params>[^)]*)\))?\s*-?%\})/s';
+    private const MACRO_TAG_RE = '/\{%-?\s*(?:(?P<end>endmacro)\s*-?%\}|macro(?:\s+(?P<at>@)?(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*\((?P<params>(?:(?!%\}).)*?)\))?\s*-?%\})/s';
 
     // -------------------------------------------------------------------------
     // Macros
@@ -256,7 +261,7 @@ trait DirectiveSupportTrait
         $regex = self::MACRO_TAG_RE;
         $pos   = $from;
 
-        /** @var null|array{start:int,end:int,name:string,params:list<string>} */
+        /** @var null|array{start:int,end:int,name:string,params:list<array{name:string,default:?string}>} */
         $open = null;
 
         while (\preg_match($regex, $source, $m, PREG_OFFSET_CAPTURE, $pos)) {
@@ -323,7 +328,7 @@ trait DirectiveSupportTrait
                 'start'  => $tagStart,
                 'end'    => $tagEnd,
                 'name'   => $m['name'][0],
-                'params' => \trim($m['params'][0]) !== '' ? \array_map('trim', \explode(',', $m['params'][0])) : [],
+                'params' => $this->parseMacroParams($m['params'][0] ?? '', $templateName, $source, $tagStart),
             ];
             $pos = $tagEnd;
         }
@@ -340,7 +345,7 @@ trait DirectiveSupportTrait
     /**
      * Validate one `{% macro %}` definition and record it.
      *
-     * @param list<string> $params
+     * @param list<array{name: string, default: ?string}> $params
      */
     private function registerMacro(
         string $name,
@@ -351,7 +356,7 @@ trait DirectiveSupportTrait
         int $tagStart
     ): void {
         foreach ($params as $param) {
-            $this->validateLocalName($param, 'macro parameter', $templateName, $source, $tagStart);
+            $this->validateLocalName($param['name'], 'macro parameter', $templateName, $source, $tagStart);
         }
         if (\in_array($name, self::RESERVED_MACRO_NAMES, true)) {
             throw new ClarityException(
@@ -362,6 +367,127 @@ trait DirectiveSupportTrait
         }
 
         $this->macros[$name] = ['params' => $params, 'body' => $body];
+    }
+
+    /**
+     * Parse a `{% macro %}` parameter list into names and optional defaults.
+     *
+     * A parameter is `name`, or `name = <expression>`. The default is held as
+     * TEXT and compiled at each CALL SITE, exactly as an argument is: a macro is
+     * spliced inline, so the definition has no scope of its own, and a default
+     * reads the caller's variables plus the parameters bound before it.
+     *
+     * Optional parameters must come last, because a call binds positionally: a
+     * defaulted parameter followed by a required one could never be omitted, so
+     * the required one would always have to be passed as well.
+     *
+     * @param string $raw      Text between the definition's parentheses.
+     * @param int    $tagStart Offset of the definition tag, for the error line.
+     * @return list<array{name: string, default: ?string}>
+     */
+    private function parseMacroParams(string $raw, string $templateName, string $source, int $tagStart): array
+    {
+        if (\trim($raw) === '') {
+            return [];
+        }
+
+        $params = [];
+
+        foreach ($this->splitArgList($raw) as $piece) {
+            $piece = \trim($piece);
+            if ($piece === '') {
+                continue;
+            }
+
+            $eq      = $this->findDefaultSeparator($piece);
+            $name    = \trim($eq === null ? $piece : \substr($piece, 0, $eq));
+            $default = $eq === null ? null : \trim(\substr($piece, $eq + 1));
+
+            if (!Tokenizer::isIdentifier($name)) {
+                throw new ClarityException(
+                    "Invalid macro parameter '{$piece}': a parameter is 'name' or 'name = <expression>'.",
+                    $templateName,
+                    $this->sourceLineAtOffset($source, $tagStart)
+                );
+            }
+
+            if ($default === '') {
+                throw new ClarityException(
+                    "Macro parameter '{$name}' has no default value: write '{$name} = <expression>', "
+                        . "or drop the '=' to make it required.",
+                    $templateName,
+                    $this->sourceLineAtOffset($source, $tagStart)
+                );
+            }
+
+            if ($default === null && $params !== [] && \end($params)['default'] !== null) {
+                throw new ClarityException(
+                    "Required macro parameter '{$name}' follows an optional one: optional parameters "
+                        . 'must come last, so either give it a default too or move it before them.',
+                    $templateName,
+                    $this->sourceLineAtOffset($source, $tagStart)
+                );
+            }
+
+            $params[] = ['name' => $name, 'default' => $default];
+        }
+
+        return $params;
+    }
+
+    /**
+     * Offset of the `=` that separates a parameter's name from its default, or
+     * null when the parameter has no default.
+     *
+     * The comparison operators are what this has to step over: `a == 1`, `a != 1`,
+     * `a >= 1`, `a <= 1` and `a => 1` all contain `=` yet none of them introduces
+     * a default. A parameter name is a bare identifier, so the FIRST `=` that is
+     * not part of one of those is the separator.
+     */
+    private function findDefaultSeparator(string $piece): ?int
+    {
+        $len      = \strlen($piece);
+        $depth    = 0;
+        $inSingle = false;
+        $inDouble = false;
+
+        for ($i = 0; $i < $len; $i++) {
+            $ch = $piece[$i];
+
+            if (($inSingle || $inDouble) && $ch === '\\' && $i + 1 < $len) {
+                $i++;
+                continue;
+            }
+            if ($ch === "'" && !$inDouble) {
+                $inSingle = !$inSingle;
+                continue;
+            }
+            if ($ch === '"' && !$inSingle) {
+                $inDouble = !$inDouble;
+                continue;
+            }
+            if ($inSingle || $inDouble) {
+                continue;
+            }
+
+            if ($ch === '(' || $ch === '[' || $ch === '{') {
+                $depth++;
+            } elseif ($ch === ')' || $ch === ']' || $ch === '}') {
+                $depth--;
+            } elseif ($ch === '=' && $depth === 0) {
+                $prev = $i > 0 ? $piece[$i - 1] : '';
+                $next = $i + 1 < $len ? $piece[$i + 1] : '';
+
+                // `==`, `=>`, `!=`, `>=`, `<=` — never a default separator.
+                if ($next === '=' || $next === '>' || \str_contains('!=<>', $prev)) {
+                    continue;
+                }
+
+                return $i;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -697,7 +823,23 @@ trait DirectiveSupportTrait
         $params = $macro['params'];
         $args   = $argsRaw !== '' ? $this->splitArgList($argsRaw) : [];
 
-        if (\count($args) !== \count($params)) {
+        // `m( )` and `m()` are the same call: an all-whitespace list is no list.
+        if (\count($args) === 1 && \trim($args[0]) === '') {
+            $args = [];
+        }
+
+        // A call may omit trailing parameters that carry a default. Anything
+        // beyond the declared count is an error; a missing one is an error only
+        // when it has no default to fall back on (optional parameters come last,
+        // so the count of required ones is what has to be met).
+        $required = 0;
+        foreach ($params as $param) {
+            if ($param['default'] === null) {
+                $required++;
+            }
+        }
+
+        if (\count($args) > \count($params) || \count($args) < $required) {
             throw new ClarityException(
                 "Macro '{$name}' expects " . \count($params) . " argument(s), got " . \count($args),
                 $sourcePath,
@@ -706,22 +848,62 @@ trait DirectiveSupportTrait
         }
 
         // Assign each argument to a unique PHP local; save compile-scope for restore.
+        //
+        // Two scopes are in play while binding. An ARGUMENT is an expression the
+        // caller wrote, so it compiles in the caller's scope — the parameter it
+        // is being bound to must not shadow a variable of the same name in it.
+        // A DEFAULT belongs to the definition, so it compiles with the parameters
+        // already bound, which lets `b = a ~ "!"` read `a` (as Jinja does).
+        $callerVars = $this->localVars;
+        $callerDyn  = $this->dynamicBindings;
+        $boundVars  = [];
+        $boundDyn   = [];
+
         $restore = [];
         foreach ($params as $idx => $param) {
-            $phpVar  = '$__c_m_' . $param;
+            $paramName = $param['name'];
+            $phpVar    = '$__c_m_' . $paramName;
+            $arg       = \trim($args[$idx] ?? '');
+
+            if ($arg !== '') {
+                $expression = $arg;
+                $scopeVars  = $callerVars;
+                $scopeDyn   = $callerDyn;
+            } elseif ($param['default'] !== null) {
+                $expression = $param['default'];
+                $scopeVars  = $boundVars + $callerVars;
+                $scopeDyn   = $boundDyn + $callerDyn;
+            } else {
+                throw new ClarityException(
+                    "Macro '{$name}': argument " . ($idx + 1) . " for parameter '{$paramName}' is empty "
+                        . 'and it has no default value.',
+                    $sourcePath,
+                    $tplLine
+                );
+            }
+
+            $this->tokenizer->setLocalVars($scopeVars);
+            $this->tokenizer->setDynamicBindings($scopeDyn);
+
             $phpExpr = $this->withLocation(
-                fn() => $this->tokenizer->processCondition(\trim($args[$idx])),
+                fn() => $this->tokenizer->processCondition($expression),
                 $sourcePath,
                 $tplLine
             );
             $this->addPhpLines($lines, $phpVar . ' = ' . $phpExpr . ';', $tplLine, $sourcePath);
-            $restore[$param] = [
-                'var' => $this->localVars[$param] ?? null,
-                'dyn' => isset($this->dynamicBindings[$param]),
+
+            $restore[$paramName] = [
+                'var' => $callerVars[$paramName] ?? null,
+                'dyn' => isset($callerDyn[$paramName]),
             ];
-            $this->localVars[$param]        = $phpVar;
-            $this->dynamicBindings[$param] = true;
+            $boundVars[$paramName] = $phpVar;
+            $boundDyn[$paramName]  = true;
         }
+
+        // The body sees every parameter, shadowing a caller variable of the same
+        // name — `+` keeps the LEFT operand's keys.
+        $this->localVars       = $boundVars + $callerVars;
+        $this->dynamicBindings = $boundDyn + $callerDyn;
         $this->tokenizer->setLocalVars($this->localVars);
         $this->tokenizer->setDynamicBindings($this->dynamicBindings);
 

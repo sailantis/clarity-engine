@@ -225,7 +225,13 @@ class Compiler
     /**
      * Macros defined during the current compile pass (after pre-scan).
      * Static includes can add more macros before the rest of the template is compiled.
-     * @var array<string, array{params: list<string>, body: string}>
+     *
+     * A parameter's `default` is the SOURCE TEXT of its default expression, or
+     * null when the parameter is required. It is compiled at each call site
+     * rather than at the definition, because a macro body is spliced inline and
+     * has no scope of its own.
+     *
+     * @var array<string, array{params: list<array{name: string, default: ?string}>, body: string}>
      */
     private array $macros = [];
 
