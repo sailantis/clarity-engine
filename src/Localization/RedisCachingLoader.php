@@ -29,15 +29,14 @@ class RedisCachingLoader implements TranslationLoaderInterface
         private \Redis $redis,
         private int $ttl = 3600,
         private string $keyPrefix = 'translations'
-    ) {
-    }
+    ) {}
 
     public function load(string $domain, string $locale): array
     {
-        $key = $this->key($domain, $locale);
+        $key    = $this->key($domain, $locale);
         $cached = $this->redis->get($key);
         if ($cached !== false) {
-            return unserialize($cached);
+            return unserialize($cached, ['allowed_classes' => false]);
         }
 
         $data = $this->inner->load($domain, $locale);

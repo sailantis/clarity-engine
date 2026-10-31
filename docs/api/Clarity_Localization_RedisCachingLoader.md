@@ -40,7 +40,7 @@ Redis instance, give each its own prefix.
 
 ---
 
-### load() · <small>[🗎](../../src/Localization/RedisCachingLoader.php#L35)</small>
+### load() · <small>[🗎](../../src/Localization/RedisCachingLoader.php#L34)</small>
 
 `public function load(string $domain, string $locale): array`
 
@@ -58,7 +58,7 @@ Redis instance, give each its own prefix.
 
 ---
 
-### invalidate() · <small>[🗎](../../src/Localization/RedisCachingLoader.php#L55)</small>
+### invalidate() · <small>[🗎](../../src/Localization/RedisCachingLoader.php#L54)</small>
 
 `public function invalidate(string|null $domain = null, string|null $locale = null): void`
 
