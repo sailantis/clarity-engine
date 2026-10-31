@@ -75,7 +75,7 @@ caller's buffer if a template closed clarity's buffer illegally.
 
 ## Public methods
 
-### __construct() · <small>[🗎](../../src/Engine/Compiler.php#L286)</small>
+### __construct() · <small>[🗎](../../src/Engine/Compiler.php#L292)</small>
 
 `public function __construct(): mixed`
 
@@ -86,7 +86,7 @@ caller's buffer if a template closed clarity's buffer illegally.
 
 ---
 
-### default() · <small>[🗎](../../src/Engine/Compiler.php#L291)</small>
+### default() · <small>[🗎](../../src/Engine/Compiler.php#L297)</small>
 
 `public static function default(): static`
 
@@ -97,7 +97,7 @@ caller's buffer if a template closed clarity's buffer illegally.
 
 ---
 
-### setRegistry() · <small>[🗎](../../src/Engine/Compiler.php#L303)</small>
+### setRegistry() · <small>[🗎](../../src/Engine/Compiler.php#L309)</small>
 
 `public function setRegistry(Clarity\Engine\Registry $registry): static`
 
@@ -114,7 +114,7 @@ caller's buffer if a template closed clarity's buffer illegally.
 
 ---
 
-### setDebugMode() · <small>[🗎](../../src/Engine/Compiler.php#L310)</small>
+### setDebugMode() · <small>[🗎](../../src/Engine/Compiler.php#L316)</small>
 
 `public function setDebugMode(bool $debug): static`
 
@@ -131,7 +131,7 @@ caller's buffer if a template closed clarity's buffer illegally.
 
 ---
 
-### setPolicy() · <small>[🗎](../../src/Engine/Compiler.php#L335)</small>
+### setPolicy() · <small>[🗎](../../src/Engine/Compiler.php#L341)</small>
 
 `public function setPolicy(Clarity\Engine\Policy $policy): static`
 

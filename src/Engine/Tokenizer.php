@@ -311,25 +311,26 @@ class Tokenizer
     /**
      * Split a directive argument list into compiled positional and named arguments.
      *
-     * This is the shared parser behind custom-directive handlers that receive a
-     * list — see {@see \Clarity\Engine\Compiler\PairedDirectiveTrait::directiveProcessExpr()},
-     * where `$processExpr($rest, true)` resolves to this method.  The grammar is
-     * the one the filter syntax already uses:
+     * This is the shared parser for custom-directive handlers that receive a list.
+     * It is called by {@see \Clarity\Engine\Compiler\PairedDirectiveTrait::directiveProcessExpr()},
+     * where `$processExpr($rest, true)` resolves to this method. The grammar is
+     * the same as the filter syntax:
      *
      *     [name: ] expr [, [name: ] expr ...]
      *
-     * An argument whose text starts with `name:` is NAMED; anything else is
-     * POSITIONAL and keys by its numeric index.  A positional argument may NOT
-     * follow a named one, matching filter calls (whose named arguments become PHP
-     * named arguments and are therefore order-bound).
+     * An argument that starts with `name:` is named. Any other argument is
+     * positional and is collected in the positional list. A positional argument
+     * cannot follow a named one, because PHP does not allow positional arguments
+     * after named ones, and filter calls compile to PHP named arguments.
      *
-     * Both lists hold PHP expressions, compiled through {@see processCondition()},
-     * so a caller never re-implements the split or the named-argument rule.
+     * Both lists hold PHP expressions compiled through {@see processCondition()},
+     * so callers do not need to implement the split or the named-argument rules.
      *
      * @return array{0: list<string>, 1: array<string, string>}
      *         [positional PHP expressions, named PHP expressions]
-     * @throws ClarityException On an empty argument, a duplicate or empty-handed
-     *                          named argument, or a positional after a named one.
+     * @throws ClarityException For an empty argument, a duplicate name, a positional
+     *                          argument after a named one, or a spread (`...`) outside
+     *                          an array or object literal.
      */
     public function processArgumentList(string $rest): array
     {

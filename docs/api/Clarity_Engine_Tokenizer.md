@@ -129,26 +129,26 @@ through `setPolicy()`.
 
 ---
 
-### processArgumentList() · <small>[🗎](../../src/Engine/Tokenizer.php#L334)</small>
+### processArgumentList() · <small>[🗎](../../src/Engine/Tokenizer.php#L335)</small>
 
 `public function processArgumentList(string $rest): array`
 
 Split a directive argument list into compiled positional and named arguments.
 
-This is the shared parser behind custom-directive handlers that receive a
-list — see [`PairedDirectiveTrait::directiveProcessExpr()`](Clarity_Engine_Compiler_PairedDirectiveTrait.md#directiveprocessexpr),
-where `$processExpr($rest, true)` resolves to this method.  The grammar is
-the one the filter syntax already uses:
+This is the shared parser for custom-directive handlers that receive a list.
+It is called by [`PairedDirectiveTrait::directiveProcessExpr()`](Clarity_Engine_Compiler_PairedDirectiveTrait.md#directiveprocessexpr),
+where `$processExpr($rest, true)` resolves to this method. The grammar is
+the same as the filter syntax:
 
     [name: ] expr [, [name: ] expr ...]
 
-An argument whose text starts with `name:` is NAMED; anything else is
-POSITIONAL and keys by its numeric index.  A positional argument may NOT
-follow a named one, matching filter calls (whose named arguments become PHP
-named arguments and are therefore order-bound).
+An argument that starts with `name:` is named. Any other argument is
+positional and is collected in the positional list. A positional argument
+cannot follow a named one, because PHP does not allow positional arguments
+after named ones, and filter calls compile to PHP named arguments.
 
-Both lists hold PHP expressions, compiled through `processCondition()`,
-so a caller never re-implements the split or the named-argument rule.
+Both lists hold PHP expressions compiled through `processCondition()`,
+so callers do not need to implement the split or the named-argument rules.
 
 **Parameters**
 
@@ -163,13 +163,14 @@ so a caller never re-implements the split or the named-argument rule.
 
 **Throws**
 
-- [ClarityException](Clarity_ClarityException.md)  On an empty argument, a duplicate or empty-handed
-named argument, or a positional after a named one.
+- [ClarityException](Clarity_ClarityException.md)  For an empty argument, a duplicate name, a positional
+argument after a named one, or a spread (`...`) outside
+an array or object literal.
 
 
 ---
 
-### setPolicy() · <small>[🗎](../../src/Engine/Tokenizer.php#L359)</small>
+### setPolicy() · <small>[🗎](../../src/Engine/Tokenizer.php#L360)</small>
 
 `public function setPolicy(Clarity\Engine\Policy $policy): void`
 
@@ -192,7 +193,7 @@ the policy are not seen until setPolicy() is called again.
 
 ---
 
-### getPolicy() · <small>[🗎](../../src/Engine/Tokenizer.php#L370)</small>
+### getPolicy() · <small>[🗎](../../src/Engine/Tokenizer.php#L371)</small>
 
 `public function getPolicy(): Clarity\Engine\Policy`
 
@@ -203,7 +204,7 @@ the policy are not seen until setPolicy() is called again.
 
 ---
 
-### setLocalRoots() · <small>[🗎](../../src/Engine/Tokenizer.php#L390)</small>
+### setLocalRoots() · <small>[🗎](../../src/Engine/Tokenizer.php#L391)</small>
 
 `public function setLocalRoots(bool $enabled): void`
 
@@ -225,7 +226,7 @@ compiler that seeds no locals never emits a local read.
 
 ---
 
-### setRegistry() · <small>[🗎](../../src/Engine/Tokenizer.php#L409)</small>
+### setRegistry() · <small>[🗎](../../src/Engine/Tokenizer.php#L410)</small>
 
 `public function setRegistry(Clarity\Engine\Registry $registry): void`
 
@@ -242,7 +243,7 @@ compiler that seeds no locals never emits a local read.
 
 ---
 
-### setLocalVars() · <small>[🗎](../../src/Engine/Tokenizer.php#L423)</small>
+### setLocalVars() · <small>[🗎](../../src/Engine/Tokenizer.php#L424)</small>
 
 `public function setLocalVars(array $localVars): void`
 
@@ -265,7 +266,7 @@ variable resolution inside the loop uses direct PHP local variables
 
 ---
 
-### setDynamicBindings() · <small>[🗎](../../src/Engine/Tokenizer.php#L437)</small>
+### setDynamicBindings() · <small>[🗎](../../src/Engine/Tokenizer.php#L438)</small>
 
 `public function setDynamicBindings(array $names): void`
 
@@ -367,9 +368,9 @@ is escaped for the current context set by `setEscapeContext()`:
 
 ---
 
-### processCondition() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L72)</small>
+### processCondition() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L76)</small>
 
-`public function processCondition(string $expression): string`
+`public function processCondition(string $expression, bool $asObject = false): string`
 
 Convert a Clarity expression without pipeline — used for control
 structure conditions (if, for, set) where auto-escape is meaningless.
@@ -379,6 +380,7 @@ structure conditions (if, for, set) where auto-escape is meaningless.
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$expression` | string | - | Raw Clarity expression. |
+| `$asObject` | bool | `false` | Whether a brace literal in this expression is an<br>OBJECT literal. Set only by the `object` cast's<br>operand path; every other caller leaves it off, so<br>`{ … }` compiles to a map exactly as before. |
 
 **Return value**
 
@@ -388,7 +390,7 @@ structure conditions (if, for, set) where auto-escape is meaningless.
 
 ---
 
-### processLvalue() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L96)</small>
+### processLvalue() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L100)</small>
 
 `public function processLvalue(string $var): string`
 
@@ -414,9 +416,9 @@ choice is made in the chain emitter, so it matches the read path.
 
 ---
 
-### convertVarsAndOps() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L112)</small>
+### convertVarsAndOps() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L120)</small>
 
-`public function convertVarsAndOps(string $expr): string`
+`public function convertVarsAndOps(string $expr, bool $asObject = false): string`
 
 Convert a Clarity expression (no pipeline) to PHP by:
 1. Replacing var-chains with $__c_va[...] accesses
@@ -433,6 +435,7 @@ identifiers/var-chains, operators, punctuation) and process each atom.
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$expr` | string | - |  |
+| `$asObject` | bool | `false` | Whether a brace literal here is an object literal.<br>Propagates to the literals AND to parenthesised<br>groups, but not through `[`, whose items are values. |
 
 **Return value**
 
@@ -503,7 +506,45 @@ which matches [`Tokenizer::IDENT_RE()`](Clarity_Engine_Tokenizer.md#ident_re).
 
 ---
 
-### buildFilterCall() · <small>[🗎](../../src/Engine/Tokenizer/FilterCompilerTrait.php#L230)</small>
+### splitArgumentList() · <small>[🗎](../../src/Engine/Tokenizer/FilterCompilerTrait.php#L100)</small>
+
+`public function splitArgumentList(string $rest): array`
+
+Split a directive or macro argument list into pieces that keep their
+optional name: `[name: ] expr [, [name: ] expr ...]`.
+
+This is the SPLIT half of `processArgumentList()`: it splits and
+names the arguments but compiles nothing, which is what a caller needs
+when the arguments are not PHP call arguments. A macro call binds each
+piece to the PARAMETER of that name instead of passing it positionally
+to PHP.
+
+A piece's name is `null` for a positional argument. The rules are the
+ones the tokenizer already applies to call arguments, so a named macro
+argument behaves exactly like a named filter argument: positional
+arguments cannot follow named ones, names must be unique, and an empty
+argument (`a,,b`) is refused. Commas inside quoted strings or nested
+`()`/`[]`/`}` do not split.
+
+**Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$rest` | string | - |  |
+
+**Return value**
+
+- Type: `array`
+
+**Throws**
+
+- [ClarityException](Clarity_ClarityException.md)  On an empty argument, a duplicate named argument,
+or a positional argument after a named one.
+
+
+---
+
+### buildFilterCall() · <small>[🗎](../../src/Engine/Tokenizer/FilterCompilerTrait.php#L296)</small>
 
 `public function buildFilterCall(string $filterSegment, string $phpValue): string`
 

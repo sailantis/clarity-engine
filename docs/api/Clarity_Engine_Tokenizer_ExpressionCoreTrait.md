@@ -55,9 +55,9 @@ is escaped for the current context set by `setEscapeContext()`:
 
 ---
 
-### processCondition() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L72)</small>
+### processCondition() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L76)</small>
 
-`public function processCondition(string $expression): string`
+`public function processCondition(string $expression, bool $asObject = false): string`
 
 Convert a Clarity expression without pipeline — used for control
 structure conditions (if, for, set) where auto-escape is meaningless.
@@ -67,6 +67,7 @@ structure conditions (if, for, set) where auto-escape is meaningless.
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$expression` | string | - | Raw Clarity expression. |
+| `$asObject` | bool | `false` | Whether a brace literal in this expression is an<br>OBJECT literal. Set only by the `object` cast's<br>operand path; every other caller leaves it off, so<br>`{ … }` compiles to a map exactly as before. |
 
 **Return value**
 
@@ -76,7 +77,7 @@ structure conditions (if, for, set) where auto-escape is meaningless.
 
 ---
 
-### processLvalue() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L96)</small>
+### processLvalue() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L100)</small>
 
 `public function processLvalue(string $var): string`
 
@@ -102,9 +103,9 @@ choice is made in the chain emitter, so it matches the read path.
 
 ---
 
-### convertVarsAndOps() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L112)</small>
+### convertVarsAndOps() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L120)</small>
 
-`public function convertVarsAndOps(string $expr): string`
+`public function convertVarsAndOps(string $expr, bool $asObject = false): string`
 
 Convert a Clarity expression (no pipeline) to PHP by:
 1. Replacing var-chains with $__c_va[...] accesses
@@ -121,6 +122,7 @@ identifiers/var-chains, operators, punctuation) and process each atom.
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `$expr` | string | - |  |
+| `$asObject` | bool | `false` | Whether a brace literal here is an object literal.<br>Propagates to the literals AND to parenthesised<br>groups, but not through `[`, whose items are values. |
 
 **Return value**
 
