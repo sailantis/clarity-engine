@@ -797,6 +797,14 @@ trait DirectiveSupportTrait
     /**
      * Inline a macro call into the current output. Params become
      * PHP locals ($__c_m_paramName) scoped to the macro body.
+     *
+     * An argument is positional or named — `{% call card("Hi", language: "bash") %}`.
+     * Positional arguments bind to the parameters in declaration order; a named
+     * argument binds to the parameter of that name, which is what lets a call
+     * skip a middle optional parameter without having to spell out the ones
+     * before it. Mixing the two is allowed as long as no parameter is bound
+     * twice and a positional argument never follows a named one (the rule the
+     * tokenizer already applies to filter and function calls).
      */
     private function compileMacroCall(
         string $name,
@@ -821,30 +829,119 @@ trait DirectiveSupportTrait
 
         $macro  = $this->macros[$name];
         $params = $macro['params'];
-        $args   = $argsRaw !== '' ? $this->splitArgList($argsRaw) : [];
 
-        // `m( )` and `m()` are the same call: an all-whitespace list is no list.
-        if (\count($args) === 1 && \trim($args[0]) === '') {
-            $args = [];
-        }
+        // Split into named/positional pieces; the tokenizer owns the grammar, so
+        // the duplicate / positional-after-named / empty-argument rules are not
+        // re-implemented here.
+        [$args, $named] = $this->withLocation(
+            function () use ($argsRaw) {
+                $positional = [];
+                $named      = [];
+                foreach ($this->tokenizer->splitArgumentList($argsRaw) as $piece) {
+                    if ($piece['name'] === null) {
+                        $positional[] = $piece['expr'];
+                    } else {
+                        $named[$piece['name']] = $piece['expr'];
+                    }
+                }
+                return [$positional, $named];
+            },
+            $sourcePath,
+            $tplLine
+        );
 
-        // A call may omit trailing parameters that carry a default. Anything
-        // beyond the declared count is an error; a missing one is an error only
-        // when it has no default to fall back on (optional parameters come last,
-        // so the count of required ones is what has to be met).
-        $required = 0;
-        foreach ($params as $param) {
-            if ($param['default'] === null) {
-                $required++;
+        // Reject a name that is not a parameter: a typo would otherwise be
+        // silently dropped and the parameter would fall back to its default.
+        foreach ($named as $given => $_) {
+            foreach ($params as $param) {
+                if ($param['name'] === $given) {
+                    continue 2;
+                }
             }
-        }
-
-        if (\count($args) > \count($params) || \count($args) < $required) {
             throw new ClarityException(
-                "Macro '{$name}' expects " . \count($params) . " argument(s), got " . \count($args),
+                "Macro '{$name}' has no parameter '{$given}'.",
                 $sourcePath,
                 $tplLine
             );
+        }
+
+        // A call may omit trailing parameters that carry a default. Too many
+        // positional arguments, or a required parameter that neither a
+        // positional nor a named argument fills, is an error.
+        $positional = [];
+        foreach ($args as $arg) {
+            if (\trim($arg) !== '') {
+                $positional[] = $arg;
+            }
+        }
+
+        if (\count($positional) > \count($params)) {
+            throw new ClarityException(
+                "Macro '{$name}' expects " . \count($params) . ' argument(s), got '
+                    . (\count($positional) + \count($named)),
+                $sourcePath,
+                $tplLine
+            );
+        }
+
+        $missingRequired = [];
+        foreach ($params as $idx => $param) {
+            if ($param['default'] !== null) {
+                continue;
+            }
+            if (!isset($positional[$idx]) && !isset($named[$param['name']])) {
+                $missingRequired[] = $param['name'];
+            }
+        }
+
+        if ($missingRequired !== []) {
+            if ($named === []) {
+                // Positional-only call: keep the long-standing arity message.
+                throw new ClarityException(
+                    "Macro '{$name}' expects " . \count($params) . ' argument(s), got '
+                        . \count($positional),
+                    $sourcePath,
+                    $tplLine
+                );
+            }
+            throw new ClarityException(
+                "Macro '{$name}' is missing required parameter(s): " . \implode(', ', $missingRequired) . '.',
+                $sourcePath,
+                $tplLine
+            );
+        }
+
+        // Bind in DECLARATION order, so a default compiled later sees the
+        // parameters already bound before it (`b = a ~ "!"`), whichever way the
+        // call happened to supply them.
+        $bindings = [];
+        foreach ($params as $idx => $param) {
+            $paramName  = $param['name'];
+            $given      = isset($positional[$idx]) ? \trim($positional[$idx]) : '';
+            $byName     = $named[$paramName] ?? null;
+
+            if ($given !== '' && $byName !== null) {
+                throw new ClarityException(
+                    "Macro '{$name}': parameter '{$paramName}' is passed both positionally and by name.",
+                    $sourcePath,
+                    $tplLine
+                );
+            }
+
+            if ($given !== '') {
+                $bindings[$paramName] = ['expr' => $given, 'default' => false];
+            } elseif ($byName !== null) {
+                $bindings[$paramName] = ['expr' => $byName, 'default' => false];
+            } elseif ($param['default'] !== null) {
+                $bindings[$paramName] = ['expr' => $param['default'], 'default' => true];
+            } else {
+                throw new ClarityException(
+                    "Macro '{$name}': argument " . ($idx + 1) . " for parameter '{$paramName}' is missing "
+                        . 'and it has no default value.',
+                    $sourcePath,
+                    $tplLine
+                );
+            }
         }
 
         // Assign each argument to a unique PHP local; save compile-scope for restore.
@@ -860,27 +957,18 @@ trait DirectiveSupportTrait
         $boundDyn   = [];
 
         $restore = [];
-        foreach ($params as $idx => $param) {
-            $paramName = $param['name'];
-            $phpVar    = '$__c_m_' . $paramName;
-            $arg       = \trim($args[$idx] ?? '');
+        foreach ($bindings as $paramName => $binding) {
+            $phpVar = '$__c_m_' . $paramName;
 
-            if ($arg !== '') {
-                $expression = $arg;
-                $scopeVars  = $callerVars;
-                $scopeDyn   = $callerDyn;
-            } elseif ($param['default'] !== null) {
-                $expression = $param['default'];
-                $scopeVars  = $boundVars + $callerVars;
-                $scopeDyn   = $boundDyn + $callerDyn;
+            if (!$binding['default']) {
+                $scopeVars = $callerVars;
+                $scopeDyn  = $callerDyn;
             } else {
-                throw new ClarityException(
-                    "Macro '{$name}': argument " . ($idx + 1) . " for parameter '{$paramName}' is empty "
-                        . 'and it has no default value.',
-                    $sourcePath,
-                    $tplLine
-                );
+                $scopeVars = $boundVars + $callerVars;
+                $scopeDyn  = $boundDyn + $callerDyn;
             }
+
+            $expression = $binding['expr'];
 
             $this->tokenizer->setLocalVars($scopeVars);
             $this->tokenizer->setDynamicBindings($scopeDyn);

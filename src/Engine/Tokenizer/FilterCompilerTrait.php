@@ -77,6 +77,72 @@ trait FilterCompilerTrait
     }
 
     /**
+     * Split a directive or macro argument list into pieces that keep their
+     * optional name: `[name: ] expr [, [name: ] expr ...]`.
+     *
+     * This is the SPLIT half of {@see processArgumentList()}: it splits and
+     * names the arguments but compiles nothing, which is what a caller needs
+     * when the arguments are not PHP call arguments. A macro call binds each
+     * piece to the PARAMETER of that name instead of passing it positionally
+     * to PHP.
+     *
+     * A piece's name is `null` for a positional argument. The rules are the
+     * ones the tokenizer already applies to call arguments, so a named macro
+     * argument behaves exactly like a named filter argument: positional
+     * arguments cannot follow named ones, names must be unique, and an empty
+     * argument (`a,,b`) is refused. Commas inside quoted strings or nested
+     * `()`/`[]`/`{}` do not split.
+     *
+     * @return list<array{name: ?string, expr: string}>
+     * @throws ClarityException On an empty argument, a duplicate named argument,
+     *                          or a positional argument after a named one.
+     */
+    public function splitArgumentList(string $rest): array
+    {
+        $rest = \trim($rest);
+        if ($rest === '') {
+            return [];
+        }
+
+        $pieces   = [];
+        $seenNamed = false;
+        $namedSeen = [];
+
+        foreach ($this->splitRespectingStrings($rest, ',') as $arg) {
+            $arg = \trim($arg);
+            if ($arg === '') {
+                throw new ClarityException('Empty argument in argument list.');
+            }
+            if (\str_starts_with($arg, '...')) {
+                throw new ClarityException('Spread operator is only allowed inside array and object literals.');
+            }
+
+            $named = $this->parseNamedArg($arg);
+            if ($named !== null) {
+                if (isset($namedSeen[$named['name']])) {
+                    throw new ClarityException(
+                        "Duplicate named argument '{$named['name']}' in argument list."
+                    );
+                }
+                $namedSeen[$named['name']] = true;
+                $seenNamed = true;
+                $pieces[] = ['name' => $named['name'], 'expr' => $named['expr']];
+                continue;
+            }
+
+            if ($seenNamed) {
+                throw new ClarityException(
+                    "Positional argument after named argument in argument list: '{$arg}'"
+                );
+            }
+
+            $pieces[] = ['name' => null, 'expr' => $arg];
+        }
+
+        return $pieces;
+    }
+
+    /**
      * @param string[] $argList
      * @return array{0: string[], 1: array<string, string>}
      */

@@ -1045,6 +1045,9 @@ Named arguments can be combined with positional ones:
 > For runtime callables and PHP functions, named arguments are emitted as PHP 8 named arguments, so PHP applies its usual argument validation at runtime.
 > Positional arguments must come before named ones.
 
+Macro calls accept the same syntax, where the name selects the **parameter**
+rather than a PHP parameter — see [Macros](./01-template-syntax.md#named-arguments).
+
 ## PHP Functions as Filters
 
 When the `phpFunctions` rule is on, unregistered PHP functions can be used directly

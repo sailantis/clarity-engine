@@ -576,6 +576,40 @@ handled:
 {% macro titled(a, b = a ~ "!") %}{{ a }}{{ b }}{% endmacro %}  {# b reads a #}
 ```
 
+#### Named Arguments
+
+An argument may name its parameter: `name: expr`. It binds that parameter
+wherever it sits in the declaration, which is how a call skips a middle
+optional parameter without spelling out the ones before it:
+
+```twig
+{% macro terminal(label, command, icon = "fa-terminal", language = "") %}
+  <i class="{{ icon }}"></i> <span>{{ label }}</span>
+  <pre><code class="{{ language }}">{{ command }}</code></pre>
+{% endmacro %}
+
+{# icon keeps its default; language is set by name #}
+{% call terminal("Install", "composer require x", language: "bash") %}
+```
+
+The argument rules are the ones every Clarity call uses:
+
+- Positional arguments must come before named ones, and each name must be
+  unique. `{% call t(a: 1, 2) %}` and `{% call t(a: 1, a: 2) %}` both fail.
+- A name must be a parameter of that macro, so a typo is an error instead of a
+  silent fall back to the default.
+- One parameter cannot be filled both ways. `{% call t(1, a: 2) %}` fails when
+  `a` is the first parameter, but is fine when `a` is the second.
+- An argument is an ordinary expression. A colon-key read must be parenthesised
+  to stay a read: `{% call t((user:name)) %}` passes the value of
+  `user.name`-style key `name`; an unparenthesised `user:name` reads as a named
+  argument of the parameter `user`, which is the rule the
+  [collections](01-template-syntax.md#collections-and-access) syntax already
+  follows.
+
+Named arguments work the same way on filters and functions
+([Filters and Functions](./02-filters-and-functions.md#named-arguments)).
+
 #### Macro Rules
 
 - Define macros with `{% macro name(param1, param2) %}...{% endmacro %}`.
@@ -583,6 +617,8 @@ handled:
 - A parameter may declare a **default value**: `{% macro name(a, b = "fallback") %}`.
   A call that omits a trailing parameter uses its default; passing a value
   overrides it. Optional parameters must come last.
+- An argument may name its parameter (`name: expr`) to bind it out of order,
+  which skips a middle optional parameter.
 - The definition itself renders nothing; the call expands at its own position.
 - Macros expand **at compile time** and accept expressions available at the call site.
 - Macro names are identifiers, so they are case-sensitive and may not be a
@@ -1225,6 +1261,7 @@ Without the cast, the same literal is a map and `userData.fullName` is an error
 | `{% include "template" %}`                  | Include another template    |
 | `{% macro name(params) %}...{% endmacro %}` | Define a reusable macro     |
 | `{% call name(args) %}`                     | Call a macro                |
+| `{% call name(a, b: value) %}`              | Call a macro with a named argument (skips middle optionals) |
 | `{% macro name(a, b = value) %}`            | Macro with a default value  |
 | `{% parent %}`                              | Inline parent block content |
 | `{# comment #}`                             | Template comment            |

@@ -57,7 +57,7 @@ class ControlFlowTest extends BaseTestCase
     }
 
     /**
-     * The two-variable form is (key, value) — Twig order. Reversing it must fail
+     * The two-variable form is (key, value) â€” Twig order. Reversing it must fail
      * loudly rather than silently swapping the bindings.
      */
     public function testForLoopTwoVariableOrderIsKeyThenValue(): void
@@ -942,7 +942,7 @@ class ControlFlowTest extends BaseTestCase
     public function testMacroDefaultCompilesAtTheCallSite(): void
     {
         // The default is spliced where the call is, so it reads the CALLER's
-        // scope — `fallback` is not visible at the definition.
+        // scope â€” `fallback` is not visible at the definition.
         self::tpl(
             'macro_default_caller_scope',
             '{% macro pick(value = fallback) %}{{ value }}{% endmacro %}{% call pick() %}'
@@ -985,7 +985,7 @@ class ControlFlowTest extends BaseTestCase
     public function testMacroDefaultMayReferenceAnEarlierParameter(): void
     {
         // Parameters are bound in order, so `b`'s default sees the already-bound
-        // `a` — the same way a body reference would.
+        // `a` â€” the same way a body reference would.
         self::tpl(
             'macro_default_earlier_param',
             '{% macro m(a, b = a ~ "!") %}{{ a }}{{ b }}{% endmacro %}{% call m("hi") %}'
@@ -1047,6 +1047,165 @@ class ControlFlowTest extends BaseTestCase
             '{% macro m(a == 1) %}{{ a }}{% endmacro %}{% call m(1) %}'
         );
         self::render('macro_default_comparison');
+    }
+
+    public function testMacroNamedArgumentsSkipOptionalParameters(): void
+    {
+        // A named argument binds the parameter of that name, so a call can skip a
+        // middle optional parameter instead of spelling out the ones before it.
+        self::tpl(
+            'macro_named_skip',
+            '{% macro terminal(label, command, icon = "fa-terminal", language = "") %}'
+                . '{{ label }}|{{ command }}|{{ icon }}|{{ language }}'
+                . '{% endmacro %}'
+                . '{% call terminal("Install", "composer require x", language: "bash") %}'
+        );
+
+        $this->assertSame(
+            'Install|composer require x|fa-terminal|bash',
+            self::render('macro_named_skip')
+        );
+    }
+
+    public function testMacroNamedArgumentOverridesAMiddleDefault(): void
+    {
+        self::tpl(
+            'macro_named_middle',
+            '{% macro t(a, b = "B", c = "C") %}{{ a }}/{{ b }}/{{ c }}{% endmacro %}'
+                . '{% call t("A", c: "CC") %}'
+        );
+
+        $this->assertSame('A/B/CC', self::render('macro_named_middle'));
+    }
+
+    public function testMacroAllArgumentsNamed(): void
+    {
+        self::tpl(
+            'macro_named_all',
+            '{% macro t(a, b) %}{{ a }}{{ b }}{% endmacro %}'
+                . '{% call t(b: "2", a: "1") %}'
+        );
+
+        $this->assertSame('12', self::render('macro_named_all'));
+    }
+
+    public function testMacroMixesPositionalThenNamed(): void
+    {
+        self::tpl(
+            'macro_named_mixed',
+            '{% macro t(a, b, c = "C") %}{{ a }}{{ b }}{{ c }}{% endmacro %}'
+                . '{% call t("A", "B", c: "!") %}'
+        );
+
+        $this->assertSame('AB!', self::render('macro_named_mixed'));
+    }
+
+    public function testMacroNamedArgumentOfAnExpression(): void
+    {
+        self::tpl(
+            'macro_named_expr',
+            '{% macro t(a = 1, b = 2) %}{{ a + b }}{% endmacro %}'
+                . '{% call t(b: n * 2) %}'
+        );
+
+        $this->assertSame('11', self::render('macro_named_expr', ['n' => 5]));
+    }
+
+    public function testMacroUnknownParameterNameIsRejected(): void
+    {
+        // A typo must not be silently dropped: the parameter would fall back to
+        // its default and the call would look like it worked.
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches("/has no parameter 'nope'/i");
+        self::tpl(
+            'macro_named_unknown',
+            '{% macro t(a = 1) %}{{ a }}{% endmacro %}{% call t(nope: 2) %}'
+        );
+        self::render('macro_named_unknown');
+    }
+
+    public function testMacroDuplicateNamedArgumentIsRejected(): void
+    {
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches("/Duplicate named argument 'a'/i");
+        self::tpl(
+            'macro_named_duplicate',
+            '{% macro t(a = 1) %}{{ a }}{% endmacro %}{% call t(a: 1, a: 2) %}'
+        );
+        self::render('macro_named_duplicate');
+    }
+
+    public function testMacroPositionalAfterNamedIsRejected(): void
+    {
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/Positional argument after named argument/i');
+        self::tpl(
+            'macro_named_pos_after',
+            '{% macro t(a, b) %}{{ a }}{{ b }}{% endmacro %}{% call t(a: 1, 2) %}'
+        );
+        self::render('macro_named_pos_after');
+    }
+
+    public function testMacroParameterPassedBothWaysIsRejected(): void
+    {
+        // `a` is filled by the positional argument AND by name.
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/passed both positionally and by name/i');
+        self::tpl(
+            'macro_named_both',
+            '{% macro t(a, b = 2) %}{{ a }}{{ b }}{% endmacro %}{% call t("1", a: 3) %}'
+        );
+        self::render('macro_named_both');
+    }
+
+    public function testMacroNamedArgumentMissingRequiredParameterIsRejected(): void
+    {
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches("/missing required parameter\(s\): label/i");
+        self::tpl(
+            'macro_named_missing',
+            '{% macro t(label, command = "c") %}{{ label }}{% endmacro %}'
+                . '{% call t(command: "x") %}'
+        );
+        self::render('macro_named_missing');
+    }
+
+    public function testMacroArgumentListSplitsRespectingBraceLiterals(): void
+    {
+        // A comma inside a `{}` literal is not an argument separator. The old
+        // macro splitter tracked only `(` and `[`, so a map literal was torn into
+        // one argument per entry.
+        self::tpl(
+            'macro_brace_arg',
+            '{% macro m(a) %}{{ a|length }}{% endmacro %}'
+                . '{% call m({x: 1, y: 2}) %}'
+        );
+
+        $this->assertSame('2', self::render('macro_brace_arg'));
+    }
+
+    public function testMacroArgumentListSplitsRespectingNestedBraceLiterals(): void
+    {
+        self::tpl(
+            'macro_brace_nested',
+            '{% macro m(a) %}{{ a|length }}{% endmacro %}'
+                . '{% call m({x: {y: 1, z: 2}, w: 3}) %}'
+        );
+
+        $this->assertSame('2', self::render('macro_brace_nested'));
+    }
+
+    public function testMacroNamedArgumentMayBeAColonKeyRead(): void
+    {
+        // `u:name` is a key read, not a named argument: a name is an identifier
+        // followed by `:`, and `u:name` is the read form. Grouping it makes the
+        // intent explicit.
+        self::tpl(
+            'macro_named_colonkey',
+            '{% macro t(v) %}{{ v }}{% endmacro %}{% call t((u:name)) %}'
+        );
+
+        $this->assertSame('Bob', self::render('macro_named_colonkey', ['u' => ['name' => 'Bob']]));
     }
 
     public function testMacroCalledInsideAnIfBranch(): void

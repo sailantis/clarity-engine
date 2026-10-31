@@ -9,6 +9,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Macro calls accept named arguments.** An argument may name its parameter —
+  `{% call terminal("Install", "cmd", language: "bash") %}` — which binds that
+  parameter wherever it sits in the declaration, so a call can skip a middle
+  optional parameter instead of spelling out the ones before it:
+
+  ```twig
+  {% macro terminal(label, command, icon = "fa-terminal", language = "") %}
+    <i class="{{ icon }}"></i><code class="{{ language }}">{{ command }}</code>
+  {% endmacro %}
+
+  {% call terminal("Install", "composer require x", language: "bash") %}
+  ```
+
+  The argument rules are the ones every Clarity call already uses: positional
+  arguments must come before named ones, each name must be unique, and an empty
+  argument is refused. Two rules are specific to macros, because a name binds a
+  PARAMETER rather than a PHP parameter:
+
+  - a name that is not a parameter of that macro is refused, so a typo cannot
+    silently fall back to the default;
+  - filling one parameter twice is refused, whether the two ways are
+    positional+positional, positional+named, or named+named.
+
+  A required parameter that neither a positional nor a named argument fills is
+  reported by name (`Macro 'x' is missing required parameter(s): label.`) instead
+  of as a bare argument count, which is the only message a partial binding can
+  usefully carry.
+
+  Defaults still compile at the call site and are bound in DECLARATION order, so
+  `{% macro m(a, b = a ~ "!") %}` works the same whether `b` is omitted or passed
+  by name. The split half of the list grammar is now `Tokenizer::splitArgumentList()`,
+  which the macro binder uses instead of its own comma splitter.
+
+### Fixed
+
+- **A `{}` literal is no longer split into one argument per entry.** The macro
+  argument splitter tracked only `(` and `[`, so
+  `{% call m({x: 1, y: 2}) %}` was read as two arguments and failed with
+  `expects 1 argument(s), got 2`. It now uses the tokenizer's nesting-aware
+  splitter, which also tracks `{}`, so a map or object literal (nested included)
+  is one argument.
+
 - **Macro parameters may declare a default value.**
   `{% macro terminal(label, command, icon = "fa-solid fa-terminal") %}` may now
   be called with the trailing argument omitted, and the default is used:
