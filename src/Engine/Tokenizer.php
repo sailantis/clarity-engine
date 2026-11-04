@@ -311,20 +311,18 @@ class Tokenizer
     /**
      * Split a directive argument list into compiled positional and named arguments.
      *
-     * This is the shared parser for custom-directive handlers that receive a list.
-     * It is called by {@see \Clarity\Engine\Compiler\PairedDirectiveTrait::directiveProcessExpr()},
-     * where `$processExpr($rest, true)` resolves to this method. The grammar is
-     * the same as the filter syntax:
+     * Shared parser for custom-directive handlers that receive a list. It is called by
+     * {@see \Clarity\Engine\Compiler\PairedDirectiveTrait::directiveProcessExpr()}, where
+     * `$processExpr($rest, true)` resolves to this method. The grammar matches the filter syntax:
      *
      *     [name: ] expr [, [name: ] expr ...]
      *
-     * An argument that starts with `name:` is named. Any other argument is
-     * positional and is collected in the positional list. A positional argument
-     * cannot follow a named one, because PHP does not allow positional arguments
-     * after named ones, and filter calls compile to PHP named arguments.
+     * An argument beginning with `name:` is named; any other argument is positional. A positional
+     * argument cannot follow a named one, since PHP does not allow it and filter calls compile to
+     * PHP named arguments.
      *
-     * Both lists hold PHP expressions compiled through {@see processCondition()},
-     * so callers do not need to implement the split or the named-argument rules.
+     * Both lists contain PHP expressions compiled through {@see processCondition()}, so callers
+     * need not handle the split or the named-argument rules.
      *
      * @return array{0: list<string>, 1: array<string, string>}
      *         [positional PHP expressions, named PHP expressions]
