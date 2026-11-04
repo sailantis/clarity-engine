@@ -920,6 +920,121 @@ class RenderingTest extends BaseTestCase
         );
     }
 
+    /**
+     * A quote only OPENS a string when the surrounding code could legally begin
+     * one. Without that rule any quote opened a string, so this template emitted
+     * `var a = hello world;` — because a string value would have lost its quotes.
+     *
+     * The trap is invisible with a one-word value: `VAL` is a valid JavaScript
+     * identifier, so the output only looks wrong once the value contains a space
+     * or a punctuation character. Every case below therefore uses a value with a
+     * space in it.
+     *
+     * @dataProvider provideQuotesThatDoNotOpenAString
+     */
+    public function testJsContextIgnoresQuotesThatCannotOpenAString(
+        string $name,
+        string $template,
+        string $expected,
+    ): void {
+        // A distinct template name per row: the compiled class is cached by name,
+        // so reusing one would silently assert against the first row's output.
+        self::tpl('ctx_js_notdelim_' . $name, $template);
+
+        $this->assertSame(
+            $expected,
+            self::render('ctx_js_notdelim_' . $name, ['v' => 'hello world']),
+            'the complete JSON literal must still be emitted here',
+        );
+    }
+
+    /**
+     * @return array<string, array{string, string, string}>
+     */
+    public static function provideQuotesThatDoNotOpenAString(): array
+    {
+        return [
+            'apostrophe in a line comment'  => [
+                'line_comment',
+                "<script>// don't touch: {{ v }}</script>",
+                <<<'HTML'
+                <script>// don't touch: "hello world"</script>
+                HTML,
+            ],
+            'apostrophe in a block comment' => [
+                'block_comment',
+                "<script>/* don't */ var a = {{ v }};</script>",
+                <<<'HTML'
+                <script>/* don't */ var a = "hello world";</script>
+                HTML,
+            ],
+            'quote inside a regex literal'  => [
+                'regex',
+                '<script>var re = /"/; var a = {{ v }};</script>',
+                <<<'HTML'
+                <script>var re = /"/; var a = "hello world";</script>
+                HTML,
+            ],
+            'apostrophe in a template str'  => [
+                'backtick',
+                "<script>var t = `it's`; var a = {{ v }};</script>",
+                <<<'HTML'
+                <script>var t = `it's`; var a = "hello world";</script>
+                HTML,
+            ],
+        ];
+    }
+    /**
+     * A string literal may also begin after a keyword, where the preceding
+     * character is a letter rather than an operator.
+     */
+    public function testJsContextRecognisesAStringAfterAKeyword(): void
+    {
+        self::tpl('ctx_js_return', '<script>function f(){ return "{{ v }}"; }</script>');
+
+        $this->assertSame(
+            '<script>function f(){ return "hello world"; }</script>',
+            self::render('ctx_js_return', ['v' => 'hello world']),
+        );
+    }
+
+    public function testJsContextRecognisesAStringInAnObjectKey(): void
+    {
+        self::tpl('ctx_js_objkey', '<script>var o = {"k": "{{ v }}"};</script>');
+
+        $this->assertSame(
+            '<script>var o = {"k": "hello world"};</script>',
+            self::render('ctx_js_objkey', ['v' => 'hello world']),
+        );
+    }
+
+    public function testJsContextHandlesBothFormsInATernary(): void
+    {
+        self::tpl('ctx_js_ternary', '<script>var a = ok ? "{{ v }}" : {{ v }};</script>');
+
+        $this->assertSame(
+            '<script>var a = ok ? "hello world" : "hello world";</script>',
+            self::render('ctx_js_ternary', ['v' => 'hello world', 'ok' => true]),
+        );
+    }
+
+    public function testJsContextTreatsAQuoteInsideAStringAsText(): void
+    {
+        // Only the MATCHING delimiter closes a string, which is what makes these
+        // two render as one literal rather than flipping the state mid-value.
+        self::tpl('ctx_js_inner_apos', '<script>var a = "it\'s {{ v }}";</script>');
+        $this->assertSame(
+            '<script>var a = "it\'s hello world";</script>',
+            self::render('ctx_js_inner_apos', ['v' => 'hello world']),
+        );
+
+        self::tpl('ctx_js_inner_dq', '<script>var a = \'say "hi" {{ v }}\';</script>');
+        $this->assertSame(
+            '<script>var a = \'say "hi" hello world\';</script>',
+            self::render('ctx_js_inner_dq', ['v' => 'hello world']),
+        );
+    }
+
     public function testCssContextRaw(): void
     {
         self::tpl('ctx_css', '<style>body { color: {{ color }}; }</style>');

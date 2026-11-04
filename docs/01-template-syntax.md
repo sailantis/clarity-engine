@@ -1200,18 +1200,36 @@ How the position is decided, and what to expect at the edges:
 | Position | Emitted |
 | --- | --- |
 | Between tokens | complete literal (`"Ada"`, `12`, `["a"]`) |
-| Directly after `"` or `'` | escaped content only, no delimiters |
-| Mid-literal, after other text | escaped content only |
+| Inside `"…"` or `'…'` | escaped content only, no delimiters |
 
-- Both `"` and `'` delimiters are recognised, and a backslash escapes the next
-  character, so `"a\"b{{ n }}"` stays inside the string.
+A quote only **opens** a string when the surrounding code could legally begin
+one — after an operator or bracket (`= ( [ , : ? + …`), at the start of a
+statement, or after a keyword such as `return`. A quote anywhere else is an
+ordinary character. That is what keeps prose out of the way:
+
+```twig
+<script>
+// don't touch: {{ value }}      {# apostrophe in a comment  -> normal literal #}
+var t = `it's {{ value }}`;      {# apostrophe in backticks   -> normal literal #}
+var re = /"/; var a = {{ value }};   {# quote in a regex     -> normal literal #}
+</script>
+```
+
+Other rules worth knowing:
+
+- Only the **matching** delimiter closes a string, so `"it's {{ x }}"` and
+  `'say "hi" {{ x }}'` both stay inside their literal.
+- A backslash escapes the next character, so `"a\"b{{ n }}"` stays inside the
+  string.
 - A **raw line break** ends any open string. A JavaScript string literal cannot
-  span an unescaped newline, so this stops one stray apostrophe in a comment from
-  making the rest of the file look quoted.
+  span an unescaped newline, so a misjudged quote can never affect a later line.
 - **Template literals (backticks) are not tracked.** `${…}` is JavaScript's own
   interpolation and Clarity does not read it.
-- If the position cannot be classified the engine assumes "inside a string",
-  because that form can never produce a syntax error.
+
+Remaining limit: a **regex literal containing a quote, directly after `(`** —
+`x.replace(/'/g, '…')`, or `'{{ x }}'.match(/'/)` — is read as an opening
+delimiter, so the rest of that line looks quoted. Moving such an expression onto
+its own line avoids it entirely.
 
 `raw` keeps its universal meaning — verbatim, no escaping — in every context. It
 is rarely needed now: `{{ items }}` already emits a JSON literal, so the older
