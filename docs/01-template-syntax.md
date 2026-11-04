@@ -1168,6 +1168,40 @@ Available contexts:
 
 > **Tip:** Clarity automatically switches context when it encounters `<script>` or `<style>` tags in the template. Use `{# @context … #}` when the auto-detection isn't sufficient (e.g. inside a string literal that contains a tag-like pattern).
 
+#### Do not add quotes of your own inside `<script>`
+
+In `js` context the output of an interpolation **is already a complete JSON
+literal, including its quotes**. Writing quotes around it therefore emits two
+string boundaries back to back:
+
+```twig
+<script>
+var purpose = "{{ purpose }}";    {# WRONG: emits  var purpose = ""purchase""; #}
+var purpose = {{ purpose }};      {# right: emits  var purpose = "purchase";   #}
+</script>
+```
+
+This matters more than a normal typo: the browser fails to parse the **entire**
+`<script>` block, so every function and listener defined in it disappears at
+once. The page still renders, so nothing looks broken until you interact with
+it — a form that computes a live total simply stops updating.
+
+The same applies to any expression that already evaluates to a JS literal:
+
+| Expression | Emits | Correct usage |
+| --- | --- | --- |
+| `{{ user.name }}` | `"Ada"` | `{{ user.name }}` |
+| `{{ list \|> json }}` | `[1,2]` | `{{ list \|> json }}` |
+| `{{ count }}` | `42` | `{{ count }}` |
+| `{{ flag }}` | `true` | `{{ flag }}` |
+| `{{ flag ? 'true' : 'false' }}` | `"false"` | `{{ flag }}` — the ternary yields a **string**, so it gets quoted |
+
+Because a ternary returns a string, it is JSON-encoded as a string and not as a
+boolean. Pass the boolean itself. If you genuinely need a literal without
+encoding, `| raw` writes the value out unchanged — but for strings that also
+drops the escaping that keeps them safe inside a script, so prefer the plain
+form.
+
 ## Complex Examples
 
 ### Nested Loops
