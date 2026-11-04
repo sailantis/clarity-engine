@@ -1160,47 +1160,62 @@ use an annotation to override the detected mode:
 
 Available contexts:
 
-| Context | Escaping applied to output expressions                 |
-| ------- | ------------------------------------------------------ |
-| `html`  | `htmlspecialchars()` (default)                         |
-| `js`    | `json_encode()` with hex escaping (safe for inline JS) |
-| `css`   | Cast to `(string)` — no HTML escaping                  |
+| Context | Escaping applied to output expressions                        |
+| ------- | ------------------------------------------------------------- |
+| `html`  | `htmlspecialchars()` (default)                                |
+| `js`    | `json_encode()` with hex escaping (safe for inline JS), adapted to the quote position |
+| `css`   | Cast to `(string)` — no HTML escaping                         |
 
 > **Tip:** Clarity automatically switches context when it encounters `<script>` or `<style>` tags in the template. Use `{# @context … #}` when the auto-detection isn't sufficient (e.g. inside a string literal that contains a tag-like pattern).
 
-#### Do not add quotes of your own inside `<script>`
+#### Both quoting styles work inside `<script>`
 
-In `js` context the output of an interpolation **is already a complete JSON
-literal, including its quotes**. Writing quotes around it therefore emits two
-string boundaries back to back:
+In `js` context an interpolation is escaped with `json_encode()`, which already
+produces a **complete JS literal including its quotes**. That is the right
+result between tokens, but writing it unquoted is not valid JavaScript to an
+editor or a linter — so Clarity also tracks whether the expression sits inside a
+string literal and adapts:
 
 ```twig
 <script>
-var purpose = "{{ purpose }}";    {# WRONG: emits  var purpose = ""purchase""; #}
-var purpose = {{ purpose }};      {# right: emits  var purpose = "purchase";   #}
+var name   = {{ user.name }};    {# -> var name   = "Ada";    #}
+var name   = "{{ user.name }}";  {# -> var name   = "Ada";    #}
+var label  = "Hi {{ user.name }}";  {# -> var label = "Hi Ada"; #}
+var seats  = "{{ count }}";      {# -> var seats  = "12";     #}
+var items  = {{ items }};        {# -> var items  = ["a","b"]; #}
 </script>
 ```
 
-This matters more than a normal typo: the browser fails to parse the **entire**
-`<script>` block, so every function and listener defined in it disappears at
-once. The page still renders, so nothing looks broken until you interact with
-it — a form that computes a live total simply stops updating.
+Both forms render valid, escaped JavaScript. Use whichever reads better; the
+quoted form is the one editors are happy with.
 
-The same applies to any expression that already evaluates to a JS literal:
+This matters more than a normal typo would. A syntax error anywhere in a
+`<script>` block makes the browser discard the **entire** block, so every
+function and listener defined in it disappears at once. The page still renders,
+so nothing looks broken until you interact with it — a form that computes a live
+total simply stops updating.
 
-| Expression | Emits | Correct usage |
-| --- | --- | --- |
-| `{{ user.name }}` | `"Ada"` | `{{ user.name }}` |
-| `{{ list \|> json }}` | `[1,2]` | `{{ list \|> json }}` |
-| `{{ count }}` | `42` | `{{ count }}` |
-| `{{ flag }}` | `true` | `{{ flag }}` |
-| `{{ flag ? 'true' : 'false' }}` | `"false"` | `{{ flag }}` — the ternary yields a **string**, so it gets quoted |
+How the position is decided, and what to expect at the edges:
 
-Because a ternary returns a string, it is JSON-encoded as a string and not as a
-boolean. Pass the boolean itself. If you genuinely need a literal without
-encoding, `| raw` writes the value out unchanged — but for strings that also
-drops the escaping that keeps them safe inside a script, so prefer the plain
-form.
+| Position | Emitted |
+| --- | --- |
+| Between tokens | complete literal (`"Ada"`, `12`, `["a"]`) |
+| Directly after `"` or `'` | escaped content only, no delimiters |
+| Mid-literal, after other text | escaped content only |
+
+- Both `"` and `'` delimiters are recognised, and a backslash escapes the next
+  character, so `"a\"b{{ n }}"` stays inside the string.
+- A **raw line break** ends any open string. A JavaScript string literal cannot
+  span an unescaped newline, so this stops one stray apostrophe in a comment from
+  making the rest of the file look quoted.
+- **Template literals (backticks) are not tracked.** `${…}` is JavaScript's own
+  interpolation and Clarity does not read it.
+- If the position cannot be classified the engine assumes "inside a string",
+  because that form can never produce a syntax error.
+
+`raw` keeps its universal meaning — verbatim, no escaping — in every context. It
+is rarely needed now: `{{ items }}` already emits a JSON literal, so the older
+`{{ items |> json |> raw }}` workaround is obsolete.
 
 ## Complex Examples
 

@@ -798,6 +798,128 @@ class RenderingTest extends BaseTestCase
         $this->assertSame('&lt;b&gt;', $result);
     }
 
+    // =========================================================================
+    // Context-aware escaping inside a quoted string literal
+    //
+    // `js` context emits json_encode(), which is a COMPLETE literal including its
+    // quotes. Authors still write the quoted form, because a bare interpolation is
+    // not valid JavaScript to an editor or a linter. Emitting the complete literal
+    // there produced `var x = ""v"";` — a syntax error that made the browser
+    // discard the WHOLE <script> block, silently killing every listener in it.
+    //
+    // So the engine tracks whether the expression sits inside a string literal.
+    // =========================================================================
+
+    public function testJsContextInsideDoubleQuotesEmitsInnerContentOnly(): void
+    {
+        self::tpl('ctx_js_dq', '<script>var x = "{{ name }}";</script>');
+
+        $this->assertSame(
+            '<script>var x = "O\u0027Reilly \u003Cb\u003E";</script>',
+            self::render('ctx_js_dq', ['name' => 'O\'Reilly <b>']),
+            'exactly one pair of quotes, and the content still escaped',
+        );
+    }
+
+    public function testJsContextInsideSingleQuotesEmitsInnerContentOnly(): void
+    {
+        self::tpl('ctx_js_sq', "<script>var x = '{{ name }}';</script>");
+
+        $this->assertSame(
+            "<script>var x = 'O\\u0027Reilly \\u003Cb\\u003E';</script>",
+            self::render('ctx_js_sq', ['name' => 'O\'Reilly <b>']),
+        );
+    }
+
+    public function testJsContextInsideQuotesMidLiteral(): void
+    {
+        self::tpl('ctx_js_mid', '<script>var x = "before {{ name }} after";</script>');
+
+        $this->assertSame(
+            '<script>var x = "before O\u0027Reilly \u003Cb\u003E after";</script>',
+            self::render('ctx_js_mid', ['name' => 'O\'Reilly <b>']),
+        );
+    }
+
+    public function testJsContextSwitchesFormWithinOneScript(): void
+    {
+        // The quoted and unquoted positions in the SAME script must each get the
+        // right form — the state has to follow the text between them.
+        self::tpl('ctx_js_both', '<script>var a = "{{ name }}", b = {{ name }};</script>');
+
+        $this->assertSame(
+            '<script>var a = "O\u0027Reilly \u003Cb\u003E", b = "O\u0027Reilly \u003Cb\u003E";</script>',
+            self::render('ctx_js_both', ['name' => 'O\'Reilly <b>']),
+        );
+    }
+
+    public function testJsContextQuotedScalarKeepsItsDigits(): void
+    {
+        // json_encode(12) is `12`, with no quotes. Stripping its first and last
+        // character would delete the digits, so the quoted form must stringify.
+        self::tpl('ctx_js_scalar', '<script>var a = "{{ n }}", b = {{ n }};</script>');
+
+        $this->assertSame(
+            '<script>var a = "12", b = 12;</script>',
+            self::render('ctx_js_scalar', ['n' => 12]),
+        );
+    }
+
+    public function testJsContextQuotedArrayUsesJoinNotJson(): void
+    {
+        self::tpl('ctx_js_join', '<script>var a = "{{ list |> join(",") }}";</script>');
+
+        $this->assertSame(
+            '<script>var a = "a,b";</script>',
+            self::render('ctx_js_join', ['list' => ['a', 'b']]),
+        );
+    }
+
+    public function testJsContextBareArrayIsAJsonLiteral(): void
+    {
+        self::tpl('ctx_js_arr', '<script>var a = {{ list }};</script>');
+
+        $this->assertSame(
+            '<script>var a = ["a","b"];</script>',
+            self::render('ctx_js_arr', ['list' => ['a', 'b']]),
+        );
+    }
+
+    public function testJsContextEscapedQuoteDoesNotOpenAString(): void
+    {
+        // `\"` inside a string is content, so the position after it is still
+        // inside the literal.
+        self::tpl('ctx_js_escape', '<script>var x = "a\\"b{{ n }}";</script>');
+
+        $this->assertSame(
+            '<script>var x = "a\\"b12";</script>',
+            self::render('ctx_js_escape', ['n' => 12]),
+        );
+    }
+
+    public function testJsContextUnterminatedQuoteOnAPreviousLineIsForgotten(): void
+    {
+        // A raw line break cannot appear in a JS string literal. Without that
+        // rule one stray apostrophe in a comment would make every later
+        // expression look quoted.
+        self::tpl('ctx_js_line', "<script>// it's fine\nvar a = {{ n }};</script>");
+
+        $this->assertSame(
+            "<script>// it's fine\nvar a = 12;</script>",
+            self::render('ctx_js_line', ['n' => 12]),
+        );
+    }
+
+    public function testJsContextStateDoesNotLeakBetweenScripts(): void
+    {
+        self::tpl('ctx_js_leak', '<script>var a = "{{ n }}";</script><p>{{ n }}</p><script>var b = {{ n }};</script>');
+
+        $this->assertSame(
+            '<script>var a = "12";</script><p>12</p><script>var b = 12;</script>',
+            self::render('ctx_js_leak', ['n' => 12]),
+        );
+    }
+
     public function testCssContextRaw(): void
     {
         self::tpl('ctx_css', '<style>body { color: {{ color }}; }</style>');

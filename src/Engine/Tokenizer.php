@@ -4,6 +4,7 @@ namespace Clarity\Engine;
 use Clarity\Engine\Tokenizer\SegmentScannerTrait;
 use Clarity\Engine\Tokenizer\ExpressionCoreTrait;
 use Clarity\Engine\Tokenizer\ExpressionSupportTrait;
+use Clarity\Engine\Tokenizer\ScriptQuoteTrait;
 use Clarity\Engine\Tokenizer\FilterCompilerTrait;
 use Clarity\Engine\Tokenizer\CallableTrait;
 use Clarity\Engine\Tokenizer\OperatorTestTrait;
@@ -62,6 +63,7 @@ class Tokenizer
     use SegmentScannerTrait;
     use ExpressionCoreTrait;
     use ExpressionSupportTrait;
+    use ScriptQuoteTrait;
     use FilterCompilerTrait;
     use CallableTrait;
     use OperatorTestTrait;

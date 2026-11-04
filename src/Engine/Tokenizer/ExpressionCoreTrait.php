@@ -22,7 +22,23 @@ trait ExpressionCoreTrait
      */
     public function setEscapeContext(string $context): void
     {
+        if ($context !== $this->escapeContext) {
+            $this->resetScriptQuoteState();
+        }
+
         $this->escapeContext = $context;
+    }
+
+    /**
+     * Advance the script quote state over a template TEXT segment.
+     *
+     * The Compiler calls this for every text segment in `js` context, in source
+     * order, with the RAW text. Skipping a segment — or passing trimmed text —
+     * would misjudge whether the next expression sits inside a string literal.
+     */
+    public function advanceEscapeScan(string $text): void
+    {
+        $this->advanceScriptQuoteState($text);
     }
 
     /**
@@ -33,7 +49,9 @@ trait ExpressionCoreTrait
      * pipeline ends in `raw` (the filter form that disables escaping), the result
      * is escaped for the current context set by {@see setEscapeContext()}:
      *   - html: `htmlspecialchars()`
-     *   - js:   `json_encode()` with HEX flags, safe for inline script
+     *   - js:   `json_encode()` with HEX flags. A COMPLETE JS literal, quotes
+     *           included, unless the expression sits inside a quoted string — in
+     *           which case only the escaped inner content is emitted.
      *   - css:  cast to string, no escaping
      *
      * @param string $expression Raw expression from inside `{{ ... }}`.
@@ -53,13 +71,40 @@ trait ExpressionCoreTrait
 
         if ($this->autoEscape) {
             $phpExpr = match ($this->escapeContext) {
-                'js'    => '\\json_encode(' . $phpExpr . ', 271)', // HEX_TAG|HEX_AMP|HEX_APOS|HEX_QUOT|UNESCAPED_UNICODE
+                'js'    => $this->jsContextExpression($phpExpr),
                 'css'   => '(string)(' . $phpExpr . ')',           // raw — CSS values are not HTML-escaped
                 default => "\\htmlspecialchars((string)({$phpExpr}), 11, 'UTF-8')",
             };
         }
 
         return $phpExpr;
+    }
+
+    /**
+     * Escape an expression for `js` context.
+     *
+     * 271 = HEX_TAG | HEX_AMP | HEX_APOS | HEX_QUOT | UNESCAPED_UNICODE. The
+     * flags are identical in both branches, so the content is escaped either way;
+     * only the surrounding delimiters differ.
+     */
+    private function jsContextExpression(string $phpExpr): string
+    {
+        // Between tokens the complete literal is exactly what the caller wants:
+        // `var x = {{ value }};` and `{{ value |> json }}` both work.
+        if (!$this->currentScriptQuoteInside()) {
+            return '\\json_encode(' . $phpExpr . ', 271)';
+        }
+
+        // Inside a string literal the delimiters are already in the template, so
+        // only the escaped CONTENT may be emitted: `"{{ value }}"` has to render
+        // `"content"`, never `"\"content\""`.
+        //
+        // The (string) cast is what makes this a single, safe strip: without it
+        // json_encode(12) is `12` with no quotes and cutting the first and last
+        // character would delete the digits. Casting also means an absent value
+        // encodes as `""` rather than as a bare `null`, so the result is always a
+        // quoted JSON string and the same substr() is always correct.
+        return '\\substr(\\json_encode((string) (' . $phpExpr . '), 271), 1, -1)';
     }
 
     /**

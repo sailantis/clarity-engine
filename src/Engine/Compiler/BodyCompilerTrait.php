@@ -80,6 +80,11 @@ trait BodyCompilerTrait
                         // output question, so the post-tag rule must not affect it.)
                         $this->updateContextFromText($rawText);
 
+                        // Track whether a following expression sits inside a JS
+                        // string literal, so `js` context can tell `"{{ x }}"` from
+                        // `{{ x }}`. Also raw text, for the same reason.
+                        $this->tokenizer->advanceEscapeScan($rawText);
+
                         // A text segment that directly follows a {% … %} or {# … #}
                         // tag loses ONE leading line break — see the method docblock
                         // for why, and for why {{ … }} is deliberately excluded.
