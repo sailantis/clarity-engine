@@ -323,6 +323,7 @@ trait FilterCompilerTrait
             // the probe (never part of the expression value), while the value it
             // returns is rendered like any other output — escaped for HTML,
             // JSON-encoded in JS.
+            $this->probeInExpression = true;
             $probe = "\$__c_sv['" . \addslashes($this->filterProbes[$name]) . "']";
             $call  = $probe . '(' . $this->probeArgs($this->escapeContext, $phpValue, $args) . ')';
             return $trailing !== '' ? $call . ', ' . $this->convertVarsAndOps($trailing) : $call;

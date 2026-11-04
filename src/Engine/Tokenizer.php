@@ -83,6 +83,15 @@ class Tokenizer
 
     private bool $autoEscape = true;
 
+    /**
+     * True while compiling an expression whose filters include a debug probe.
+     *
+     * A probe echoes its own output (a JS comment or a dump block) and returns the
+     * value unchanged, so in `js` context the tag is a STATEMENT rather than a
+     * value. The quote-position check that guards value positions does not apply.
+     */
+    private bool $probeInExpression = false;
+
     /** Output-escaping context: 'html' | 'js' | 'css' */
     private string $escapeContext = 'html';
 

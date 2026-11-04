@@ -1163,77 +1163,75 @@ Available contexts:
 | Context | Escaping applied to output expressions                        |
 | ------- | ------------------------------------------------------------- |
 | `html`  | `htmlspecialchars()` (default)                                |
-| `js`    | `json_encode()` with hex escaping (safe for inline JS), adapted to the quote position |
+| `js`    | escaped string content, for use inside quotes the template supplies; unquoted is a compile error |
 | `css`   | Cast to `(string)` — no HTML escaping                         |
 
 > **Tip:** Clarity automatically switches context when it encounters `<script>` or `<style>` tags in the template. Use `{# @context … #}` when the auto-detection isn't sufficient (e.g. inside a string literal that contains a tag-like pattern).
 
-#### Both quoting styles work inside `<script>`
+#### Inside `<script>`: always quote the interpolation
 
-In `js` context an interpolation is escaped with `json_encode()`, which already
-produces a **complete JS literal including its quotes**. That is the right
-result between tokens, but writing it unquoted is not valid JavaScript to an
-editor or a linter — so Clarity also tracks whether the expression sits inside a
-string literal and adapts:
+A script interpolation is always **escaped string content**, and the template
+supplies the quotes:
 
 ```twig
 <script>
-var name   = {{ user.name }};    {# -> var name   = "Ada";    #}
-var name   = "{{ user.name }}";  {# -> var name   = "Ada";    #}
-var label  = "Hi {{ user.name }}";  {# -> var label = "Hi Ada"; #}
-var seats  = "{{ count }}";      {# -> var seats  = "12";     #}
-var items  = {{ items }};        {# -> var items  = ["a","b"]; #}
+var name = "{{ user.name }}";   {# -> var name = "Ada";   #}
+var id   = '{{ user.id }}';     {# -> var id   = '7';     #}
 </script>
 ```
 
-Both forms render valid, escaped JavaScript. Use whichever reads better; the
-quoted form is the one editors are happy with.
-
-This matters more than a normal typo would. A syntax error anywhere in a
-`<script>` block makes the browser discard the **entire** block, so every
-function and listener defined in it disappears at once. The page still renders,
-so nothing looks broken until you interact with it — a form that computes a live
-total simply stops updating.
-
-How the position is decided, and what to expect at the edges:
-
-| Position | Emitted |
-| --- | --- |
-| Between tokens | complete literal (`"Ada"`, `12`, `["a"]`) |
-| Inside `"…"` or `'…'` | escaped content only, no delimiters |
-
-A quote only **opens** a string when the surrounding code could legally begin
-one — after an operator or bracket (`= ( [ , : ? + …`), at the start of a
-statement, or after a keyword such as `return`. A quote anywhere else is an
-ordinary character. That is what keeps prose out of the way:
+There is exactly one output form. An unquoted tag is a **compile error**, not a
+different escaping strategy:
 
 ```twig
 <script>
-// don't touch: {{ value }}      {# apostrophe in a comment  -> normal literal #}
-var t = `it's {{ value }}`;      {# apostrophe in backticks   -> normal literal #}
-var re = /"/; var a = {{ value }};   {# quote in a regex     -> normal literal #}
+var name = {{ user.name }};     {# ClarityException: not valid JavaScript #}
 </script>
 ```
 
-Other rules worth knowing:
+That error is deliberate. The alternative — inferring JavaScript lexical state
+from template text so that quoted and unquoted positions render differently —
+means a misjudged quote changes what is rendered, silently. And the unquoted form
+is not valid JavaScript anyway, so no editor or linter will accept it. With one
+form, the quote position can only *reject* a template; it can never change the
+output.
 
-- Only the **matching** delimiter closes a string, so `"it's {{ x }}"` and
-  `'say "hi" {{ x }}'` both stay inside their literal.
-- A backslash escapes the next character, so `"a\"b{{ n }}"` stays inside the
-  string.
-- A **raw line break** ends any open string. A JavaScript string literal cannot
-  span an unescaped newline, so a misjudged quote can never affect a later line.
-- **Template literals (backticks) are not tracked.** `${…}` is JavaScript's own
-  interpolation and Clarity does not read it.
+Everything non-string is coerced where the template says so:
 
-Remaining limit: a **regex literal containing a quote, directly after `(`** —
-`x.replace(/'/g, '…')`, or `'{{ x }}'.match(/'/)` — is read as an opening
-delimiter, so the rest of that line looks quoted. Moving such an expression onto
-its own line avoids it entirely.
+```twig
+<script>
+var seats  = Number('{{ license.seats }}');
+var paid   = ('{{ order.paid }}' === '1');          {# PHP renders true as 1 #}
+var tiers  = JSON.parse('{{ tiers |> json |> raw }}');
+var config = {{ config |> raw }};                   {# already valid JSON #}
+</script>
+```
 
-`raw` keeps its universal meaning — verbatim, no escaping — in every context. It
-is rarely needed now: `{{ items }}` already emits a JSON literal, so the older
-`{{ items |> json |> raw }}` workaround is obsolete.
+`| json` encodes the value; `| raw` stops the result being escaped a second
+time. `raw` keeps that universal meaning of "verbatim, no escaping" in every
+context, which is why it is the JSON escape hatch.
+
+What the compile check tolerates — a quote only opens a string where JavaScript
+could legally begin one (after an operator or bracket, at the start of a
+statement, or after a keyword such as `return`), so these are all fine:
+
+```twig
+<script>
+// don't touch this: "{{ value }}"      {# apostrophe in a comment #}
+var t = `it's "{{ value }}"`;           {# apostrophe in backticks #}
+var re = /"/; var a = "{{ value }}";    {# quote in a regex literal #}
+</script>
+```
+
+Two known false rejects, both confined to one line because a raw line break
+cannot occur inside a JS string literal:
+
+- a regex literal containing a quote **directly after `(`**, as in
+  `x.replace(/'/g, '…')` or `'{{ x }}'.match(/'/)`;
+- a string whose opening quote follows something outside the accepted set.
+
+Move the expression to its own line and the check passes. Template literals are
+not tracked at all: `${…}` is JavaScript's own interpolation, not Clarity's.
 
 ## Complex Examples
 

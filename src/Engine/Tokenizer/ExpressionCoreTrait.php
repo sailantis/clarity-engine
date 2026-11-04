@@ -49,9 +49,8 @@ trait ExpressionCoreTrait
      * pipeline ends in `raw` (the filter form that disables escaping), the result
      * is escaped for the current context set by {@see setEscapeContext()}:
      *   - html: `htmlspecialchars()`
-     *   - js:   `json_encode()` with HEX flags. A COMPLETE JS literal, quotes
-     *           included, unless the expression sits inside a quoted string — in
-     *           which case only the escaped inner content is emitted.
+     *   - js:   escaped string CONTENT, for use inside quotes the template
+     *           supplies. An unquoted interpolation is a compile error.
      *   - css:  cast to string, no escaping
      *
      * @param string $expression Raw expression from inside `{{ ... }}`.
@@ -60,6 +59,7 @@ trait ExpressionCoreTrait
     public function processExpression(string $expression): string
     {
         $this->autoEscape = true;
+        $this->probeInExpression = false;
         [$expr, $filters] = $this->splitPipeline($this->normalizePipeOperator($expression));
 
         $phpExpr = $this->convertVarsAndOps($expr);
@@ -83,27 +83,42 @@ trait ExpressionCoreTrait
     /**
      * Escape an expression for `js` context.
      *
-     * 271 = HEX_TAG | HEX_AMP | HEX_APOS | HEX_QUOT | UNESCAPED_UNICODE. The
-     * flags are identical in both branches, so the content is escaped either way;
-     * only the surrounding delimiters differ.
+     * A script interpolation is ALWAYS escaped string content, and the template
+     * is required to supply the quotes itself:
+     *
+     *     var name = "{{ user.name }}";     ->  var name = "Ada";
+     *
+     * There is no second form and no context detection. That is deliberate. Any
+     * rule that varies the output with the position has to infer JavaScript
+     * lexical state from template text, and a misjudgement silently changes what
+     * is rendered — which is how `var tiers = {{ tiers }};` ended up as invalid
+     * JavaScript that no editor would accept.
+     *
+     * Here the position only VALIDATES: an unquoted interpolation is a compile
+     * error with a message pointing at the fix. So a misjudged line can only
+     * produce a loud build failure, never wrong output.
      */
     private function jsContextExpression(string $phpExpr): string
     {
-        // Between tokens the complete literal is exactly what the caller wants:
-        // `var x = {{ value }};` and `{{ value |> json }}` both work.
-        if (!$this->currentScriptQuoteInside()) {
+        // A debug probe ECHOES its own output (a JS comment or a dump block) and
+        // returns the value unchanged, so the tag is a statement, not a value in a
+        // string. It keeps the complete-literal form: the point of a dump is to
+        // show the value, and an array has no sensible string-cast.
+        if ($this->probeInExpression) {
             return '\\json_encode(' . $phpExpr . ', 271)';
         }
 
-        // Inside a string literal the delimiters are already in the template, so
-        // only the escaped CONTENT may be emitted: `"{{ value }}"` has to render
-        // `"content"`, never `"\"content\""`.
-        //
-        // The (string) cast is what makes this a single, safe strip: without it
-        // json_encode(12) is `12` with no quotes and cutting the first and last
-        // character would delete the digits. Casting also means an absent value
-        // encodes as `""` rather than as a bare `null`, so the result is always a
-        // quoted JSON string and the same substr() is always correct.
+        if (!$this->currentScriptQuoteInside()) {
+            throw new ClarityException(
+                'An unquoted output tag is not valid JavaScript. Put the quotes in the'
+                . ' template: "{{ value }}". For a JSON payload such as an array or an'
+                . " object, use JSON.parse('{{ value |> json |> raw }}').",
+            );
+        }
+
+        // A `raw` payload is never escaped, so it is the one form that may appear
+        // unquoted — that is the JSON escape hatch:
+        //   var tiers = JSON.parse('{{ tiers |> raw }}');
         return '\\substr(\\json_encode((string) (' . $phpExpr . '), 271), 1, -1)';
     }
 

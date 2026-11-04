@@ -766,72 +766,38 @@ class RenderingTest extends BaseTestCase
     // Context-aware escaping
     // =========================================================================
 
-    public function testJsContextAutoDetectEncodesAsJson(): void
-    {
-        self::tpl('ctx_js_auto', '<script>var x = {{ name }};</script>');
-        $result = self::render('ctx_js_auto', ['name' => 'O\'Reilly <b>']);
-        // json_encode wraps strings in quotes and escapes < (HEX_TAG) and ' (HEX_APOS)
-        $this->assertStringContainsString('var x = ', $result);
-        $this->assertStringNotContainsString("O'Reilly", $result); // apostrophe escaped
-        $this->assertStringNotContainsString('<b>', $result);      // < escaped
-    }
-
-    public function testHtmlContextAfterScriptClose(): void
-    {
-        self::tpl('ctx_html_after', '<script></script>{{ name }}');
-        $result = self::render('ctx_html_after', ['name' => '<b>bold</b>']);
-        $this->assertSame('<script></script>&lt;b&gt;bold&lt;/b&gt;', $result);
-    }
-
-    public function testContextHintJs(): void
-    {
-        self::tpl('ctx_hint_js', '{# @context js #}{{ name }}');
-        $result = self::render('ctx_hint_js', ['name' => '<script>']);
-        // json_encode with HEX_TAG encodes < and > as unicode escapes
-        $this->assertStringNotContainsString('<script>', $result);
-    }
-
-    public function testContextHintHtmlRestores(): void
-    {
-        self::tpl('ctx_hint_restore', '{# @context js #}{# @context html #}{{ name }}');
-        $result = self::render('ctx_hint_restore', ['name' => '<b>']);
-        $this->assertSame('&lt;b&gt;', $result);
-    }
-
-    // =========================================================================
-    // Context-aware escaping inside a quoted string literal
-    //
-    // `js` context emits json_encode(), which is a COMPLETE literal including its
-    // quotes. Authors still write the quoted form, because a bare interpolation is
-    // not valid JavaScript to an editor or a linter. Emitting the complete literal
-    // there produced `var x = ""v"";` — a syntax error that made the browser
-    // discard the WHOLE <script> block, silently killing every listener in it.
-    //
-    // So the engine tracks whether the expression sits inside a string literal.
-    // =========================================================================
-
-    public function testJsContextInsideDoubleQuotesEmitsInnerContentOnly(): void
+    /**
+     * `js` context emits escaped string CONTENT, so the template supplies the
+     * quotes: `var name = "{{ user.name }}";`.
+     *
+     * There is exactly one output form. A rule that varied with the position
+     * would have to infer JavaScript lexical state from template text, and a
+     * misjudgement there silently changes what is rendered — which is how
+     * `var tiers = {{ tiers }};` became invalid JavaScript that no editor would
+     * accept. The quote position is now used only to ACCEPT or REJECT.
+     */
+    public function testJsContextEmitsEscapedContentForQuotedOutput(): void
     {
         self::tpl('ctx_js_dq', '<script>var x = "{{ name }}";</script>');
 
         $this->assertSame(
             '<script>var x = "O\u0027Reilly \u003Cb\u003E";</script>',
             self::render('ctx_js_dq', ['name' => 'O\'Reilly <b>']),
-            'exactly one pair of quotes, and the content still escaped',
+            'exactly one pair of quotes, and the content escaped',
         );
     }
 
-    public function testJsContextInsideSingleQuotesEmitsInnerContentOnly(): void
+    public function testJsContextAcceptsSingleQuotes(): void
     {
         self::tpl('ctx_js_sq', "<script>var x = '{{ name }}';</script>");
 
         $this->assertSame(
-            "<script>var x = 'O\\u0027Reilly \\u003Cb\\u003E';</script>",
+            "<script>var x = 'O\u0027Reilly \u003Cb\u003E';</script>",
             self::render('ctx_js_sq', ['name' => 'O\'Reilly <b>']),
         );
     }
 
-    public function testJsContextInsideQuotesMidLiteral(): void
+    public function testJsContextAcceptsAnExpressionMidLiteral(): void
     {
         self::tpl('ctx_js_mid', '<script>var x = "before {{ name }} after";</script>');
 
@@ -841,187 +807,80 @@ class RenderingTest extends BaseTestCase
         );
     }
 
-    public function testJsContextSwitchesFormWithinOneScript(): void
+    public function testJsContextRejectsAnUnquotedOutputTag(): void
     {
-        // The quoted and unquoted positions in the SAME script must each get the
-        // right form — the state has to follow the text between them.
-        self::tpl('ctx_js_both', '<script>var a = "{{ name }}", b = {{ name }};</script>');
+        self::tpl('ctx_js_bare', '<script>var x = {{ name }};</script>');
 
-        $this->assertSame(
-            '<script>var a = "O\u0027Reilly \u003Cb\u003E", b = "O\u0027Reilly \u003Cb\u003E";</script>',
-            self::render('ctx_js_both', ['name' => 'O\'Reilly <b>']),
-        );
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/An unquoted output tag is not valid JavaScript/');
+
+        self::render('ctx_js_bare', ['name' => 'Ada']);
     }
 
-    public function testJsContextQuotedScalarKeepsItsDigits(): void
+    public function testJsContextRejectsAnUnquotedJsonPayload(): void
     {
-        // json_encode(12) is `12`, with no quotes. Stripping its first and last
-        // character would delete the digits, so the quoted form must stringify.
-        self::tpl('ctx_js_scalar', '<script>var a = "{{ n }}", b = {{ n }};</script>');
+        self::tpl('ctx_js_bare_arr', '<script>var x = {{ items }};</script>');
 
-        $this->assertSame(
-            '<script>var a = "12", b = 12;</script>',
-            self::render('ctx_js_scalar', ['n' => 12]),
-        );
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/JSON\.parse/');
+
+        self::render('ctx_js_bare_arr', ['items' => ['a', 'b']]);
     }
 
-    public function testJsContextQuotedArrayUsesJoinNotJson(): void
+    /**
+     * The compile error must name the file and line, because its whole purpose is
+     * to point an author at the offending tag.
+     */
+    public function testJsContextRejectionCarriesTheTemplateLocation(): void
     {
-        self::tpl('ctx_js_join', '<script>var a = "{{ list |> join(",") }}";</script>');
+        self::tpl('ctx_js_located', "<script>\nvar ok = \"x\";\nvar bad = {{ name }};\n</script>");
 
-        $this->assertSame(
-            '<script>var a = "a,b";</script>',
-            self::render('ctx_js_join', ['list' => ['a', 'b']]),
-        );
+        try {
+            self::render('ctx_js_located', ['name' => 'Ada']);
+            $this->fail('an unquoted output tag must not compile');
+        } catch (ClarityException $e) {
+            $this->assertStringContainsString('ctx_js_located', $e->templateName . $e->templatePath);
+            $this->assertSame(3, $e->templateLine);
+        }
     }
 
-    public function testJsContextBareArrayIsAJsonLiteral(): void
+    /**
+     * A JSON payload takes the `raw` route, which bypasses escaping entirely:
+     * `JSON.parse('{{ items |> json |> raw }}')`.
+     */
+    public function testJsContextJsonPayloadViaRaw(): void
     {
-        self::tpl('ctx_js_arr', '<script>var a = {{ list }};</script>');
+        self::tpl('ctx_js_json', "<script>var x = JSON.parse('{{ items |> json |> raw }}');</script>");
 
         $this->assertSame(
-            '<script>var a = ["a","b"];</script>',
-            self::render('ctx_js_arr', ['list' => ['a', 'b']]),
-        );
-    }
-
-    public function testJsContextEscapedQuoteDoesNotOpenAString(): void
-    {
-        // `\"` inside a string is content, so the position after it is still
-        // inside the literal.
-        self::tpl('ctx_js_escape', '<script>var x = "a\\"b{{ n }}";</script>');
-
-        $this->assertSame(
-            '<script>var x = "a\\"b12";</script>',
-            self::render('ctx_js_escape', ['n' => 12]),
-        );
-    }
-
-    public function testJsContextUnterminatedQuoteOnAPreviousLineIsForgotten(): void
-    {
-        // A raw line break cannot appear in a JS string literal. Without that
-        // rule one stray apostrophe in a comment would make every later
-        // expression look quoted.
-        self::tpl('ctx_js_line', "<script>// it's fine\nvar a = {{ n }};</script>");
-
-        $this->assertSame(
-            "<script>// it's fine\nvar a = 12;</script>",
-            self::render('ctx_js_line', ['n' => 12]),
-        );
-    }
-
-    public function testJsContextStateDoesNotLeakBetweenScripts(): void
-    {
-        self::tpl('ctx_js_leak', '<script>var a = "{{ n }}";</script><p>{{ n }}</p><script>var b = {{ n }};</script>');
-
-        $this->assertSame(
-            '<script>var a = "12";</script><p>12</p><script>var b = 12;</script>',
-            self::render('ctx_js_leak', ['n' => 12]),
+            '<script>var x = JSON.parse(\'["a","b"]\');</script>',
+            self::render('ctx_js_json', ['items' => ['a', 'b']]),
         );
     }
 
     /**
-     * A quote only OPENS a string when the surrounding code could legally begin
-     * one. Without that rule any quote opened a string, so this template emitted
-     * `var a = hello world;` — because a string value would have lost its quotes.
-     *
-     * The trap is invisible with a one-word value: `VAL` is a valid JavaScript
-     * identifier, so the output only looks wrong once the value contains a space
-     * or a punctuation character. Every case below therefore uses a value with a
-     * space in it.
-     *
-     * @dataProvider provideQuotesThatDoNotOpenAString
+     * A number arrives as a string and is coerced where the template says so.
+     * This is the deliberate cost of having one output form.
      */
-    public function testJsContextIgnoresQuotesThatCannotOpenAString(
-        string $name,
-        string $template,
-        string $expected,
-    ): void {
-        // A distinct template name per row: the compiled class is cached by name,
-        // so reusing one would silently assert against the first row's output.
-        self::tpl('ctx_js_notdelim_' . $name, $template);
+    public function testJsContextNumbersAndBooleansAreCoercedByTheTemplate(): void
+    {
+        self::tpl(
+            'ctx_js_coerce',
+            "<script>var n = Number('{{ n }}'); var b = ('{{ flag }}' === '1');</script>",
+        );
 
         $this->assertSame(
-            $expected,
-            self::render('ctx_js_notdelim_' . $name, ['v' => 'hello world']),
-            'the complete JSON literal must still be emitted here',
+            "<script>var n = Number('12'); var b = ('1' === '1');</script>",
+            self::render('ctx_js_coerce', ['n' => 12, 'flag' => true]),
         );
     }
 
     /**
-     * @return array<string, array{string, string, string}>
+     * Only the MATCHING delimiter closes a string, which is what lets these render
+     * as one literal instead of flipping the state mid-value.
      */
-    public static function provideQuotesThatDoNotOpenAString(): array
-    {
-        return [
-            'apostrophe in a line comment'  => [
-                'line_comment',
-                "<script>// don't touch: {{ v }}</script>",
-                <<<'HTML'
-                <script>// don't touch: "hello world"</script>
-                HTML,
-            ],
-            'apostrophe in a block comment' => [
-                'block_comment',
-                "<script>/* don't */ var a = {{ v }};</script>",
-                <<<'HTML'
-                <script>/* don't */ var a = "hello world";</script>
-                HTML,
-            ],
-            'quote inside a regex literal'  => [
-                'regex',
-                '<script>var re = /"/; var a = {{ v }};</script>',
-                <<<'HTML'
-                <script>var re = /"/; var a = "hello world";</script>
-                HTML,
-            ],
-            'apostrophe in a template str'  => [
-                'backtick',
-                "<script>var t = `it's`; var a = {{ v }};</script>",
-                <<<'HTML'
-                <script>var t = `it's`; var a = "hello world";</script>
-                HTML,
-            ],
-        ];
-    }
-    /**
-     * A string literal may also begin after a keyword, where the preceding
-     * character is a letter rather than an operator.
-     */
-    public function testJsContextRecognisesAStringAfterAKeyword(): void
-    {
-        self::tpl('ctx_js_return', '<script>function f(){ return "{{ v }}"; }</script>');
-
-        $this->assertSame(
-            '<script>function f(){ return "hello world"; }</script>',
-            self::render('ctx_js_return', ['v' => 'hello world']),
-        );
-    }
-
-    public function testJsContextRecognisesAStringInAnObjectKey(): void
-    {
-        self::tpl('ctx_js_objkey', '<script>var o = {"k": "{{ v }}"};</script>');
-
-        $this->assertSame(
-            '<script>var o = {"k": "hello world"};</script>',
-            self::render('ctx_js_objkey', ['v' => 'hello world']),
-        );
-    }
-
-    public function testJsContextHandlesBothFormsInATernary(): void
-    {
-        self::tpl('ctx_js_ternary', '<script>var a = ok ? "{{ v }}" : {{ v }};</script>');
-
-        $this->assertSame(
-            '<script>var a = ok ? "hello world" : "hello world";</script>',
-            self::render('ctx_js_ternary', ['v' => 'hello world', 'ok' => true]),
-        );
-    }
-
     public function testJsContextTreatsAQuoteInsideAStringAsText(): void
     {
-        // Only the MATCHING delimiter closes a string, which is what makes these
-        // two render as one literal rather than flipping the state mid-value.
         self::tpl('ctx_js_inner_apos', '<script>var a = "it\'s {{ v }}";</script>');
         $this->assertSame(
             '<script>var a = "it\'s hello world";</script>',
@@ -1032,6 +891,107 @@ class RenderingTest extends BaseTestCase
         $this->assertSame(
             '<script>var a = \'say "hi" hello world\';</script>',
             self::render('ctx_js_inner_dq', ['v' => 'hello world']),
+        );
+    }
+
+    /**
+     * A quote that is NOT a delimiter must not be mistaken for one, or the check
+     * would reject perfectly good templates.
+     *
+     * @dataProvider provideQuotesThatDoNotOpenAString
+     */
+    public function testJsContextSeesThroughQuotesThatAreNotDelimiters(
+        string $name,
+        string $template,
+        string $expected,
+    ): void {
+        // A distinct template name per row: the compiled class is cached by name,
+        // so reusing one would silently assert against the first row's output.
+        self::tpl('ctx_js_notdelim_' . $name, $template);
+
+        $this->assertSame(
+            $expected,
+            self::render('ctx_js_notdelim_' . $name, ['v' => 'hi']),
+        );
+    }
+
+    /**
+     * @return array<string, array{string, string, string}>
+     */
+    public static function provideQuotesThatDoNotOpenAString(): array
+    {
+        // Single-line templates only: a nowdoc heredoc picks up the file's line
+        // endings, which would make the expected string platform-dependent.
+        return [
+            'apostrophe in a line comment'  => [
+                'line_comment',
+                '<script>// don\'t touch: var a = "{{ v }}";</script>',
+                '<script>// don\'t touch: var a = "hi";</script>',
+            ],
+            'apostrophe in a block comment' => [
+                'block_comment',
+                "<script>/* don't */ var a = \"{{ v }}\";</script>",
+                "<script>/* don't */ var a = \"hi\";</script>",
+            ],
+            'quote inside a regex literal'  => [
+                'regex',
+                '<script>var re = /"/; var a = "{{ v }}";</script>',
+                '<script>var re = /"/; var a = "hi";</script>',
+            ],
+            'apostrophe in a template str'  => [
+                'backtick',
+                "<script>var t = `it's`; var a = \"{{ v }}\";</script>",
+                "<script>var t = `it's`; var a = \"hi\";</script>",
+            ],
+        ];
+    }
+
+    /**
+     * A string literal may begin after a keyword, where the preceding character is
+     * a letter rather than an operator.
+     */
+    public function testJsContextRecognisesAStringAfterAKeyword(): void
+    {
+        self::tpl('ctx_js_return', '<script>function f(){ return "{{ v }}"; }</script>');
+
+        $this->assertSame(
+            '<script>function f(){ return "hi"; }</script>',
+            self::render('ctx_js_return', ['v' => 'hi']),
+        );
+    }
+
+    public function testJsContextRecognisesAStringInAnObjectKey(): void
+    {
+        self::tpl('ctx_js_objkey', '<script>var o = {"k": "{{ v }}"};</script>');
+
+        $this->assertSame(
+            '<script>var o = {"k": "hi"};</script>',
+            self::render('ctx_js_objkey', ['v' => 'hi']),
+        );
+    }
+
+    public function testJsContextStateDoesNotLeakBetweenScripts(): void
+    {
+        self::tpl(
+            'ctx_js_leak',
+            '<script>var a = "{{ v }}";</script><p>{{ v }}</p><script>var b = "{{ v }}";</script>',
+        );
+
+        $this->assertSame(
+            '<script>var a = "hi";</script><p>hi</p><script>var b = "hi";</script>',
+            self::render('ctx_js_leak', ['v' => 'hi']),
+        );
+    }
+
+    public function testJsContextUnterminatedQuoteOnAPreviousLineIsForgotten(): void
+    {
+        // A raw line break cannot appear in a JS string literal. Without that rule
+        // one stray apostrophe in a comment would reject every later expression.
+        self::tpl('ctx_js_line', "<script>// it's fine\nvar a = \"{{ v }}\";</script>");
+
+        $this->assertSame(
+            "<script>// it's fine\nvar a = \"hi\";</script>",
+            self::render('ctx_js_line', ['v' => 'hi']),
         );
     }
 

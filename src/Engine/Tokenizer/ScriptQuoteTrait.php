@@ -3,43 +3,36 @@
 namespace Clarity\Engine\Tokenizer;
 
 /**
- * Decides whether an output expression sits inside a JavaScript string literal.
+ * Validates that a script interpolation is inside a string literal.
  *
- * Only relevant in `js` context, where an interpolation is normally escaped with
- * `json_encode()` — a COMPLETE JS literal, quotes included. That form is correct
- * between tokens (`var x = {{ value }};`) but produces a syntax error in the
- * quoted position authors naturally write (`var x = "{{ value }}";`, which used to
- * render `var x = ""v"";`). Because a syntax error discards the whole
- * `<script>` block, the engine has to know which of the two positions it is in.
+ * `js` context emits escaped string CONTENT, so the template is required to
+ * supply the quotes: `var name = "{{ user.name }}";`. There is no second form.
  *
- * This is a heuristic, not a JavaScript lexer. Getting it wrong is expensive in
- * BOTH directions, so it is conservative about *opening* a string:
+ * This trait exists only to catch the unquoted form at COMPILE time and point at
+ * the fix. It never chooses how a value is rendered, which is why its judgement
+ * cannot change output — the worst it can do is reject a template that would
+ * have worked.
  *
- *   - Wrongly "outside" a real string emits `""v""` — a syntax error that kills
- *     the whole block.
- *   - Wrongly "inside" a bare position drops the quotes, so `{{ v }}` renders
- *     `hello world` instead of `"hello world"` — also a syntax error, and for
- *     every string value rather than only the quoted form.
- *
- * The central rule is that `"` or `'` only OPENS a string when the surrounding
- * code could legally begin one: after an operator or an opening bracket, or
- * after a keyword such as `return`. A quote anywhere else is an ordinary
- * character. That single test makes a stray apostrophe in prose behave without
- * needing to understand comments, regular expressions or template literals:
+ * A quote OPENS a string only when the surrounding code could legally begin one:
+ * after an operator or an opening bracket, at the start of a statement, or after
+ * a keyword such as `return`. A quote anywhere else is an ordinary character,
+ * which is what keeps prose out of the way without needing to understand
+ * comments, regular expressions or template literals:
  *
  *   // don't touch        -> `don` is not a keyword   -> not a string
- *   /* don't *\/          -> same
- *   `it's`                -> `it` is not a keyword    -> not a string
- *   /"/.test(x)           -> `/` cannot open a string -> not a string
+ *   `it's`               -> `it` is not a keyword    -> not a string
+ *   /"/.test(x)          -> `/` cannot open a string -> not a string
  *
- * Known limits. Both only misjudge the remainder of ONE line, because a raw line
- * break cannot occur inside a JS string literal:
+ * Known false rejects, both affecting only ONE line because a raw line break
+ * cannot occur inside a JS string literal:
  *
- *   - A regex literal directly after `(` that contains a quote, e.g.
- *     `x.replace(/'/g, …)`. That `'` is accepted as an opening delimiter, so the
- *     rest of the line looks quoted.
- *   - A string whose opening quote is preceded by something outside the accepted
- *     set (see {@see SCRIPT_STRING_OPENERS} for what is deliberately excluded).
+ *   - a regex literal containing a quote directly after `(`, as in
+ *     `'{{ x }}'.match(/'/)` or `x.replace(/'/g, '…')`;
+ *   - a string whose opening quote is preceded by something outside the accepted
+ *     set (see {@see SCRIPT_STRING_OPENERS}).
+ *
+ * Both are worked around by moving the expression to its own line, or by using
+ * `| raw` for a JSON payload, which bypasses this check entirely.
  */
 trait ScriptQuoteTrait
 {
@@ -87,9 +80,9 @@ trait ScriptQuoteTrait
     /**
      * Whether the expression being compiled sits inside a string literal.
      *
-     * There is no useful distinction between "just after the opening quote" and
-     * "mid-literal": both need the delimiters suppressed, and the engine cannot
-     * safely do anything smarter mid-string anyway.
+     * Used to ACCEPT or REJECT the template, never to choose an output form. An
+     * unquoted interpolation is a compile error rather than a different escaping
+     * strategy, so a misjudged line produces a build failure, not wrong output.
      */
     private function currentScriptQuoteInside(): bool
     {
