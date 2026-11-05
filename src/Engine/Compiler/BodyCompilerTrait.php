@@ -18,12 +18,21 @@ trait BodyCompilerTrait
     /**
      * Compile a (already-merged) template source to PHP render-body code.
      *
+     * The tokenizer outlives a single compilation — the compiler is reused — so
+     * the script-position scan is reset here, at the one top-level entry point.
+     * Without it a template ending inside `<script>` would make the next
+     * template's first interpolation look like it sits in a script. Inlined
+     * includes and macros deliberately do NOT reset: they continue the body they
+     * are spliced into, exactly as the escaping context already does.
+     *
      * @param string $source     Merged template source.
      * @param string $sourcePath Absolute path (for error reporting and source-map file tagging).
      * @return string PHP statements that form the body of render().
      */
     private function compileSource(string $source, string $sourcePath): string
     {
+        $this->tokenizer->resetEscapeScan();
+
         $lines = [];
         $this->compileSourceInto($source, $sourcePath, $lines);
         return implode("\n", $lines);

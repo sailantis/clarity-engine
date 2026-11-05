@@ -995,6 +995,95 @@ class RenderingTest extends BaseTestCase
         );
     }
 
+    /**
+     * A quote inside a comment or a regex literal must not be mistaken for an
+     * opening string delimiter.
+     *
+     * This is the security-relevant direction of the check. A phantom string
+     * opened here swallows the rest of the line, so an UNQUOTED tag looks quoted
+     * and is accepted — and its value is then emitted as bare JavaScript. A stray
+     * quote in a comment would turn a template author's mistake into script
+     * injection from data the template does not control.
+     *
+     * @dataProvider provideQuotesThatMustNotOpenAString
+     */
+    public function testJsContextRejectsABareTagAfterAQuoteThatIsNotADelimiter(
+        string $name,
+        string $template,
+    ): void {
+        self::tpl('ctx_js_phantom_' . $name, $template);
+
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/An unquoted output tag is not valid JavaScript/');
+
+        self::render('ctx_js_phantom_' . $name, ['v' => '1; alert(1)']);
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function provideQuotesThatMustNotOpenAString(): array
+    {
+        return [
+            // One quote, closed never: the old quote-counting scan kept the string
+            // open to the end of the line.
+            'odd quote in a block comment' => [
+                'block_comment',
+                "<script>/* ' */ var x = {{ v }};</script>",
+            ],
+            'odd quote in a regex class'   => [
+                'regex_class',
+                "<script>var r = /['/]; var x = {{ v }};</script>",
+            ],
+            'odd quote in a line comment'  => [
+                'line_comment',
+                "<script>// ('\nvar x = {{ v }};</script>",
+            ],
+        ];
+    }
+
+    /**
+     * The scan must know where `<script>` begins and ends by itself. Trusting the
+     * compiler's escaping context was not enough: the context only changes when
+     * the LAST boundary in a segment differs from the current one, so
+     * `</script><script>` inside a single segment leaves it unchanged and no reset
+     * happens. A string left open before the `</script>` then made a bare tag in
+     * the next script look quoted — exactly the false accept this check exists to
+     * prevent.
+     */
+    public function testJsContextFollowsScriptBoundariesWithinOneSegment(): void
+    {
+        self::tpl(
+            'ctx_js_boundary',
+            '<script>var a = "x;</script><script>var b = {{ v }};</script>',
+        );
+
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches('/An unquoted output tag is not valid JavaScript/');
+
+        self::render('ctx_js_boundary', ['v' => '1; alert(1)']);
+    }
+
+    /**
+     * A template that ends inside `<script>` must not affect the next template:
+     * the compiler and its tokenizer are reused across compilations.
+     */
+    public function testJsContextScriptPositionDoesNotLeakBetweenTemplates(): void
+    {
+        self::tpl('ctx_js_leak_src', '<script>var a = "{{ v }}";</script>');
+
+        $this->assertSame(
+            '<script>var a = "hi";</script>',
+            self::render('ctx_js_leak_src', ['v' => 'hi']),
+        );
+
+        // Compiled after a template that finished inside a script, so a naive
+        // "sticky" scan would treat this markup tag as script text.
+        self::tpl('ctx_js_leak_dst', '<p>{{ v }}</p>');
+
+        $this->assertSame('<p>hi</p>', self::render('ctx_js_leak_dst', ['v' => 'hi']));
+    }
+
     public function testCssContextRaw(): void
     {
         self::tpl('ctx_css', '<style>body { color: {{ color }}; }</style>');

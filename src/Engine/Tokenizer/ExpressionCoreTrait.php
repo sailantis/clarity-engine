@@ -30,15 +30,26 @@ trait ExpressionCoreTrait
     }
 
     /**
-     * Advance the script quote state over a template TEXT segment.
+     * Advance the script-position state over a template TEXT segment.
      *
-     * The Compiler calls this for every text segment in `js` context, in source
-     * order, with the RAW text. Skipping a segment — or passing trimmed text —
-     * would misjudge whether the next expression sits inside a string literal.
+     * The Compiler calls this for every text segment, in source order, with the
+     * RAW text — before the post-tag line-break rule, because trimming a newline
+     * would change the answer. It tracks the `<script>` boundaries itself rather
+     * than trusting the escaping context, so a segment that both opens and closes
+     * a script cannot leave the two out of step.
      */
     public function advanceEscapeScan(string $text): void
     {
         $this->advanceScriptQuoteState($text);
+    }
+
+    /**
+     * Forget the script-position scan. Called once per compiled body, because the
+     * tokenizer is reused across templates.
+     */
+    public function resetEscapeScan(): void
+    {
+        $this->resetScriptQuoteState();
     }
 
     /**

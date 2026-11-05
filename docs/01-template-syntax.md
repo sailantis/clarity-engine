@@ -1153,7 +1153,9 @@ use an annotation to override the detected mode:
 
 ```twig
 {# @context js #}
-  var userData = {{ user |> json }};   {# JSON-encodes and hex-escapes for JS safety #}
+  var userData = '{{ user |> json }}';                        {# escaped string content …
+                                                                 the quotes come from you #}
+  var config   = JSON.parse('{{ config |> json |> raw }}');   {# valid JSON as an object #}
 {# @context html #}
   <p>{{ message }}</p>                 {# Back to standard HTML escaping #}
 ```
@@ -1211,27 +1213,33 @@ var config = {{ config |> raw }};                   {# already valid JSON #}
 time. `raw` keeps that universal meaning of "verbatim, no escaping" in every
 context, which is why it is the JSON escape hatch.
 
-What the compile check tolerates — a quote only opens a string where JavaScript
-could legally begin one (after an operator or bracket, at the start of a
-statement, or after a keyword such as `return`), so these are all fine:
+What the compile check tolerates — the scan reads JavaScript's own comments and
+regular expressions, so a quote in prose is never mistaken for a delimiter:
 
 ```twig
 <script>
-// don't touch this: "{{ value }}"      {# apostrophe in a comment #}
+// don't touch this: "{{ value }}"      {# apostrophe in a line comment #}
 var t = `it's "{{ value }}"`;           {# apostrophe in backticks #}
 var re = /"/; var a = "{{ value }}";    {# quote in a regex literal #}
+var d = a / 2; var s = "{{ value }}";   {# division, not a regex #}
 </script>
 ```
+
+A tag is accepted inside a string literal or a comment — both are inert, because
+the value is escaped string content that cannot close the construct it sits in.
+A tag in code position, or inside a regular expression literal, is rejected: that
+is where a value could become code.
 
 Two known false rejects, both confined to one line because a raw line break
 cannot occur inside a JS string literal:
 
-- a regex literal containing a quote **directly after `(`**, as in
-  `x.replace(/'/g, '…')` or `'{{ x }}'.match(/'/)`;
-- a string whose opening quote follows something outside the accepted set.
+- a tag between backticks: template literals (`${…}`) are not tracked, so
+  `` `{{ value }}` `` is rejected. Use a normal string instead;
+- a comment opener split across two text segments (a `/` ending one segment and a
+  `*` starting the next). Move the expression and the check passes.
 
-Move the expression to its own line and the check passes. Template literals are
-not tracked at all: `${…}` is JavaScript's own interpolation, not Clarity's.
+The scan is deliberately fail-safe: a wrong guess can only reject a template that
+would have worked, never emit a bare value into a script.
 
 ## Complex Examples
 
