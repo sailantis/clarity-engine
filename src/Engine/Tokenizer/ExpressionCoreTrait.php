@@ -94,20 +94,15 @@ trait ExpressionCoreTrait
     /**
      * Escape an expression for `js` context.
      *
-     * A script interpolation is ALWAYS escaped string content, and the template
-     * is required to supply the quotes itself:
+     * Two output forms, selected by where the tag sits:
      *
-     *     var name = "{{ user.name }}";     ->  var name = "Ada";
+     *     var name = "{{ user.name }}";   ->  var name = "Ada";
+     *     var obj  = {{ user }};          ->  var obj  = {"name":"Ada"};
      *
-     * There is no second form and no context detection. That is deliberate. Any
-     * rule that varies the output with the position has to infer JavaScript
-     * lexical state from template text, and a misjudgement silently changes what
-     * is rendered — which is how `var tiers = {{ tiers }};` ended up as invalid
-     * JavaScript that no editor would accept.
-     *
-     * Here the position only VALIDATES: an unquoted interpolation is a compile
-     * error with a message pointing at the fix. So a misjudged line can only
-     * produce a loud build failure, never wrong output.
+     * The template supplies the quotes when it wants a string; an unquoted tag is
+     * a complete JSON literal, so `{{ n }}` renders `3` and `{{ tiers }}` renders
+     * `[1,2]`. See {@see ScriptQuoteTrait} for why the position decides, and for
+     * the two positions that are rejected rather than guessed at.
      */
     private function jsContextExpression(string $phpExpr): string
     {
@@ -119,18 +114,27 @@ trait ExpressionCoreTrait
             return '\\json_encode(' . $phpExpr . ', 271)';
         }
 
-        if (!$this->currentScriptQuoteInside()) {
-            throw new ClarityException(
-                'An unquoted output tag is not valid JavaScript. Put the quotes in the'
-                . ' template: "{{ value }}". For a JSON payload such as an array or an'
-                . " object, use JSON.parse('{{ value |> json |> raw }}').",
-            );
-        }
+        return match ($this->scriptInterpolationPosition()) {
+            // `(string)` is load-bearing: `json_encode(12)` is `12` with no
+            // quotes, so stripping the outer quotes without the cast would delete
+            // the digits.
+            ScriptInterpolationPosition::StringContent =>
+                '\\substr(\\json_encode((string) (' . $phpExpr . '), 271), 1, -1)',
 
-        // A `raw` payload is never escaped, so it is the one form that may appear
-        // unquoted — that is the JSON escape hatch:
-        //   var tiers = JSON.parse('{{ tiers |> raw }}');
-        return '\\substr(\\json_encode((string) (' . $phpExpr . '), 271), 1, -1)';
+            ScriptInterpolationPosition::Code =>
+                '\\json_encode(' . $phpExpr . ', 271)',
+
+            ScriptInterpolationPosition::RegexLiteral => throw new ClarityException(
+                'An output tag cannot be used inside a JavaScript regular expression.'
+                . ' Move it out of the /…/ literal.',
+            ),
+
+            ScriptInterpolationPosition::TemplateLiteral => throw new ClarityException(
+                'An output tag cannot be used directly inside a JavaScript template'
+                . ' literal, because neither output form escapes a backtick or ${.'
+                . ' Put it in a normal quoted string, or inside ${ … }.',
+            ),
+        };
     }
 
     /**

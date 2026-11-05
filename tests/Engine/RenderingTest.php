@@ -807,41 +807,68 @@ class RenderingTest extends BaseTestCase
         );
     }
 
-    public function testJsContextRejectsAnUnquotedOutputTag(): void
+    /**
+     * An unquoted tag sits in a value position, so it is emitted as a complete
+     * JSON literal. A string value therefore arrives already quoted — `{{ name }}`
+     * renders `"Ada"` — which is what makes `var x = {{ name }};` valid JavaScript.
+     */
+    public function testJsContextEmitsAJsonLiteralForAnUnquotedTag(): void
     {
         self::tpl('ctx_js_bare', '<script>var x = {{ name }};</script>');
 
-        $this->expectException(ClarityException::class);
-        $this->expectExceptionMessageMatches('/An unquoted output tag is not valid JavaScript/');
-
-        self::render('ctx_js_bare', ['name' => 'Ada']);
-    }
-
-    public function testJsContextRejectsAnUnquotedJsonPayload(): void
-    {
-        self::tpl('ctx_js_bare_arr', '<script>var x = {{ items }};</script>');
-
-        $this->expectException(ClarityException::class);
-        $this->expectExceptionMessageMatches('/JSON\.parse/');
-
-        self::render('ctx_js_bare_arr', ['items' => ['a', 'b']]);
+        $this->assertSame(
+            '<script>var x = "Ada";</script>',
+            self::render('ctx_js_bare', ['name' => 'Ada']),
+        );
     }
 
     /**
-     * The compile error must name the file and line, because its whole purpose is
-     * to point an author at the offending tag.
+     * A number and a boolean need no coercion: `json_encode(3)` is `3` and
+     * `json_encode(true)` is `true`, which is the case the one-form contract made
+     * awkward and the reason this second form exists.
      */
-    public function testJsContextRejectionCarriesTheTemplateLocation(): void
+    public function testJsContextUnquotedTagPreservesJsonTypes(): void
     {
-        self::tpl('ctx_js_located', "<script>\nvar ok = \"x\";\nvar bad = {{ name }};\n</script>");
+        self::tpl(
+            'ctx_js_types',
+            '<script>var n = {{ n }}; var b = {{ flag }}; var z = {{ none }};</script>',
+        );
 
-        try {
-            self::render('ctx_js_located', ['name' => 'Ada']);
-            $this->fail('an unquoted output tag must not compile');
-        } catch (ClarityException $e) {
-            $this->assertStringContainsString('ctx_js_located', $e->templateName . $e->templatePath);
-            $this->assertSame(3, $e->templateLine);
-        }
+        $this->assertSame(
+            '<script>var n = 3; var b = true; var z = null;</script>',
+            self::render('ctx_js_types', ['n' => 3, 'flag' => true, 'none' => null]),
+        );
+    }
+
+    public function testJsContextEmitsAJsonLiteralForAnUnquotedPayload(): void
+    {
+        self::tpl('ctx_js_bare_arr', '<script>var x = {{ items }};</script>');
+
+        $this->assertSame(
+            '<script>var x = ["a","b"];</script>',
+            self::render('ctx_js_bare_arr', ['items' => ['a', 'b']]),
+        );
+    }
+
+    /**
+     * A string containing quotes and angle brackets must survive both forms — the
+     * JSON literal because it is JSON, and a quoted tag because the content is
+     * hex-escaped. Both hex-escape, so the two forms agree on a string value; they
+     * differ only in whether the surrounding quotes are part of the output.
+     */
+    public function testJsContextBothFormsEscapeTheSameValue(): void
+    {
+        self::tpl(
+            'ctx_js_both_forms',
+            '<script>var a = {{ v }}; var b = "{{ v }}";</script>',
+        );
+
+        $escaped = 'O\u0027Reilly \u0022x\u0022 \u003C\/script\u003E';
+
+        $this->assertSame(
+            '<script>var a = "' . $escaped . '"; var b = "' . $escaped . '";</script>',
+            self::render('ctx_js_both_forms', ['v' => 'O\'Reilly "x" </script>']),
+        );
     }
 
     /**
@@ -1000,23 +1027,34 @@ class RenderingTest extends BaseTestCase
      * opening string delimiter.
      *
      * This is the security-relevant direction of the check. A phantom string
-     * opened here swallows the rest of the line, so an UNQUOTED tag looks quoted
-     * and is accepted — and its value is then emitted as bare JavaScript. A stray
-     * quote in a comment would turn a template author's mistake into script
-     * injection from data the template does not control.
+     * opened here swallows the rest of the line, so an unquoted tag is read as
+     * quoted and its value is emitted as bare content — a stray quote in a
+     * comment would turn a template author's mistake into script injection from
+     * data the template does not control.
+     *
+     * The assertion is on the OUTCOME, not on the form: the payload must arrive as
+     * an inert string and must never appear as executable code.
      *
      * @dataProvider provideQuotesThatMustNotOpenAString
      */
-    public function testJsContextRejectsABareTagAfterAQuoteThatIsNotADelimiter(
+    public function testJsContextNeverEmitsAValueAsCodeAfterAQuoteInACommentOrRegex(
         string $name,
         string $template,
     ): void {
         self::tpl('ctx_js_phantom_' . $name, $template);
 
-        $this->expectException(ClarityException::class);
-        $this->expectExceptionMessageMatches('/An unquoted output tag is not valid JavaScript/');
+        $out = self::render('ctx_js_phantom_' . $name, ['v' => ';alert(1);']);
 
-        self::render('ctx_js_phantom_' . $name, ['v' => '1; alert(1)']);
+        $this->assertStringNotContainsString(
+            'x = ;alert(1);',
+            $out,
+            'the payload must not be spliced in as bare code',
+        );
+        $this->assertStringContainsString(
+            'x = ";alert(1);";',
+            $out,
+            'the payload must arrive as a quoted, inert JSON string',
+        );
     }
 
     /**
@@ -1025,15 +1063,15 @@ class RenderingTest extends BaseTestCase
     public static function provideQuotesThatMustNotOpenAString(): array
     {
         return [
-            // One quote, closed never: the old quote-counting scan kept the string
-            // open to the end of the line.
+            // One quote, closed never: a quote-counting scan keeps the string open
+            // to the end of the line.
             'odd quote in a block comment' => [
                 'block_comment',
                 "<script>/* ' */ var x = {{ v }};</script>",
             ],
             'odd quote in a regex class'   => [
                 'regex_class',
-                "<script>var r = /['/]; var x = {{ v }};</script>",
+                "<script>var r = /['/]/; var x = {{ v }};</script>",
             ],
             'odd quote in a line comment'  => [
                 'line_comment',
@@ -1047,9 +1085,8 @@ class RenderingTest extends BaseTestCase
      * compiler's escaping context was not enough: the context only changes when
      * the LAST boundary in a segment differs from the current one, so
      * `</script><script>` inside a single segment leaves it unchanged and no reset
-     * happens. A string left open before the `</script>` then made a bare tag in
-     * the next script look quoted — exactly the false accept this check exists to
-     * prevent.
+     * happens. A string left open before the `</script>` then made the tag in the
+     * next script read as string content — so the value was emitted bare.
      */
     public function testJsContextFollowsScriptBoundariesWithinOneSegment(): void
     {
@@ -1058,10 +1095,80 @@ class RenderingTest extends BaseTestCase
             '<script>var a = "x;</script><script>var b = {{ v }};</script>',
         );
 
-        $this->expectException(ClarityException::class);
-        $this->expectExceptionMessageMatches('/An unquoted output tag is not valid JavaScript/');
+        $this->assertSame(
+            '<script>var a = "x;</script><script>var b = ";alert(1);";</script>',
+            self::render('ctx_js_boundary', ['v' => ';alert(1);']),
+        );
+    }
 
-        self::render('ctx_js_boundary', ['v' => '1; alert(1)']);
+    /**
+     * A tag inside a regular expression or a template literal has no sane output
+     * form, so both are rejected — and the error points at the template.
+     *
+     * @dataProvider provideScriptPositionsWithoutAnOutputForm
+     */
+    public function testJsContextRejectsPositionsWithoutAnOutputForm(
+        string $name,
+        string $template,
+        string $expectedMessage,
+    ): void {
+        self::tpl('ctx_js_noform_' . $name, $template);
+
+        $this->expectException(ClarityException::class);
+        $this->expectExceptionMessageMatches($expectedMessage);
+
+        self::render('ctx_js_noform_' . $name, ['v' => 'x']);
+    }
+
+    /**
+     * @return array<string, array{string, string, string}>
+     */
+    public static function provideScriptPositionsWithoutAnOutputForm(): array
+    {
+        return [
+            'inside a regex literal'      => [
+                'regex',
+                '<script>var r = /{{ v }}/;</script>',
+                '/cannot be used inside a JavaScript regular expression/',
+            ],
+            'inside a template literal'   => [
+                'template',
+                '<script>var t = `{{ v }}`;</script>',
+                '/cannot be used directly inside a JavaScript template\s+literal/',
+            ],
+        ];
+    }
+
+    /**
+     * `${ … }` returns to ordinary JavaScript, so a tag there is a value again and
+     * takes the JSON-literal form. A template literal's text is also opaque, so the
+     * quotes, braces and `//` in it cannot confuse the scan.
+     */
+    public function testJsContextAllowsATagInsideATemplateLiteralExpression(): void
+    {
+        self::tpl(
+            'ctx_js_tpl_expr',
+            '<script>var t = `a ${ {{ n }} } b`; var u = `x // " \' { } ${ {{ n }} }`;</script>',
+        );
+
+        $this->assertSame(
+            '<script>var t = `a ${ 3 } b`; var u = `x // " \' { } ${ 3 }`;</script>',
+            self::render('ctx_js_tpl_expr', ['n' => 3]),
+        );
+    }
+
+    /**
+     * An unquoted tag in a line comment keeps the string-content form: a comment is
+     * inert, so either form is safe and changing it would only churn output.
+     */
+    public function testJsContextTreatsACommentAsInert(): void
+    {
+        self::tpl('ctx_js_cmt_form', "<script>// note: {{ v }}\nvar a = {{ v }};</script>");
+
+        $this->assertSame(
+            "<script>// note: hi\nvar a = \"hi\";</script>",
+            self::render('ctx_js_cmt_form', ['v' => 'hi']),
+        );
     }
 
     /**

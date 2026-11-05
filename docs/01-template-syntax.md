@@ -1165,57 +1165,89 @@ Available contexts:
 | Context | Escaping applied to output expressions                        |
 | ------- | ------------------------------------------------------------- |
 | `html`  | `htmlspecialchars()` (default)                                |
-| `js`    | escaped string content, for use inside quotes the template supplies; unquoted is a compile error |
+| `js`    | quoted tag → escaped string content; unquoted tag → complete JSON literal |
 | `css`   | Cast to `(string)` — no HTML escaping                         |
 
 > **Tip:** Clarity automatically switches context when it encounters `<script>` or `<style>` tags in the template. Use `{# @context … #}` when the auto-detection isn't sufficient (e.g. inside a string literal that contains a tag-like pattern).
 
-#### Inside `<script>`: always quote the interpolation
+#### Inside `<script>`: two forms, chosen by the position
 
-A script interpolation is always **escaped string content**, and the template
-supplies the quotes:
+A script interpolation has two output forms, and where the tag sits selects
+between them:
 
 ```twig
 <script>
-var name = "{{ user.name }}";   {# -> var name = "Ada";   #}
+var name = "{{ user.name }}";   {# -> var name = "Ada";          string content #}
+var obj  = {{ user }};          {# -> var obj  = {"name":"Ada"};  JSON literal   #}
+</script>
+```
+
+**Quoted** — you write the quotes, and the value arrives as escaped *content*:
+
+```twig
+<script>
 var id   = '{{ user.id }}';     {# -> var id   = '7';     #}
+var text = "hi {{ user.name }}";{# -> var text = "hi Ada"; #}
 </script>
 ```
 
-There is exactly one output form. An unquoted tag is a **compile error**, not a
-different escaping strategy:
+**Unquoted** — the value is a complete JSON literal, so strings arrive already
+quoted and numbers, booleans and arrays stay themselves:
 
 ```twig
 <script>
-var name = {{ user.name }};     {# ClarityException: not valid JavaScript #}
+var seats  = {{ license.seats }};    {# -> var seats  = 3;          #}
+var paid   = {{ order.paid }};       {# -> var paid   = true;       #}
+var tiers  = {{ tiers }};            {# -> var tiers  = [1,2,3];    #}
+var config = {{ config }};           {# -> var config = {"a":1};    #}
 </script>
 ```
 
-That error is deliberate. The alternative — inferring JavaScript lexical state
-from template text so that quoted and unquoted positions render differently —
-means a misjudged quote changes what is rendered, silently. And the unquoted form
-is not valid JavaScript anyway, so no editor or linter will accept it. With one
-form, the quote position can only *reject* a template; it can never change the
-output.
+No coercion is needed in either direction: `Number(…)`, `=== '1'` and
+`JSON.parse(…)` are no longer required, though `JSON.parse('{{ x |> json |> raw }}')`
+still works if you prefer it.
 
-Everything non-string is coerced where the template says so:
+##### The risk, stated plainly
+
+Choosing between two forms means the choice can be wrong, and a wrong choice
+changes what is rendered. That is the price of allowing both forms; it was taken
+because an unquoted tag is the natural way to write a number or a JSON payload.
+
+What keeps it safe is that a misjudgement fails **loudly**, never silently:
+
+| Misjudgement | Output | Result |
+| --- | --- | --- |
+| quoted tag read as code | `var x = {{ v }};` → `var x = "Ada";` inside your `"…"` | `""Ada""` — JS syntax error |
+| code tag read as string | `var x = {{ n }};` → `var x = 3;` inside a string position | escaped content, still a valid literal |
+| a number, either way | `3` and the content of `3` are both `3` | identical, by design |
+
+And measured, not assumed: across 72 combinations of both forms and hostile values
+(quotes, backticks, `${…}`, `</script>`, newlines, NUL bytes, BOM, emoji) every
+rendered script is valid JavaScript, and no value containing `;alert(1)` became
+code — in either form, and with comments, regex literals and template literals
+before it.
+
+##### Positions that are rejected
+
+A tag inside a regular expression or directly inside a template literal has no
+sane output form, so both are a compile error:
 
 ```twig
 <script>
-var seats  = Number('{{ license.seats }}');
-var paid   = ('{{ order.paid }}' === '1');          {# PHP renders true as 1 #}
-var tiers  = JSON.parse('{{ tiers |> json |> raw }}');
-var config = {{ config |> json |> raw }};            {# valid JSON, unquoted on purpose #}
+var r = /{{ v }}/;      {# ClarityException — not meaningful in a pattern #}
+var t = `{{ v }}`;      {# ClarityException — use "{{ v }}" or ${ {{ v }} } #}
+var ok = `${ {{ v }} }`;{# fine: back inside JavaScript, so JSON literal #}
 </script>
 ```
 
-`| json` encodes the value; `| raw` stops the result being escaped a second
-time. `raw` keeps that universal meaning of "verbatim, no escaping" in every
-context, which is why it is the JSON escape hatch — and why an unquoted
-`{{ … |> json |> raw }}` is allowed: it bypasses the check entirely.
+`raw` keeps its universal meaning (verbatim, no escaping) in every context, which
+is what lets it bypass all of the above: `{{ x |> json |> raw }}` is emitted
+untouched, quoted or not.
 
-What the compile check tolerates — the scan reads JavaScript's own comments and
-regular expressions, so a quote in prose is never mistaken for a delimiter:
+##### What the scan understands
+
+The scanner reads JavaScript's own comments, regular expressions and template
+literals, so a quote in prose is never mistaken for a delimiter:
 
 ```twig
 <script>
@@ -1226,16 +1258,10 @@ var d = a / 2; var s = "{{ value }}";  {# division, not a regex #}
 </script>
 ```
 
-A tag is accepted inside a string literal or a comment — both are inert, because
-the value is escaped string content that cannot close the construct it sits in.
-A tag in code position, or inside a regular expression literal, is rejected: that
-is where a value could become code.
+Two known limits, both confined to one line because a raw line break cannot occur
+inside a JS string literal:
 
-Two known false rejects, both confined to one line because a raw line break
-cannot occur inside a JS string literal:
-
-- a tag between backticks: template literals (`${…}`) are not tracked, so
-  `` `{{ value }}` `` is rejected. Use a normal string instead;
+- `` `{{ value }}` `` — a tag in template-literal text is rejected (see above);
 - a comment opener split across two text segments (a `/` ending one segment and a
   `*` starting the next). Move the expression and the check passes.
 

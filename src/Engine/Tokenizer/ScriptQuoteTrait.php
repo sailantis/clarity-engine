@@ -3,50 +3,66 @@
 namespace Clarity\Engine\Tokenizer;
 
 /**
- * Validates where a script interpolation sits, so an unquoted one is caught at
- * compile time.
+ * Decides how a script interpolation is emitted, from where it sits.
  *
- * `js` context emits escaped string CONTENT, so the template supplies the quotes:
- * `var name = "{{ user.name }}";`. There is no second form — see
- * {@see ExpressionCoreTrait::jsContextExpression()} for why.
+ * `js` context has two output forms, and the position selects between them:
  *
- * This trait never chooses how a value is rendered, only whether a tag is
- * allowed to compile. Its judgement therefore cannot change output: the worst a
- * misjudgement can do is reject a template that would have worked.
+ *     var name = "{{ user.name }}";   ->  var name = "Ada";        (string content)
+ *     var obj  = {{ user }};          ->  var obj  = {"name":"Ada"}; (JSON literal)
+ *
+ * The template supplies the quotes when it wants a string; an unquoted tag is a
+ * complete JSON literal, so `{{ n }}` renders `3` and `{{ tiers }}` renders
+ * `[1,2]`.
+ *
+ * ## Why this trait exists
+ *
+ * Choosing between two forms means the choice can be WRONG, and a wrong choice
+ * changes what is rendered. That is the risk this file is entirely about. It was
+ * taken deliberately, after seeing that a bare `{{ x }}` is the form people
+ * naturally write and that rejecting it forced a workaround for every number,
+ * boolean and JSON payload.
+ *
+ * The mitigation is that a misjudgement must fail loudly:
+ *
+ *   - wrong in the code-position direction (a quoted tag read as code) emits a
+ *     JSON literal, which for a string value is a double quote — a JavaScript
+ *     syntax error on that line;
+ *   - wrong in the string direction (a code tag read as quoted) emits escaped
+ *     string content, which for a string value is a bare identifier or a
+ *     ReferenceError.
+ *
+ * Neither silently produces a different-but-valid value, and the numbers case
+ * coincides on purpose: `json_encode(12)` and the string content of `12` are both
+ * `12`.
  *
  * ## Why the scan lexes instead of counting quotes
  *
  * Counting quotes would be enough if JavaScript had no comments or regular
- * expressions, and it is exactly how an unquoted tag could get accepted. One
- * quote in the wrong place opens a phantom string that swallows the rest of the
- * line:
+ * expressions. One quote in the wrong place opens a phantom string that swallows
+ * the rest of the line:
  *
  *     <script>/* ' *\/ var x = {{ v }};</script>
  *     <script>var r = /'[/; var x = {{ v }};</script>
  *
- * The tag then looked quoted, and its value was emitted as bare JavaScript — a
- * template author's slip turned into script injection from data the template did
- * not control. Comments and regular expressions are therefore lexed here.
+ * Read as quoted, that emitted the value as bare JavaScript — script injection
+ * from data the template did not control. Comments and regular expressions are
+ * therefore lexed here, so the quote cannot be misread.
  *
- * ## What is accepted
+ * ## States
  *
- * A tag is accepted inside a string literal or a comment, because both are inert:
- * the value is escaped string content that cannot close the construct it sits in.
- * A tag in a regular expression, or in code position, is rejected — that is where
- * a value can become code, and a regex is not a construct the escape rules were
- * designed to fill.
- *
- * ## Fail-safe by construction
- *
- * A lexing mistake leaves the scanner inside a literal or comment. Comments are
- * accepted and regex literals and code are rejected, and a stray quote in code is
- * what the check exists to catch — so guessing wrong lands on "reject" for the
- * cases that matter, never on "emit as bare JavaScript".
+ * | Position              | Emitted           | Why                              |
+ * | --------------------- | ----------------- | -------------------------------- |
+ * | inside `"…"` or `'…'` | escaped content   | cannot close the literal         |
+ * | inside a comment      | escaped content   | inert either way                 |
+ * | code position         | JSON literal      | a literal is valid where a value is expected |
+ * | inside a regex        | **rejected**      | a value inside `/…/` is not meaningful |
+ * | inside a template     | **rejected**      | `` ` `` and `${` are not escaped by either form, so a value containing them would break out or execute |
  *
  * ## Known limitations
  *
- *   - Template literals (`${…}`) are not tracked: a tag between backticks is
- *     rejected. Put it in a normal string.
+ *   - Template literals are tracked opaquely: `${ … }` is not parsed, so a tag
+ *     inside the interpolation of a template literal is rejected too. Use a
+ *     normal string.
  *   - A comment opener split across two text segments (`/` ending one segment,
  *     `*` starting the next) is not recognised; a tag between them is rejected.
  */
@@ -111,6 +127,15 @@ trait ScriptQuoteTrait
      */
     private ?bool $scriptInScript = null;
 
+    /** Inside a `` `…` `` template literal. */
+    private bool $scriptInTemplate = false;
+
+    /** Inside `${ … }` within a template literal. */
+    private bool $scriptInTemplateExpr = false;
+
+    /** Brace depth inside `${ … }`, so a nested `}` cannot end it early. */
+    private int $scriptTemplateExprDepth = 0;
+
     /**
      * Forget everything about the previous template. Called when the escaping
      * context changes, so state cannot leak from one template — or from one
@@ -125,29 +150,57 @@ trait ScriptQuoteTrait
     /** Reset only the lexical state, keeping the `<script>` nesting answer. */
     private function resetScriptLexState(): void
     {
-        $this->scriptQuoteChar       = '';
-        $this->scriptLastSignificant = '';
-        $this->scriptWord            = '';
-        $this->scriptInLineComment   = false;
-        $this->scriptInBlockComment  = false;
-        $this->scriptInRegex         = false;
-        $this->scriptInRegexClass    = false;
+        $this->scriptQuoteChar          = '';
+        $this->scriptLastSignificant    = '';
+        $this->scriptWord               = '';
+        $this->scriptInLineComment      = false;
+        $this->scriptInBlockComment     = false;
+        $this->scriptInRegex            = false;
+        $this->scriptInRegexClass       = false;
+        $this->scriptInTemplate         = false;
+        $this->scriptInTemplateExpr     = false;
+        $this->scriptTemplateExprDepth  = 0;
     }
 
     /**
-     * Whether the expression being compiled sits somewhere a value is inert.
+     * Where the expression being compiled sits, which selects the output form.
      *
-     * Used to ACCEPT or REJECT the template, never to choose an output form.
+     * Deciding this is a real risk — a wrong answer changes what is rendered —
+     * so the enum makes every caller handle each case explicitly rather than
+     * guessing from a boolean.
+     */
+    private function scriptInterpolationPosition(): ScriptInterpolationPosition
+    {
+        if (!$this->scriptInScriptText()) {
+            return ScriptInterpolationPosition::Code;
+        }
+
+        if ($this->scriptQuoteChar !== ''
+            || $this->scriptInLineComment
+            || $this->scriptInBlockComment
+        ) {
+            return ScriptInterpolationPosition::StringContent;
+        }
+
+        if ($this->scriptInRegex) {
+            return ScriptInterpolationPosition::RegexLiteral;
+        }
+
+        // A tag directly in a template literal's text has no output form, but one
+        // inside `${ … }` is a value again and takes the code form.
+        if ($this->scriptInTemplate && !$this->scriptInTemplateExpr) {
+            return ScriptInterpolationPosition::TemplateLiteral;
+        }
+
+        return ScriptInterpolationPosition::Code;
+    }
+
+    /**
+     * Whether the expression being compiled is emitted as string content.
      */
     private function currentScriptQuoteInside(): bool
     {
-        if (!$this->scriptInScriptText()) {
-            return false;
-        }
-
-        return $this->scriptQuoteChar !== ''
-            || $this->scriptInLineComment
-            || $this->scriptInBlockComment;
+        return $this->scriptInterpolationPosition() === ScriptInterpolationPosition::StringContent;
     }
 
     /**
@@ -255,6 +308,46 @@ trait ScriptQuoteTrait
                 continue;
             }
 
+            // A template literal's text is opaque: `//`, `/*`, quotes and braces
+            // mean nothing until a `${ … }` resumes ordinary JavaScript. A
+            // backslash escapes the next character, and only a backtick closes it.
+            if ($this->scriptInTemplate && !$this->scriptInTemplateExpr) {
+                if ($char === '\\') {
+                    $i++;
+                    continue;
+                }
+                if ($char === '`') {
+                    $this->scriptInTemplate      = false;
+                    $this->scriptLastSignificant = '`';
+                    $this->scriptWord            = '';
+                    continue;
+                }
+                if ($char === '$' && $next === '{') {
+                    $this->scriptInTemplateExpr    = true;
+                    $this->scriptTemplateExprDepth = 0;
+                    $i++;
+                }
+                continue;
+            }
+
+            if ($this->scriptInTemplateExpr) {
+                // `${ … }` holds ordinary JavaScript, so the string, comment and
+                // regex rules below apply again. Only the braces are counted, to
+                // find the `}` that ends the interpolation — nested object
+                // literals must not close it early.
+                if ($char === '{') {
+                    $this->scriptTemplateExprDepth++;
+                } elseif ($char === '}') {
+                    if ($this->scriptTemplateExprDepth === 0) {
+                        $this->scriptInTemplateExpr = false;
+                        $this->scriptWord           = '';
+                        $this->scriptLastSignificant = '}';
+                        continue;
+                    }
+                    $this->scriptTemplateExprDepth--;
+                }
+            }
+
             if ($this->scriptInBlockComment) {
                 if ($char === '*' && $next === '/') {
                     $this->scriptInBlockComment  = false;
@@ -321,6 +414,14 @@ trait ScriptQuoteTrait
                     $this->scriptInRegexClass = false;
                     continue;
                 }
+            }
+
+            if ($char === '`' && $this->scriptValueMayStart()) {
+                $this->scriptInTemplate        = true;
+                $this->scriptInTemplateExpr    = false;
+                $this->scriptTemplateExprDepth = 0;
+                $this->scriptWord              = '';
+                continue;
             }
 
             if ($char === '"' || $char === "'") {
