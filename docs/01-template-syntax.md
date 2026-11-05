@@ -1205,13 +1205,14 @@ Everything non-string is coerced where the template says so:
 var seats  = Number('{{ license.seats }}');
 var paid   = ('{{ order.paid }}' === '1');          {# PHP renders true as 1 #}
 var tiers  = JSON.parse('{{ tiers |> json |> raw }}');
-var config = {{ config |> raw }};                   {# already valid JSON #}
+var config = {{ config |> json |> raw }};            {# valid JSON, unquoted on purpose #}
 </script>
 ```
 
 `| json` encodes the value; `| raw` stops the result being escaped a second
 time. `raw` keeps that universal meaning of "verbatim, no escaping" in every
-context, which is why it is the JSON escape hatch.
+context, which is why it is the JSON escape hatch — and why an unquoted
+`{{ … |> json |> raw }}` is allowed: it bypasses the check entirely.
 
 What the compile check tolerates — the scan reads JavaScript's own comments and
 regular expressions, so a quote in prose is never mistaken for a delimiter:
@@ -1219,9 +1220,9 @@ regular expressions, so a quote in prose is never mistaken for a delimiter:
 ```twig
 <script>
 // don't touch this: "{{ value }}"      {# apostrophe in a line comment #}
-var t = `it's "{{ value }}"`;           {# apostrophe in backticks #}
-var re = /"/; var a = "{{ value }}";    {# quote in a regex literal #}
-var d = a / 2; var s = "{{ value }}";   {# division, not a regex #}
+var t = `it's`; var a = "{{ value }}"; {# apostrophe in backticks #}
+var re = /"/; var a = "{{ value }}";   {# quote in a regex literal #}
+var d = a / 2; var s = "{{ value }}";  {# division, not a regex #}
 </script>
 ```
 
