@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **Cached translations are no longer deserialised into arbitrary objects.** A cache hit in
+  `RedisCachingLoader` called `unserialize()` without restrictions, so a poisoned Redis entry
+  could instantiate any class. It now passes `allowed_classes => false`.
+
 ### Added
 
 - **Macro calls accept named arguments**, allowing callers to skip optional parameters:
@@ -24,6 +30,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   are reported by name. Defaults are evaluated at the call site in declaration order,
   so they can use caller variables and earlier parameters. Argument lists use the
   tokenizer's nesting-aware `splitArgumentList()`.
+
+### Changed
+
+- **`js` interpolation reads the quote position** (BREAKING). A quoted interpolation is
+  escaped string content, and the template supplies the quotes; an unquoted one is a
+  complete JSON literal:
+
+  ```twig
+  var name = "{{ user.name }}";   {# -> var name = "Ada";             #}
+  var obj  = {{ user }};          {# -> var obj  = {"name":"Ada"};    #}
+  var n    = {{ n }};             {# -> var n    = 3;                 #}
+  ```
+
+  Previously every `js` interpolation emitted `json_encode($v, 271)` — a complete
+  literal including its own quotes — so the quoted form above produced `""Ada""`.
+  That form now renders correctly, which is why a template that worked can render
+  differently: an unquoted string value is still a quoted JSON string, but a quoted
+  one no longer doubles its quotes.
+
+  A misjudged position now fails loudly instead of silently. Two positions are a
+  compile error, because neither form is meaningful there: inside a regex literal
+  (the value would be spliced into a pattern) and directly inside a template literal
+  (neither form escapes a backtick or `${`). `${ {{ v }} }` still works, since that
+  is ordinary JavaScript again. Template literals are lexed so the distinction is
+  possible.
 
 ### Fixed
 
