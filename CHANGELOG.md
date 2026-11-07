@@ -9,10 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Macro calls accept named arguments.** An argument may name its parameter —
-  `{% call terminal("Install", "cmd", language: "bash") %}` — which binds that
-  parameter wherever it sits in the declaration, so a call can skip a middle
-  optional parameter instead of spelling out the ones before it:
+- **Macro calls accept named arguments**, allowing callers to skip optional parameters:
 
   ```twig
   {% macro terminal(label, command, icon = "fa-terminal", language = "") %}
@@ -22,98 +19,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   {% call terminal("Install", "composer require x", language: "bash") %}
   ```
 
-  The argument rules are the ones every Clarity call already uses: positional
-  arguments must come before named ones, each name must be unique, and an empty
-  argument is refused. Two rules are specific to macros, because a name binds a
-  PARAMETER rather than a PHP parameter:
-
-  - a name that is not a parameter of that macro is refused, so a typo cannot
-    silently fall back to the default;
-  - filling one parameter twice is refused, whether the two ways are
-    positional+positional, positional+named, or named+named.
-
-  A required parameter that neither a positional nor a named argument fills is
-  reported by name (`Macro 'x' is missing required parameter(s): label.`) instead
-  of as a bare argument count, which is the only message a partial binding can
-  usefully carry.
-
-  Defaults still compile at the call site and are bound in DECLARATION order, so
-  `{% macro m(a, b = a ~ "!") %}` works the same whether `b` is omitted or passed
-  by name. The split half of the list grammar is now `Tokenizer::splitArgumentList()`,
-  which the macro binder uses instead of its own comma splitter.
+  Positional arguments must precede named ones; names must be unique and match macro
+  parameters, and empty or duplicate bindings are rejected. Missing required parameters
+  are reported by name. Defaults are evaluated at the call site in declaration order,
+  so they can use caller variables and earlier parameters. Argument lists use the
+  tokenizer's nesting-aware `splitArgumentList()`.
 
 ### Fixed
 
-- **A `{}` literal is no longer split into one argument per entry.** The macro
-  argument splitter tracked only `(` and `[`, so
-  `{% call m({x: 1, y: 2}) %}` was read as two arguments and failed with
-  `expects 1 argument(s), got 2`. It now uses the tokenizer's nesting-aware
-  splitter, which also tracks `{}`, so a map or object literal (nested included)
-  is one argument.
-
-- **Macro parameters may declare a default value.**
-  `{% macro terminal(label, command, icon = "fa-solid fa-terminal") %}` may now
-  be called with the trailing argument omitted, and the default is used:
+- **Macro arguments may contain brace literals.** Nested `{}` are tracked, so a map or
+  object literal is parsed as one argument.
+- **Macro parameters may have defaults**, which callers can omit or override:
 
   ```twig
   {% call terminal("Install", "composer require x") %}
   {% call terminal("Install", "composer require x", "fa-bolt") %}
   ```
 
-  A call that omits a trailing parameter falls back to its default; passing a
-  value overrides it. Optional parameters must come last — a required one after
-  an optional one is refused at compile time, because a call binds positionally
-  and could never omit the optional one before it.
-
-  The default is an ordinary expression, compiled at the CALL SITE rather than
-  at the definition: a macro body is spliced inline and has no scope of its own,
-  so a default reads the caller's variables and the parameters already bound
-  before it (`{% macro m(a, b = a ~ "!") %}` works). Filters and calls work, and
-  a default containing nested parentheses or a quoted comma
-  (`= slice("a,b", 0, 1)`) parses correctly, because the parameter list is now
-  split with the same nesting-aware splitter the argument list uses.
-
-  A definition that is missing its closing `)` no longer swallows the tags after
-  it: the parameter text stops at the first `%}`.
-
-- **Nested object literals.** `(object) { … }` is an object LITERAL, so a brace
-  literal nested in one is another object literal, at any depth:
+  Optional parameters must trail required ones. Defaults are expressions compiled at the
+  call site, so they can use caller variables and earlier parameters; filters, calls,
+  nested parentheses, and quoted commas are supported. A missing closing `)` no longer
+  consumes subsequent tags.
+- **Nested object literals.** `(object) { … }` now casts nested brace literals recursively:
 
   ```twig
   {% set person = (object) { name: "John", address: { city: "Rome" } } %}
-  {{ person.address.city }}   {# Rome #}
+  {{ person.address.city }}
   ```
 
-  Before this, the `object` cast was shallow, so every nesting level needed its
-  own cast — `(object) { address: (object) { city: "Rome" } }` — which is why the
-  documented `Complex Variable Assignment` example threw
-  `Cannot read property "fullName" on array`.
-
-  The reading is LEXICAL, which is what keeps the neighbouring spellings
-  distinct:
-
-  | Spelling                             | Meaning                                |
-  | ------------------------------------ | -------------------------------------- |
-  | `(object) { a: { b: 1 } }`           | object, with `a` an object             |
-  | `{ a: { b: 1 } }`                    | map, with `a` a map — UNCHANGED        |
-  | `{ a: { b: 1 } } \|> object`         | PHP's shallow cast: `a` stays a map    |
-  | `(object) { a: cond ? {b:1} : {} }`  | `a` is a map: the literal is not the value |
-
-  An array element inside an object literal stays a value, because `[` states
-  that its items are values: `(object) { tags: ["a", "b"] }` holds a list.
-
-  `{}` therefore stays an array, which it must: `include(view, {…})`, spread,
-  `merge`, `reverse` and `{% set x:key = … %}` all require one.
-
-### Fixed
-
-- **The docs called a brace literal an "Objects:" literal.** `{ name: "John" }`
-  is a MAP, readable with `:`; the same heading also contradicted the
-  `Variable Access` section of the same file, which correctly said "an ARRAY".
-  `Collection Literals` now separates Arrays, Maps and Object literals, and the
-  `Complex Variable Assignment` example carries the `(object)` cast it needs to
-  run. The mirrored text in the framework's
-  `docs/03b-CLARITY-ENGINE.md` is updated the same way.
+  This cast applies only to brace literals: non-empty `{…}` remains a map, `|> object`
+  remains a shallow PHP cast, and brace literals in ternaries remain maps. Array
+  literals such as `["a", "b"]` remain arrays, and `{}` remains an array for APIs
+  that expect one.
+- **Clarified collection documentation:** brace literals are maps, distinct from arrays
+  and `(object)` literals. Updated the complex assignment example and the mirrored
+  `docs/03b-CLARITY-ENGINE.md` in the framework.
 
 ## [0.3.0] - 2026-10-10
 
