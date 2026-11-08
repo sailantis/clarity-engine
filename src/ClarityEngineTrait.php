@@ -662,30 +662,18 @@ trait ClarityEngineTrait
     }
 
     /**
-     * Set how long a compiled template may be trusted without re-checking the
-     * filesystem — the template analogue of `opcache.revalidate_freq`.
+     * Set how many seconds to reuse a template's freshness verdict.
      *
-     * A warm render revalidates every template's dependencies against the
-     * filesystem before using it, at one `filemtime()` syscall per dependency
-     * (`items.list` extends a layout and includes a partial, so three). That is
-     * what keeps an edited template honest, and it is also why rendering is
-     * more expensive than the compiled body itself.
-     *
-     * With a positive value the verdict is reused for that many seconds, so the
-     * filesystem is consulted at most once per template per window. The
-     * trade-off is stated as a bound rather than left implicit: **an edit to a
-     * template is picked up within this many seconds**, exactly as with OPcache.
-     * The default (2) mirrors OPcache's own default.
+     * The default, 2, mirrors OPcache. Set 0 to check every render; a positive
+     * value bounds how long an edit may remain unseen while reducing filesystem
+     * checks.
      *
      * ```php
      * $engine->setRevalidateFreq(0);   // check on every render
      * $engine->setRevalidateFreq(60);  // a minute of tolerance
      * ```
      *
-     * In-process only: this bounds a single render loop, not a fleet. A
-     * deployment that runs the same engine in several processes still has to
-     * tell them the same value. `clearCache()` and `invalidate()` are never
-     * delayed by it.
+     * Applies per process. `clearCache()` and `invalidate()` take effect immediately.
      *
      * @param int $seconds Seconds to trust a verdict for; 0 checks every render.
      * @return static

@@ -2,62 +2,27 @@
 namespace Clarity\Engine;
 
 /**
- * Read/write cache for Clarity compiled template classes.
+ * Cache for compiled Clarity template classes.
  *
- * Each compiled template is stored as a single `.php` file.  The cache
- * filename is derived deterministically from `md5($templateName)` so lookups
- * never require reading the directory.
+ * Each template is stored in `md5($templateName).php`. Every compile gets a
+ * versioned class name, allowing old and new versions to coexist in long-running
+ * processes. Requiring a compiled file returns its class name.
  *
- * Cache filename : md5($templateName).php
- * Class name     : __Clarity_<md5($templateName)>_<12-char uniqid suffix>   (versioned per compile)
+ * The shared `Cache::$classNames` registry maps template names to loaded classes.
+ * `isFresh()` still checks that the cache file exists.
  *
- * Versioned class names allow multiple compiled versions of the same template
- * to coexist in memory across recompilations — eliminating redeclaration
- * collisions in long-running processes (Swoole, RoadRunner, regular FPM alike).
- *
- * Each compiled file ends with `return '$className';` so that `require`-ing
- * it returns the exact class name without any file re-reading or regex.
- *
- * In-process class name registry
- * --------------------------------
- * `Cache::$classNames` maps templateName → loaded class name for the current
- * process.  This lets warm-path calls to `isFresh()` and `load()` operate
- * from memory (OPcache + static array). `isFresh()` still makes one `is_file()` check first.
- *
- * Compiled class static properties
- * ---------------------------------
- * $dependencies – array<string,int|string>  logicalName => revision
- * $sourceMap    – string  packed ranges; decode with {@see SourceMap::decode()}
- * $compilerVersion – int  Compiler::COMPILER_VERSION that produced the class
+ * Compiled classes define `$dependencies` (logical names to revisions),
+ * `$sourceMap` (packed ranges; see {@see SourceMap::decode()}), and
+ * `$compilerVersion`.
  */
 class Cache
 {
     private string $path;
 
     /**
-     * How long (in seconds) a template's freshness check may be trusted before
-     * the filesystem is consulted again. 0 checks on every render, which is the
-     * default: enabling this changes how quickly an edited template is picked
-     * up, so it is opt-in rather than a silent change.
-     *
-     * This is the template analogue of OPcache's `opcache.revalidate_freq`, and
-     * it exists for the same reason. The check is not free: it costs one
-     * `filemtime()` SYSCALL per dependency, and a template that extends a layout
-     * and includes a partial has three of them. PHP's stat cache holds a single
-     * entry, so the `is_file()` at the top of {@see isFresh()} evicts the
-     * template's entry before the dependency walk begins — every dependency is
-     * a real syscall on every request, and the walk then repeats for each
-     * template in the render chain.
-     *
-     * A positive value bounds how long an edited template can keep rendering
-     * from cache, which is the trade OPcache makes: **an edit is picked up
-     * within this many seconds, never later**. That bound is the whole contract
-     * — the verdict is reused only for a finite window, so no edit can be missed
-     * indefinitely even when it lands in the same clock second as a check
-     * (mtimes have one-second resolution).
-     *
-     * {@see invalidate()} and {@see flush()} clear the timers, so an explicit
-     * invalidation is never delayed by this.
+     * Seconds to reuse a positive freshness verdict before checking the filesystem.
+     * The default, 0, checks on every render; a positive value bounds template
+     * staleness. {@see invalidate()} and {@see flush()} clear verdicts immediately.
      */
     private int $revalidateFreq = 0;
 

@@ -9,37 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **`setRevalidateFreq()` — the template analogue of `opcache.revalidate_freq`.** A warm
-  render used to revalidate every compiled template against the filesystem on every call:
-  one `filemtime()` syscall per dependency. PHP's stat cache holds a single entry, so the
-  `is_file()` that starts `Cache::isFresh()` evicts the template's own entry before the
-  dependency walk begins — every dependency is a real syscall, on every request, for every
-  template in the render chain. A positive value reuses the verdict for that many seconds,
-  which bounds staleness explicitly: **an edit is picked up within that many seconds, never
-  later.** Default is `0` (check every render), so enabling it is opt-in rather than a
-  silent behaviour change. `invalidate()` and `flushCache()` are never delayed by it.
+- **`setRevalidateFreq()`** reuses positive template-freshness verdicts for a configured
+  interval, reducing filesystem checks on warm renders. A positive value bounds how long an
+  edit can remain unseen; the default `0` checks every render. `invalidate()` and
+  `flushCache()` take effect immediately.
 
   ```php
   $engine->setRevalidateFreq(60);   // or via config: new ClarityEngine(['revalidateFreq' => 60])
   ```
 
-  Measured on a page whose template extends a layout and includes a partial (three
-  dependencies): `isFresh()` 3.43 µs → 0.22 µs per template, and the whole page render
-  11.08 µs → 4.37 µs. Throughput of the page under `wrk` at c=96 rose 23.5 k → 24.5 k rps
-  (+4.4 %), interleaved over 5 rounds.
+  On a page with three dependencies, `isFresh()` dropped from 3.43 µs to 0.22 µs per
+  template; render time fell from 11.08 µs to 4.37 µs. At `wrk` concurrency 96, throughput
+  rose from 23.5k to 24.5k rps (+4.4%, five interleaved rounds).
 
 ### Changed
 
-- **`Policy::digest()` is memoized.** The digest is compared against the one baked into
-  every compiled class on every template load, so it is asked for once per template per
-  request, and building it costs a canonical string over every rule and allowlist plus an
-  FNV-1a pass. Every fluent mutator (`allowRule()`, `denyRule()`, `allowFunctions()`,
-  `allowFilters()`, `denyFunctions()`) now clears the memo, so it cannot outlive the state
-  it describes. 1.24 µs → 0.07 µs per load.
-
+- **`Policy::digest()` is memoized**, reducing digest time from 1.24 µs to 0.07 µs per
+  template load. Mutators (`allowRule()`, `denyRule()`, `allowFunctions()`,
+  `allowFilters()`, `denyFunctions()`) clear the memo to prevent stale results.
 
 Installed by `composer require` from this tag. Carries a breaking `js` contract change -- read
-*Changed* below before upgrading.
+_Changed_ below before upgrading.
+
+## [0.4.0] - 2024-11-07
 
 ### Security
 
@@ -105,6 +97,7 @@ Installed by `composer require` from this tag. Carries a breaking `js` contract 
   call site, so they can use caller variables and earlier parameters; filters, calls,
   nested parentheses, and quoted commas are supported. A missing closing `)` no longer
   consumes subsequent tags.
+
 - **Nested object literals.** `(object) { … }` now casts nested brace literals recursively:
 
   ```twig
@@ -116,6 +109,7 @@ Installed by `composer require` from this tag. Carries a breaking `js` contract 
   remains a shallow PHP cast, and brace literals in ternaries remain maps. Array
   literals such as `["a", "b"]` remain arrays, and `{}` remains an array for APIs
   that expect one.
+
 - **Clarified collection documentation:** brace literals are maps, distinct from arrays
   and `(object)` literals. Updated the complex assignment example and the mirrored
   `docs/03b-CLARITY-ENGINE.md` in the framework.
@@ -169,11 +163,11 @@ Installed by `composer require` from this tag. Carries a breaking `js` contract 
   Because the cast name alone decides, three spellings change meaning for a
   template that holds a variable named after a cast type:
 
-  | Template     | Before                        | After                |
-  | ------------ | ----------------------------- | -------------------- |
-  | `(int)(x)`   | a call on the variable `int`  | a cast of the `(x)`  |
-  | `(int)[0]`   | an index into the variable    | a cast of `[0]`      |
-  | `(int)-5`    | the variable `int` minus `5`  | a cast of `-5`       |
+  | Template   | Before                       | After               |
+  | ---------- | ---------------------------- | ------------------- |
+  | `(int)(x)` | a call on the variable `int` | a cast of the `(x)` |
+  | `(int)[0]` | an index into the variable   | a cast of `[0]`     |
+  | `(int)-5`  | the variable `int` minus `5` | a cast of `-5`      |
 
   Every other previously valid reading of `( … )` compiles to the same PHP as
   before: a name that is not one of the six cast types never reaches the rule.
@@ -260,7 +254,7 @@ Installed by `composer require` from this tag. Carries a breaking `js` contract 
   loader. `composer.json` now suggests `ext-redis` beside `ext-intl`, and the
   loaders have tests for the first time
   (`tests/Engine/TranslationLoaderArchitectureTest.php`) — including a pin on the
-  per-lookup behaviour described under *Fixed* below.
+  per-lookup behaviour described under _Fixed_ below.
 
 ### Fixed
 
@@ -313,7 +307,7 @@ Installed by `composer require` from this tag. Carries a breaking `js` contract 
 - **`TranslationModule`'s catalog memoization was dead code, and is gone.**
   `7818c46` ("introduce `ChainTranslationLoader` and `FileTranslationLoader`")
   moved the file reading out of the module and into `FileTranslationLoader`, but
-  only the *reads* of `$this->catalog` came along — the writes stayed behind. The
+  only the _reads_ of `$this->catalog` came along — the writes stayed behind. The
   field was thereafter permanently empty, so its fast path and both `isset()`
   guards were dead branches that always fell through to the loader: a lookup
   consulted the loader every single time. The interface docblock asserted the
@@ -333,7 +327,7 @@ Installed by `composer require` from this tag. Carries a breaking `js` contract 
 - **`cache_path` has one default, owned by `FileTranslationLoader`.**
   `TranslationModule` used to compute its own default, which duplicated the
   loader's. Both now use `sys_get_temp_dir()/clarity_translations/<md5 of
-  translations_path>`. Without `translations_path`, the cache moves from
+translations_path>`. Without `translations_path`, the cache moves from
   `clarity_translations` to `clarity_translations/<md5 of ''>`. Caches are
   regenerated on demand, so nothing needs migrating.
 - **Every locale parameter is now named `locale`.** The intl filters had split
@@ -465,8 +459,8 @@ Installed by `composer require` from this tag. Carries a breaking `js` contract 
 
 - **The registry's codegen table is now `$inlineDefinitions`.** It was
   `$inlineFilters`, which stopped being accurate the moment a record could be a
-  call-only function rather than a filter. The table answers one question — *how
-  does this name compile?* — so the neutral name states it. The public API is
+  call-only function rather than a filter. The table answers one question — _how
+  does this name compile?_ — so the neutral name states it. The public API is
   unchanged (`addInlineFilter()`, `hasInlineFilter()`, `getInlineFilter()`), and
   `hasInlineFilter()` still means “has codegen”; `hasFilter()` is what answers
   “may be piped”. `Registry::isInlineFunction()` is new and asks the call-only
@@ -485,7 +479,7 @@ Installed by `composer require` from this tag. Carries a breaking `js` contract 
 
 - **Compiled-template properties renamed to `functions` / `services`.** A compiled
   class was generated with `public function __construct(private array $__c_fn, private
-  array $__c_sv)`, so the only spelling available to a module author emitting directive
+array $__c_sv)`, so the only spelling available to a module author emitting directive
   or inline-filter PHP was the cryptic `$__c_sv['key']`. The constructor properties are
   now `$functions` and `$services`, which reads as `$this->services['locale']`:
 
@@ -520,7 +514,7 @@ Installed by `composer require` from this tag. Carries a breaking `js` contract 
   handler registered against the old shape — the type error is loud, not silent — but the
   old form bought the handler nothing it could actually use, so the migration is a
   signature edit and, where the location was discarded, a `throw new ClarityException(…,
-  $at)`. In-repo: `LocaleService`, `TranslationModule`. See `docs/04-advanced-topics.md`.
+$at)`. In-repo: `LocaleService`, `TranslationModule`. See `docs/04-advanced-topics.md`.
 
 ### Added
 
@@ -653,11 +647,11 @@ Installed by `composer require` from this tag. Carries a breaking `js` contract 
   no policy object on the render path, so none of this costs anything to
   enforce.
 
-  | Rule          | Default | What it grants                                                                                    |
+  | Rule                | Default | What it grants                                                                                    |
   | ------------------- | ------- | ------------------------------------------------------------------------------------------------- |
   | `phpFunctions`      | `false` | bare calls (`strtoupper(name)`) and filter steps that resolve to a PHP function                   |
   | `rawPhp`            | `false` | `{% php CODE %}`                                                                                  |
-  | `methodCalls`       | `false` | `obj.method(args)` / `$obj->method(args)`, with arguments and dynamic names                        |
+  | `methodCalls`       | `false` | `obj.method(args)` / `$obj->method(args)`, with arguments and dynamic names                       |
   | `superglobals`      | `false` | `$_SERVER`, `$_GET`, `$_ENV`, … as chain roots                                                    |
   | `phpVariables`      | `false` | the render scope seeded as PHP locals — what makes `$title` and `{% php echo $title; %}` one name |
   | `variableVariables` | `true`  | `$$name` / `${expr}`                                                                              |
@@ -665,10 +659,10 @@ Installed by `composer require` from this tag. Carries a breaking `js` contract 
   | `staticCalls`       | `false` | `Foo::method(args)`, `Foo::CONST`, `Foo::class`, `Foo::$prop`                                     |
   | `strictTypes`       | `true`  | `declare(strict_types=1)` in the compiled template                                                |
 
-  | Allowlist   | Default | What it governs                                            |
-  | ----------- | ------- | ---------------------------------------------------------- |
-  | `functions` | `[]`    | names the `phpFunctions` rule may resolve to a PHP function   |
-  | `filters`   | `[]`    | names accepted after `\|>`, which need not be functions    |
+  | Allowlist   | Default | What it governs                                             |
+  | ----------- | ------- | ----------------------------------------------------------- |
+  | `functions` | `[]`    | names the `phpFunctions` rule may resolve to a PHP function |
+  | `filters`   | `[]`    | names accepted after `\|>`, which need not be functions     |
 
   **An empty allowlist is no restriction; a non-empty one is the complete set** —
   only the listed names resolve, and anything else is a compile-time error. That
@@ -739,7 +733,7 @@ Installed by `composer require` from this tag. Carries a breaking `js` contract 
 
   Clarity's answer to Twig's `{{ parent() }}`, with the same rules: valid only in
   an overriding child block, repeatable, and scoped to the **immediate** parent
-  block. The difference is *when* it resolves: Twig calls a function at render
+  block. The difference is _when_ it resolves: Twig calls a function at render
   time, while Clarity splices the parent fragment in during compilation, so there
   is no render-time dispatch — and a compile error raised inside the parent's own
   content points at the parent template and line rather than the child.
@@ -761,9 +755,9 @@ Installed by `composer require` from this tag. Carries a breaking `js` contract 
   `{% set %}` or `{% php %}` assignment in open mode writes a local too — so a
   snapshot that read only `$__c_va` silently left them out:
 
-  | Template (inside `{% for user in users %}`) | Before           | Now                        |
-  | ------------------------------------------- | ---------------- | -------------------------- |
-  | `{{ vars() \|> json \|> raw }}`              | `{"users":[…]}`  | `{"users":[…],"user":"a"}` |
+  | Template (inside `{% for user in users %}`) | Before          | Now                        |
+  | ------------------------------------------- | --------------- | -------------------------- |
+  | `{{ vars() \|> json \|> raw }}`             | `{"users":[…]}` | `{"users":[…],"user":"a"}` |
 
   The snapshot is now compile-time scoped — a variable is visible exactly where a
   read of it would resolve — and engine internals (`__c_…`) are filtered out.
@@ -806,18 +800,18 @@ Installed by `composer require` from this tag. Carries a breaking `js` contract 
 
 - **Policy "capabilities" are now Policy "rules".** The set grew a member that
   grants nothing: `strictTypes` adds no construct and names no class, it changes
-  the contract at a call boundary. Calling that a *capability* forced every
+  the contract at a call boundary. Calling that a _capability_ forced every
   description of it to open with a caveat ("not a reach capability…"), which is
   the sign of the wrong noun. The type is unchanged; only the name is.
 
-  | Before                  | After              |
-  | ----------------------- | ------------------ |
-  | `Policy::CAPABILITIES`  | `Policy::RULES`    |
+  | Before                    | After              |
+  | ------------------------- | ------------------ |
+  | `Policy::CAPABILITIES`    | `Policy::RULES`    |
   | `$policy->capabilities()` | `$policy->rules()` |
-  | `allowCapability('x')`  | `allowRule('x')`   |
-  | `denyCapability('x')`   | `denyRule('x')`    |
-  | `['capabilities' => …]` | `['rules' => …]`   |
-  | `$policy->allows('x')`  | unchanged          |
+  | `allowCapability('x')`    | `allowRule('x')`   |
+  | `denyCapability('x')`     | `denyRule('x')`    |
+  | `['capabilities' => …]`   | `['rules' => …]`   |
+  | `$policy->allows('x')`    | unchanged          |
 
   `allows()` keeps its name deliberately: `hasRule('x')` would be ambiguous — it
   could mean "the policy contains such a rule" (always true, the name is in the
@@ -832,10 +826,10 @@ Installed by `composer require` from this tag. Carries a breaking `js` contract 
   coercion those casts performed still happens in weak mode, but weak mode is no
   longer the default (see above), so these are the two things the removal changes:
 
-  | Template                | Before                                | After                                            |
-  | ----------------------- | ------------------------------------- | ------------------------------------------------ |
-  | `{{ null \|> upper }}`  | silent `''`                           | `''` + a `Deprecated` diagnostic                 |
-  | `{{ 42 \|> join(',') }}`| `'42'` (the scalar was wrapped)       | `ClarityException` — `(array)` was never a coercion |
+  | Template                 | Before                          | After                                               |
+  | ------------------------ | ------------------------------- | --------------------------------------------------- |
+  | `{{ null \|> upper }}`   | silent `''`                     | `''` + a `Deprecated` diagnostic                    |
+  | `{{ 42 \|> join(',') }}` | `'42'` (the scalar was wrapped) | `ClarityException` — `(array)` was never a coercion |
 
   The `join`/`merge` change is the one that affects the **default** mode, because
   PHP has no scalar→array coercion in either mode: a scalar that used to be wrapped
@@ -862,7 +856,7 @@ Installed by `composer require` from this tag. Carries a breaking `js` contract 
   index-aligned with `$sourceFiles`.
 - **`ClarityException::$templateFile` is renamed `$templateName`, and a
   `$templatePath` is added for the physical file.** The old name was a misnomer:
-  it held a *logical* name (`pages/home`) and never a file, which is what made
+  it held a _logical_ name (`pages/home`) and never a file, which is what made
   `getFile()`'s former uselessness look like a mapping bug rather than the
   naming problem it was. `$templateName` is the logical name the loader was asked
   for, `$templatePath` the file it resolved to (`''` when the loader has none —
@@ -922,7 +916,7 @@ allow it.` A separate message names an unlisted _filter_, because the remedy
 - **A deprecation raised by a template no longer vanishes, and it is reported at
   the template rather than the cache file.** The render error handler was
   installed with the habitual `E_ALL & ~E_DEPRECATED & ~E_USER_DEPRECATED` mask,
-  which kept Clarity's handler from ever being *entered* for a deprecation —
+  which kept Clarity's handler from ever being _entered_ for a deprecation —
   making both of its branches unreachable. The diagnostic therefore bypassed the
   application's handler entirely and was reported by PHP's built-in handler
   against the compiled cache file, an internal path that leaked into the
@@ -1036,7 +1030,7 @@ allow it.` A separate message names an unlisted _filter_, because the remedy
 
 - **A compile-time policy refusal now points at the template line that contains
   the offending construct.** `{% php %}` on a policy that denies `rawPhp` was
-  raised during the pre-scan — the pass that runs *before* the source map cursor
+  raised during the pre-scan — the pass that runs _before_ the source map cursor
   starts tracking, and the reason the report claimed the engine file
   (`Compiler/DirectiveSupportTrait.php:222`) with no template at all. The refusal
   now resolves its position from the `{# @source … #}` markers the merge already
@@ -1049,7 +1043,7 @@ allow it.` A separate message names an unlisted _filter_, because the remedy
   frame, which is what Smarty does for the same reason. The real call path stays
   in `getTrace()`.
 - **A failure raised by the tokenizer now names the template and line.** The two
-  fixes above both depend on the exception *carrying* a location — and the
+  fixes above both depend on the exception _carrying_ a location — and the
   tokenizer never did. It is constructed without a template (it has no
   `sourcePath` property), so it could not fill in the name, line or path, and
   every one of its 90 throws — an unregistered filter, a malformed expression —
@@ -1067,6 +1061,7 @@ allow it.` A separate message names an unlisted _filter_, because the remedy
   passed the correct line but an empty name, so `relocate()` discarded the line
   and the position survived only as prose inside the message ("opened on template
   line 3"). Those now carry the line, and the compiler fills in just the name.
+
 - **The two debug modes are one.** `setDebugMode(bool)` (compiler-level
   assertions plus a bare `dump()`) and `enableDebug(DumpOptions)` (renderers,
   bus, panel) were introduced four days apart and had drifted into one feature

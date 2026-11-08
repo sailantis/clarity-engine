@@ -124,19 +124,10 @@ final class Policy
     private array $denied = [];
 
     /**
-     * Memoized {@see digest()}, or null when the policy has been mutated since
-     * it was last computed.
+     * Cached {@see digest()}, or null until computed or after a policy mutation.
      *
-     * The digest exists to be compared against the one baked into every
-     * compiled class, which happens on EVERY template load — so on a warm
-     * render path it is asked for once per request, and once per template in
-     * the request. Building it costs a canonical string over every rule and
-     * allowlist plus an FNV-1a pass; that is measurable next to the render it
-     * precedes. The values it summarizes only change through this class's own
-     * mutators, all of which are fluent (`allowRule()`, `denyRule()`,
-     * `allowFunctions()`, `allowFilters()`, `denyFunctions()`) and every one of
-     * them clears this cache, so a memoized digest can never outlive the state
-     * it describes.
+     * Compiled templates are checked against this digest on every load, so
+     * caching avoids rebuilding it for each template. Mutators clear the cache.
      */
     private ?string $digestCache = null;
     /**
