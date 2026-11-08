@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-08
+
+Installed by `composer require` from this tag. A patch release: it adds one opt-in setter and
+memoizes an internal digest. No API is removed and no default changes — `revalidateFreq`
+stays `0`, so a project that does not opt in revalidates exactly as before.
+
 ### Added
 
 - **`setRevalidateFreq()`** reuses positive template-freshness verdicts for a configured
@@ -28,10 +34,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   template load. Mutators (`allowRule()`, `denyRule()`, `allowFunctions()`,
   `allowFilters()`, `denyFunctions()`) clear the memo to prevent stale results.
 
+## [0.4.0] - 2026-11-07
+
 Installed by `composer require` from this tag. Carries a breaking `js` contract change -- read
 _Changed_ below before upgrading.
-
-## [0.4.0] - 2024-11-07
 
 ### Security
 
@@ -1219,7 +1225,8 @@ setSandboxMode(false) to let a PHP function of the same name be used.` The
   removed the documented-but-unimplemented `loop` object.
 - Removed a stale docblock reference to a `castToArray()` that no longer exists.
 
-[Unreleased]: https://github.com/sailantis/clarity-engine/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/sailantis/clarity-engine/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/sailantis/clarity-engine/releases/tag/v0.4.1
 [0.4.0]: https://github.com/sailantis/clarity-engine/releases/tag/v0.4.0
 [0.3.0]: https://github.com/sailantis/clarity-engine/releases/tag/v0.3.0
 [0.2.0]: https://github.com/sailantis/clarity-engine/releases/tag/v0.2.0
