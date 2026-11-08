@@ -35,6 +35,44 @@ class Cache
     private string $path;
 
     /**
+     * How long (in seconds) a template's freshness check may be trusted before
+     * the filesystem is consulted again. 0 checks on every render, which is the
+     * default: enabling this changes how quickly an edited template is picked
+     * up, so it is opt-in rather than a silent change.
+     *
+     * This is the template analogue of OPcache's `opcache.revalidate_freq`, and
+     * it exists for the same reason. The check is not free: it costs one
+     * `filemtime()` SYSCALL per dependency, and a template that extends a layout
+     * and includes a partial has three of them. PHP's stat cache holds a single
+     * entry, so the `is_file()` at the top of {@see isFresh()} evicts the
+     * template's entry before the dependency walk begins — every dependency is
+     * a real syscall on every request, and the walk then repeats for each
+     * template in the render chain.
+     *
+     * A positive value bounds how long an edited template can keep rendering
+     * from cache, which is the trade OPcache makes: **an edit is picked up
+     * within this many seconds, never later**. That bound is the whole contract
+     * — the verdict is reused only for a finite window, so no edit can be missed
+     * indefinitely even when it lands in the same clock second as a check
+     * (mtimes have one-second resolution).
+     *
+     * {@see invalidate()} and {@see flush()} clear the timers, so an explicit
+     * invalidation is never delayed by this.
+     */
+    private int $revalidateFreq = 0;
+
+    /**
+     * Last filesystem freshness verdict per template, with the time it was
+     * reached: name => [checkedAt (float), fresh (bool)].
+     *
+     * Only positive verdicts are reused. A stale verdict is never cached — the
+     * recompile that follows must see the new state.
+     *
+     * @var array<string, array{0: float, 1: bool}>
+     */
+    private array $freshCheckedAt = [];
+
+    /**
      * In-process registry: templateName → the class name that was loaded (via
      * require) in this PHP process.  Shared across all Cache instances.
      *
@@ -61,6 +99,29 @@ class Cache
     public function getPath(): string
     {
         return $this->path;
+    }
+
+    /**
+     * Set how many seconds a freshness verdict may be reused for.
+     *
+     * See {@see $revalidateFreq}. 0 — the default — restores a per-render
+     * filesystem check; a positive value bounds staleness by that many seconds.
+     *
+     * @param int $seconds Seconds; negative values are treated as 0.
+     */
+    public function setRevalidateFreq(int $seconds): static
+    {
+        $this->revalidateFreq = \max(0, $seconds);
+        $this->freshCheckedAt = [];
+        return $this;
+    }
+
+    /**
+     * How many seconds a freshness verdict is reused for.
+     */
+    public function getRevalidateFreq(): int
+    {
+        return $this->revalidateFreq;
     }
 
     // -------------------------------------------------------------------------
@@ -90,9 +151,19 @@ class Cache
      */
     public function isFresh(string $templateName, callable $revisionFor): bool
     {
+        $now = \microtime(true);
+
+        if ($this->revalidateFreq > 0) {
+            $last = $this->freshCheckedAt[$templateName] ?? null;
+            if ($last !== null && $last[1] && ($now - $last[0]) < $this->revalidateFreq) {
+                return true;
+            }
+        }
+
         $cacheFile = $this->cacheFilePath($templateName);
 
         if (!\is_file($cacheFile)) {
+            unset($this->freshCheckedAt[$templateName]);
             return false;
         }
 
@@ -100,30 +171,37 @@ class Cache
 
         if ($className === null) {
             // File present but unreadable / not a compiled class → treat as stale
+            unset($this->freshCheckedAt[$templateName]);
             return false;
         }
 
         // Check if the emitted bytecode comes from the current compiler.
         if (($className::$compilerVersion ?? 0) !== Compiler::COMPILER_VERSION) {
+            unset($this->freshCheckedAt[$templateName]);
             return false;
         }
 
         $deps = $className::$dependencies ?? null;
 
         if (!\is_array($deps)) {
+            unset($this->freshCheckedAt[$templateName]);
             return false;
         }
 
         foreach ($deps as $name => $revision) {
             try {
                 if ($revisionFor($name) !== $revision) {
+                    unset($this->freshCheckedAt[$templateName]);
                     return false;
                 }
             } catch (\Throwable) {
                 // Loader cannot find dep (e.g. file deleted) → stale
+                unset($this->freshCheckedAt[$templateName]);
                 return false;
             }
         }
+
+        $this->freshCheckedAt[$templateName] = [$now, true];
 
         return true;
     }
@@ -203,6 +281,8 @@ class Cache
      */
     public function invalidate(string $templateName): void
     {
+        unset($this->freshCheckedAt[$templateName]);
+
         $file = $this->cacheFilePath($templateName);
         if (\is_file($file)) {
             if (\function_exists('opcache_invalidate')) {
@@ -240,7 +320,8 @@ class Cache
             }
             \unlink($path);
         }
-        self::$classNames = [];
+        self::$classNames   = [];
+        $this->freshCheckedAt = [];
     }
 
     // -------------------------------------------------------------------------

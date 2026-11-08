@@ -5,7 +5,38 @@ All notable changes to `sailantis/clarity-engine` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.0] - 2026-11-07
+## [Unreleased]
+
+### Added
+
+- **`setRevalidateFreq()` — the template analogue of `opcache.revalidate_freq`.** A warm
+  render used to revalidate every compiled template against the filesystem on every call:
+  one `filemtime()` syscall per dependency. PHP's stat cache holds a single entry, so the
+  `is_file()` that starts `Cache::isFresh()` evicts the template's own entry before the
+  dependency walk begins — every dependency is a real syscall, on every request, for every
+  template in the render chain. A positive value reuses the verdict for that many seconds,
+  which bounds staleness explicitly: **an edit is picked up within that many seconds, never
+  later.** Default is `0` (check every render), so enabling it is opt-in rather than a
+  silent behaviour change. `invalidate()` and `flushCache()` are never delayed by it.
+
+  ```php
+  $engine->setRevalidateFreq(60);   // or via config: new ClarityEngine(['revalidateFreq' => 60])
+  ```
+
+  Measured on a page whose template extends a layout and includes a partial (three
+  dependencies): `isFresh()` 3.43 µs → 0.22 µs per template, and the whole page render
+  11.08 µs → 4.37 µs. Throughput of the page under `wrk` at c=96 rose 23.5 k → 24.5 k rps
+  (+4.4 %), interleaved over 5 rounds.
+
+### Changed
+
+- **`Policy::digest()` is memoized.** The digest is compared against the one baked into
+  every compiled class on every template load, so it is asked for once per template per
+  request, and building it costs a canonical string over every rule and allowlist plus an
+  FNV-1a pass. Every fluent mutator (`allowRule()`, `denyRule()`, `allowFunctions()`,
+  `allowFilters()`, `denyFunctions()`) now clears the memo, so it cannot outlive the state
+  it describes. 1.24 µs → 0.07 µs per load.
+
 
 Installed by `composer require` from this tag. Carries a breaking `js` contract change -- read
 *Changed* below before upgrading.

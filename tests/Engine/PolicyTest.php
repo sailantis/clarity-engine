@@ -322,6 +322,56 @@ class PolicyTest extends BaseTestCase
         $this->assertMatchesRegularExpression('/^[0-9a-f]{16}$/', $digest);
     }
 
+    /**
+     * The digest is memoized, and every mutator must drop the memo.
+     *
+     * The digest is compared against the one baked into every compiled class on
+     * every template load, so it is asked for once per template per request and
+     * building it (a canonical string over every rule and allowlist plus an
+     * FNV-1a pass) is measurable next to the render it precedes. It is safe to
+     * cache only because a policy can change in exactly one way — through its
+     * own fluent mutators — so this asserts each of them invalidates the memo.
+     * A missed one would serve stale compiled templates indefinitely, which is
+     * the worst possible failure for this cache.
+     */
+    public function testEveryMutatorInvalidatesTheMemoizedDigest(): void
+    {
+        $mutators = [
+            'allowRule'      => [fn() => Policy::restricted(), fn(Policy $p) => $p->allowRule('methodCalls')],
+            'denyRule'       => [fn() => Policy::unrestricted(), fn(Policy $p) => $p->denyRule('phpFunctions')],
+            'allowFunctions' => [fn() => Policy::restricted(), fn(Policy $p) => $p->allowFunctions('count')],
+            'allowFilters'   => [fn() => Policy::restricted(), fn(Policy $p) => $p->allowFilters('upper')],
+            'denyFunctions'  => [fn() => Policy::restricted(), fn(Policy $p) => $p->denyFunctions('exec')],
+        ];
+
+        // Every mutator in the list must actually exist, so a rename cannot make
+        // this test vacuously pass.
+        foreach (array_keys($mutators) as $method) {
+            $this->assertTrue(method_exists(Policy::class, $method), "Policy::{$method}() must exist");
+        }
+
+        foreach ($mutators as $name => [$base, $mutate]) {
+            // Each base leaves the mutation genuinely state-changing, so the
+            // assertion fails if the memo is not dropped rather than passing on
+            // an unchanged digest.
+            $policy = $base();
+            $before = $policy->digest();
+
+            $mutate($policy);
+
+            $this->assertNotSame(
+                $before,
+                $policy->digest(),
+                "{$name}() must invalidate the memoized digest"
+            );
+            $this->assertSame(
+                $policy->digest(),
+                $policy->digest(),
+                "{$name}() must leave a stable digest afterwards"
+            );
+        }
+    }
+
     // =========================================================================
     // Coarse questions
     // =========================================================================

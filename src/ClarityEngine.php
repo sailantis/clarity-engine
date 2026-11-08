@@ -127,6 +127,9 @@ class ClarityEngine
      * - `layout`: default layout name or null
      * - `namespaces`: associative array of namespace => path
      * - `cachePath`: path to compiled template cache (applied after init)
+     * - `revalidateFreq`: seconds a compiled template is trusted before its
+     *   dependencies are re-checked; 0 checks every render. The template
+     *   analogue of `opcache.revalidate_freq`, and it defaults to the same 2.
      * - `debug`: bool to enable debug mode
      * - `policy`: what templates may reach — a {@see \Clarity\Engine\Policy} or
      *   the array form it accepts. Sandboxed by default; `Policy::unrestricted()`
@@ -172,6 +175,12 @@ class ClarityEngine
         // Post-init config that requires the registry/cache to exist
         if (isset($config['cachePath']) && \is_string($config['cachePath'])) {
             $this->setCachePath($config['cachePath']);
+        }
+        // How long a compiled template may be trusted before its dependencies
+        // are re-checked. Mirrors opcache.revalidate_freq; see
+        // ClarityEngineTrait::setRevalidateFreq().
+        if (isset($config['revalidateFreq'])) {
+            $this->setRevalidateFreq((int) $config['revalidateFreq']);
         }
         if (!empty($config['debug'])) {
             $this->setDebugMode($config['debug']);

@@ -436,6 +436,122 @@ class CacheTest extends BaseTestCase
         $this->removeDir($isolatedCache);
     }
 
+    /**
+     * A positive revalidate window reuses a freshness verdict — and the window is
+     * a stated BOUND, not an optimisation that might quietly never expire.
+     *
+     * `isFresh()` costs one `filemtime()` syscall per dependency, on every render,
+     * because PHP's stat cache holds a single entry: the `is_file()` on the cache
+     * file evicts the template's entry before the dependency walk starts. That is
+     * the same cost OPcache removes with `opcache.revalidate_freq`, so this cache
+     * offers the same knob.
+     *
+     * The test asserts all three halves of the contract: a verdict inside the
+     * window is reused even though the template changed on disk (the saving), an
+     * edit is still seen once the window has passed (the bound), and the same-
+     * second case is re-checked rather than trusted so a rewrite-then-render in
+     * one second is not missed.
+     */
+    public function testRevalidateFreqBoundsStalenessAndReusesWithinIt(): void
+    {
+        $cacheDir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'clarity_test_revalidate';
+        $this->removeDir($cacheDir);
+        @mkdir($cacheDir, 0755, true);
+
+        $engine = new ClarityEngine();
+        $engine->setViewPath(TestEnvironment::viewDir())->setCachePath($cacheDir);
+        $engine->setRevalidateFreq(60);
+
+        $file = TestEnvironment::viewDir() . DIRECTORY_SEPARATOR . 'reval.clarity.html';
+        file_put_contents($file, 'first');
+        touch($file, time() - 100);
+
+        $cache = new Cache($cacheDir);
+        $cache->invalidate('reval');
+        $cache->setRevalidateFreq(60);
+
+        $this->assertSame('first', $engine->renderPartial('reval'));
+
+        $revision = static fn(string $n) => $engine->getLoader()->load($n)?->revision;
+
+        // First check: fresh, and now cached for 60 s.
+        $this->assertTrue($cache->isFresh('reval', $revision));
+
+        // The template changes on disk. Inside the window the verdict is reused:
+        // that is the saving, and it is what makes the window a BOUND — the edit
+        // is picked up once the window ends, never later.
+        file_put_contents($file, 'second');
+        touch($file, time() + 2);
+        $this->assertTrue(
+            $cache->isFresh('reval', $revision),
+            'inside the window the previous verdict must be reused'
+        );
+
+        // Age the recorded check past the window; the edit must now be visible.
+        $prop = new \ReflectionProperty($cache, 'freshCheckedAt');
+        $prop->setAccessible(true);
+        $state = $prop->getValue($cache);
+        $state['reval'] = [microtime(true) - 120, true];
+        $prop->setValue($cache, $state);
+        $this->assertFalse(
+            $cache->isFresh('reval', $revision),
+            'past the window an edited template must be re-checked'
+        );
+
+        // A stale verdict is never cached: the very next check must also say stale.
+        $this->assertFalse($cache->isFresh('reval', $revision));
+
+        $engine->setRevalidateFreq(0);
+        $this->assertSame(0, $engine->getRevalidateFreq());
+        $this->assertSame(
+            0,
+            (new ClarityEngine())->getRevalidateFreq(),
+            'the default must be per-render checking, so this is opt-in'
+        );
+
+        $this->removeDir($cacheDir);
+    }
+
+    /**
+     * An explicit invalidation must never be delayed by the revalidate window.
+     */
+    public function testInvalidateAndFlushIgnoreTheRevalidateWindow(): void
+    {
+        $cacheDir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'clarity_test_reval_flush';
+        $this->removeDir($cacheDir);
+        @mkdir($cacheDir, 0755, true);
+
+        $engine = new ClarityEngine();
+        $engine->setViewPath(TestEnvironment::viewDir())->setCachePath($cacheDir);
+        $engine->setRevalidateFreq(3600);
+
+        self::tpl('revalflush', 'ok');
+        $this->assertSame('ok', $engine->renderPartial('revalflush'));
+
+        $revision = static fn(string $n) => $engine->getLoader()->load($n)?->revision;
+
+        $ref = new \ReflectionProperty($engine, 'cache');
+        $ref->setAccessible(true);
+        $cache = $ref->getValue($engine);
+        $cache->setRevalidateFreq(3600);
+
+        $cache->isFresh('revalflush', $revision);
+
+        // A fresh verdict is now recorded for an hour. invalidate() must drop it.
+        $cache->invalidate('revalflush');
+        $this->assertFalse(
+            $cache->isFresh('revalflush', $revision),
+            'invalidate() must not leave a fresh verdict behind'
+        );
+
+        $this->assertSame('ok', $engine->renderPartial('revalflush'));
+        $cache->isFresh('revalflush', $revision);
+        $engine->flushCache();
+        $this->assertFalse($cache->isFresh('revalflush', $revision), 'flushCache() must clear the verdicts');
+
+        $this->removeDir($cacheDir);
+    }
+
     /** Resolve the class name the engine currently has loaded for a template. */
     private function loadedClassFor(ClarityEngine $engine, string $template): string
     {

@@ -124,6 +124,22 @@ final class Policy
     private array $denied = [];
 
     /**
+     * Memoized {@see digest()}, or null when the policy has been mutated since
+     * it was last computed.
+     *
+     * The digest exists to be compared against the one baked into every
+     * compiled class, which happens on EVERY template load — so on a warm
+     * render path it is asked for once per request, and once per template in
+     * the request. Building it costs a canonical string over every rule and
+     * allowlist plus an FNV-1a pass; that is measurable next to the render it
+     * precedes. The values it summarizes only change through this class's own
+     * mutators, all of which are fluent (`allowRule()`, `denyRule()`,
+     * `allowFunctions()`, `allowFilters()`, `denyFunctions()`) and every one of
+     * them clears this cache, so a memoized digest can never outlive the state
+     * it describes.
+     */
+    private ?string $digestCache = null;
+    /**
      * @param array<string, bool> $rules Complete rule map.
      */
     private function __construct(array $rules)
@@ -349,6 +365,7 @@ final class Policy
             $this->allows($rule); // validates the name
             $this->rules[$rule] = true;
         }
+        $this->digestCache = null;
         return $this;
     }
 
@@ -363,6 +380,7 @@ final class Policy
             $this->allows($rule); // validates the name
             $this->rules[$rule] = false;
         }
+        $this->digestCache = null;
         return $this;
     }
 
@@ -394,6 +412,7 @@ final class Policy
             $this->functions[self::normalizeName($name)] = true;
         }
         $this->rules['phpFunctions'] = true;
+        $this->digestCache = null;
         return $this;
     }
 
@@ -408,6 +427,7 @@ final class Policy
         foreach ($names as $name) {
             $this->filters[self::normalizeName($name)] = true;
         }
+        $this->digestCache = null;
         return $this;
     }
 
@@ -471,6 +491,7 @@ final class Policy
         foreach ($names as $name) {
             $this->denied[self::normalizeName($name)] = true;
         }
+        $this->digestCache = null;
         return $this;
     }
 
@@ -583,6 +604,10 @@ final class Policy
      */
     public function digest(): string
     {
+        if ($this->digestCache !== null) {
+            return $this->digestCache;
+        }
+
         $rules = [];
         foreach ($this->rules as $name => $allowed) {
             $rules[] = $name . ":" . ($allowed ? '1' : '0');
@@ -601,7 +626,7 @@ final class Policy
             . "\x1F" . \implode("\x1E", $filters)
             . "\x1F" . \implode("\x1E", $denied);
 
-        return \hash('fnv1a64', $canonical);
+        return $this->digestCache = \hash('fnv1a64', $canonical);
     }
 
     private static function normalizeName(string $name): string
