@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Whitespace between adjacent output tags is preserved as one space.** Previously, the
+  tokenizer discarded whitespace-only text runs, joining their values:
+
+  ```twig
+  <div class="d-flex flex-column {{ pageClass ?? '' }} {{ sectionClass ?? '' }}">
+  ```
+
+  The example now renders `class="d-flex flex-column page-home section-hero"` instead of
+  `class="d-flex flex-column page-homesection-hero"`. Newlines between output tags also
+  create a gap (`{{ a }}\n{{ b }}` → `A B`); adjacent tags remain joined (`AB`), and
+  whitespace-control markers still suppress the gap. Whitespace next to directive or
+  comment tags remains discarded, preserving blank-line trimming.
+
 ## [0.4.1] - 2026-11-08
 
 Installed by `composer require` from this tag. A patch release: it adds one opt-in setter and

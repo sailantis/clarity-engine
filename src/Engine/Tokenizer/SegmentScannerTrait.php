@@ -52,6 +52,10 @@ trait SegmentScannerTrait
         $line         = 1;
         $pos          = 0;
         $trimNextText = false;
+        // Whether the text run being assembled starts right after an OUTPUT
+        // tag. Only an output/output pair has meaningful whitespace between
+        // them, so only that pair is collapsed (see collapseInlineGap).
+        $prevWasOutput = false;
 
         foreach ($matches[0] as [$opener, $tagPos]) {
             if ($tagPos < $pos) {
@@ -89,18 +93,26 @@ trait SegmentScannerTrait
             }
 
             if ($beforePos > $pos) {
-                $text = \substr($source, $pos, $beforePos - $pos);
+                $rawText = \substr($source, $pos, $beforePos - $pos);
+                $text    = $rawText;
                 if ($trimNextText) {
                     $text = self::trimLeftWhitespace($text);
                 }
-                if (self::hasVisibleText($text)) {
+                if ($prevWasOutput && $type === self::OUTPUT) {
+                    $text = self::collapseInlineGap($text);
+                } elseif (!self::hasVisibleText($text)) {
+                    $text = '';
+                }
+                if ($text !== '') {
                     $segments[] = [
                         self::KEY_TYPE    => self::TEXT,
                         self::KEY_CONTENT => $text,
                         self::KEY_LINE    => $line,
                     ];
                 }
-                $line += \substr_count($text, "\n");
+                // Line arithmetic uses the RAW run: a collapsed gap must not
+                // change which line the segments after it are attributed to.
+                $line += \substr_count($rawText, "\n");
             }
 
             $innerStart = $tagPos + 2;
@@ -151,6 +163,7 @@ trait SegmentScannerTrait
 
             $line += \substr_count(\substr($source, $tagPos, $end - $tagPos), "\n");
             $pos = $end;
+            $prevWasOutput = $type === self::OUTPUT;
         }
 
         if ($pos < $sourceLen) {
@@ -188,6 +201,19 @@ trait SegmentScannerTrait
     private static function hasVisibleText(string $segment): bool
     {
         return \strspn($segment, " \t\n\r\0\x0B") < \strlen($segment);
+    }
+
+    /**
+     * Replace whitespace-only gaps between adjacent output tags with one space.
+     * This preserves separation between inline values, including across line
+     * breaks; text containing visible content is left unchanged.
+     */
+    private static function collapseInlineGap(string $text): string
+    {
+        if ($text === '' || \strspn($text, " \t\n\r\0\x0B") < \strlen($text)) {
+            return $text; // carries visible content: leave it alone
+        }
+        return ' ';
     }
 
     /**

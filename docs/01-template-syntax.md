@@ -35,6 +35,20 @@ markers collapses the loop to the markup alone:
 
 The same markers work on output tags (`{{- x -}}`) and comments (`{#- c -#}`).
 
+### Whitespace between output tags
+
+Whitespace-only runs between adjacent output tags are preserved as one space:
+
+```twig
+<div class="card {{ cardClass ?? '' }} {{ bodyClass ?? '' }}">
+```
+
+The example renders `class="card card-wide is-active"`. Use `{{- … -}}` to remove the gap.
+Newlines collapse the same way: `{{ a }}\n{{ b }}` renders `A B`.
+
+Whitespace around `{% … %}` and `{# … #}` tags is layout and is trimmed; one following line
+break is removed as described above.
+
 ## Output Expressions
 
 ### Basic Output
