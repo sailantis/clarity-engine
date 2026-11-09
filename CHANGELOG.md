@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-11-09
+
+Installed by `composer require` from this tag. A patch release: no API changes. Rendered
+output can differ from 0.4.1 — read *Fixed* below, because for some templates the old
+output was invalid HTML.
+
 ### Fixed
 
 - **Whitespace between two tags on one line is preserved as one space.** Previously, the
@@ -36,6 +42,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   A run that **starts** a line is indentation and is still dropped, which is what keeps a
   directive-only line from leaving a blank line and preserves the indentation inside a
   `<pre>` block.
+
+### Compatibility
+
+Measured rather than assumed: every segment the tokenizer emits was captured for all 77
+templates in the reference projects (the homepage, the competition app and the docs
+examples), for 0.4.1 and for this release. Exactly one segment differs — a single
+collapsible space in `docs/examples/06-complex.clarity.html` — and no rendered page
+changes except where the old output was the glued or invalid form described above.
 
 ## [0.4.1] - 2026-11-08
 
@@ -1255,7 +1269,8 @@ setSandboxMode(false) to let a PHP function of the same name be used.` The
   removed the documented-but-unimplemented `loop` object.
 - Removed a stale docblock reference to a `castToArray()` that no longer exists.
 
-[Unreleased]: https://github.com/sailantis/clarity-engine/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/sailantis/clarity-engine/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/sailantis/clarity-engine/releases/tag/v0.4.2
 [0.4.1]: https://github.com/sailantis/clarity-engine/releases/tag/v0.4.1
 [0.4.0]: https://github.com/sailantis/clarity-engine/releases/tag/v0.4.0
 [0.3.0]: https://github.com/sailantis/clarity-engine/releases/tag/v0.3.0
