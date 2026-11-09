@@ -35,19 +35,32 @@ markers collapses the loop to the markup alone:
 
 The same markers work on output tags (`{{- x -}}`) and comments (`{#- c -#}`).
 
-### Whitespace between output tags
+### Whitespace between tags
 
-Whitespace-only runs between adjacent output tags are preserved as one space:
+A whitespace-only run between two tags is a **word gap** when the line already carries
+content. It is kept as exactly one space:
 
 ```twig
 <div class="card {{ cardClass ?? '' }} {{ bodyClass ?? '' }}">
 ```
 
-The example renders `class="card card-wide is-active"`. Use `{{- … -}}` to remove the gap.
-Newlines collapse the same way: `{{ a }}\n{{ b }}` renders `A B`.
+renders `class="card card-wide is-active"`. The same rule covers a directive as a
+neighbour — this is how a conditional class list is written:
 
-Whitespace around `{% … %}` and `{# … #}` tags is layout and is trimmed; one following line
-break is removed as described above.
+```twig
+<div class="card {% if wide %}card-wide{% endif %} {{ bodyClass ?? '' }}">
+```
+
+renders `class="card card-wide is-active"` when `wide` is true. A comment counts as a
+neighbour too. Use `{{- … -}}` / `{%- … -%}` to remove a gap you do not want.
+
+A **line break** between two *output* tags is a word gap as well, so
+`{{ a }}\n{{ b }}` renders `A B`. A line break next to a directive is still layout: it
+disappears, which is what keeps a directive-only line from leaving a blank line behind.
+
+A whitespace run that **starts** a line is indentation, not a gap, and is dropped as
+before. That is what keeps an `{% extends %}`/`{% block %}` preamble from gaining spaces,
+and what preserves the indentation of markup inside a `<pre>` block.
 
 ## Output Expressions
 

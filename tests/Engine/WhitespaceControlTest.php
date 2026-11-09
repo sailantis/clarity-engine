@@ -74,11 +74,12 @@ class WhitespaceControlTest extends BaseTestCase
     }
 
     // =========================================================================
-    // The gap between two output tags
+    // The gap between two tags on one line
     //
-    // A run of whitespace between two output tags is a word gap, not layout.
+    // A run of whitespace-only text between two tags is a word gap when the
+    // line already carries content, and layout only when it starts the line.
     // Dropping it (which the tokenizer used to do for every whitespace-only
-    // run) glued two values together: `{{ a }} {{ b }}` rendered as `AB`.
+    // run) glued values together: `{{ a }} {{ b }}` rendered as `AB`.
     // =========================================================================
 
     public function testSpaceBetweenOutputTagsIsKept(): void
@@ -119,9 +120,9 @@ class WhitespaceControlTest extends BaseTestCase
     }
 
     /**
-     * The collapse is scoped to output/output. A gap next to a block or
-     * comment tag keeps the old behaviour - it is layout, and dropping it is
-     * what keeps a directive-only line from leaving a blank line behind.
+     * A gap that ends a line followed by a directive is layout: the directive
+     * line disappears and the value after it starts the next line. This is what
+     * keeps a directive-only line from leaving a blank line behind.
      */
     public function testGapAfterOutputBeforeBlockIsStillDropped(): void
     {
@@ -129,9 +130,71 @@ class WhitespaceControlTest extends BaseTestCase
         $this->assertSame('AZ', self::render('ws_out_block_gap', ['a' => 'A']));
     }
 
+    /**
+     * A gap between two directives that sits at the start of a line is layout
+     * too, so an `{% extends %}`/`{% block %}` preamble does not gain spaces.
+     */
+    public function testGapBetweenDirectivesAtLineStartIsDropped(): void
+    {
+        self::tpl('ws_blk_gap_start', "{% set a = 1 %} {{ a }}");
+        $this->assertSame('1', self::render('ws_blk_gap_start'));
+    }
+
     public function testTrimMarkersStillWinOverTheGapRule(): void
     {
         self::tpl('ws_out_gap_trim', '{{ a -}} {{- b }}');
         $this->assertSame('AB', self::render('ws_out_gap_trim', ['a' => 'A', 'b' => 'B']));
+    }
+
+    // =========================================================================
+    // The same gap, with a directive or a comment as one of the neighbours
+    //
+    // The rule is about the position of the run, not about the tag types: any
+    // whitespace-only run that follows content on the line is a word gap. The
+    // output/output pair above is just the case where a line break is a gap too.
+    // =========================================================================
+
+    /** A value, then a conditional attribute: the gap between them survives. */
+    public function testGapBetweenOutputAndConditionalBlock(): void
+    {
+        self::tpl('ws_out_blk_out', '<i class="{{ a }} {% if c %}{{ b }}{% endif %}">');
+        $this->assertSame(
+            '<i class="x y">',
+            self::render('ws_out_blk_out', ['a' => 'x', 'b' => 'y', 'c' => true])
+        );
+    }
+
+    /** A conditional class, then a value - the leading-space idiom. */
+    public function testGapBetweenConditionalBlockAndOutput(): void
+    {
+        self::tpl('ws_blk_out', '<i class="{% if c %}sm{% endif %} {{ b }}">');
+        $this->assertSame('<i class="sm y">', self::render('ws_blk_out', ['b' => 'y', 'c' => true]));
+    }
+
+    /**
+     * Two conditional attributes next to each other. Dropping the gap here
+     * produced invalid HTML - `<div class="x"id="y">` - not just a wrong string.
+     */
+    public function testGapBetweenTwoConditionalAttributes(): void
+    {
+        self::tpl('ws_blk_blk_attr', '<div {% if a %}class="x"{% endif %} {% if b %}id="y"{% endif %}>');
+        $this->assertSame(
+            '<div class="x" id="y">',
+            self::render('ws_blk_blk_attr', ['a' => true, 'b' => true])
+        );
+    }
+
+    /** A comment between two values separates them like any other tag. */
+    public function testGapAroundACommentBetweenOutputs(): void
+    {
+        self::tpl('ws_cmt_between', '<i class="{{ a }} {# separator #} {{ b }}">');
+        $this->assertSame('<i class="x y">', self::render('ws_cmt_between', ['a' => 'x', 'b' => 'y']));
+    }
+
+    /** A gap inside a loop body after the loop's own value is a gap per iteration. */
+    public function testGapAfterAnOutputInsideALoop(): void
+    {
+        self::tpl('ws_loop_gap', '<i class="{% for v in vs %}{{ v }} {% endfor %}">');
+        $this->assertSame('<i class="a b ">', self::render('ws_loop_gap', ['vs' => ['a', 'b']]));
     }
 }

@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Whitespace between adjacent output tags is preserved as one space.** Previously, the
+- **Whitespace between two tags on one line is preserved as one space.** Previously, the
   tokenizer discarded whitespace-only text runs, joining their values:
 
   ```twig
@@ -19,8 +19,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The example now renders `class="d-flex flex-column page-home section-hero"` instead of
   `class="d-flex flex-column page-homesection-hero"`. Newlines between output tags also
   create a gap (`{{ a }}\n{{ b }}` → `A B`); adjacent tags remain joined (`AB`), and
-  whitespace-control markers still suppress the gap. Whitespace next to directive or
-  comment tags remains discarded, preserving blank-line trimming.
+  whitespace-control markers still suppress the gap.
+
+  The rule is about the **position** of the run, not the tag types: any whitespace-only
+  run that follows content on the same line is a word gap, so a directive or a comment as
+  the neighbour is covered too. `<div class="{% if c %}wide{% endif %} {{ bodyClass }}">`
+  used to render `class="widey"`, and
+
+  ```twig
+  <div {% if a %}class="x"{% endif %} {% if b %}id="y"{% endif %}>
+  ```
+
+  used to render `<div class="x"id="y">` — two attributes with no separator, which is
+  invalid HTML rather than merely wrong spacing.
+
+  A run that **starts** a line is indentation and is still dropped, which is what keeps a
+  directive-only line from leaving a blank line and preserves the indentation inside a
+  `<pre>` block.
 
 ## [0.4.1] - 2026-11-08
 
