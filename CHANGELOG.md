@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-11-16
+
+Installed by `composer require` from this tag. A **patch** release: no API changes
+and no change to rendered output — documentation and benchmark assets only.
+
+### Changed
+
+- **README header.** The logo is now `docs/images/clarity-engine-logo-text.svg`,
+  whose lettering stays legible at the width GitHub renders it. The tagline is an
+  `h1` and its subtitle an `h3`, so the page has one heading of each level instead
+  of starting at `h3`. The editable source ships beside it as
+  `clarity-engine-logo-text-source.svg`.
+- **Benchmarks re-measured** on the current toolchain: every engine's numbers in
+  `docs/08-benchmark.md` and the six SVGs under `docs/images/benchmarks/` were
+  regenerated, with the version strings in the chart footers updated to match.
+  Read the tables as one measurement of one machine on one day — the ordering
+  moved in places, which is what re-running a benchmark looks like, not what a
+  change to the engine looks like. Clarity was not modified for this release.
+
 ## [0.4.2] - 2026-11-09
 
 Installed by `composer require` from this tag. A patch release: no API changes. Rendered
@@ -1269,7 +1288,8 @@ setSandboxMode(false) to let a PHP function of the same name be used.` The
   removed the documented-but-unimplemented `loop` object.
 - Removed a stale docblock reference to a `castToArray()` that no longer exists.
 
-[Unreleased]: https://github.com/sailantis/clarity-engine/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/sailantis/clarity-engine/compare/v0.4.3...HEAD
+[0.4.3]: https://github.com/sailantis/clarity-engine/releases/tag/v0.4.3
 [0.4.2]: https://github.com/sailantis/clarity-engine/releases/tag/v0.4.2
 [0.4.1]: https://github.com/sailantis/clarity-engine/releases/tag/v0.4.1
 [0.4.0]: https://github.com/sailantis/clarity-engine/releases/tag/v0.4.0
