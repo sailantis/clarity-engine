@@ -692,7 +692,51 @@ Get the currently configured cache directory.
 
 ---
 
-### flushCache() · <small>[🗎](../../src/ClarityEngineTrait.php#L669)</small>
+### setRevalidateFreq() · <small>[🗎](../../src/ClarityEngineTrait.php#L681)</small>
+
+`public function setRevalidateFreq(int $seconds): static`
+
+Set how many seconds to reuse a template's freshness verdict.
+
+The default, 2, mirrors OPcache. Set 0 to check every render; a positive
+value bounds how long an edit may remain unseen while reducing filesystem
+checks.
+
+```php
+$engine->setRevalidateFreq(0);   // check on every render
+$engine->setRevalidateFreq(60);  // a minute of tolerance
+```
+
+Applies per process. `clearCache()` and `invalidate()` take effect immediately.
+
+**Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$seconds` | int | - | Seconds to trust a verdict for; 0 checks every render. |
+
+**Return value**
+
+- Type: `static`
+
+
+---
+
+### getRevalidateFreq() · <small>[🗎](../../src/ClarityEngineTrait.php#L692)</small>
+
+`public function getRevalidateFreq(): int`
+
+How long a freshness verdict is reused for, in seconds.
+
+**Return value**
+
+- Type: `int`
+- Description: Seconds; 0 means every render re-checks the filesystem.
+
+
+---
+
+### flushCache() · <small>[🗎](../../src/ClarityEngineTrait.php#L702)</small>
 
 `public function flushCache(): static`
 
@@ -705,7 +749,7 @@ Flush all cached compiled templates.
 
 ---
 
-### render() · <small>[🗎](../../src/ClarityEngineTrait.php#L720)</small>
+### render() · <small>[🗎](../../src/ClarityEngineTrait.php#L753)</small>
 
 `public function render(string $view, array $vars = []): string`
 
@@ -766,7 +810,7 @@ $html = $engine->render('admin::dashboard', $data);
 
 ---
 
-### renderPartial() · <small>[🗎](../../src/ClarityEngineTrait.php#L742)</small>
+### renderPartial() · <small>[🗎](../../src/ClarityEngineTrait.php#L775)</small>
 
 `public function renderPartial(string $view, array $vars = []): string`
 
@@ -787,7 +831,7 @@ Render a partial view (without applying a layout) and return the output.
 
 ---
 
-### renderLayout() · <small>[🗎](../../src/ClarityEngineTrait.php#L768)</small>
+### renderLayout() · <small>[🗎](../../src/ClarityEngineTrait.php#L801)</small>
 
 `public function renderLayout(string $layout, string $content, array $vars = []): string`
 

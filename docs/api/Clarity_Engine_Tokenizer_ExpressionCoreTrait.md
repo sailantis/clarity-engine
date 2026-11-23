@@ -27,7 +27,46 @@ Called by the Compiler as it tracks the current position in the template.
 
 ---
 
-### processExpression() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L42)</small>
+### advanceEscapeScan() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L41)</small>
+
+`public function advanceEscapeScan(string $text): void`
+
+Advance the script-position state over a template TEXT segment.
+
+The Compiler calls this for every text segment, in source order, with the
+RAW text — before the post-tag line-break rule, because trimming a newline
+would change the answer. It tracks the `<script>` boundaries itself rather
+than trusting the escaping context, so a segment that both opens and closes
+a script cannot leave the two out of step.
+
+**Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$text` | string | - |  |
+
+**Return value**
+
+- Type: `void`
+
+
+---
+
+### resetEscapeScan() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L50)</small>
+
+`public function resetEscapeScan(): void`
+
+Forget the script-position scan. Called once per compiled body, because the
+tokenizer is reused across templates.
+
+**Return value**
+
+- Type: `void`
+
+
+---
+
+### processExpression() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L70)</small>
 
 `public function processExpression(string $expression): string`
 
@@ -38,7 +77,8 @@ expression, and each following segment is a filter call. Unless the
 pipeline ends in `raw` (the filter form that disables escaping), the result
 is escaped for the current context set by `setEscapeContext()`:
   - html: `htmlspecialchars()`
-  - js:   `json_encode()` with HEX flags, safe for inline script
+  - js:   escaped string CONTENT, for use inside quotes the template
+          supplies. An unquoted interpolation is a compile error.
   - css:  cast to string, no escaping
 
 **Parameters**
@@ -55,7 +95,7 @@ is escaped for the current context set by `setEscapeContext()`:
 
 ---
 
-### processCondition() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L76)</small>
+### processCondition() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L151)</small>
 
 `public function processCondition(string $expression, bool $asObject = false): string`
 
@@ -77,7 +117,7 @@ structure conditions (if, for, set) where auto-escape is meaningless.
 
 ---
 
-### processLvalue() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L100)</small>
+### processLvalue() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L175)</small>
 
 `public function processLvalue(string $var): string`
 
@@ -103,7 +143,7 @@ choice is made in the chain emitter, so it matches the read path.
 
 ---
 
-### convertVarsAndOps() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L120)</small>
+### convertVarsAndOps() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L195)</small>
 
 `public function convertVarsAndOps(string $expr, bool $asObject = false): string`
 

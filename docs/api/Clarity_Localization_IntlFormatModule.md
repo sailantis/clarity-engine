@@ -2,21 +2,25 @@
 
 **Full name:** [Clarity\Localization\IntlFormatModule](../../src/Localization/IntlFormatModule.php)
 
-ICU / intl formatting module for the Clarity template engine.
+ICU / intl formatting filters for the Clarity template engine.
 
-Provides locale-aware number, currency, date, time, and text formatting
-filters backed by PHP's `intl` extension. Each filter has a fallback when
-`intl` is unavailable: a PHP-native equivalent, or the unmodified value.
+A thin registration layer: all formatting logic lives in [`IntlFormatter`](Clarity_Localization_IntlFormatter.md),
+which operates independently of the template engine. This module registers its
+methods as filters and functions and wires the shared [`LocaleService`](Clarity_Localization_LocaleService.md), so
+`{% with_locale %}` updates formatting and translation together.
+
+Direct calls to the formatter — in a mailer, CLI task, or framework service —
+produce the same output as the filters because both use the same methods.
 
 Registration
 ------------
 ```php
-// Optional: register to set an application-wide default locale
+// Register a LocaleService to set an application-wide default locale
 $engine->addModule(new LocaleService(['locale' => 'de_DE']));
 
 $engine->addModule(new IntlFormatModule([
-    'locale'    => 'de_DE',   // this module's locale; wins over the LocaleService default
-    'timezone'  => 'Europe/Dublin',  // default timezone for date/time formatting
+    'locale'    => 'de_DE',   // this module's locale; takes precedence over the LocaleService default
+    'timezone'  => 'Europe/Dublin',
 ]));
 ```
 
@@ -69,7 +73,7 @@ Template usage
 
 ## Public methods
 
-### __construct() · <small>[🗎](../../src/Localization/IntlFormatModule.php#L91)</small>
+### __construct() · <small>[🗎](../../src/Localization/IntlFormatModule.php#L95)</small>
 
 `public function __construct(array $config = []): mixed`
 
@@ -79,7 +83,7 @@ Create a new IntlFormatModule instance.
 
 | Name | Type | Default | Description |
 |---|---|---|---|
-| `$config` | array | `[]` | `locale`: locale for formatting (e.g. "en_US"). Falls back to the<br>LocaleService default, then the detected environment locale.<br>`timezone`: default timezone (e.g. "UTC" or "Europe/Berlin"). Falls back<br>to `date_default_timezone_get()`. |
+| `$config` | array | `[]` | `locale`: locale for formatting (e.g. "en_US"). Falls back to the<br>LocaleService default, then the detected environment locale.<br>`timezone`: default timezone (e.g. "UTC" or "Europe/Berlin"). Falls back<br>to `date_default_timezone_get()`.<br>`formatter`: a pre-built formatter instance; use it to share formatting<br>configuration with application code. A formatter is bound to at most<br>one [`LocaleService`](Clarity_Localization_LocaleService.md): `register()` throws when it is already bound<br>to a different stack, instead of overwriting another engine's locale. |
 
 **Return value**
 
@@ -88,16 +92,22 @@ Create a new IntlFormatModule instance.
 
 ---
 
-### register() · <small>[🗎](../../src/Localization/IntlFormatModule.php#L100)</small>
+### getFormatter() · <small>[🗎](../../src/Localization/IntlFormatModule.php#L104)</small>
+
+`public function getFormatter(): Clarity\Localization\IntlFormatter`
+
+Return the formatter this module registers.
+
+**Return value**
+
+- Type: [IntlFormatter](Clarity_Localization_IntlFormatter.md)
+
+
+---
+
+### register() · <small>[🗎](../../src/Localization/IntlFormatModule.php#L117)</small>
 
 `public function register(Clarity\ClarityEngine $engine): void`
-
-Register all filters, functions, services, and directives that
-this module provides into the given engine instance.
-
-[`ClarityEngine::addModule()`](Clarity_ClarityEngine.md#addmodule) calls this method immediately. Call
-addModule() before rendering templates so the module's filters and
-directives are available.
 
 **Parameters**
 
@@ -108,6 +118,13 @@ directives are available.
 **Return value**
 
 - Type: `void`
+
+**Throws**
+
+- LogicException  When the configured formatter is already bound to a
+different [`LocaleService`](Clarity_Localization_LocaleService.md). Rebinding it would
+replace that stack, so the earlier engine's filters
+would silently resolve their locale from this one.
 
 
 

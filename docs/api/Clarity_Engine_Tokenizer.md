@@ -56,7 +56,7 @@ Named arguments
 
 ## Public methods
 
-### setPrunedFunctions() · <small>[🗎](../../src/Engine/Tokenizer.php#L255)</small>
+### setPrunedFunctions() · <small>[🗎](../../src/Engine/Tokenizer.php#L266)</small>
 
 `public function setPrunedFunctions(array $names): void`
 
@@ -73,7 +73,7 @@ Named arguments
 
 ---
 
-### setContextInjectedFunctions() · <small>[🗎](../../src/Engine/Tokenizer.php#L261)</small>
+### setContextInjectedFunctions() · <small>[🗎](../../src/Engine/Tokenizer.php#L272)</small>
 
 `public function setContextInjectedFunctions(array $names): void`
 
@@ -90,7 +90,7 @@ Named arguments
 
 ---
 
-### setFilterProbes() · <small>[🗎](../../src/Engine/Tokenizer.php#L277)</small>
+### setFilterProbes() · <small>[🗎](../../src/Engine/Tokenizer.php#L288)</small>
 
 `public function setFilterProbes(array $names): void`
 
@@ -115,7 +115,7 @@ user-registered template function of the same name.
 
 ---
 
-### __construct() · <small>[🗎](../../src/Engine/Tokenizer.php#L306)</small>
+### __construct() · <small>[🗎](../../src/Engine/Tokenizer.php#L317)</small>
 
 `public function __construct(): mixed`
 
@@ -129,26 +129,24 @@ through `setPolicy()`.
 
 ---
 
-### processArgumentList() · <small>[🗎](../../src/Engine/Tokenizer.php#L335)</small>
+### processArgumentList() · <small>[🗎](../../src/Engine/Tokenizer.php#L344)</small>
 
 `public function processArgumentList(string $rest): array`
 
 Split a directive argument list into compiled positional and named arguments.
 
-This is the shared parser for custom-directive handlers that receive a list.
-It is called by [`PairedDirectiveTrait::directiveProcessExpr()`](Clarity_Engine_Compiler_PairedDirectiveTrait.md#directiveprocessexpr),
-where `$processExpr($rest, true)` resolves to this method. The grammar is
-the same as the filter syntax:
+Shared parser for custom-directive handlers that receive a list. It is called by
+[`PairedDirectiveTrait::directiveProcessExpr()`](Clarity_Engine_Compiler_PairedDirectiveTrait.md#directiveprocessexpr), where
+`$processExpr($rest, true)` resolves to this method. The grammar matches the filter syntax:
 
     [name: ] expr [, [name: ] expr ...]
 
-An argument that starts with `name:` is named. Any other argument is
-positional and is collected in the positional list. A positional argument
-cannot follow a named one, because PHP does not allow positional arguments
-after named ones, and filter calls compile to PHP named arguments.
+An argument beginning with `name:` is named; any other argument is positional. A positional
+argument cannot follow a named one, since PHP does not allow it and filter calls compile to
+PHP named arguments.
 
-Both lists hold PHP expressions compiled through `processCondition()`,
-so callers do not need to implement the split or the named-argument rules.
+Both lists contain PHP expressions compiled through `processCondition()`, so callers
+need not handle the split or the named-argument rules.
 
 **Parameters**
 
@@ -170,7 +168,7 @@ an array or object literal.
 
 ---
 
-### setPolicy() · <small>[🗎](../../src/Engine/Tokenizer.php#L360)</small>
+### setPolicy() · <small>[🗎](../../src/Engine/Tokenizer.php#L369)</small>
 
 `public function setPolicy(Clarity\Engine\Policy $policy): void`
 
@@ -193,7 +191,7 @@ the policy are not seen until setPolicy() is called again.
 
 ---
 
-### getPolicy() · <small>[🗎](../../src/Engine/Tokenizer.php#L371)</small>
+### getPolicy() · <small>[🗎](../../src/Engine/Tokenizer.php#L380)</small>
 
 `public function getPolicy(): Clarity\Engine\Policy`
 
@@ -204,7 +202,7 @@ the policy are not seen until setPolicy() is called again.
 
 ---
 
-### setLocalRoots() · <small>[🗎](../../src/Engine/Tokenizer.php#L391)</small>
+### setLocalRoots() · <small>[🗎](../../src/Engine/Tokenizer.php#L400)</small>
 
 `public function setLocalRoots(bool $enabled): void`
 
@@ -226,7 +224,7 @@ compiler that seeds no locals never emits a local read.
 
 ---
 
-### setRegistry() · <small>[🗎](../../src/Engine/Tokenizer.php#L410)</small>
+### setRegistry() · <small>[🗎](../../src/Engine/Tokenizer.php#L419)</small>
 
 `public function setRegistry(Clarity\Engine\Registry $registry): void`
 
@@ -243,7 +241,7 @@ compiler that seeds no locals never emits a local read.
 
 ---
 
-### setLocalVars() · <small>[🗎](../../src/Engine/Tokenizer.php#L424)</small>
+### setLocalVars() · <small>[🗎](../../src/Engine/Tokenizer.php#L433)</small>
 
 `public function setLocalVars(array $localVars): void`
 
@@ -266,7 +264,7 @@ variable resolution inside the loop uses direct PHP local variables
 
 ---
 
-### setDynamicBindings() · <small>[🗎](../../src/Engine/Tokenizer.php#L438)</small>
+### setDynamicBindings() · <small>[🗎](../../src/Engine/Tokenizer.php#L447)</small>
 
 `public function setDynamicBindings(array $names): void`
 
@@ -340,7 +338,46 @@ Called by the Compiler as it tracks the current position in the template.
 
 ---
 
-### processExpression() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L42)</small>
+### advanceEscapeScan() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L41)</small>
+
+`public function advanceEscapeScan(string $text): void`
+
+Advance the script-position state over a template TEXT segment.
+
+The Compiler calls this for every text segment, in source order, with the
+RAW text — before the post-tag line-break rule, because trimming a newline
+would change the answer. It tracks the `<script>` boundaries itself rather
+than trusting the escaping context, so a segment that both opens and closes
+a script cannot leave the two out of step.
+
+**Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$text` | string | - |  |
+
+**Return value**
+
+- Type: `void`
+
+
+---
+
+### resetEscapeScan() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L50)</small>
+
+`public function resetEscapeScan(): void`
+
+Forget the script-position scan. Called once per compiled body, because the
+tokenizer is reused across templates.
+
+**Return value**
+
+- Type: `void`
+
+
+---
+
+### processExpression() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L70)</small>
 
 `public function processExpression(string $expression): string`
 
@@ -351,7 +388,8 @@ expression, and each following segment is a filter call. Unless the
 pipeline ends in `raw` (the filter form that disables escaping), the result
 is escaped for the current context set by `setEscapeContext()`:
   - html: `htmlspecialchars()`
-  - js:   `json_encode()` with HEX flags, safe for inline script
+  - js:   escaped string CONTENT, for use inside quotes the template
+          supplies. An unquoted interpolation is a compile error.
   - css:  cast to string, no escaping
 
 **Parameters**
@@ -368,7 +406,7 @@ is escaped for the current context set by `setEscapeContext()`:
 
 ---
 
-### processCondition() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L76)</small>
+### processCondition() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L151)</small>
 
 `public function processCondition(string $expression, bool $asObject = false): string`
 
@@ -390,7 +428,7 @@ structure conditions (if, for, set) where auto-escape is meaningless.
 
 ---
 
-### processLvalue() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L100)</small>
+### processLvalue() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L175)</small>
 
 `public function processLvalue(string $var): string`
 
@@ -416,7 +454,7 @@ choice is made in the chain emitter, so it matches the read path.
 
 ---
 
-### convertVarsAndOps() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L120)</small>
+### convertVarsAndOps() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L195)</small>
 
 `public function convertVarsAndOps(string $expr, bool $asObject = false): string`
 

@@ -2,37 +2,22 @@
 
 **Full name:** [Clarity\Engine\Cache](../../src/Engine/Cache.php)
 
-Read/write cache for Clarity compiled template classes.
+Cache for compiled Clarity template classes.
 
-Each compiled template is stored as a single `.php` file.  The cache
-filename is derived deterministically from `md5($templateName)` so lookups
-never require reading the directory.
+Each template is stored in `md5($templateName).php`. Every compile gets a
+versioned class name, allowing old and new versions to coexist in long-running
+processes. Requiring a compiled file returns its class name.
 
-Cache filename : md5($templateName).php
-Class name     : __Clarity_<md5($templateName)>_<12-char uniqid suffix>   (versioned per compile)
+The shared `Cache::$classNames` registry maps template names to loaded classes.
+`isFresh()` still checks that the cache file exists.
 
-Versioned class names allow multiple compiled versions of the same template
-to coexist in memory across recompilations — eliminating redeclaration
-collisions in long-running processes (Swoole, RoadRunner, regular FPM alike).
-
-Each compiled file ends with `return '$className';` so that `require`-ing
-it returns the exact class name without any file re-reading or regex.
-
-In-process class name registry
---------------------------------
-`Cache::$classNames` maps templateName → loaded class name for the current
-process.  This lets warm-path calls to `isFresh()` and `load()` operate
-from memory (OPcache + static array). `isFresh()` still makes one `is_file()` check first.
-
-Compiled class static properties
----------------------------------
-$dependencies – array<string,int|string>  logicalName => revision
-$sourceMap    – string  packed ranges; decode with [`SourceMap::decode()`](Clarity_Engine_SourceMap.md#decode)
-$compilerVersion – int  Compiler::COMPILER_VERSION that produced the class
+Compiled classes define `$dependencies` (logical names to revisions),
+`$sourceMap` (packed ranges; see [`SourceMap::decode()`](Clarity_Engine_SourceMap.md#decode)), and
+`$compilerVersion`.
 
 ## Public methods
 
-### __construct() · <small>[🗎](../../src/Engine/Cache.php#L45)</small>
+### __construct() · <small>[🗎](../../src/Engine/Cache.php#L48)</small>
 
 `public function __construct(string $path = ''): mixed`
 
@@ -49,7 +34,7 @@ $compilerVersion – int  Compiler::COMPILER_VERSION that produced the class
 
 ---
 
-### setPath() · <small>[🗎](../../src/Engine/Cache.php#L55)</small>
+### setPath() · <small>[🗎](../../src/Engine/Cache.php#L58)</small>
 
 `public function setPath(string $path): static`
 
@@ -68,7 +53,7 @@ Change the cache directory at runtime.
 
 ---
 
-### getPath() · <small>[🗎](../../src/Engine/Cache.php#L61)</small>
+### getPath() · <small>[🗎](../../src/Engine/Cache.php#L64)</small>
 
 `public function getPath(): string`
 
@@ -79,7 +64,42 @@ Change the cache directory at runtime.
 
 ---
 
-### isFresh() · <small>[🗎](../../src/Engine/Cache.php#L91)</small>
+### setRevalidateFreq() · <small>[🗎](../../src/Engine/Cache.php#L77)</small>
+
+`public function setRevalidateFreq(int $seconds): static`
+
+Set how many seconds a freshness verdict may be reused for.
+
+See `$revalidateFreq`. 0 — the default — restores a per-render
+filesystem check; a positive value bounds staleness by that many seconds.
+
+**Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$seconds` | int | - | Seconds; negative values are treated as 0. |
+
+**Return value**
+
+- Type: `static`
+
+
+---
+
+### getRevalidateFreq() · <small>[🗎](../../src/Engine/Cache.php#L87)</small>
+
+`public function getRevalidateFreq(): int`
+
+How many seconds a freshness verdict is reused for.
+
+**Return value**
+
+- Type: `int`
+
+
+---
+
+### isFresh() · <small>[🗎](../../src/Engine/Cache.php#L117)</small>
 
 `public function isFresh(string $templateName, callable $revisionFor): bool`
 
@@ -114,7 +134,7 @@ read directly. The only file access is the `is_file()` check before `load()`.
 
 ---
 
-### load() · <small>[🗎](../../src/Engine/Cache.php#L141)</small>
+### load() · <small>[🗎](../../src/Engine/Cache.php#L184)</small>
 
 `public function load(string $templateName): string|null`
 
@@ -138,7 +158,7 @@ is OPcache-eligible) and registers the returned class name.
 
 ---
 
-### writeAndLoad() · <small>[🗎](../../src/Engine/Cache.php#L175)</small>
+### writeAndLoad() · <small>[🗎](../../src/Engine/Cache.php#L218)</small>
 
 `public function writeAndLoad(string $templateName, Clarity\Engine\CompiledTemplate $compiled): string`
 
@@ -164,7 +184,7 @@ loaded in this process.
 
 ---
 
-### invalidate() · <small>[🗎](../../src/Engine/Cache.php#L204)</small>
+### invalidate() · <small>[🗎](../../src/Engine/Cache.php#L247)</small>
 
 `public function invalidate(string $templateName): void`
 
@@ -184,7 +204,7 @@ remove it from the in-process registry.
 
 ---
 
-### flush() · <small>[🗎](../../src/Engine/Cache.php#L221)</small>
+### flush() · <small>[🗎](../../src/Engine/Cache.php#L266)</small>
 
 `public function flush(): void`
 
@@ -198,7 +218,7 @@ registry so stale class names do not prevent recompilation.
 
 ---
 
-### classNameFor() · <small>[🗎](../../src/Engine/Cache.php#L254)</small>
+### classNameFor() · <small>[🗎](../../src/Engine/Cache.php#L300)</small>
 
 `public function classNameFor(string $templateName): string`
 
@@ -220,7 +240,7 @@ Use `getLoadedClassName()` to obtain the real class name after a template has be
 
 ---
 
-### getLoadedClassName() · <small>[🗎](../../src/Engine/Cache.php#L263)</small>
+### getLoadedClassName() · <small>[🗎](../../src/Engine/Cache.php#L309)</small>
 
 `public function getLoadedClassName(string $templateName): string|null`
 
@@ -240,7 +260,7 @@ given template name, or null if the template has not been loaded yet.
 
 ---
 
-### cacheFilePath() · <small>[🗎](../../src/Engine/Cache.php#L278)</small>
+### cacheFilePath() · <small>[🗎](../../src/Engine/Cache.php#L324)</small>
 
 `public function cacheFilePath(string $templateName): string`
 

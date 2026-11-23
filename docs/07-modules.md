@@ -115,13 +115,19 @@ translations follow locale changes at runtime.
 ```
 LocaleService          — shared locale stack (push/pop + with_locale block)
     ↑                       ↑
-TranslationModule      IntlFormatModule
-(t filter, domains)    (number/date/currency filters)
+TranslationModule      IntlFormatModule        — registration layers
+    ↓                       ↓
+TranslationLoader*     IntlFormatter           — engine-free logic
 ```
 
 Both modules register `LocaleService` automatically if it is not already
 registered. Registering it explicitly sets an application-wide default locale
 for modules without their own `locale` option.
+
+The engine-independent components are reusable outside templates:
+`TranslationLoaderInterface` supplies messages, and `IntlFormatter` handles
+formatting. Frameworks can expose translation and locale-aware formatting to
+controllers, CLI tasks and mailers, while Clarity provides the template syntax.
 
 Each module has an independent `locale` option. If unset, the module uses the
 `LocaleService` default, then the detected environment locale. Detection checks
@@ -522,21 +528,60 @@ is found there.
 
 Registers locale-aware number, currency, date, time, and text formatting filters backed by PHP's `intl` extension. Every filter degrades gracefully when `intl` is unavailable, falling back to a PHP-native equivalent or returning the value unchanged.
 
+The formatting **logic** lives in `Clarity\Localization\IntlFormatter`, which has
+no engine dependency. This module is a thin registration layer over it, so the
+same behaviour is available outside a template:
+
+```php
+use Clarity\Localization\IntlFormatter;
+
+$intl = new IntlFormatter(locale: 'de_DE', timezone: 'Europe/Berlin');
+
+$intl->formatCurrency(1234.5, 'EUR');   // "1.234,50 €"
+$intl->formatDate($order->createdAt, 'long');
+$intl->formatMessage('{count, plural, one{# item} other{# items}}', ['count' => 3]);
+```
+
+A filter call and a direct call produce identical output when the direct call
+uses the formatter wired to the module's `LocaleService` — the one passed as the
+`formatter:` option or read via `getFormatter()`. They are the same method, and
+that is what lets a framework expose formatting to controllers, mailers and CLI
+tasks without duplicating a line of ICU code.
+
+A standalone `new IntlFormatter(locale: 'de_DE')` is not wired to the engine: it
+uses only its own configured locale, so it will not follow `{% with_locale %}`
+or the engine's locale stack and can differ from the filter in the same process.
+
+### Sharing a formatter
+
+Pass a pre-built instance to share it with application code, or read the one the
+module registered:
+
+```php
+$formatter = new IntlFormatter(locale: 'de_DE');
+
+$engine->addModule(new IntlFormatModule(['formatter' => $formatter]));
+
+$formatter->formatCurrency(1234.5, 'EUR');   // still in sync with the filters
+```
+
 ### Configuration
 
 ```php
 use Clarity\Localization\IntlFormatModule;
 
 $engine->addModule(new IntlFormatModule([
-    'locale'   => 'de_DE',
-    'timezone' => 'Europe/Berlin',
+    'locale'    => 'de_DE',
+    'timezone'  => 'Europe/Berlin',
+    'formatter' => null,   // optional: a pre-built IntlFormatter
 ]));
 ```
 
-| Option     | Type   | Default | Description                                                                                                                   |
-| ---------- | ------ | ------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `locale`   | string | `null`  | Default locale for all formatting filters; falls back to the `LocaleService` default, then to the detected environment locale |
-| `timezone` | string | `null`  | Default timezone for date/time formatting                                                                                     |
+| Option      | Type             | Default | Description                                                                                                                   |
+| ----------- | ---------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `locale`    | string           | `null`  | Default locale for all formatting filters; falls back to the `LocaleService` default, then to the detected environment locale |
+| `timezone`  | string           | `null`  | Default timezone for date/time formatting                                                                                     |
+| `formatter` | `IntlFormatter`  | `null`  | Pre-built formatter to register instead of creating one                                                                       |
 
 ### Filter Reference
 

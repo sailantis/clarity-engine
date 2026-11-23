@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+This **minor** release separates `IntlFormatModule` into an engine-independent
+formatter and a registration layer, making locale-aware formatting available
+outside templates while preserving rendered output.
+
+### Added
+
+- **`Clarity\Localization\IntlFormatter`** — the formatting logic behind
+  `IntlFormatModule`'s filters, available independently of an engine: numbers, currency,
+  percentages, scientific notation, spellout, ordinals, dates, times, relative
+  time, transliteration, ICU messages and locale information. Callers can use
+  it for locale-aware output in mailers, CLI reports, framework services, and
+  other contexts, with byte-identical results to the filters. Locale resolution
+  follows the same per-call precedence as the filters, aligning direct calls
+  with `{% with_locale %}` blocks. Each method includes a native fallback for
+  PHP environments without `ext-intl`.
+
+  The `$useIntl` constructor argument selects ICU availability explicitly,
+  allowing native fallback paths to be tested on systems with the extension
+  installed.
+
+### Changed
+
+- **`IntlFormatModule` is now a registration layer.** Its fourteen filters and
+  four functions delegate to an `IntlFormatter`, centralizing the formatting
+  logic and reducing the class from ~670 to ~290 lines. It gains a
+  `formatter` config option for sharing an instance with application code and a
+  `getFormatter()` accessor. Public behaviour is unchanged: the same filters,
+  the same signatures, the same output — verified filter-by-filter against the
+  previous implementation in `en_US`, `de_DE`, `fr_FR` and `ja_JP`.
+- The formatting helpers moved with the logic: `localeFor()` is now
+  `IntlFormatter::locale()`, and `dateStyleType()` / `intlDate()` / `nativeDate()`
+  / `relativeTimeFallback()` / `toTimestamp()` / `currencyEntry()` are private to
+  the formatter.
+
+
 ## [0.4.3] - 2026-11-16
 
 Installed by `composer require` from this tag. A **patch** release: no API changes

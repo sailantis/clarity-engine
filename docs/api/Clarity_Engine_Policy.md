@@ -100,7 +100,7 @@ rather than catching a mistake.
 
 ## Public methods
 
-### restricted() · <small>[🗎](../../src/Engine/Policy.php#L147)</small>
+### restricted() · <small>[🗎](../../src/Engine/Policy.php#L154)</small>
 
 `public static function restricted(): self`
 
@@ -119,7 +119,7 @@ turning it off would achieve nothing (see below).
 
 ---
 
-### unrestricted() · <small>[🗎](../../src/Engine/Policy.php#L170)</small>
+### unrestricted() · <small>[🗎](../../src/Engine/Policy.php#L177)</small>
 
 `public static function unrestricted(): self`
 
@@ -137,7 +137,7 @@ can choose.
 
 ---
 
-### trusted() · <small>[🗎](../../src/Engine/Policy.php#L201)</small>
+### trusted() · <small>[🗎](../../src/Engine/Policy.php#L208)</small>
 
 `public static function trusted(): self`
 
@@ -163,7 +163,7 @@ withholds; a trusted template is simply held to the types it declares.
 
 ---
 
-### default() · <small>[🗎](../../src/Engine/Policy.php#L227)</small>
+### default() · <small>[🗎](../../src/Engine/Policy.php#L234)</small>
 
 `public static function default(): self`
 
@@ -184,7 +184,7 @@ Policy::default()
 
 ---
 
-### fromArray() · <small>[🗎](../../src/Engine/Policy.php#L254)</small>
+### fromArray() · <small>[🗎](../../src/Engine/Policy.php#L261)</small>
 
 `public static function fromArray(array $data): self`
 
@@ -216,7 +216,7 @@ that silently drops a rule is worse than one that refuses to load.
 
 ---
 
-### toArray() · <small>[🗎](../../src/Engine/Policy.php#L308)</small>
+### toArray() · <small>[🗎](../../src/Engine/Policy.php#L315)</small>
 
 `public function toArray(): array`
 
@@ -229,7 +229,7 @@ The array form of this policy.  Round-trips through `fromArray()`.
 
 ---
 
-### allows() · <small>[🗎](../../src/Engine/Policy.php#L322)</small>
+### allows() · <small>[🗎](../../src/Engine/Policy.php#L329)</small>
 
 `public function allows(string $rule): bool`
 
@@ -246,7 +246,7 @@ The array form of this policy.  Round-trips through `fromArray()`.
 
 ---
 
-### rules() · <small>[🗎](../../src/Engine/Policy.php#L336)</small>
+### rules() · <small>[🗎](../../src/Engine/Policy.php#L343)</small>
 
 `public function rules(): array`
 
@@ -257,7 +257,7 @@ The array form of this policy.  Round-trips through `fromArray()`.
 
 ---
 
-### allowRule() · <small>[🗎](../../src/Engine/Policy.php#L346)</small>
+### allowRule() · <small>[🗎](../../src/Engine/Policy.php#L353)</small>
 
 `public function allowRule(string ...$rules): self`
 
@@ -276,7 +276,7 @@ Turn rules on.  Accepts more than one so a grant reads as a list.
 
 ---
 
-### denyRule() · <small>[🗎](../../src/Engine/Policy.php#L360)</small>
+### denyRule() · <small>[🗎](../../src/Engine/Policy.php#L368)</small>
 
 `public function denyRule(string ...$rules): self`
 
@@ -295,7 +295,7 @@ Turn rules off.  Accepts more than one so a denial reads as a list.
 
 ---
 
-### allowFunctions() · <small>[🗎](../../src/Engine/Policy.php#L388)</small>
+### allowFunctions() · <small>[🗎](../../src/Engine/Policy.php#L397)</small>
 
 `public function allowFunctions(string ...$names): self`
 
@@ -326,7 +326,7 @@ that is allowed and not registered calls the PHP function of that name.
 
 ---
 
-### allowFilters() · <small>[🗎](../../src/Engine/Policy.php#L406)</small>
+### allowFilters() · <small>[🗎](../../src/Engine/Policy.php#L416)</small>
 
 `public function allowFilters(string ...$names): self`
 
@@ -348,7 +348,7 @@ list is about the PHP-function fallback.
 
 ---
 
-### restrictsFunctions() · <small>[🗎](../../src/Engine/Policy.php#L420)</small>
+### restrictsFunctions() · <small>[🗎](../../src/Engine/Policy.php#L431)</small>
 
 `public function restrictsFunctions(): bool`
 
@@ -364,7 +364,7 @@ what decides is the rules plus this list.  See the class docblock.
 
 ---
 
-### restrictsFilters() · <small>[🗎](../../src/Engine/Policy.php#L426)</small>
+### restrictsFilters() · <small>[🗎](../../src/Engine/Policy.php#L437)</small>
 
 `public function restrictsFilters(): bool`
 
@@ -377,7 +377,7 @@ Whether the filter allowlist restricts anything at all.
 
 ---
 
-### allowsFunction() · <small>[🗎](../../src/Engine/Policy.php#L438)</small>
+### allowsFunction() · <small>[🗎](../../src/Engine/Policy.php#L449)</small>
 
 `public function allowsFunction(string $name): bool`
 
@@ -400,7 +400,7 @@ leading namespace separator is ignored, because PHP's are.
 
 ---
 
-### allowsFilter() · <small>[🗎](../../src/Engine/Policy.php#L445)</small>
+### allowsFilter() · <small>[🗎](../../src/Engine/Policy.php#L456)</small>
 
 `public function allowsFilter(string $name): bool`
 
@@ -419,7 +419,7 @@ Whether a name may be used as a `|>` filter step under this policy.
 
 ---
 
-### allowedFunctions() · <small>[🗎](../../src/Engine/Policy.php#L452)</small>
+### allowedFunctions() · <small>[🗎](../../src/Engine/Policy.php#L463)</small>
 
 `public function allowedFunctions(): array`
 
@@ -430,7 +430,7 @@ Whether a name may be used as a `|>` filter step under this policy.
 
 ---
 
-### allowedFilters() · <small>[🗎](../../src/Engine/Policy.php#L458)</small>
+### allowedFilters() · <small>[🗎](../../src/Engine/Policy.php#L469)</small>
 
 `public function allowedFilters(): array`
 
@@ -441,7 +441,7 @@ Whether a name may be used as a `|>` filter step under this policy.
 
 ---
 
-### denyFunctions() · <small>[🗎](../../src/Engine/Policy.php#L469)</small>
+### denyFunctions() · <small>[🗎](../../src/Engine/Policy.php#L480)</small>
 
 `public function denyFunctions(string ...$names): self`
 
@@ -463,7 +463,7 @@ deny list. Denial takes precedence over the function allowlist.
 
 ---
 
-### deniesFunction() · <small>[🗎](../../src/Engine/Policy.php#L478)</small>
+### deniesFunction() · <small>[🗎](../../src/Engine/Policy.php#L490)</small>
 
 `public function deniesFunction(string $name): bool`
 
@@ -482,7 +482,7 @@ Whether this policy denies a function name outright.
 
 ---
 
-### deniedFunctions() · <small>[🗎](../../src/Engine/Policy.php#L484)</small>
+### deniedFunctions() · <small>[🗎](../../src/Engine/Policy.php#L496)</small>
 
 `public function deniedFunctions(): array`
 
@@ -493,7 +493,7 @@ Whether this policy denies a function name outright.
 
 ---
 
-### isUnrestricted() · <small>[🗎](../../src/Engine/Policy.php#L497)</small>
+### isUnrestricted() · <small>[🗎](../../src/Engine/Policy.php#L509)</small>
 
 `public function isUnrestricted(): bool`
 
@@ -507,7 +507,7 @@ the engine's former PHP mode.
 
 ---
 
-### allowsPhp() · <small>[🗎](../../src/Engine/Policy.php#L526)</small>
+### allowsPhp() · <small>[🗎](../../src/Engine/Policy.php#L538)</small>
 
 `public function allowsPhp(): bool`
 
@@ -534,7 +534,7 @@ a template any less able to run PHP.
 
 ---
 
-### isSandboxed() · <small>[🗎](../../src/Engine/Policy.php#L551)</small>
+### isSandboxed() · <small>[🗎](../../src/Engine/Policy.php#L563)</small>
 
 `public function isSandboxed(): bool`
 
@@ -551,7 +551,7 @@ one source of truth rather than a second flag that could disagree.
 
 ---
 
-### strictTypes() · <small>[🗎](../../src/Engine/Policy.php#L567)</small>
+### strictTypes() · <small>[🗎](../../src/Engine/Policy.php#L579)</small>
 
 `public function strictTypes(): bool`
 
@@ -572,7 +572,7 @@ less PHP than a weak one, it is merely held to the types it declares.
 
 ---
 
-### digest() · <small>[🗎](../../src/Engine/Policy.php#L584)</small>
+### digest() · <small>[🗎](../../src/Engine/Policy.php#L596)</small>
 
 `public function digest(): string`
 

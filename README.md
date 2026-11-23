@@ -290,6 +290,10 @@ $engine->addModule(new \Clarity\Localization\TranslationModule([
     'locale'            => 'en_US',
     'translations_path' => __DIR__ . '/locales',
 ]));
+
+// The logic behind those modules is engine-free, so it works outside templates
+$formatter = new \Clarity\Localization\IntlFormatter(locale: 'de_DE');
+$formatter->formatCurrency(1234.5, 'EUR');    // "1.234,50 €" — same as the filter
 ```
 
 **[Configuration guide →](docs/00-getting-started.md#configuration-options)**

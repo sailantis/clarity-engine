@@ -56,6 +56,7 @@
 - [FilterCompilerTrait](Clarity_Engine_Tokenizer_FilterCompilerTrait.md) `Clarity\Engine\Tokenizer\FilterCompilerTrait`
 - [OperatorTestTrait](Clarity_Engine_Tokenizer_OperatorTestTrait.md) `Clarity\Engine\Tokenizer\OperatorTestTrait`
 - [PhpConstructTrait](Clarity_Engine_Tokenizer_PhpConstructTrait.md) `Clarity\Engine\Tokenizer\PhpConstructTrait`
+- [ScriptQuoteTrait](Clarity_Engine_Tokenizer_ScriptQuoteTrait.md) `Clarity\Engine\Tokenizer\ScriptQuoteTrait`
 - [SegmentScannerTrait](Clarity_Engine_Tokenizer_SegmentScannerTrait.md) `Clarity\Engine\Tokenizer\SegmentScannerTrait`
 - [VarChainTrait](Clarity_Engine_Tokenizer_VarChainTrait.md) `Clarity\Engine\Tokenizer\VarChainTrait`
 
@@ -66,6 +67,7 @@
 - [ChainTranslationLoader](Clarity_Localization_ChainTranslationLoader.md) `Clarity\Localization\ChainTranslationLoader`
 - [FileTranslationLoader](Clarity_Localization_FileTranslationLoader.md) `Clarity\Localization\FileTranslationLoader`
 - [IntlFormatModule](Clarity_Localization_IntlFormatModule.md) `Clarity\Localization\IntlFormatModule`
+- [IntlFormatter](Clarity_Localization_IntlFormatter.md) `Clarity\Localization\IntlFormatter`
 - [LocaleService](Clarity_Localization_LocaleService.md) `Clarity\Localization\LocaleService`
 - [RedisCachingLoader](Clarity_Localization_RedisCachingLoader.md) `Clarity\Localization\RedisCachingLoader`
 - [TranslationLoaderInterface](Clarity_Localization_TranslationLoaderInterface.md) `Clarity\Localization\TranslationLoaderInterface`
