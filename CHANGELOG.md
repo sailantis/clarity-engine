@@ -7,7 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-This **minor** release separates `IntlFormatModule` into an engine-independent
+## [0.5.0] - 2026-11-23
+
+Installed by `composer require` from this tag. A **minor** release: `IntlFormatter` is
+new public API, and `IntlFormatModule` keeps its filters, signatures and rendered output.
+
+The release separates `IntlFormatModule` into an engine-independent
 formatter and a registration layer, making locale-aware formatting available
 outside templates while preserving rendered output.
 
@@ -1323,7 +1328,8 @@ setSandboxMode(false) to let a PHP function of the same name be used.` The
   removed the documented-but-unimplemented `loop` object.
 - Removed a stale docblock reference to a `castToArray()` that no longer exists.
 
-[Unreleased]: https://github.com/sailantis/clarity-engine/compare/v0.4.3...HEAD
+[Unreleased]: https://github.com/sailantis/clarity-engine/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/sailantis/clarity-engine/releases/tag/v0.5.0
 [0.4.3]: https://github.com/sailantis/clarity-engine/releases/tag/v0.4.3
 [0.4.2]: https://github.com/sailantis/clarity-engine/releases/tag/v0.4.2
 [0.4.1]: https://github.com/sailantis/clarity-engine/releases/tag/v0.4.1
