@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-24
+
+Installed by `composer require` from this tag. A **minor** release: the two policy
+rules are new public API and every preset enables them.
+
+One template renders differently than it did under `0.5.0`. `escape`, `esc` and `e`
+in output position used to compile as an ordinary filter call that the automatic
+escaping wrapper then wrapped a second time, so `{{ title |> e }}` emitted
+`&amp;lt;b&amp;gt;` for `<b>`. They are now markers, the dual of `raw`, and escape
+exactly once. Code that compensated for the double escaping must drop the
+workaround. Compiled caches recompile on upgrade: `Compiler::COMPILER_VERSION` is
+`33`, because the change is in the emitted PHP rather than in the policy digest.
+
 ### Added
 
 - **Policy rules `escapeHtml` and `strictVariables`, with matching accessors.**
@@ -17,10 +30,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   line is reported, and rendering continues. Invalid operators still raise errors.
   Both rules are included in the compilation digest.
 
+### Changed
+
+- **`escape`, `esc` and `e` in output position are markers, not filters.** Each
+  applies context-aware escaping and cancels the automatic wrapper, so a value is
+  escaped once. In non-output positions they remain ordinary filters, and the first
+  marker in a chain decides the expression's output mode, making a repeated marker
+  idempotent.
+- **Denying `escapeHtml` makes escaping the template's job.** `{{ x }}` emits the
+  value verbatim and `{{ x |> esc }}` still escapes it, so escaping can be opted
+  into per expression without the double escaping a plain filter would cause.
+
 ### Fixed
 
-- **`escape`, `e` and `esc` output markers** apply context-aware escaping once.
-  In non-output positions, they remain ordinary filters.
 - Integer array-key warnings, including PHP 8's unquoted format, map to the
   undefined-key diagnostic.
 - Pre-compilation examples render templates with fixture data to validate
