@@ -109,8 +109,12 @@ class Compiler
      * - 32: allows a cast to be glued to its operand (`(int)x`). `(int)(x)`,
      *   `(int)[0]` and `(int)-5` now parse as casts, so version 31 classes are
      *   stale for templates that use a variable named `int`.
+     * - 33: `escape`/`esc`/`e` in OUTPUT position compile as a marker that
+     *   escapes and cancels the automatic wrapper, instead of an ordinary
+     *   filter call that the wrapper escaped a second time. A version 32 class
+     *   for a template that uses one of them emits the double-escaped result.
      */
-    public const COMPILER_VERSION = 32;
+    public const COMPILER_VERSION = 33;
 
     /**
      * Prefix for every PHP variable the engine binds into the render frame, for
