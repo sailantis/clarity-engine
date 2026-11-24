@@ -84,6 +84,28 @@ class Tokenizer
     private bool $autoEscape = true;
 
     /**
+     * True while compiling an explicit `|> escape` marker in OUTPUT position.
+     *
+     * `escape` is a MARKER there — it applies the context's escaping now and
+     * cancels the automatic wrapper, so the value is escaped exactly once.  In
+     * every other position (`{% set %}`, `{% if %}`, an argument) it is an
+     * ordinary filter: escaping a value stored in a variable or compared in a
+     * condition is a string operation, not an output decision, and treating it
+     * as a marker there would silently double-escape the later `{{ }}`.
+     */
+    private bool $escapeMarker = false;
+
+    /**
+     * True while compiling an operand that must be a bare variable or chain.
+     *
+     * PHP accepts only a variable, or a chain over one, inside `isset()`, so a
+     * parenthesised expression there is a parse error. Set by the presence guard in
+     * `assertInlineCallArgument()`; nothing else depends on it. (Variable TOLERANCE
+     * needs no flag: it is decided at render time by the error handler.)
+     */
+    private bool $bareOperand = false;
+
+    /**
      * True while compiling an expression whose filters include a debug probe.
      *
      * A probe echoes its own output (a JS comment or a dump block) and returns the

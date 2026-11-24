@@ -71,6 +71,32 @@ arguments (`identifier: phpExpr`). PHP validates names and arity at runtime.
 - Description: PHP call expression.
 
 
+---
+
+### compileIterable() · <small>[🗎](../../src/Engine/Tokenizer/FilterCompilerTrait.php#L717)</small>
+
+`public function compileIterable(string $expression): string`
+
+Compile the subject of `{% for … in … %}`.
+
+The subject is compiled as an ordinary expression. An absent or null list then
+reaches PHP's `foreach()`, which raises "foreach() argument must be of type
+array|object" and iterates zero times — that diagnostic is an ABSENCE, so
+under `strictVariables` denied it is warned rather than thrown, and the loop
+simply renders nothing. Both policies therefore need the same code here; the
+difference is decided at render time by the error handler.
+
+**Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$expression` | string | - |  |
+
+**Return value**
+
+- Type: `string`
+
+
 
 ---
 

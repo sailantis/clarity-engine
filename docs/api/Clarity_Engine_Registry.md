@@ -38,7 +38,7 @@ Built-in Filters Catalog
 - `striptags [$allowed]`      : Strip HTML/PHP tags
 - `truncate($length [, $ellipsis='…'])`: Truncate string to length
 - `sprintf(...$args)`         : sprintf-style string formatting (alias: `format`)
-- `escape` (alias: `esc`)     : HTML-escape (htmlspecialchars) — explicit escaping; output is already auto-escaped unless `raw` is used
+- `escape` (aliases: `e`, `esc`) : HTML-escape (htmlspecialchars) — explicit escaping; output is already auto-escaped unless `raw` is used
 - `raw`                       : Disable auto-escaping for this output; untrusted input is rendered as-is
 
 **Numbers**

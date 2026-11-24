@@ -587,16 +587,17 @@ trait VarChainTrait
     /**
      * Emit a chain root: a PHP local in open mode, else a `$__c_va` lookup.
      *
-     * Open mode seeds the render scope into locals, so the root IS the local.
-     * No guard expression is emitted: an unknown name then raises PHP's own
-     * "Undefined variable" warning, which {@see ClarityEngineTrait::buildErrorHandler()}
-     * already maps to a ClarityException carrying the template line. That keeps
-     * the strict-access contract identical to sandbox mode — and a `?? $__c_va[…]`
-     * fallback would silently suppress it, which is the failure strict access
-     * exists to prevent.
+     * No guard expression is emitted, in EITHER policy. Reading a name the scope
+     * does not contain makes PHP yield null and raise a diagnostic, and which of
+     * those the caller sees is decided at RENDER time by the error handler:
      *
-     * Read and write are therefore the same text (`$name`), so no lvalue flag is
-     * needed in either mode.
+     *   `strictVariables` granted  -> ClarityException naming the template line
+     *   denied                     -> the diagnostic is warned and the null stands
+     *
+     * Compiling the guard here instead (`?? null`) would be worse than useless under
+     * the lax rule: it suppresses the very warning that policy exists to keep.
+     * See {@see ClarityEngineTrait::buildErrorHandler()} and
+     * {@see forwardToleratedDiagnostic()}.
      *
      * A name matching an enclosing lambda's parameter is emitted bare as well:
      * that parameter is a real local of the enclosing closure, so reading it
@@ -604,6 +605,8 @@ trait VarChainTrait
      */
     private function rootPhp(string $name): string
     {
+        // A lambda parameter is a real local of the enclosing closure, so it is
+        // always bound.
         if ($this->isLambdaParam($name)) {
             return '$' . $name;
         }
@@ -613,7 +616,7 @@ trait VarChainTrait
         //
         //   granted     -> PHP's own `$_SERVER`, whatever the scope holds
         //   not granted -> an ordinary scope read, which is absent and therefore
-        //                  throws
+        //                  reported
         //
         // Without the second rule, a template could reach every superglobal
         // through the seeded-local form once `phpVariables` was granted.

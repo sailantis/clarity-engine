@@ -56,7 +56,7 @@ Named arguments
 
 ## Public methods
 
-### setPrunedFunctions() · <small>[🗎](../../src/Engine/Tokenizer.php#L266)</small>
+### setPrunedFunctions() · <small>[🗎](../../src/Engine/Tokenizer.php#L288)</small>
 
 `public function setPrunedFunctions(array $names): void`
 
@@ -73,7 +73,7 @@ Named arguments
 
 ---
 
-### setContextInjectedFunctions() · <small>[🗎](../../src/Engine/Tokenizer.php#L272)</small>
+### setContextInjectedFunctions() · <small>[🗎](../../src/Engine/Tokenizer.php#L294)</small>
 
 `public function setContextInjectedFunctions(array $names): void`
 
@@ -90,7 +90,7 @@ Named arguments
 
 ---
 
-### setFilterProbes() · <small>[🗎](../../src/Engine/Tokenizer.php#L288)</small>
+### setFilterProbes() · <small>[🗎](../../src/Engine/Tokenizer.php#L310)</small>
 
 `public function setFilterProbes(array $names): void`
 
@@ -115,7 +115,7 @@ user-registered template function of the same name.
 
 ---
 
-### __construct() · <small>[🗎](../../src/Engine/Tokenizer.php#L317)</small>
+### __construct() · <small>[🗎](../../src/Engine/Tokenizer.php#L339)</small>
 
 `public function __construct(): mixed`
 
@@ -129,7 +129,7 @@ through `setPolicy()`.
 
 ---
 
-### processArgumentList() · <small>[🗎](../../src/Engine/Tokenizer.php#L344)</small>
+### processArgumentList() · <small>[🗎](../../src/Engine/Tokenizer.php#L366)</small>
 
 `public function processArgumentList(string $rest): array`
 
@@ -168,7 +168,7 @@ an array or object literal.
 
 ---
 
-### setPolicy() · <small>[🗎](../../src/Engine/Tokenizer.php#L369)</small>
+### setPolicy() · <small>[🗎](../../src/Engine/Tokenizer.php#L391)</small>
 
 `public function setPolicy(Clarity\Engine\Policy $policy): void`
 
@@ -191,7 +191,7 @@ the policy are not seen until setPolicy() is called again.
 
 ---
 
-### getPolicy() · <small>[🗎](../../src/Engine/Tokenizer.php#L380)</small>
+### getPolicy() · <small>[🗎](../../src/Engine/Tokenizer.php#L402)</small>
 
 `public function getPolicy(): Clarity\Engine\Policy`
 
@@ -202,7 +202,7 @@ the policy are not seen until setPolicy() is called again.
 
 ---
 
-### setLocalRoots() · <small>[🗎](../../src/Engine/Tokenizer.php#L400)</small>
+### setLocalRoots() · <small>[🗎](../../src/Engine/Tokenizer.php#L422)</small>
 
 `public function setLocalRoots(bool $enabled): void`
 
@@ -224,7 +224,7 @@ compiler that seeds no locals never emits a local read.
 
 ---
 
-### setRegistry() · <small>[🗎](../../src/Engine/Tokenizer.php#L419)</small>
+### setRegistry() · <small>[🗎](../../src/Engine/Tokenizer.php#L441)</small>
 
 `public function setRegistry(Clarity\Engine\Registry $registry): void`
 
@@ -241,7 +241,7 @@ compiler that seeds no locals never emits a local read.
 
 ---
 
-### setLocalVars() · <small>[🗎](../../src/Engine/Tokenizer.php#L433)</small>
+### setLocalVars() · <small>[🗎](../../src/Engine/Tokenizer.php#L455)</small>
 
 `public function setLocalVars(array $localVars): void`
 
@@ -264,7 +264,7 @@ variable resolution inside the loop uses direct PHP local variables
 
 ---
 
-### setDynamicBindings() · <small>[🗎](../../src/Engine/Tokenizer.php#L447)</small>
+### setDynamicBindings() · <small>[🗎](../../src/Engine/Tokenizer.php#L469)</small>
 
 `public function setDynamicBindings(array $names): void`
 
@@ -377,7 +377,7 @@ tokenizer is reused across templates.
 
 ---
 
-### processExpression() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L70)</small>
+### processExpression() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L73)</small>
 
 `public function processExpression(string $expression): string`
 
@@ -385,12 +385,15 @@ Convert an output expression, `{{ ... }}`, to a PHP expression string.
 
 The pipeline (`|>`) is processed first. The leftmost segment is the
 expression, and each following segment is a filter call. Unless the
-pipeline ends in `raw` (the filter form that disables escaping), the result
-is escaped for the current context set by `setEscapeContext()`:
-  - html: `htmlspecialchars()`
-  - js:   escaped string CONTENT, for use inside quotes the template
-          supplies. An unquoted interpolation is a compile error.
-  - css:  cast to string, no escaping
+pipeline contains `raw` (the marker that disables escaping) or a bare
+`escape` (the marker that applies it explicitly), the result is escaped for
+the current context set by `setEscapeContext()` — see
+`escapeExpression()`.
+
+`raw` and `escape` are the two halves of one switch. `raw` leaves the value
+alone and cancels the automatic wrapper; `escape` applies the wrapper's
+work itself and cancels it, so the value is escaped exactly once. Neither
+has an effect outside output position.
 
 **Parameters**
 
@@ -406,7 +409,7 @@ is escaped for the current context set by `setEscapeContext()`:
 
 ---
 
-### processCondition() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L151)</small>
+### processCondition() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L197)</small>
 
 `public function processCondition(string $expression, bool $asObject = false): string`
 
@@ -428,7 +431,7 @@ structure conditions (if, for, set) where auto-escape is meaningless.
 
 ---
 
-### processLvalue() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L175)</small>
+### processLvalue() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L221)</small>
 
 `public function processLvalue(string $var): string`
 
@@ -454,7 +457,7 @@ choice is made in the chain emitter, so it matches the read path.
 
 ---
 
-### convertVarsAndOps() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L195)</small>
+### convertVarsAndOps() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L241)</small>
 
 `public function convertVarsAndOps(string $expr, bool $asObject = false): string`
 
@@ -611,7 +614,33 @@ arguments (`identifier: phpExpr`). PHP validates names and arity at runtime.
 
 ---
 
-### varChainToPhp() · <small>[🗎](../../src/Engine/Tokenizer/VarChainTrait.php#L703)</small>
+### compileIterable() · <small>[🗎](../../src/Engine/Tokenizer/FilterCompilerTrait.php#L717)</small>
+
+`public function compileIterable(string $expression): string`
+
+Compile the subject of `{% for … in … %}`.
+
+The subject is compiled as an ordinary expression. An absent or null list then
+reaches PHP's `foreach()`, which raises "foreach() argument must be of type
+array|object" and iterates zero times — that diagnostic is an ABSENCE, so
+under `strictVariables` denied it is warned rather than thrown, and the loop
+simply renders nothing. Both policies therefore need the same code here; the
+difference is decided at render time by the error handler.
+
+**Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `$expression` | string | - |  |
+
+**Return value**
+
+- Type: `string`
+
+
+---
+
+### varChainToPhp() · <small>[🗎](../../src/Engine/Tokenizer/VarChainTrait.php#L706)</small>
 
 `public function varChainToPhp(string $chain): string`
 

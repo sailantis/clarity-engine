@@ -79,9 +79,13 @@ trait ControlFlowTrait
             return implode("\n", $rangeLines);
         }
 
-        // Standard foreach — evaluate list in the current (outer) scope first
+        // Standard foreach — evaluate list in the current (outer) scope first.
+        //
+        // compileIterable() appends `?? []` when the subject is a bare name under the
+        // lax rule, which yields zero iterations for an absent or null list. Chains
+        // and filter expressions keep their own error handling.
         $listExpr = $this->withLocation(
-            fn() => $this->tokenizer->processCondition(trim($m[3])),
+            fn() => $this->tokenizer->compileIterable(trim($m[3])),
             $sourcePath,
             $tplLine
         );

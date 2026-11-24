@@ -23,16 +23,20 @@ class PolicyTest extends BaseTestCase
 
     public function testRestrictedIsTheDefaultShape(): void
     {
-        // The shape is what matters here: every rule off except two.
-        // `variableVariables` is on because denying it would achieve nothing (see
-        // the Policy docblock); `strictTypes` is on because coercion hides
-        // mistakes and a type error does not. Compared order-insensitively — the
-        // preset's insertion order is not part of the contract.
+        // The shape is what matters here: every rule off except the four that do
+        // not reach PHP. `variableVariables` is on because denying it would achieve
+        // nothing (see the Policy docblock); `strictTypes` and `strictVariables` are
+        // on because a mistake reported is better than a mistake hidden, and
+        // neither grants a construct; `escapeHtml` is on because a sandboxed
+        // template must never emit unescaped data. Compared order-insensitively —
+        // the preset's insertion order is not part of the contract.
         $rules = Policy::restricted()->rules();
 
         $expected = \array_fill_keys(Policy::RULES, false);
         $expected['variableVariables'] = true;
         $expected['strictTypes'] = true;
+        $expected['strictVariables'] = true;
+        $expected['escapeHtml'] = true;
 
         \ksort($expected);
         \ksort($rules);

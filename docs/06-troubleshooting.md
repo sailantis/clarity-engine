@@ -47,10 +47,12 @@ See [strictTypes](09-policy-api.md#stricttypes) and
 **Error:**
 
 ```
-Warning: Undefined array key "variableName"
+Clarity\ClarityException: Variable "variableName" is not defined in this context
 ```
 
-**Cause:** Variable not passed to template or typo in variable name.
+**Cause:** Variable not passed to template or typo in variable name. `strictVariables` is
+on by default, so a read of an absent name aborts the render instead of yielding an empty
+string; the exception names the template and line.
 
 **Solutions:**
 
@@ -83,6 +85,17 @@ $engine->render('page', [
 ```twig
 {{ variableName ?? 'Default' }}
 ```
+
+5. **Relax the rule for the whole policy** — then an absent name reads as `null`, and
+   `{% if variableName %}` needs neither `??` nor `isset()`:
+
+```php
+$engine->setPolicy(Policy::default()->denyRule('strictVariables'));
+```
+
+Only the chain *root* becomes tolerant: `{{ variableName }}` and `{% if variableName %}`
+read null, while a mistyped member (`user.nope`) or a wrong operator (`user.name` on an
+array) still throws. See [`strictVariables`](09-policy-api.md#strictvariables).
 
 ---
 
@@ -424,14 +437,24 @@ $engine->setCachePath(__DIR__ . "/cache/clarity-{$env}");
 
 **Solutions:**
 
-1. **Pre-warm cache after deployment:**
+1. **Pre-warm cache after deployment — with data, not an empty array:**
 
 ```php
-$templates = ['home', 'about', 'contact', 'products/index'];
-foreach ($templates as $template) {
-    $engine->render($template, []);
+// Under the default policy a template that reads a variable throws when rendered
+// with no data, so warm with the same fixtures a test would use.
+$fixtures = [
+    'home'           => ['title' => 'Home'],
+    'about'          => ['title' => 'About'],
+    'contact'        => ['title' => 'Contact'],
+    'products/index' => ['title' => 'Products', 'items' => []],
+];
+foreach ($fixtures as $template => $data) {
+    $engine->render($template, $data);
 }
 ```
+
+A fixture render also fails on a variable typo, a missing filter, a broken include or a
+syntax error — compilation alone cannot see a variable name.
 
 2. **Accept warm-up time:** Subsequent requests will be fast.
 

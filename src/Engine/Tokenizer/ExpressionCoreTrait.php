@@ -57,12 +57,15 @@ trait ExpressionCoreTrait
      *
      * The pipeline (`|>`) is processed first. The leftmost segment is the
      * expression, and each following segment is a filter call. Unless the
-     * pipeline ends in `raw` (the filter form that disables escaping), the result
-     * is escaped for the current context set by {@see setEscapeContext()}:
-     *   - html: `htmlspecialchars()`
-     *   - js:   escaped string CONTENT, for use inside quotes the template
-     *           supplies. An unquoted interpolation is a compile error.
-     *   - css:  cast to string, no escaping
+     * pipeline contains `raw` (the marker that disables escaping) or a bare
+     * `escape` (the marker that applies it explicitly), the result is escaped for
+     * the current context set by {@see setEscapeContext()} — see
+     * {@see escapeExpression()}.
+     *
+     * `raw` and `escape` are the two halves of one switch. `raw` leaves the value
+     * alone and cancels the automatic wrapper; `escape` applies the wrapper's
+     * work itself and cancels it, so the value is escaped exactly once. Neither
+     * has an effect outside output position.
      *
      * @param string $expression Raw expression from inside `{{ ... }}`.
      * @return string PHP expression (no leading `<?=` or trailing `?>`).
@@ -70,25 +73,68 @@ trait ExpressionCoreTrait
     public function processExpression(string $expression): string
     {
         $this->autoEscape = true;
+        $this->escapeMarker = false;
         $this->probeInExpression = false;
         [$expr, $filters] = $this->splitPipeline($this->normalizePipeOperator($expression));
 
         $phpExpr = $this->convertVarsAndOps($expr);
 
-        // Wrap in filter calls (innermost first → outermost last)
+        // Wrap in filter calls (innermost first → outermost last).
+        //
+        // The marker flag is set per TOP-LEVEL segment and cleared inside
+        // buildFilterCall(), so a pipeline nested in a filter ARGUMENT
+        // (`{{ x |> default(y |> escape) }}`) does not inherit it. Argument
+        // position is not output position: there the value is an ordinary filter
+        // operand, and treating it as a marker would cancel the wrapper for the
+        // whole tag.
         foreach ($filters as $filterSegment) {
-            $phpExpr = $this->buildFilterCall($filterSegment, $phpExpr);
+            $this->escapeMarker = true;
+
+            try {
+                $phpExpr = $this->buildFilterCall($filterSegment, $phpExpr);
+            } finally {
+                $this->escapeMarker = false;
+            }
         }
 
+        // `raw` and `escape` both cancel the automatic wrapper; the difference is
+        // that `escape` has already applied it (in buildFilterCall()).
         if ($this->autoEscape) {
-            $phpExpr = match ($this->escapeContext) {
-                'js'    => $this->jsContextExpression($phpExpr),
-                'css'   => '(string)(' . $phpExpr . ')',           // raw — CSS values are not HTML-escaped
-                default => "\\htmlspecialchars((string)({$phpExpr}), 11, 'UTF-8')",
-            };
+            $phpExpr = $this->escapeExpression($phpExpr);
         }
 
         return $phpExpr;
+    }
+
+    /**
+     * Escape a compiled expression for the current output context.
+     *
+     * The single emission point for escaping, shared by the automatic wrapper in
+     * {@see processExpression()} and by the explicit `|> escape` marker, so the
+     * two can never drift apart:
+     *   - html: `htmlspecialchars()`
+     *   - js:   escaped string CONTENT, for use inside quotes the template
+     *           supplies. An unquoted interpolation is a compile error.
+     *   - css:  cast to string, no escaping
+     *
+     * Routing the marker through here is what makes `{{ x |> escape }}` safe in a
+     * `<script>`: HTML-escaping alone leaves `"` intact after JavaScript decodes
+     * `&quot;`, so the string could still be closed and a payload executed.
+     *
+     * @param bool $explicit True for the `|> escape` marker, which always escapes.
+     *                       The `escapeHtml` rule governs only the AUTOMATIC
+     *                       wrapper; an explicit marker is the opt-in that makes
+     *                       `{{ user.name |> e }}` work when the rule is denied.
+     */
+    private function escapeExpression(string $phpExpr, bool $explicit = false): string
+    {
+        return match ($this->escapeContext) {
+            'js'    => $this->jsContextExpression($phpExpr),
+            'css'   => '(string)(' . $phpExpr . ')',           // raw — CSS values are not HTML-escaped
+            default => ($explicit || $this->allows('escapeHtml'))
+                ? "\\htmlspecialchars((string)({$phpExpr}), 11, 'UTF-8')"
+                : '(string)(' . $phpExpr . ')',
+        };
     }
 
     /**

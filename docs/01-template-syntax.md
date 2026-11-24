@@ -143,6 +143,13 @@ write — see [Object literals](#collection-literals):
 
 A missing key or property raises `ClarityException` naming the template and line.
 
+With [`strictVariables` denied](09-policy-api.md#strictvariables), a missing name, key,
+property or intermediate value reads `null` at every level — so `{% if user.nickname %}`
+works exactly as `{% if user %}` does — and the diagnostic is reported as a warning
+carrying the template line instead of aborting the render. A read that applies the wrong
+operator (`user.name` on an array, `user['x']` on an object) is still an error, because
+that is a bug in the template rather than data that happens to be absent.
+
 #### Optional access
 
 `?` marks the value BEFORE it as possibly absent or `null`. Everything after the

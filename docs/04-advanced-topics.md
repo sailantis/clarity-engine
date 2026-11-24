@@ -191,7 +191,7 @@ htmlspecialchars($vars['userInput'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
 
 ### Disabling Auto-Escaping (raw filter)
 
-To output raw HTML, use the `raw` filter. It is a **compile-time marker** that disables the auto-escape wrapper, and it applies to the **entire expression** when it appears anywhere in the filter chain:
+To output raw HTML, use the `raw` filter. It is a **compile-time marker** that disables the auto-escape wrapper, and it applies to the **entire expression** when it appears anywhere in the filter chain. Its opposite is [`escape`](02-filters-and-functions.md#escape-aliases-e-esc), which applies the escaping itself and cancels the wrapper:
 
 ```twig
 {{ article:sanitizedBody |> raw }}          {# sanitized HTML from a WYSIWYG editor #}
@@ -202,6 +202,15 @@ To output raw HTML, use the `raw` filter. It is a **compile-time marker** that d
 ```
 
 Only use `raw` with trusted content — never with user input.
+
+`raw` and `escape` are the two halves of one switch. Both cancel the automatic wrapper;
+`escape` performs its work itself, so the value is escaped exactly once:
+
+| Output                      | Emitted                                     |
+| --------------------------- | ------------------------------------------- |
+| `{{ x }}`                  | `htmlspecialchars((string)(x))`             |
+| `{{ x \|> escape }}`        | `htmlspecialchars((string)(x))` — the same  |
+| `{{ x \|> raw }}`           | `x`, verbatim                               |
 
 ### Safe HTML Generation
 
@@ -495,22 +504,23 @@ reference.
 
 ### Pre-Compilation
 
-Pre-compile all templates after deployment:
+Render every template once after deployment so the first user request does not pay for it.
+Use data, not an empty array: under the default policy a template that reads any variable
+throws on its first read, and a fixture render is also what catches a typo, a missing
+filter, a bad `{% include %}` and a syntax error at deploy time:
 
 ```php
-$templates = [
-    'layouts/main',
-    'pages/home',
-    'pages/about',
-    // ... all templates
+$fixtures = [
+    'layouts/main' => ['title' => 'x', 'content' => ''],
+    'pages/home'   => ['title' => 'x', 'items' => [['id' => 1]]],
 ];
-
-foreach ($templates as $template) {
-    $engine->render($template, []);
+foreach ($fixtures as $template => $data) {
+    $engine->render($template, $data);   // warms the template and everything it includes
 }
 ```
 
-This warms the cache and ensures the first user request is fast.
+Compilation alone cannot see a variable name, so this is the only stage that can
+(see [Troubleshooting](06-troubleshooting.md#undefined-variable)).
 
 ### Cache in Persistent Storage
 

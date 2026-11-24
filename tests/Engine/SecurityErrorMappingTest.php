@@ -29,6 +29,84 @@ class SecurityErrorMappingTest extends BaseTestCase
         }
     }
 
+    /**
+     * PHP quotes a STRING array key in its diagnostic but leaves an INTEGER key
+     * bare, so a pattern requiring the quotes missed every `{{ items[3] }}` over a
+     * short array. That diagnostic fell through to the generic branch and was
+     * handed to the application handler; with display_errors on it landed inside
+     * the rendered page instead of aborting the render.
+     *
+     * A non-throwing previous handler is installed first, because that is what a
+     * production application provides — and because PHPUnit's own handler converts
+     * the warning to an exception, which would make this test pass whether or not
+     * the mapping works.
+     */
+    public function testUndefinedIntegerArrayKeyAbortsTheRender(): void
+    {
+        self::tpl('warn_int_key', '{{ items[3] }}');
+
+        set_error_handler(static fn(): bool => true);
+
+        try {
+            $this->expectException(ClarityException::class);
+            $this->expectExceptionMessageMatches('/Variable "3" is not defined/');
+            self::render('warn_int_key', ['items' => [1]]);
+        } finally {
+            restore_error_handler();
+        }
+    }
+
+    public function testUndefinedNegativeIntegerArrayKeyAbortsTheRender(): void
+    {
+        self::tpl('warn_neg_int_key', '{{ items[-1] }}');
+
+        set_error_handler(static fn(): bool => true);
+
+        try {
+            $this->expectException(ClarityException::class);
+            self::render('warn_neg_int_key', ['items' => [1]]);
+        } finally {
+            restore_error_handler();
+        }
+    }
+
+    public function testUndefinedIntegerArrayKeyInAConditionAbortsTheRender(): void
+    {
+        self::tpl('warn_int_key_if', '{% if items[3] %}y{% else %}n{% endif %}');
+
+        set_error_handler(static fn(): bool => true);
+
+        try {
+            $this->expectException(ClarityException::class);
+            self::render('warn_int_key_if', ['items' => [1]]);
+        } finally {
+            restore_error_handler();
+        }
+    }
+
+    /**
+     * An empty string key is quoted but empty, so the "one or more characters"
+     * form of the pattern would not match it and the unquoted fallback would
+     * capture the quote characters themselves.
+     */
+    public function testUndefinedEmptyStringArrayKeyNamesAnEmptyKey(): void
+    {
+        self::tpl('warn_empty_key', "{{ items[''] }}");
+
+        set_error_handler(static fn(): bool => true);
+
+        try {
+            try {
+                self::render('warn_empty_key', ['items' => [1]]);
+                $this->fail('Expected ClarityException was not thrown');
+            } catch (ClarityException $e) {
+                $this->assertStringContainsString('Variable "" is not defined', $e->getMessage());
+            }
+        } finally {
+            restore_error_handler();
+        }
+    }
+
     public function testNestedUndefinedArrayKeyUsesExactTemplateLine(): void
     {
         self::tpl('warn_nested_line', implode("\n", [

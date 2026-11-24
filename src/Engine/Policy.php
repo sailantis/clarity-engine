@@ -91,6 +91,7 @@ final class Policy
 {
     /** Every rule, in the order the documentation lists them. */
     public const RULES = [
+        'escapeHtml',
         'methodCalls',
         'newExpressions',
         'phpFunctions',
@@ -98,6 +99,7 @@ final class Policy
         'rawPhp',
         'staticCalls',
         'strictTypes',
+        'strictVariables',
         'superglobals',
         'variableVariables',
     ];
@@ -146,14 +148,16 @@ final class Policy
      * The default: no template reaches PHP.  Identical to the engine's
      * historical sandbox mode, and what a bare `new ClarityEngine()` uses.
      *
-     * Two rules are on rather than off, for opposite reasons:
-     * `strictTypes` because it is desirable (it costs nothing and reports
-     * mismatches instead of hiding them), and `variableVariables` because
-     * turning it off would achieve nothing (see below).
+     * Four rules are on rather than off, for two reasons. `strictTypes`,
+     * `strictVariables` and `escapeHtml` because they are desirable — the three
+     * cost nothing at render time and report or prevent mistakes instead of hiding
+     * them, and none is a reach rule — and `variableVariables` because turning it
+     * off would achieve nothing (see below).
      */
     public static function restricted(): self
     {
         return new self([
+            'escapeHtml'        => true,
             'methodCalls'       => false,
             'newExpressions'    => false,
             'phpFunctions'      => false,
@@ -161,6 +165,7 @@ final class Policy
             'rawPhp'            => false,
             'staticCalls'       => false,
             'strictTypes'       => true,
+            'strictVariables'   => true,
             'superglobals'      => false,
             'variableVariables' => true,
         ]);
@@ -177,6 +182,7 @@ final class Policy
     public static function unrestricted(): self
     {
         return new self([
+            'escapeHtml'        => true,
             'methodCalls'       => true,
             'newExpressions'    => true,
             'phpFunctions'      => true,
@@ -184,6 +190,7 @@ final class Policy
             'rawPhp'            => true,
             'staticCalls'       => true,
             'strictTypes'       => true,
+            'strictVariables'   => true,
             'superglobals'      => true,
             'variableVariables' => true,
         ]);
@@ -208,6 +215,7 @@ final class Policy
     public static function trusted(): self
     {
         return new self([
+            'escapeHtml'        => true,
             'methodCalls'       => true,
             'newExpressions'    => false,
             'phpFunctions'      => true,
@@ -215,6 +223,7 @@ final class Policy
             'rawPhp'            => false,
             'staticCalls'       => false,
             'strictTypes'       => true,
+            'strictVariables'   => true,
             'superglobals'      => true,
             'variableVariables' => true,
         ]);
@@ -579,6 +588,47 @@ final class Policy
     public function strictTypes(): bool
     {
         return $this->allows('strictTypes');
+    }
+
+    /**
+     * Whether `{{ … }}` output is HTML-escaped.
+     *
+     * A FORMAT rule, not a reach rule: it grants no construct and names no
+     * class. Denying it compiles every HTML output tag to its bare value, which
+     * is the posture some engines (Phalcon's Volt) default to. `js` context is
+     * unaffected — `json_encode` there is correctness rather than safety, since
+     * a bare value would be invalid JavaScript — and `css` was never escaped.
+     *
+     * The rule governs only the AUTOMATIC wrapper. An explicit `|> escape` is the
+     * opt-in and always escapes, which is what lets a template written for this
+     * mode use `{{ user.name |> e }}` for the values that need it.
+     */
+    public function escapeHtml(): bool
+    {
+        return $this->allows('escapeHtml');
+    }
+
+    /**
+     * Whether an absent value aborts the render.
+     *
+     * On (the default) a missing name, key, property or intermediate value is a
+     * `ClarityException` carrying the template line, so a typo fails loudly instead
+     * of rendering empty. Denying it reports the same diagnostic as a WARNING and
+     * lets the render continue with the null PHP already produced, at every level of
+     * a chain — `{{ user.nickname }}` and `{% if user.nickname %}` become as
+     * forgiving as `{{ user }}`.
+     *
+     * A wrong OPERATOR is not an absence and keeps throwing under both policies:
+     * `user.name` over an array is a template bug, not absent data, and PHP words it
+     * differently (`Attempt to read property … on array` versus `… on null`).
+     *
+     * Like `strictTypes`, this is not a reach rule: the compiled template is
+     * identical under both policies. Only the error handler's reading of the
+     * diagnostic differs.
+     */
+    public function strictVariables(): bool
+    {
+        return $this->allows('strictVariables');
     }
 
     // -------------------------------------------------------------------------

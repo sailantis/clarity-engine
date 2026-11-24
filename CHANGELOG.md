@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Policy rules `escapeHtml` and `strictVariables`, with matching accessors.**
+  `escapeHtml` controls HTML-context output escaping and is enabled in every preset;
+  JavaScript output uses `json_encode()`. `strictVariables` controls handling of
+  missing names, keys, properties, intermediate values, loop subjects and null
+  receivers. When disabled, these resolve to `null`, a warning with the template
+  line is reported, and rendering continues. Invalid operators still raise errors.
+  Both rules are included in the compilation digest.
+
+### Fixed
+
+- **`escape`, `e` and `esc` output markers** apply context-aware escaping once.
+  In non-output positions, they remain ordinary filters.
+- Integer array-key warnings, including PHP 8's unquoted format, map to the
+  undefined-key diagnostic.
+- Pre-compilation examples render templates with fixture data to validate
+  variables, filters, includes and syntax.
+
 ## [0.5.0] - 2026-11-23
 
 Installed by `composer require` from this tag. A **minor** release: `IntlFormatter` is

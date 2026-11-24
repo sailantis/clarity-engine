@@ -66,7 +66,7 @@ tokenizer is reused across templates.
 
 ---
 
-### processExpression() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L70)</small>
+### processExpression() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L73)</small>
 
 `public function processExpression(string $expression): string`
 
@@ -74,12 +74,15 @@ Convert an output expression, `{{ ... }}`, to a PHP expression string.
 
 The pipeline (`|>`) is processed first. The leftmost segment is the
 expression, and each following segment is a filter call. Unless the
-pipeline ends in `raw` (the filter form that disables escaping), the result
-is escaped for the current context set by `setEscapeContext()`:
-  - html: `htmlspecialchars()`
-  - js:   escaped string CONTENT, for use inside quotes the template
-          supplies. An unquoted interpolation is a compile error.
-  - css:  cast to string, no escaping
+pipeline contains `raw` (the marker that disables escaping) or a bare
+`escape` (the marker that applies it explicitly), the result is escaped for
+the current context set by `setEscapeContext()` — see
+`escapeExpression()`.
+
+`raw` and `escape` are the two halves of one switch. `raw` leaves the value
+alone and cancels the automatic wrapper; `escape` applies the wrapper's
+work itself and cancels it, so the value is escaped exactly once. Neither
+has an effect outside output position.
 
 **Parameters**
 
@@ -95,7 +98,7 @@ is escaped for the current context set by `setEscapeContext()`:
 
 ---
 
-### processCondition() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L151)</small>
+### processCondition() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L197)</small>
 
 `public function processCondition(string $expression, bool $asObject = false): string`
 
@@ -117,7 +120,7 @@ structure conditions (if, for, set) where auto-escape is meaningless.
 
 ---
 
-### processLvalue() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L175)</small>
+### processLvalue() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L221)</small>
 
 `public function processLvalue(string $var): string`
 
@@ -143,7 +146,7 @@ choice is made in the chain emitter, so it matches the read path.
 
 ---
 
-### convertVarsAndOps() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L195)</small>
+### convertVarsAndOps() · <small>[🗎](../../src/Engine/Tokenizer/ExpressionCoreTrait.php#L241)</small>
 
 `public function convertVarsAndOps(string $expr, bool $asObject = false): string`
 

@@ -40,8 +40,10 @@ The three ready-made modes differ only in their rules. This table is the complet
 
 | Rule                | `restricted()` | `trusted()` | `unrestricted()` |
 | ------------------- | -------------- | ----------- | ---------------- |
+| `escapeHtml`        | ✓              | ✓           | ✓                |
 | `variableVariables` | ✓              | ✓           | ✓                |
 | `strictTypes`       | ✓              | ✓           | ✓                |
+| `strictVariables`   | ✓              | ✓           | ✓                |
 | `phpFunctions`      | -              | **✓**       | **✓**            |
 | `methodCalls`       | -              | **✓**       | **✓**            |
 | `superglobals`      | -              | **✓**       | **✓**            |
@@ -127,6 +129,7 @@ your templates need.
 
 | Rule                | Default | What it grants                                                                                          |
 | ------------------- | ------- | ------------------------------------------------------------------------------------------------------- |
+| `escapeHtml`        | `true`  | `htmlspecialchars()` around every `{{ … }}` in HTML context (see [`escapeHtml`](#escapehtml))            |
 | `phpFunctions`      | `false` | bare calls (`strtoupper(name)`) and filter steps that resolve to a PHP function                         |
 | `rawPhp`            | `false` | `{% php CODE %}` tags                                                                                   |
 | `methodCalls`       | `false` | `obj.method()` / `$obj->method()`, with arguments and dynamic names                                     |
@@ -136,8 +139,11 @@ your templates need.
 | `newExpressions`    | `false` | `new Foo(args)`                                                                                         |
 | `staticCalls`       | `false` | `Foo::method(args)`, `Foo::CONST`, `Foo::class`, `Foo::$prop`                                           |
 | `strictTypes`       | `true`  | `declare(strict_types=1)` in the compiled template (see [`strictTypes`](#stricttypes))                  |
+| `strictVariables`   | `true`  | an absent name aborts the render (see [`strictVariables`](#strictvariables))                            |
 
-Deny `strictTypes` to opt a template back into PHP's weak-mode coercion.
+Deny `strictTypes` to opt a template back into PHP's weak-mode coercion, and
+`strictVariables` to let an absent name read as `null`. Both are *strictness*
+rules: denying either changes what a mistake does, not what a template can reach.
 
 ### Allowlists
 
@@ -313,6 +319,116 @@ To avoid a `TypeError` under `strictTypes`, use an explicit [cast](01-template-s
 {{ (float) '3.7' |> round(2) }}      {# 3.7 — cast to float, then round         #}
 {{ '3.7' |> float |> round(2) }}     {# 3.7 — cast to float, then round         #}
 ```
+
+### `strictVariables`
+
+With `strictVariables` enabled — the default — an absent render-scope name aborts
+the render with a `ClarityException` carrying the template line:
+
+```
+Variable "tittle" is not defined in this context   (page.clarity.html on line 4)
+```
+
+That is what makes a typo fail loudly instead of rendering an empty string, and it
+costs nothing: the check *is* PHP's own undefined-key diagnostic, so a failed read
+is the only thing that pays for it. There is no `isset()` probe in the generated code.
+
+**Denying the rule makes every absence tolerant, and keeps the diagnostic as a warning.**
+
+```php
+$engine->setPolicy(Policy::default()->denyRule('strictVariables'));
+```
+
+```twig
+{{ missing }}                  {# null  -> renders ''      + a warning #}
+{% if missing %}…{% endif %}   {# false -> no ?? null needed           #}
+{{ user.nickname }}            {# null  -> renders ''      + a warning #}
+{{ user.address.city }}        {# null  -> renders ''      + a warning #}
+{% for i in missing %}…{% endfor %}  {# zero iterations     + a warning #}
+```
+
+That is the whole reason the rule exists: with the default, `{% if missing %}` is
+impossible, and the alternatives read badly:
+
+```twig
+{% if missing ?? null %}…{% endif %}    {# works, but verbose #}
+{% if isset(missing) %}…{% endif %}     {# same #}
+{% if missing %}…{% endif %}            {# requires denyRule('strictVariables') #}
+```
+
+**Tolerance is decided at render time, not by emitted code.** PHP already yields `null`
+for an absent read and raises a diagnostic beside it, so the compiled template is
+identical under both policies. The error handler decides what the diagnostic becomes:
+
+| Diagnostic | `strictVariables` on | denied |
+| ---------- | -------------------- | ------ |
+| `Undefined variable` / `Undefined array key` / `Undefined property` | `ClarityException` | warning, render continues |
+| `Attempt to read property "x" on null` | `ClarityException` | warning, render continues |
+| `foreach() argument must be…` | `ClarityException` | warning, render continues |
+| `Attempt to read property "x" on array` (wrong operator) | `ClarityException` | **`ClarityException`** |
+| `Cannot use object of type X as array` (wrong operator) | `ClarityException` | **`ClarityException`** |
+
+Warning rather than silence is deliberate. Twig's lenient mode returns `null` silently, so
+a typo hides forever; Latte, Blade and Stempler leave PHP's warning in place. This does
+the same, with the template line attached — an application can log it, promote it, or
+ignore it through its own error handler.
+
+**A wrong operator is not an absence.** `user.name` over an array is a template bug, and
+PHP words it differently (`on array` rather than `on null`), which is what lets the
+handler keep it an error under every policy. An explicit `??` or `|> default(…)` stays
+silent, because it states the fallback rather than relying on tolerance.
+
+Assignment targets are unaffected: `{% set data:value = 1 %}` creates the missing
+intermediate in both policies, since PHP auto-vivifies it.
+
+### `escapeHtml`
+
+With `escapeHtml` enabled — the default — every `{{ … }}` in HTML context is wrapped
+in `htmlspecialchars()`, and `js` context is encoded with `json_encode()`. Denying the
+rule compiles HTML output to its bare value:
+
+```php
+$engine->setPolicy(Policy::default()->denyRule('escapeHtml'));
+```
+
+```twig
+{{ userInput }}   {# default: &lt;script&gt;   denied: <script> #}
+```
+
+This is the posture Phalcon's Volt defaults to. It is a **format** rule, not a reach
+rule: it grants nothing and opens no PHP. Because it is part of the policy it is part
+of the digest, so a template compiled escaped is never served from a cache built for
+an unescaped policy.
+
+**`escape` remains the opt-in.** Denying the rule disables only the *automatic* wrapper;
+an explicit `|> escape` still escapes, which is what makes the Volt idiom work. All three
+spellings are the same marker, so a template can use the short one in prose or dense
+markup:
+
+```twig
+{{ userInput |> escape }}   {# escaped, even with escapeHtml denied #}
+{{ userInput |> e }}        {# the same                                       #}
+{{ userInput }}             {# bare value                                     #}
+```
+
+Two things are deliberately unaffected:
+
+- **`js` context is still encoded.** `json_encode` there is correctness, not safety:
+  without it `var n = {{ n }};` emits `12345,` and an unquoted string breaks the
+  script. Denying `escapeHtml` does not disable it.
+- **`css` context was never escaped**, so nothing changes there.
+
+When the rule is denied, escaping becomes the template's job — exactly Volt's
+contract. A project can enforce it with a CI lint on the compiled templates or the
+sources; `azera-competition/tests/PhalconTemplateEscapingTest.php` is the same pattern
+for Volt.
+
+> **Note.** `|> escape` (also `|> e` and `|> esc`) is a *marker* in output position: it
+> applies the context's escaping and cancels the automatic wrapper, so the value is
+> escaped exactly once. `|> raw` is its opposite — it cancels the wrapper and emits the
+> value verbatim. In `{% set %}`, `{% if %}` and argument position, `escape` is an
+> ordinary filter, because there is no output to encode there. When a chain contains
+> both markers the first one wins.
 
 ---
 

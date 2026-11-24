@@ -1208,7 +1208,54 @@ trait ClarityEngineTrait
             [$tplFile, $tplLine, $tplPath] = $this->resolveTemplateLine($templateName, $errline);
             $tplFile = $tplFile ?? $templateName;
 
-            // 1) Undefined array key "foo"
+            // ── Absence diagnostics ───────────────────────────────────────────
+            //
+            // A read that names something the data does not have is an ABSENCE, and
+            // PHP reports it as a warning while yielding null. Under the default
+            // policy that warning becomes a ClarityException (fail loudly). With
+            // `strictVariables` denied it falls through to the generic branch at the
+            // end of this handler, which annotates the diagnostic with the template
+            // line and hands it to the application's handler as a WARNING while the
+            // render continues with the null PHP already produced.
+            //
+            // Warning rather than silence is deliberate: Twig's lenient mode returns
+            // null silently, but a typo then hides forever. Every other tolerant
+            // engine (Latte, Blade, Stempler) leaves PHP's warning in place; this
+            // does the same while keeping the template line attached.
+            //
+            // A wrong OPERATOR is not an absence and is handled below — see (5),
+            // where `on array` / `on int` keeps throwing under every policy.
+            $toleratesAbsence = !$this->getPolicy()->strictVariables()
+                && (
+                    \str_starts_with($errstr, 'Undefined array key ')
+                    || \preg_match('/^Undefined variable:?\s/', $errstr) === 1
+                    || \str_starts_with($errstr, 'Undefined property: ')
+                    // A chain step over null is the "absent member one level down"
+                    // case: `user.address.city` where `address` is null/absent.
+                    || \preg_match('/^Attempt to read property ".+" on null$/', $errstr) === 1
+                    || \str_starts_with($errstr, 'Trying to access array offset on')
+                    || \str_starts_with($errstr, 'foreach() argument must be')
+                );
+
+            if ($toleratesAbsence) {
+                // Fall through to the generic forwarding at the end of this closure.
+                // Nothing here; the code below is skipped by the early return.
+                return $this->forwardToleratedDiagnostic(
+                    $errno,
+                    $errstr,
+                    $tplFile,
+                    $tplLine,
+                    $tplPath,
+                    $previousHandler
+                );
+            }
+
+            // 1) Undefined array key "foo"  (string key — quoted)            //    Undefined array key 3       (integer key — UNQUOTED)            //
+            //    PHP quotes a string key and leaves an integer key bare, so a
+            //    pattern that requires the quotes misses every `{{ items[3] }}`
+            //    over a short array. That diagnostic then fell through to the
+            //    generic branch below and, with display_errors on, was printed
+            //    into the rendered page instead of aborting the render.
             //
             //    Deliberately NOT reworded to mention a filter or a variable by
             //    name: the same PHP diagnostic covers a missing render-scope
@@ -1216,8 +1263,10 @@ trait ClarityEngineTrait
             //    (`$__c_va['user']['foo']`), and the message cannot tell which
             //    array it was. A missing FILTER no longer reaches this branch at
             //    all — it is rejected at compile time (see FilterCompilerTrait).
-            if (preg_match('/Undefined array key "([^"]+)"/', $errstr, $m)) {
-                $varName = $m[1];
+            if (preg_match('/Undefined array key (?:"([^"]*)"|(\S+))\s*$/', $errstr, $m, PREG_UNMATCHED_AS_NULL)) {
+                // A quoted key (possibly empty) keeps its own text; the unquoted
+                // integer form is the fallback when the quoted group did not match.
+                $varName = $m[1] ?? $m[2] ?? '';
                 throw new ClarityException(
                     "Variable \"$varName\" is not defined in this context",
                     $tplFile,
@@ -1343,6 +1392,50 @@ trait ClarityEngineTrait
             trigger_error($annotated, $userLevel);
             return true;
         };
+    }
+
+    /**
+     * Report a diagnostic that the policy tolerates, and let the render continue.
+     *
+     * Used for absence diagnostics under `strictVariables` denied: PHP has already
+     * produced the null the template will use, so the only job here is to keep the
+     * diagnostic visible — annotated with the TEMPLATE's location rather than the
+     * compiled cache file's — without aborting the render.
+     *
+     * The level is mapped to its E_USER_* counterpart for the same reason as the
+     * generic branch: `trigger_error()` accepts user-level constants only, and a
+     * handler that promotes warnings to exceptions must not be handed a notice.
+     *
+     * @param callable|null $previousHandler
+     */
+    private function forwardToleratedDiagnostic(
+        int $errno,
+        string $errstr,
+        string $tplFile,
+        int $tplLine,
+        string $tplPath,
+        ?callable $previousHandler
+    ): bool {
+        $userLevel = match ($errno) {
+            E_NOTICE, E_USER_NOTICE         => E_USER_NOTICE,
+            E_DEPRECATED, E_USER_DEPRECATED => E_USER_DEPRECATED,
+            default                         => E_USER_WARNING
+        };
+
+        $annotated = $errstr . ' in ' . $tplFile . ':' . $tplLine;
+
+        if ($previousHandler !== null) {
+            return self::dispatchToPreviousHandler(
+                $previousHandler,
+                $userLevel,
+                $annotated,
+                $tplPath !== '' ? $tplPath : $tplFile,
+                $tplLine
+            );
+        }
+
+        trigger_error($annotated, $userLevel);
+        return true;
     }
 
     /**

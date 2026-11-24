@@ -334,6 +334,37 @@ trait FilterCompilerTrait
             return $phpValue;
         }
 
+        // `escape` in OUTPUT position is a MARKER, the dual of `raw`: it applies the
+        // context's escaping now and cancels the automatic wrapper, so the value is
+        // escaped exactly once. Without this branch it compiles as an ordinary
+        // `htmlspecialchars()` call and the wrapper escapes the result again
+        // (`<b>` → `&amp;lt;b&amp;gt;`).
+        //
+        // `raw` and `escape` are the two halves of one switch, and the FIRST one in a
+        // chain wins: whichever appears earliest decided the expression's output
+        // mode, and a later marker only restates it. `{{ x |> e |> escape }}` therefore
+        // escapes once, and `{{ x |> raw |> escape }}` stays raw — re-escaping would
+        // mean the later marker silently overrode the earlier, which is the sort of
+        // order-dependent surprise the explicit markers exist to avoid.
+        //
+        // This is also what makes a repeated marker idempotent: the `autoEscape` guard
+        // below stops once the expression's mode has been decided.
+        if ($this->escapeMarker && \in_array($name, ['escape', 'esc', 'e'], true)) {
+            if ($args !== '') {
+                throw new ClarityException(
+                    "'{$name}' takes no arguments: the escaping context follows the position of the tag"
+                        . " (HTML, or JSON inside <script>). Remove the argument."
+                );
+            }
+
+            if (!$this->autoEscape) {
+                return $phpValue;
+            }
+
+            $this->autoEscape = false;
+            return $this->escapeExpression($phpValue, true);
+        }
+
         if ($args === '') {
             $argList = [];
         } elseif (isset(self::CALLABLE_ARG_FILTERS[$name])) {
@@ -345,6 +376,17 @@ trait FilterCompilerTrait
         $isCallableFilter = isset(self::CALLABLE_ARG_FILTERS[$name]);
         $isRegistered     = $isCallableFilter
             || ($this->registry !== null && $this->registry->hasFilter($name));
+
+        // The filter's ARGUMENTS are not output position. Clearing the marker for
+        // the rest of this call keeps a nested pipeline in an argument
+        // (`default(x |> escape)`) an ordinary value transform instead of letting it
+        // cancel the wrapper for the whole tag.
+        //
+        // The bare-operand flag is cleared for the same reason: it describes the
+        // OUTER operand only, so an argument expression keeps whatever tolerance the
+        // policy grants.
+        $this->escapeMarker = false;
+        $this->bareOperand  = false;
 
         // A name that is callable but NOT filterable (`context`, `include`,
         // `dd`, and the call-only inline function `isset`) was registered for
@@ -645,6 +687,39 @@ trait FilterCompilerTrait
     }
 
     /**
+     * Compile an operand that must remain a bare variable or chain.
+     *
+     * PHP accepts only a variable, or a chain over one, inside `isset()`, so the
+     * tolerant-root wrapper must be suppressed here: `isset(($x ?? null))` is a
+     * parse error. See {@see $bareOperand}.
+     */
+    private function compileBareOperand(string $expression): string
+    {
+        $this->bareOperand = true;
+
+        try {
+            return $this->processCondition($expression);
+        } finally {
+            $this->bareOperand = false;
+        }
+    }
+
+    /**
+     * Compile the subject of `{% for … in … %}`.
+     *
+     * The subject is compiled as an ordinary expression. An absent or null list then
+     * reaches PHP's `foreach()`, which raises "foreach() argument must be of type
+     * array|object" and iterates zero times — that diagnostic is an ABSENCE, so
+     * under `strictVariables` denied it is warned rather than thrown, and the loop
+     * simply renders nothing. Both policies therefore need the same code here; the
+     * difference is decided at render time by the error handler.
+     */
+    public function compileIterable(string $expression): string
+    {
+        return $this->processCondition($expression);
+    }
+
+    /**
      * Validate a call-only inline function's COMPILED first argument against a
      * named guard.
      *
@@ -735,7 +810,7 @@ trait FilterCompilerTrait
                     "{$name}() requires exactly one argument."
                 );
             }
-            $compiled = isset($argList[0]) ? $this->processCondition(\trim($argList[0])) : null;
+            $compiled = isset($argList[0]) ? $this->compileBareOperand(\trim($argList[0])) : null;
             $this->assertInlineCallArgument($name, $compiled, $definition['callGuard']);
 
             return $this->substituteInlineFilterTemplate($definition['php'], [1 => (string) $compiled]);

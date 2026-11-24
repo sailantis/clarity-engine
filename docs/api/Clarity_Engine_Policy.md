@@ -87,6 +87,7 @@ rather than catching a mistake.
 ## Public Constants
 
 - **RULES** = `[
+    'escapeHtml',
     'methodCalls',
     'newExpressions',
     'phpFunctions',
@@ -94,23 +95,25 @@ rather than catching a mistake.
     'rawPhp',
     'staticCalls',
     'strictTypes',
+    'strictVariables',
     'superglobals',
     'variableVariables'
 ]`
 
 ## Public methods
 
-### restricted() · <small>[🗎](../../src/Engine/Policy.php#L154)</small>
+### restricted() · <small>[🗎](../../src/Engine/Policy.php#L157)</small>
 
 `public static function restricted(): self`
 
 The default: no template reaches PHP.  Identical to the engine's
 historical sandbox mode, and what a bare `new ClarityEngine()` uses.
 
-Two rules are on rather than off, for opposite reasons:
-`strictTypes` because it is desirable (it costs nothing and reports
-mismatches instead of hiding them), and `variableVariables` because
-turning it off would achieve nothing (see below).
+Four rules are on rather than off, for two reasons. `strictTypes`,
+`strictVariables` and `escapeHtml` because they are desirable — the three
+cost nothing at render time and report or prevent mistakes instead of hiding
+them, and none is a reach rule — and `variableVariables` because turning it
+off would achieve nothing (see below).
 
 **Return value**
 
@@ -119,7 +122,7 @@ turning it off would achieve nothing (see below).
 
 ---
 
-### unrestricted() · <small>[🗎](../../src/Engine/Policy.php#L177)</small>
+### unrestricted() · <small>[🗎](../../src/Engine/Policy.php#L182)</small>
 
 `public static function unrestricted(): self`
 
@@ -137,7 +140,7 @@ can choose.
 
 ---
 
-### trusted() · <small>[🗎](../../src/Engine/Policy.php#L208)</small>
+### trusted() · <small>[🗎](../../src/Engine/Policy.php#L215)</small>
 
 `public static function trusted(): self`
 
@@ -163,7 +166,7 @@ withholds; a trusted template is simply held to the types it declares.
 
 ---
 
-### default() · <small>[🗎](../../src/Engine/Policy.php#L234)</small>
+### default() · <small>[🗎](../../src/Engine/Policy.php#L243)</small>
 
 `public static function default(): self`
 
@@ -184,7 +187,7 @@ Policy::default()
 
 ---
 
-### fromArray() · <small>[🗎](../../src/Engine/Policy.php#L261)</small>
+### fromArray() · <small>[🗎](../../src/Engine/Policy.php#L270)</small>
 
 `public static function fromArray(array $data): self`
 
@@ -216,7 +219,7 @@ that silently drops a rule is worse than one that refuses to load.
 
 ---
 
-### toArray() · <small>[🗎](../../src/Engine/Policy.php#L315)</small>
+### toArray() · <small>[🗎](../../src/Engine/Policy.php#L324)</small>
 
 `public function toArray(): array`
 
@@ -229,7 +232,7 @@ The array form of this policy.  Round-trips through `fromArray()`.
 
 ---
 
-### allows() · <small>[🗎](../../src/Engine/Policy.php#L329)</small>
+### allows() · <small>[🗎](../../src/Engine/Policy.php#L338)</small>
 
 `public function allows(string $rule): bool`
 
@@ -246,7 +249,7 @@ The array form of this policy.  Round-trips through `fromArray()`.
 
 ---
 
-### rules() · <small>[🗎](../../src/Engine/Policy.php#L343)</small>
+### rules() · <small>[🗎](../../src/Engine/Policy.php#L352)</small>
 
 `public function rules(): array`
 
@@ -257,7 +260,7 @@ The array form of this policy.  Round-trips through `fromArray()`.
 
 ---
 
-### allowRule() · <small>[🗎](../../src/Engine/Policy.php#L353)</small>
+### allowRule() · <small>[🗎](../../src/Engine/Policy.php#L362)</small>
 
 `public function allowRule(string ...$rules): self`
 
@@ -276,7 +279,7 @@ Turn rules on.  Accepts more than one so a grant reads as a list.
 
 ---
 
-### denyRule() · <small>[🗎](../../src/Engine/Policy.php#L368)</small>
+### denyRule() · <small>[🗎](../../src/Engine/Policy.php#L377)</small>
 
 `public function denyRule(string ...$rules): self`
 
@@ -295,7 +298,7 @@ Turn rules off.  Accepts more than one so a denial reads as a list.
 
 ---
 
-### allowFunctions() · <small>[🗎](../../src/Engine/Policy.php#L397)</small>
+### allowFunctions() · <small>[🗎](../../src/Engine/Policy.php#L406)</small>
 
 `public function allowFunctions(string ...$names): self`
 
@@ -326,7 +329,7 @@ that is allowed and not registered calls the PHP function of that name.
 
 ---
 
-### allowFilters() · <small>[🗎](../../src/Engine/Policy.php#L416)</small>
+### allowFilters() · <small>[🗎](../../src/Engine/Policy.php#L425)</small>
 
 `public function allowFilters(string ...$names): self`
 
@@ -348,7 +351,7 @@ list is about the PHP-function fallback.
 
 ---
 
-### restrictsFunctions() · <small>[🗎](../../src/Engine/Policy.php#L431)</small>
+### restrictsFunctions() · <small>[🗎](../../src/Engine/Policy.php#L440)</small>
 
 `public function restrictsFunctions(): bool`
 
@@ -364,7 +367,7 @@ what decides is the rules plus this list.  See the class docblock.
 
 ---
 
-### restrictsFilters() · <small>[🗎](../../src/Engine/Policy.php#L437)</small>
+### restrictsFilters() · <small>[🗎](../../src/Engine/Policy.php#L446)</small>
 
 `public function restrictsFilters(): bool`
 
@@ -377,7 +380,7 @@ Whether the filter allowlist restricts anything at all.
 
 ---
 
-### allowsFunction() · <small>[🗎](../../src/Engine/Policy.php#L449)</small>
+### allowsFunction() · <small>[🗎](../../src/Engine/Policy.php#L458)</small>
 
 `public function allowsFunction(string $name): bool`
 
@@ -400,7 +403,7 @@ leading namespace separator is ignored, because PHP's are.
 
 ---
 
-### allowsFilter() · <small>[🗎](../../src/Engine/Policy.php#L456)</small>
+### allowsFilter() · <small>[🗎](../../src/Engine/Policy.php#L465)</small>
 
 `public function allowsFilter(string $name): bool`
 
@@ -419,7 +422,7 @@ Whether a name may be used as a `|>` filter step under this policy.
 
 ---
 
-### allowedFunctions() · <small>[🗎](../../src/Engine/Policy.php#L463)</small>
+### allowedFunctions() · <small>[🗎](../../src/Engine/Policy.php#L472)</small>
 
 `public function allowedFunctions(): array`
 
@@ -430,7 +433,7 @@ Whether a name may be used as a `|>` filter step under this policy.
 
 ---
 
-### allowedFilters() · <small>[🗎](../../src/Engine/Policy.php#L469)</small>
+### allowedFilters() · <small>[🗎](../../src/Engine/Policy.php#L478)</small>
 
 `public function allowedFilters(): array`
 
@@ -441,7 +444,7 @@ Whether a name may be used as a `|>` filter step under this policy.
 
 ---
 
-### denyFunctions() · <small>[🗎](../../src/Engine/Policy.php#L480)</small>
+### denyFunctions() · <small>[🗎](../../src/Engine/Policy.php#L489)</small>
 
 `public function denyFunctions(string ...$names): self`
 
@@ -463,7 +466,7 @@ deny list. Denial takes precedence over the function allowlist.
 
 ---
 
-### deniesFunction() · <small>[🗎](../../src/Engine/Policy.php#L490)</small>
+### deniesFunction() · <small>[🗎](../../src/Engine/Policy.php#L499)</small>
 
 `public function deniesFunction(string $name): bool`
 
@@ -482,7 +485,7 @@ Whether this policy denies a function name outright.
 
 ---
 
-### deniedFunctions() · <small>[🗎](../../src/Engine/Policy.php#L496)</small>
+### deniedFunctions() · <small>[🗎](../../src/Engine/Policy.php#L505)</small>
 
 `public function deniedFunctions(): array`
 
@@ -493,7 +496,7 @@ Whether this policy denies a function name outright.
 
 ---
 
-### isUnrestricted() · <small>[🗎](../../src/Engine/Policy.php#L509)</small>
+### isUnrestricted() · <small>[🗎](../../src/Engine/Policy.php#L518)</small>
 
 `public function isUnrestricted(): bool`
 
@@ -507,7 +510,7 @@ the engine's former PHP mode.
 
 ---
 
-### allowsPhp() · <small>[🗎](../../src/Engine/Policy.php#L538)</small>
+### allowsPhp() · <small>[🗎](../../src/Engine/Policy.php#L547)</small>
 
 `public function allowsPhp(): bool`
 
@@ -534,7 +537,7 @@ a template any less able to run PHP.
 
 ---
 
-### isSandboxed() · <small>[🗎](../../src/Engine/Policy.php#L563)</small>
+### isSandboxed() · <small>[🗎](../../src/Engine/Policy.php#L572)</small>
 
 `public function isSandboxed(): bool`
 
@@ -551,7 +554,7 @@ one source of truth rather than a second flag that could disagree.
 
 ---
 
-### strictTypes() · <small>[🗎](../../src/Engine/Policy.php#L579)</small>
+### strictTypes() · <small>[🗎](../../src/Engine/Policy.php#L588)</small>
 
 `public function strictTypes(): bool`
 
@@ -572,7 +575,58 @@ less PHP than a weak one, it is merely held to the types it declares.
 
 ---
 
-### digest() · <small>[🗎](../../src/Engine/Policy.php#L596)</small>
+### escapeHtml() · <small>[🗎](../../src/Engine/Policy.php#L606)</small>
+
+`public function escapeHtml(): bool`
+
+Whether `{{ … }}` output is HTML-escaped.
+
+A FORMAT rule, not a reach rule: it grants no construct and names no
+class. Denying it compiles every HTML output tag to its bare value, which
+is the posture some engines (Phalcon's Volt) default to. `js` context is
+unaffected — `json_encode` there is correctness rather than safety, since
+a bare value would be invalid JavaScript — and `css` was never escaped.
+
+The rule governs only the AUTOMATIC wrapper. An explicit `|> escape` is the
+opt-in and always escapes, which is what lets a template written for this
+mode use `{{ user.name |> e }}` for the values that need it.
+
+**Return value**
+
+- Type: `bool`
+
+
+---
+
+### strictVariables() · <small>[🗎](../../src/Engine/Policy.php#L629)</small>
+
+`public function strictVariables(): bool`
+
+Whether an absent value aborts the render.
+
+On (the default) a missing name, key, property or intermediate value is a
+`ClarityException` carrying the template line, so a typo fails loudly instead
+of rendering empty. Denying it reports the same diagnostic as a WARNING and
+lets the render continue with the null PHP already produced, at every level of
+a chain — `{{ user.nickname }}` and `{% if user.nickname %}` become as
+forgiving as `{{ user }}`.
+
+A wrong OPERATOR is not an absence and keeps throwing under both policies:
+`user.name` over an array is a template bug, not absent data, and PHP words it
+differently (`Attempt to read property … on array` versus `… on null`).
+
+Like `strictTypes`, this is not a reach rule: the compiled template is
+identical under both policies. Only the error handler's reading of the
+diagnostic differs.
+
+**Return value**
+
+- Type: `bool`
+
+
+---
+
+### digest() · <small>[🗎](../../src/Engine/Policy.php#L646)</small>
 
 `public function digest(): string`
 

@@ -146,15 +146,37 @@ Title-case every word:
 {{ "hello world" |> title }} {# Output: "Hello World" #}
 ```
 
-#### escape (alias: esc, e)
+#### escape (aliases: e, esc)
 
-HTML-escape the value (same as auto-escaping):
+Apply the output context's escaping explicitly. All three spellings are the same marker:
 
 ```twig
-{{ userInput |> escape }} {# Manually escape if needed #}
+{{ userInput |> escape }}   {# HTML-escaped, exactly once #}
+{{ userInput |> esc }}      {# the same #}
+{{ userInput |> e }}        {# the same #}
 ```
 
-> **Note:** All output is auto-escaped by default. Use this filter explicitly only when needed.
+In **output position** (`{{ … }}`) this is a **marker**, the dual of
+[`raw`](04-advanced-topics.md#disabling-auto-escaping-raw-filter): it applies the context's escaping and cancels
+the automatic wrapper, so a value is escaped exactly once. That makes it the spelling to
+use when auto-escaping is off — see [`escapeHtml`](09-policy-api.md#escapehtml) — and it
+is context-aware, so inside `<script>` it uses JSON encoding rather than HTML escaping.
+
+Because the two are one switch, the first two escape identically and the third does not
+escape at all:
+
+```twig
+{{ userInput }}             {# auto-escaped            #}
+{{ userInput |> escape }}   {# escaped by the marker — the same output #}
+{{ userInput |> raw }}      {# NOT escaped             #}
+```
+
+> **Note:** All output is auto-escaped by default, so the marker is redundant unless
+> you have denied `escapeHtml` or want to state the intent explicitly.
+>
+> In `{% set %}`, `{% if %}` and argument position `escape` is an ordinary filter, not a
+> marker: there is no output to encode, and storing an escaped value for a later
+> `{{ }}` would escape it twice.
 
 #### nl2br
 
@@ -1133,7 +1155,7 @@ governed by the `rawPhp` rule. See [The Policy API](09-policy-api.md) for detail
 | `url_encode`                | URL-encode             | `{{ q \|> url_encode }}`                         |
 | `data_uri(mime)`            | Base64 data URI        | `{{ img \|> data_uri('image/png') }}`            |
 | `unicode`                   | Unicode string ops     | `{{ text \|> unicode \|> reverse }}`             |
-| `escape` / `esc`            | HTML escape            | `{{ html \|> escape }}`                          |
+| `escape` / `e` / `esc`      | HTML escape            | `{{ html \|> escape }}`                          |
 | `raw`                       | Disable auto-escaping  | `{{ html \|> raw }}`                             |
 
 > **Note:** Every name above is also callable with parentheses; the value that would be piped becomes the first argument, except `date` and `join`, whose call form mirrors PHP (see [One call model](#one-call-model-two-signatures)).  
