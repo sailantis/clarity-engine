@@ -1,9 +1,6 @@
 <?php
 namespace Clarity\Engine;
 
-use Clarity\Engine\Pointer\ApcuPointerCache;
-use Clarity\Engine\Pointer\PointerCache;
-
 /**
  * Cache for compiled Clarity template classes.
  *
@@ -34,9 +31,6 @@ class Cache
 
     /** Optional in-memory layer in front of pointer reads. */
     private ?PointerCache $pointerCache = null;
-
-    /** Whether a pointer cache was requested (for diagnostics). */
-    private bool $pointerCacheEnabled = false;
 
     /**
      * Seconds to reuse a positive freshness verdict before checking the filesystem.
@@ -407,29 +401,36 @@ class Cache
     }
 
     /**
-     * Enable or disable the optional in-memory pointer layer (APCu).
+     * Install APCu based cache that sits in front of the pointer files.
      *
-     * Off by default. When enabled it sits in front of the pointer READ only: a
-     * hit costs ~0.04 us instead of the ~35-100 us `file_get_contents`, and a
-     * miss falls through to the file and repopulates. The pointer file is always
-     * written, so a restart, a `clearCache()`, or a host without the extension
-     * degrades to slower — never to wrong.
-     *
-     * @param bool $enabled Whether to use APCu in front of pointer reads.
+     * @param bool $enabled Whether to enable the pointer cache.
      */
-    public function setPointerCache(bool $enabled = true): static
+    public function usePointerCache(bool $enabled = true): static
     {
-        $this->pointerCacheEnabled = $enabled;
-        $this->pointerCache        = $enabled ? new ApcuPointerCache($this->path) : null;
-        $this->freshCheckedAt      = [];
+        if (!$enabled || !PointerCache::isAvailable()) {
+            $this->pointerCache = null;
+            $this->freshCheckedAt = [];
+            return $this;
+        }
+
+        $cache = new PointerCache($this->path);
+        $this->pointerCache = $cache;
+        $this->freshCheckedAt = [];
 
         return $this;
     }
 
-    /** Whether the optional in-memory pointer layer is enabled. */
+    /**
+     * Whether an in-memory layer is installed AND able to store anything.
+     *
+     * A configured-but-unusable backend (APCu compiled out, or `apc.enable_cli=0`
+     * under CLI) reports false, because it cannot save a single read. Reporting
+     * "enabled" there would hide a configuration mistake behind behaviour that
+     * looks identical to working.
+     */
     public function hasPointerCache(): bool
     {
-        return $this->pointerCacheEnabled;
+        return $this->pointerCache !== null;
     }
 
     /**
@@ -610,6 +611,12 @@ class Cache
         ]);
 
         $file = $this->pointerPath($templateName);
+
+        $this->pointerCache?->put($templateName, [
+            'class'   => $className,
+            'version' => Compiler::COMPILER_VERSION,
+            'deps'    => $deps,
+        ]);
 
         \clearstatcache(true, $file);
         if (\is_file($file) && @\file_get_contents($file) === $raw) {

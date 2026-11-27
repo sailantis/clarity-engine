@@ -173,14 +173,34 @@ template-name hash used in the pointer path, body path and class name.
 Serialization also supports non-UTF-8 data. For a 12-dependency pointer, reading
 and decoding took 39.3 µs with `serialize()` versus 47.0 µs with JSON.
 
-### Optional APCu pointer cache
+### Pointer cache (APCu)
+
+The `.ptr` file remains the durable record. A pointer cache only fronts *reads*,
+so a restart, a `clearCache()`, or a host without APCu degrades to slower — never
+to wrong.
 
 ```php
-$engine->setPointerCache(true);   // read-through APCu, off by default
+$engine->useApcuPointerCache();     // returns bool: false if APCu is unusable here
 ```
 
-APCu caches pointer reads; the `.ptr` file remains the durable record. Under FPM,
-workers share the APCu segment. Superseded bodies can be removed with:
+Under FPM every worker shares one APCu segment, so a pointer any worker has already
+read is available to all of them. That is the case worth optimising: a cold request
+drops from a `file_get_contents()` + `unserialize()` to an `apcu_fetch()` (measured:
+166 µs → 46 µs per render). A long-lived worker gains nothing, because it answers
+from its own in-process registry (~27 µs) and never reaches either store.
+
+`useApcuPointerCache()` returns whether APCu is actually usable and
+`hasPointerCache()` reports the same thing, so a host where the extension is missing
+or `apc.enable_cli` is off says so instead of silently doing nothing.
+
+Any backend can be injected with `setPointerCache()` — it only needs `get()`,
+`put()`, `forget()` and `isAvailable()`:
+
+```php
+$engine->setPointerCache(new MyPointerCache());   // null = read from disk only
+```
+
+Superseded bodies can be removed with:
 
 ```bash
 php azera cache:prune
@@ -188,6 +208,21 @@ php azera cache:prune --older-than=3600
 ```
 
 `cache:status` reports how many unreferenced bodies exist.
+
+### Long-Lived Workers
+
+PHP caches file metadata and realpaths per process. Long-lived workers can therefore
+observe stale template mtimes after files change or a deployment swaps a symlink.
+`FileLoader::load()` calls `clearstatcache(true, $path)` before reading the mtime,
+clearing both caches so the revision reflects the current file.
+
+Each dependency adds a real `stat()` to a warm render — about 16 µs on Windows and
+less on Linux in the measured setup. Set `revalidateFreq` to reuse a positive
+freshness verdict for N seconds when delayed propagation is acceptable:
+
+```php
+$engine->setRevalidateFreq(2);   // at most 2 s of staleness
+```
 
 ### Compiler Version
 

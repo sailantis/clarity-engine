@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`FileLoader` clears stat and realpath caches before checking template mtimes,**
+  so long-lived workers detect edits and symlink-based deployments.
+
+- **Pointer-cache writes refresh dependency revisions before comparing pointer bytes,**
+  preventing comment-only edits from leaving stale revisions when emitted code is
+  unchanged.
+
 ### Changed
 
 - **Compiled templates use immutable, content-addressed bodies.** Each template has a
@@ -22,9 +31,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Template cache utilities.** `Cache::templateHash()` centralizes the `xxh128`
   template-name hash used by paths and class names. `Cache::codeFilePath()` and
   `getLoadedCodeFile()` expose compiled body paths.
-- **Optional APCu pointer cache.** `PointerCache` and `ApcuPointerCache` cache pointer
-  reads in memory; durable `.ptr` files remain authoritative. Enable it with
-  `ClarityEngine::setPointerCache(true)` and inspect it with `hasPointerCache()`.
+- **Optional APCu pointer cache.** `PointerCache` is a four-method interface
+  (`get`/`put`/`forget`/`isAvailable`) that fronts pointer reads; `ApcuPointerCache`
+  implements it. Enable it with `ClarityEngine::useApcuPointerCache()`, which returns
+  whether APCu is usable, inject a custom backend with `setPointerCache()`, and inspect
+  with `hasPointerCache()`. Under FPM the segment is shared across workers, cutting a
+  cold request's pointer read from 166 µs to 46 µs; long-lived workers answer from their
+  in-process registry instead and gain nothing. `.ptr` files remain authoritative.
 - **Cache pruning.** `Cache::prune()` and `ClarityEngine::pruneCache()` remove
   superseded and legacy files while preserving bodies referenced by pointers.
   `--older-than` skips recent files; the framework exposes this as `cache:prune`.

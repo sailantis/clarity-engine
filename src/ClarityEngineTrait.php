@@ -9,6 +9,8 @@ use Clarity\Engine\Cache;
 use Clarity\Engine\Compiler;
 use Clarity\Engine\Directive;
 use Clarity\Engine\Policy;
+use Clarity\Engine\Pointer\ApcuPointerCache;
+use Clarity\Engine\Pointer\PointerCache;
 use Clarity\Engine\Registry;
 use Clarity\Engine\SourceMap;
 use Clarity\Template\DomainRouterLoader;
@@ -652,20 +654,18 @@ trait ClarityEngineTrait
     }
 
     /**
-     * Enable the optional in-memory pointer layer (APCu).
+     * Install an APCu based pointer cache layer.
      *
-     * A read-through cache in front of the durable pointer files.
-     *
-     * @param bool $enabled Whether to enable it. No-op (but harmless) when APCu is absent.
+     * @param bool $enabled Whether to enable the pointer cache.
      * @return static
      */
-    public function setPointerCache(bool $enabled = true): static
+    public function usePointerCache(bool $enabled = true): static
     {
-        $this->cache->setPointerCache($enabled);
+        $this->cache->usePointerCache($enabled);
         return $this;
     }
 
-    /** Whether the optional in-memory pointer layer is enabled. */
+    /** Whether a pointer layer is installed AND able to store anything. */
     public function hasPointerCache(): bool
     {
         return $this->cache->hasPointerCache();

@@ -1,19 +1,19 @@
 <?php
 
-namespace Clarity\Engine\Pointer;
+namespace Clarity\Engine;
 
 /**
- * APCu-backed {@see PointerCache}.
+ * APCu-backed.
  *
  * Keys are prefixed with a digest of the cache directory. Under FPM every worker
- * shares one APCu segment, so without the prefix two engines in one process — a
- * test harness plus the application, or two tenants — would read each other's
+ * shares one APCu segment, so without the prefix two engines in one process - a
+ * test harness plus the application, or two tenants - would read each other's
  * pointers for the same template name.
  *
  * Every failure is swallowed: APCu is an optimisation, and a fill or an eviction
  * that cannot happen only costs the next read. Nothing here may break a render.
  */
-final class ApcuPointerCache implements PointerCache
+final class PointerCache
 {
     /** Whether the extension is usable; resolved once. */
     private static ?bool $available = null;

@@ -123,8 +123,14 @@ final class FileLoader implements TemplateLoader
      */
     public function load(string $name): ?TemplateSource
     {
-        $path  = $this->resolveName($name);
-        $mtime = @filemtime($path);
+        $path = $this->resolveName($name);
+
+        // PHP caches file metadata and realpaths per process. Long-lived workers
+        // may otherwise use a stale mtime after a file changes or a deploy swaps
+        // a symlink. Clear both caches so the revision reflects the current file.
+        \clearstatcache(true, $path);
+
+        $mtime = @\filemtime($path);
 
         if ($mtime === false) {
             return null;

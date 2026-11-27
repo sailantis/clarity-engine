@@ -4,6 +4,7 @@ namespace Clarity\Tests\Engine;
 use Clarity\ClarityEngine;
 use Clarity\Engine\Cache;
 use Clarity\Engine\Compiler;
+use Clarity\Engine\PointerCache;
 use Clarity\Tests\BaseTestCase;
 use Clarity\Tests\TestEnvironment;
 
@@ -916,7 +917,7 @@ class CacheTest extends BaseTestCase
         $cache   = new Cache(TestEnvironment::cacheDir());
         $pointer = $cache->cacheFilePath('ptr_corrupt_only');
         @mkdir(dirname($pointer), 0755, true);
-        file_put_contents($pointer, 'a:2:{s:5:"class";s:3:"abc";}');   // truncated
+        file_put_contents($pointer, 'a:2:{s:5:"class";s:3:"abc";}'); // truncated
 
         self::tpl('ptr_corrupt_only', 'body');
 
@@ -933,6 +934,9 @@ class CacheTest extends BaseTestCase
     /**
      * The APCu layer is read-through: it must return the same pointer the file
      * does, and enabling it must not change what is written to disk.
+     *
+     * When APCu is unusable in this process (CLI without `apc.enable_cli`), the
+     * layer must report that honestly rather than claiming to be installed.
      */
     public function testPointerCacheIsTransparent(): void
     {
@@ -944,19 +948,83 @@ class CacheTest extends BaseTestCase
         $cache = new Cache($dir);
         $file  = null;
         foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS)) as $f) {
-            if (str_ends_with($f->getFilename(), '.ptr')) { $file = (string) file_get_contents($f->getPathname()); }
+            if (str_ends_with($f->getFilename(), '.ptr')) {
+                $file = (string) file_get_contents($f->getPathname());
+            }
         }
 
-        $cache->setPointerCache(true);
-        $this->assertTrue($cache->hasPointerCache());
-        $this->assertSame('hello 2', self::render('ptr_apcu', ['n' => 2]), 'enabling the layer must not break rendering');
+        $usable = $cache->usePointerCache(true)->hasPointerCache();
+        $this->assertSame(
+            PointerCache::isAvailable(),
+            $usable,
+            'hasPointerCache() must report whether APCu can actually store, not merely that it was configured'
+        );
+
+        $this->assertSame('hello 2', self::render('ptr_apcu', ['n' => 2]), 'installing the layer must not break rendering');
 
         $after = null;
         foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS)) as $f) {
-            if (str_ends_with($f->getFilename(), '.ptr')) { $after = (string) file_get_contents($f->getPathname()); }
+            if (str_ends_with($f->getFilename(), '.ptr')) {
+                $after = (string) file_get_contents($f->getPathname());
+            }
         }
         $this->assertSame($file, $after, 'the file remains the durable record');
 
-        $cache->setPointerCache(false);
+        $cache->usePointerCache(false);
+        $this->assertFalse($cache->hasPointerCache(), 'passing false must remove the layer');
+    }
+
+    /**
+     * A recompile must publish the new pointer to the layer, not just the file.
+     *
+     * This is the failure mode that makes a pointer cache worse than none. After a
+     * deploy the DEP REVISIONS are new, but the class is often unchanged (a
+     * comment-only edit emits identical source), so `writePointer()`'s byte
+     * compare skips the file write and returns. If the layer is only filled on a
+     * pointer *read*, it keeps the superseded deps for the life of the segment:
+     * every following request then sees `isFresh() === false` and recompiles.
+     * Measured before the fix: 10/10 cold requests recompiled with the layer
+     * installed and 1/10 without it.
+     */
+    public function testRecompilePublishesTheNewPointerToTheCacheLayer(): void
+    {
+        $base  = \sys_get_temp_dir() . \DIRECTORY_SEPARATOR . 'clarity_ptr_publish_' . \getmypid();
+        $views = $base . \DIRECTORY_SEPARATOR . 'views';
+        @\mkdir($views, 0755, true);
+        \file_put_contents($views . \DIRECTORY_SEPARATOR . 'page.clarity.html', 'A');
+        \touch($views . \DIRECTORY_SEPARATOR . 'page.clarity.html', \time() - 500);
+
+        $engine = new ClarityEngine();
+        $engine->setViewPath($views)->setCachePath($base . \DIRECTORY_SEPARATOR . 'cache');
+
+        $cacheProp = new \ReflectionProperty($engine, 'cache');
+        $cache     = $cacheProp->getValue($engine);
+        $cache->usePointerCache(true);
+
+        // `$loaded` is process-wide and short-circuits before the layer; clear it
+        // between iterations so each one behaves like a fresh request.
+        $loadedProp = new \ReflectionProperty(Cache::class, 'loaded');
+
+        $loadedProp->setValue(null, []);
+        $this->assertSame('A', $engine->renderPartial('page'));
+
+        // The deploy: new content, and a revision the cached deps do not match.
+        \file_put_contents($views . \DIRECTORY_SEPARATOR . 'page.clarity.html', 'B');
+        \touch($views . \DIRECTORY_SEPARATOR . 'page.clarity.html', \time() + 400);
+
+        $revision = static fn(string $n) => $engine->getLoader()->load($n)?->revision;
+
+        $recompiled = 0;
+        for ($i = 0; $i < 5; $i++) {
+            $loadedProp->setValue(null, []);
+            if (!$cache->isFresh('page', $revision)) {
+                $recompiled++;
+            }
+            $this->assertSame('B', $engine->renderPartial('page'));
+        }
+
+        $this->assertSame(1, $recompiled, 'only the first request may recompile; a stale layer recompiles on every one');
+
+        $this->removeDir($base);
     }
 }
