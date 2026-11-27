@@ -97,10 +97,19 @@ class Cache
      */
     public function setPath(string $path): static
     {
+        $previous = $this->path;
+
         $this->path = \rtrim($path, '/\\');
         self::$classNames     = [];
         self::$loaded         = [];
         $this->freshCheckedAt = [];
+
+        // Evict pointers from the old namespace before retargeting the layer.
+        if ($this->pointerCache !== null) {
+            PointerCache::evictDirectory($previous);
+            $this->pointerCache = new PointerCache($this->path);
+        }
+
         return $this;
     }
 
@@ -289,21 +298,12 @@ class Cache
     }
 
     /**
-     * Write a file only when the bytes are not already there, atomically.
+     * Atomically write a content-addressed file if it does not exist.
      *
-     * The existence check is the whole point of the content-addressed layout:
-     * a file at a digest path is by construction the content we were about to
-     * write, so `is_file()` is a complete correctness check and a rewrite would
-     * only discard an op_array every worker shares.
-     *
-     * The write is a temp file plus an atomic rename, so a concurrent reader can
-     * never see a half-written file.  No `opcache_invalidate()`: a path we just
-     * created has no stale entry to discard, and invalidating one that another
-     * worker had cached is the exact cost this design exists to avoid.
-     *
-     * The mtime is backdated past `opcache.file_update_protection` — a freshly
-     * written file is otherwise NOT cached at all, and would be recompiled by
-     * every worker on every request until the protection window passed.
+     * Existing digest paths already contain the required content; rewriting them
+     * would discard shared OPcache entries. A temporary file and atomic rename
+     * prevent partial reads. New files are backdated past
+     * `opcache.file_update_protection` so OPcache can cache them immediately.
      */
     private function writeCodeFile(string $file, string $code): void
     {
@@ -656,7 +656,13 @@ class Cache
     {
         unset($this->freshCheckedAt[$templateName]);
 
-        $this->pointerCache?->forget($templateName);
+        // Evict from the shared segment before the file goes, and via the STATIC
+        // path: this method is routinely called by an instance that never installed
+        // a layer (a CLI task, another SAPI), where `$this->pointerCache` is null. The
+        // entry is not owned by an instance anyway — it lives in a segment every
+        // worker shares — so a no-op here left a deleted pointer alive in APCu, and
+        // the next process to read it resurrected it. See PointerCache's docblock.
+        PointerCache::evict($this->path, $templateName);
 
         $file = $this->pointerPath($templateName);
         \clearstatcache(true, $file);
@@ -671,9 +677,21 @@ class Cache
     /**
      * Delete all cached files in the cache directory and clear the in-process
      * registry so stale class names do not prevent recompilation.
+     *
+     * The APCu namespace for this directory goes with them. It has to: `flush()`
+     * deletes every pointer file, so any surviving entry names a file that no longer
+     * exists, and the next read would resurrect it. This is deliberately done before
+     * the early return on a missing directory — an entry can outlive the directory it
+     * was namespaced to.
      */
     public function flush(): void
     {
+        PointerCache::evictDirectory($this->path);
+
+        self::$classNames     = [];
+        self::$loaded         = [];
+        $this->freshCheckedAt = [];
+
         if (!is_dir($this->path)) {
             return;
         }
@@ -694,9 +712,6 @@ class Cache
             }
             \unlink($path);
         }
-        self::$classNames     = [];
-        self::$loaded         = [];
-        $this->freshCheckedAt = [];
     }
 
     /**

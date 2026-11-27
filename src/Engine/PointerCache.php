@@ -15,6 +15,7 @@ namespace Clarity\Engine;
  */
 final class PointerCache
 {
+
     /** Whether the extension is usable; resolved once. */
     private static ?bool $available = null;
 
@@ -25,7 +26,13 @@ final class PointerCache
      */
     public function __construct(string $path)
     {
-        $this->prefix = 'clarity.ptr.' . \hash('xxh3', $path) . '.';
+        $this->prefix = self::prefixFor($path);
+    }
+
+    /** The APCu key prefix for a cache directory. */
+    private static function prefixFor(string $path): string
+    {
+        return 'clarity.ptr.' . \hash('xxh3', \rtrim($path, '/\\')) . '.';
     }
 
     /** Whether APCu can be used in this process at all. */
@@ -74,6 +81,62 @@ final class PointerCache
             \apcu_delete($this->prefix . $templateName);
         } catch (\Throwable) {
             // ignore
+        }
+    }
+
+    /**
+     * Remove a template pointer directly from the shared APCu segment.
+     *
+     * Static so callers can evict entries even without a cache instance.
+     *
+     * @param string $path         Cache directory namespace.
+     * @param string $templateName Logical template name.
+     */
+    public static function evict(string $path, string $templateName): void
+    {
+        if (!self::isAvailable()) {
+            return;
+        }
+
+        try {
+            \apcu_delete(self::prefixFor($path) . $templateName);
+        } catch (\Throwable) {
+            // an entry that cannot be removed still costs only the next read
+        }
+    }
+
+    /**
+     * Remove all APCu pointers for a cache directory after `Cache::flush()`.
+     *
+     * The directory-specific prefix preserves isolation between caches.
+     *
+     * @param string $path Cache directory to clear.
+     */
+    public static function evictDirectory(string $path): void
+    {
+        if (!self::isAvailable() || !\class_exists(\APCUIterator::class)) {
+            return;
+        }
+
+        try {
+            $iterator = new \APCUIterator(
+                '/^' . \preg_quote(self::prefixFor($path), '/') . '/',
+                \APC_ITER_KEY,
+            );
+
+            $keys = [];
+
+            foreach ($iterator as $item) {
+                if (\is_array($item) && \is_string($item['key'] ?? null)) {
+                    $keys[] = $item['key'];
+                }
+            }
+
+            if ($keys !== []) {
+                \apcu_delete($keys);
+            }
+        } catch (\Throwable) {
+            // the files are gone either way; a surviving entry costs a regeneration
         }
     }
 }

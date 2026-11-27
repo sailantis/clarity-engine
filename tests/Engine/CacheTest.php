@@ -1027,4 +1027,159 @@ class CacheTest extends BaseTestCase
 
         $this->removeDir($base);
     }
+
+    /**
+     * Evicting a template must not need a layer on the calling instance.
+     *
+     * This is the resurrection bug. `invalidate()` used to call
+     * `$this->pointerCache?->forget()`, so an instance that never installed a layer —
+     * a CLI task, another SAPI, a freshly constructed `Cache` used only for
+     * maintenance — deleted the `.ptr` file and left the APCu entry alive. The entry
+     * lives in a segment every worker shares, so the next process to read it brought
+     * the deleted pointer back: the file-based durable record said "absent" while
+     * shared memory said "present".
+     *
+     * Verified before the fix: pointer file `false`, APCu entry `true`, and
+     * `readPointer()` returned a pointer.
+     */
+    public function testInvalidateEvictsTheSharedEntryEvenWithoutALayerOnTheCaller(): void
+    {
+        if (!PointerCache::isAvailable()) {
+            self::markTestSkipped('APCu is not usable in this process (needs apc.enabled and, under CLI, apc.enable_cli).');
+        }
+
+        $dir = \sys_get_temp_dir() . \DIRECTORY_SEPARATOR . 'clarity_evict_' . \getmypid();
+        self::removeDir($dir);
+
+        $cache = (new Cache($dir))->usePointerCache(true);
+        $this->assertTrue($cache->hasPointerCache());
+
+        $className = '__Clarity_evict_' . \bin2hex(\random_bytes(4));
+        $cache->writeAndLoad('page', $this->compiledFixture($className, ['page' => 1]));
+
+        $key = 'clarity.ptr.' . \hash('xxh3', \rtrim($dir, '/\\')) . '.page';
+        $this->assertTrue(apcu_fetch($key, $ok) !== false && $ok, 'the layer must be populated');
+
+        // A DIFFERENT instance with no layer — the maintenance-command case.
+        $bare = new Cache($dir);
+        $this->assertFalse($bare->hasPointerCache(), 'the fixture must not have a layer');
+        $bare->invalidate('page');
+
+        $this->assertFalse(
+            apcu_fetch($key, $stillThere) !== false && $stillThere,
+            'invalidate() must clear the shared entry, not only the file it can see'
+        );
+
+        $read = (new \ReflectionMethod(Cache::class, 'readPointer'))->invoke($bare, 'page');
+        $this->assertNull($read, 'a deleted pointer must not be resurrected from a surviving shared entry');
+
+        apcu_delete($key);
+        self::removeDir($dir);
+    }
+
+    /**
+     * `flush()` deletes every pointer file, so it must clear the whole namespace.
+     *
+     * Leaving the entries behind lets a flushed template be served from a pointer
+     * whose file no longer exists — the same resurrection, at directory scale. The
+     * match is scoped to this directory's key prefix, so another cache directory (or
+     * another tenant on the same host) keeps its entries.
+     */
+    public function testFlushClearsOnlyThisDirectorysNamespace(): void
+    {
+        if (!PointerCache::isAvailable()) {
+            self::markTestSkipped('APCu is not usable in this process (needs apc.enabled and, under CLI, apc.enable_cli).');
+        }
+
+        $base = \sys_get_temp_dir() . \DIRECTORY_SEPARATOR . 'clarity_flush_' . \getmypid();
+        self::removeDir($base);
+        $one = $base . DIRECTORY_SEPARATOR . 'one';
+        $two = $base . DIRECTORY_SEPARATOR . 'two';
+
+        $a = (new Cache($one))->usePointerCache(true);
+        $b = (new Cache($two))->usePointerCache(true);
+
+        $a->writeAndLoad('p', $this->compiledFixture('__Clarity_flush_a_' . \bin2hex(\random_bytes(4)), ['p' => 1]));
+        $b->writeAndLoad('p', $this->compiledFixture('__Clarity_flush_b_' . \bin2hex(\random_bytes(4)), ['p' => 1]));
+
+        $keyA = 'clarity.ptr.' . \hash('xxh3', \rtrim($one, '/\\')) . '.p';
+        $keyB = 'clarity.ptr.' . \hash('xxh3', \rtrim($two, '/\\')) . '.p';
+
+        $this->assertTrue(apcu_fetch($keyA, $okA) !== false && $okA);
+        $this->assertTrue(apcu_fetch($keyB, $okB) !== false && $okB);
+
+        $a->flush();
+
+        $this->assertFalse(
+            apcu_fetch($keyA, $goneA) !== false && $goneA,
+            'flush() must clear the entries namespaced to the directory it emptied'
+        );
+        $this->assertTrue(
+            apcu_fetch($keyB, $keptB) !== false && $keptB,
+            'flush() must not reach another directory\'s namespace'
+        );
+
+        apcu_delete($keyA);
+        apcu_delete($keyB);
+        self::removeDir($base);
+    }
+
+    /**
+     * `setPath()` must retarget the layer, not leave it naming the old directory.
+     *
+     * The layer is namespaced to a cache directory. After a directory change it would
+     * otherwise hold pointers for a cache this instance no longer reads — entries no
+     * code can evict, because the only handle on them was replaced.
+     */
+    public function testSetPathRetargetsTheLayer(): void
+    {
+        if (!PointerCache::isAvailable()) {
+            self::markTestSkipped('APCu is not usable in this process (needs apc.enabled and, under CLI, apc.enable_cli).');
+        }
+
+        $base = \sys_get_temp_dir() . \DIRECTORY_SEPARATOR . 'clarity_setpath_' . \getmypid();
+        self::removeDir($base);
+        $one = $base . DIRECTORY_SEPARATOR . 'one';
+        $two = $base . DIRECTORY_SEPARATOR . 'two';
+
+        $cache = (new Cache($one))->usePointerCache(true);
+        $cache->writeAndLoad('p', $this->compiledFixture('__Clarity_setpath_' . \bin2hex(\random_bytes(4)), ['p' => 1]));
+
+        $keyOne = 'clarity.ptr.' . \hash('xxh3', \rtrim($one, '/\\')) . '.p';
+        $keyTwo = 'clarity.ptr.' . \hash('xxh3', \rtrim($two, '/\\')) . '.p';
+        $this->assertTrue(apcu_fetch($keyOne, $o1) !== false && $o1);
+
+        $cache->setPath($two);
+
+        $this->assertFalse(
+            apcu_fetch($keyOne, $o2) !== false && $o2,
+            'the previous directory\'s namespace must be dropped when the layer moves'
+        );
+
+        $cache->writeAndLoad('p', $this->compiledFixture('__Clarity_setpath2_' . \bin2hex(\random_bytes(4)), ['p' => 1]));
+        $this->assertTrue(apcu_fetch($keyTwo, $o3) !== false && $o3, 'the layer must follow the new directory');
+
+        apcu_delete($keyOne);
+        apcu_delete($keyTwo);
+        self::removeDir($base);
+    }
+
+    /**
+     * A minimal compiled template that declares one class and returns its name.
+     *
+     * `writeAndLoad()` requires the emitted source, so the fixtures above cannot be
+     * hand-written strings: the file must actually declare the class the pointer
+     * names, or `requireCodeFile()` reports a miss and never publishes.
+     *
+     * @param array<string, int|string> $deps
+     */
+    private function compiledFixture(string $className, array $deps): \Clarity\Engine\CompiledTemplate
+    {
+        return new \Clarity\Engine\CompiledTemplate(
+            className: $className,
+            code: "class {$className} { public function render(array \$vars = []): string { return ''; } }",
+            sourceMap: [],
+            dependencies: $deps,
+        );
+    }
 }
