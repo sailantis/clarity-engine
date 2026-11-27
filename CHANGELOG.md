@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Compiled templates use immutable, content-addressed bodies.** Each template has a
+  serialized `.ptr` file naming its current body and a PHP body file keyed by the
+  emitted-source digest. Unchanged recompiles reuse the body and pointer; changed
+  templates write a new body without invalidating shared OPcache entries. In testing,
+  300 forced recompiles of a 100-line template produced one body and no OPcache waste.
+  Pointer files store serialized data and are read without including PHP files. Existing
+  cache directories are recompiled on first use.
+
+### Added
+
+- **Template cache utilities.** `Cache::templateHash()` centralizes the `xxh128`
+  template-name hash used by paths and class names. `Cache::codeFilePath()` and
+  `getLoadedCodeFile()` expose compiled body paths.
+- **Optional APCu pointer cache.** `PointerCache` and `ApcuPointerCache` cache pointer
+  reads in memory; durable `.ptr` files remain authoritative. Enable it with
+  `ClarityEngine::setPointerCache(true)` and inspect it with `hasPointerCache()`.
+- **Cache pruning.** `Cache::prune()` and `ClarityEngine::pruneCache()` remove
+  superseded and legacy files while preserving bodies referenced by pointers.
+  `--older-than` skips recent files; the framework exposes this as `cache:prune`.
+
+### Fixed
+
+- **Cache path changes clear in-process registries**, preventing templates from
+  another directory from being served.
+- **Error mapping uses the template class's declaring file**, including when
+  templates with the same name are compiled in different cache directories.
+
 ## [0.6.0] - 2026-11-24
 
 Installed by `composer require` from this tag. A **minor** release: the two policy

@@ -146,6 +146,13 @@ class Compiler
     private const BODY_LINE_TOKEN = '/* @@CLARITY_BODY_LINE@@ */';
 
     /**
+     * compile() replaces this valid identifier fragment with a fixed-width hex
+     * digest of the emitted source. Matching the digest width keeps the generated
+     * file layout stable; content-based names let unchanged source reuse its class.
+     */
+    private const CLASS_NAME_DIGEST_TOKEN = 'CLARITYDIGEST0';
+
+    /**
      * `{% parent %}` inlines the parent block's content in a child override.
      * Only the bare form is recognised. `{% @parent %}` is an unknown directive.
      */

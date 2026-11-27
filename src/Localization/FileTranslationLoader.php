@@ -25,7 +25,7 @@ class FileTranslationLoader implements TranslationLoaderInterface
     /**
      * @param string      $translationsPath Directory containing the translation files.
      * @param string|null $cachePath        Directory for generated caches. Defaults to
-     *                                      `sys_get_temp_dir()/clarity_translations/<md5 of translationsPath>`.
+     *                                      `sys_get_temp_dir()/clarity_translations/<xxh128 of translationsPath>`.
      */
     public function __construct(
         private string $translationsPath,
@@ -33,7 +33,7 @@ class FileTranslationLoader implements TranslationLoaderInterface
     ) {
         $this->translationsPath = rtrim($this->translationsPath, '/\\');
         if ($this->cachePath === null) {
-            $this->cachePath = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'clarity_translations' . DIRECTORY_SEPARATOR . md5($this->translationsPath);
+            $this->cachePath = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'clarity_translations' . DIRECTORY_SEPARATOR . hash('xxh128',$this->translationsPath);
         }
         $this->cachePath = rtrim($this->cachePath, '/\\');
     }
@@ -110,7 +110,7 @@ class FileTranslationLoader implements TranslationLoaderInterface
      */
     private function loadViaCachePhp(string $sourceFile, callable $parser): array
     {
-        $cacheFile = $this->cachePath . \DIRECTORY_SEPARATOR . \md5($sourceFile) . '.php';
+        $cacheFile = $this->cachePath . \DIRECTORY_SEPARATOR . \hash('xxh3', $sourceFile) . '.php';
 
         $sourceMtime = @\filemtime($sourceFile);
         if ($sourceMtime === false) {

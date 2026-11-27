@@ -85,7 +85,7 @@ class CacheTest extends BaseTestCase
         self::render('inline_upper_cache', ['name' => 'alice']);
 
         $cache    = new Cache(TestEnvironment::cacheDir());
-        $compiled = file_get_contents($cache->cacheFilePath('inline_upper_cache'));
+        $compiled = file_get_contents((string) $cache->getLoadedCodeFile('inline_upper_cache'));
 
         $this->assertIsString($compiled);
         $this->assertStringContainsString('mb_strtoupper', $compiled);
@@ -117,7 +117,7 @@ class CacheTest extends BaseTestCase
         $cache = new Cache(TestEnvironment::cacheDir());
         $name  = 'some/template';
         $this->assertSame($cache->classNameFor($name), $cache->classNameFor($name));
-        $this->assertSame('__Clarity_' . md5($name), $cache->classNameFor($name));
+        $this->assertSame('__Clarity_' . Cache::templateHash($name), $cache->classNameFor($name));
     }
 
     public function testClassNameForIsUniquePerPath(): void
@@ -149,7 +149,7 @@ class CacheTest extends BaseTestCase
         self::render('cver');
 
         $cache    = new Cache(TestEnvironment::cacheDir());
-        $compiled = file_get_contents($cache->cacheFilePath('cver'));
+        $compiled = file_get_contents((string) $cache->getLoadedCodeFile('cver'));
 
         $this->assertIsString($compiled);
         $this->assertStringContainsString(
@@ -167,7 +167,7 @@ class CacheTest extends BaseTestCase
         self::render('cver_deps');
 
         $cache    = new Cache(TestEnvironment::cacheDir());
-        $compiled = file_get_contents($cache->cacheFilePath('cver_deps'));
+        $compiled = file_get_contents((string) $cache->getLoadedCodeFile('cver_deps'));
 
         $this->assertIsString($compiled);
         $this->assertStringNotContainsString('@compiler', $compiled);
@@ -176,7 +176,7 @@ class CacheTest extends BaseTestCase
     /**
      * A semantic compiler change (e.g. the reversed for-loop binding) leaves the
      * template source byte-identical, so the revision check alone would call the
-     * old bytecode fresh. The stamped version must force a recompile.
+     * old bytecode fresh. The pointer's version stamp must force a recompile.
      *
      * The staleness is observed from a FRESH process: the in-process path can
      * never reach the version guard (see {@see renderInFreshProcess()}).
@@ -186,63 +186,58 @@ class CacheTest extends BaseTestCase
         self::tpl('cver_stale', 'compiled-ok');
         self::assertSame('compiled-ok', self::render('cver_stale'));
 
-        $cache = new Cache(TestEnvironment::cacheDir());
-        $file  = $cache->cacheFilePath('cver_stale');
+        $cache   = new Cache(TestEnvironment::cacheDir());
+        $pointer = $cache->cacheFilePath('cver_stale');
 
-        $src = file_get_contents($file);
-        $this->assertIsString($src);
-        $mutated = str_replace(
-            'public static int $compilerVersion = ' . Compiler::COMPILER_VERSION . ';',
-            'public static int $compilerVersion = 0;',
-            $src,
-            $count
-        );
-        $this->assertSame(1, $count, 'the version stamp must appear exactly once');
-        $this->assertStringContainsString('compilerVersion = 0;', $mutated);
-        file_put_contents($file, $mutated);
+        // The pointer is serialized data, so it is rewritten by re-encoding rather
+        // than by a textual substitution.
+        $data = unserialize((string) file_get_contents($pointer), ['allowed_classes' => false]);
+        $this->assertIsArray($data);
+        $this->assertSame(Compiler::COMPILER_VERSION, $data['version']);
 
-        // Note: deliberately NO invalidate() — the wrong-stamped file must stay
+        $data['version'] = 0;
+        file_put_contents($pointer, serialize($data));
+
+        // Note: deliberately NO invalidate() — the wrong-stamped pointer must stay
         // on disk so the version guard is what rejects it.
         $this->assertSame('compiled-ok', $this->renderInFreshProcess('cver_stale'));
 
-        $this->assertStringContainsString(
-            'public static int $compilerVersion = ' . Compiler::COMPILER_VERSION . ';',
-            (string) file_get_contents($file),
-            'Expected the stale-stamped file to be recompiled'
+        $rewritten = unserialize((string) file_get_contents($pointer), ['allowed_classes' => false]);
+        $this->assertIsArray($rewritten);
+        $this->assertSame(
+            Compiler::COMPILER_VERSION,
+            $rewritten['version'],
+            'Expected the stale-stamped pointer to be rewritten'
         );
     }
 
     /**
-     * Cache files written before versioning existed carry no property at all;
-     * they must be read as version 0 (stale) rather than crash or be assumed
-     * current. This is the migration path for every existing deployment.
+     * Cache files written before versioning existed carry a bare class name
+     * rather than a pointer array; they must be read as "no pointer" and
+     * recompiled rather than crash or be assumed current. This is the migration
+     * path for every existing deployment.
      */
-    public function testUnversionedCompiledFileIsTreatedAsStale(): void
+    public function testLegacyCompiledFileIsTreatedAsStale(): void
     {
         self::tpl('cver_unversioned', 'compiled-ok');
         self::assertSame('compiled-ok', self::render('cver_unversioned'));
 
-        $cache = new Cache(TestEnvironment::cacheDir());
-        $file  = $cache->cacheFilePath('cver_unversioned');
+        $cache   = new Cache(TestEnvironment::cacheDir());
+        $pointer = $cache->cacheFilePath('cver_unversioned');
 
-        $src = file_get_contents($file);
-        $this->assertIsString($src);
-        $stripped = str_replace(
-            'public static int $compilerVersion = ' . Compiler::COMPILER_VERSION . ';',
-            '',
-            $src,
-            $count
-        );
-        $this->assertSame(1, $count, 'the version stamp must appear exactly once');
-        $this->assertStringNotContainsString('public static int $compilerVersion', $stripped);
-        file_put_contents($file, $stripped);
+        // Simulate a pre-content-addressing cache file: PHP that returned a class
+        // name. It must be replaced, never included (including it would declare a
+        // class).
+        file_put_contents($pointer, "<?php\nreturn '__Clarity_legacy_00000000000000';\n");
 
         $this->assertSame('compiled-ok', $this->renderInFreshProcess('cver_unversioned'));
 
-        $this->assertStringContainsString(
-            'public static int $compilerVersion = ' . Compiler::COMPILER_VERSION . ';',
-            (string) file_get_contents($file),
-            'Expected an unversioned file to be recompiled'
+        $rewritten = unserialize((string) file_get_contents($pointer), ['allowed_classes' => false]);
+        $this->assertIsArray($rewritten);
+        $this->assertSame(
+            Compiler::COMPILER_VERSION,
+            $rewritten['version'],
+            'Expected a legacy file to be replaced by a pointer'
         );
     }
 
@@ -565,4 +560,403 @@ class CacheTest extends BaseTestCase
         return $className;
     }
 
+    // =========================================================================
+    // Content-addressed bodies
+    // =========================================================================
+
+    /**
+     * The whole point of the layout: an unchanged recompile must reuse the body
+     * file rather than rewrite it.
+     *
+     * Rewriting a cached PHP file discards its OPcache entry, and the discarded
+     * bytecode becomes shared-memory waste every worker of the master shares.
+     * Observing the file's identity (inode + mtime) is the portable way to
+     * assert "these are the same bytes, untouched".
+     */
+    public function testUnchangedRecompileReusesTheSameBodyFile(): void
+    {
+        $cache = new Cache(TestEnvironment::cacheDir());
+        self::tpl('stable_body', 'unchanged {{ x }}');
+        self::render('stable_body', ['x' => 1]);
+
+        $body       = (string) $cache->getLoadedCodeFile('stable_body');
+        $firstInode = fileinode($body);
+        $firstMtime = filemtime($body);
+
+        // Force the compile path again with byte-identical source.
+        $cache->invalidate('stable_body');
+        self::render('stable_body', ['x' => 2]);
+
+        $again = (string) $cache->getLoadedCodeFile('stable_body');
+
+        $this->assertSame($body, $again, 'identical source must resolve to the same content-addressed file');
+        $this->assertSame($firstInode, fileinode($again));
+        $this->assertSame($firstMtime, filemtime($again), 'the body must not be rewritten');
+    }
+
+    /** Changed source must produce a NEW body file, not overwrite the old one. */
+    public function testChangedTemplateWritesANewBodyAndKeepsTheOldOne(): void
+    {
+        $cache = new Cache(TestEnvironment::cacheDir());
+        self::tpl('evolving', 'version-one');
+        self::render('evolving');
+
+        $first = (string) $cache->getLoadedCodeFile('evolving');
+
+        $file = TestEnvironment::viewDir() . DIRECTORY_SEPARATOR . 'evolving.clarity.html';
+        file_put_contents($file, 'version-two');
+        touch($file, time() + 5);
+
+        $cache->invalidate('evolving');
+        self::assertSame('version-two', self::render('evolving'));
+
+        $second = (string) $cache->getLoadedCodeFile('evolving');
+
+        $this->assertNotSame($first, $second, 'changed source must land at a different digest');
+        $this->assertFileExists($first, 'the superseded body stays until pruned');
+        $this->assertFileExists($second);
+    }
+
+    /** prune() removes only bodies no pointer names, and leaves the live one. */
+    public function testPruneRemovesOnlyUnreferencedBodies(): void
+    {
+        $cache = new Cache(TestEnvironment::cacheDir());
+        self::tpl('prunable', 'one');
+        self::render('prunable');
+
+        $first = (string) $cache->getLoadedCodeFile('prunable');
+
+        $file = TestEnvironment::viewDir() . DIRECTORY_SEPARATOR . 'prunable.clarity.html';
+        file_put_contents($file, 'two');
+        touch($file, time() + 5);
+
+        $cache->invalidate('prunable');
+        self::render('prunable');
+
+        $second = (string) $cache->getLoadedCodeFile('prunable');
+        $this->assertNotSame($first, $second);
+
+        $result = $cache->prune();
+
+        $this->assertGreaterThanOrEqual(1, $result['removed']);
+        $this->assertFileDoesNotExist($first, 'the unreferenced body must be deleted');
+        $this->assertFileExists($second, 'the live body must survive');
+        $this->assertSame('two', self::render('prunable'), 'pruning must not break rendering');
+    }
+
+    /** prune(olderThan) leaves recently written bodies alone. */
+    public function testPruneCanSpareRecentFiles(): void
+    {
+        $cache = new Cache(TestEnvironment::cacheDir());
+        self::tpl('prunable_recent', 'one');
+        self::render('prunable_recent');
+
+        $first = (string) $cache->getLoadedCodeFile('prunable_recent');
+
+        $file = TestEnvironment::viewDir() . DIRECTORY_SEPARATOR . 'prunable_recent.clarity.html';
+        file_put_contents($file, 'two');
+        touch($file, time() + 5);
+
+        $cache->invalidate('prunable_recent');
+        self::render('prunable_recent');
+
+        // Both bodies are seconds old: an hour-long grace period spares them.
+        $result = $cache->prune(3600);
+
+        $this->assertSame(0, $result['removed']);
+        $this->assertFileExists($first);
+    }
+
+    /**
+     * A recompile that produces identical source must not declare a new class.
+     *
+     * The class name is a digest of the emitted source, so the second compile
+     * resolves to the class already in memory. This is what bounds the process
+     * class table: a random suffix per compile made every recompile declare an
+     * unreclaimable class.
+     */
+    public function testIdenticalRecompileDoesNotDeclareANewClass(): void
+    {
+        $cache = new Cache(TestEnvironment::cacheDir());
+        self::tpl('same_class', 'body {{ y }}');
+        self::render('same_class', ['y' => 1]);
+
+        $first  = (string) $cache->getLoadedClassName('same_class');
+        $before = count(get_declared_classes());
+
+        $cache->invalidate('same_class');
+        self::render('same_class', ['y' => 2]);
+
+        $second = (string) $cache->getLoadedClassName('same_class');
+
+        $this->assertSame($first, $second, 'identical source must reuse the class name');
+        $this->assertSame(
+            $before,
+            count(get_declared_classes()),
+            'no new class may be declared when nothing changed'
+        );
+    }
+
+    /**
+     * The pointer must not be rewritten when its content would not change.
+     *
+     * A pointer is an OPcache-cached PHP file, so rewriting it discards an
+     * op_array (~1.2 KB of shared-memory waste, measured). A recompile that
+     * produces the same decision — same class, same dependencies — must therefore
+     * leave it alone. mtime is the portable proof that the bytes were untouched.
+     */
+    public function testUnchangedRecompileDoesNotRewriteThePointer(): void
+    {
+        $cache = new Cache(TestEnvironment::cacheDir());
+        self::tpl('pointer_stable', 'same {{ z }}');
+        self::render('pointer_stable', ['z' => 1]);
+
+        $pointer = $cache->cacheFilePath('pointer_stable');
+        clearstatcache(true, $pointer);
+        $mtime = filemtime($pointer);
+
+        // Force the compile path again with byte-identical source and an unchanged
+        // dependency revision.
+        $cache->invalidate('pointer_stable');
+        self::render('pointer_stable', ['z' => 2]);
+
+        clearstatcache(true, $pointer);
+        $this->assertSame($mtime, filemtime($pointer), 'the pointer must not be rewritten when nothing changed');
+    }
+
+    /** A changed template must still update the pointer. */
+    public function testChangedTemplateRewritesThePointer(): void
+    {
+        $cache = new Cache(TestEnvironment::cacheDir());
+        self::tpl('pointer_moving', 'one');
+        self::render('pointer_moving');
+
+        $pointer = $cache->cacheFilePath('pointer_moving');
+        clearstatcache(true, $pointer);
+        $before = (string) file_get_contents($pointer);
+
+        $file = TestEnvironment::viewDir() . DIRECTORY_SEPARATOR . 'pointer_moving.clarity.html';
+        file_put_contents($file, 'two');
+        touch($file, time() + 5);
+
+        $cache->invalidate('pointer_moving');
+        self::render('pointer_moving');
+
+        clearstatcache(true, $pointer);
+        $this->assertNotSame($before, (string) file_get_contents($pointer));
+    }
+
+    /** Bodies live at a path derived from their content, never at the pointer path. */
+    public function testBodyPathIsDistinctFromPointerPath(): void
+    {
+        $cache = new Cache(TestEnvironment::cacheDir());
+        self::tpl('paths', 'x');
+        self::render('paths');
+
+        $pointer = $cache->cacheFilePath('paths');
+        $body    = (string) $cache->getLoadedCodeFile('paths');
+
+        $this->assertNotSame($pointer, $body);
+        $this->assertFileExists($pointer);
+        $this->assertStringStartsWith(dirname($pointer) . DIRECTORY_SEPARATOR, $body);
+        $this->assertMatchesRegularExpression('/^[0-9a-f]{32}-[0-9a-f]+\.php$/', basename($body));
+    }
+
+    // =========================================================================
+    // Template-name hash
+    // =========================================================================
+
+    /**
+     * A compiled file from the pre-pointer layout is dead weight, and prune() must
+     * collect it.
+     *
+     * Before this layout a template was ONE file at `<md5(name)>.php` that declared
+     * its class and returned the name. Every existing deployment has these. Nothing
+     * in the new code looks at that path, so without an explicit rule they would be
+     * leaked forever — invisible to both the body rule (wrong shape) and the
+     * pointer rule (not a `.ptr`).
+     */
+    public function testPruneRemovesCompiledFilesFromThePreviousLayout(): void
+    {
+        $cache = new Cache(TestEnvironment::cacheDir());
+
+        $hash   = md5('legacy_layout_template');
+        $bucket = dirname($cache->cacheFilePath('legacy_layout_template'));
+        @mkdir($bucket, 0755, true);
+
+        $legacy = $bucket . DIRECTORY_SEPARATOR . $hash . '.php';
+        file_put_contents($legacy, "<?php\n// pre-pointer compiled body\nreturn '__Clarity_x_deadbeef';\n");
+
+        $result = $cache->prune();
+
+        $this->assertGreaterThanOrEqual(1, $result['legacy'], 'the pre-pointer file must be collected');
+        $this->assertFileDoesNotExist($legacy);
+    }
+
+    /** A legacy file must never be deleted while a live pointer of that name exists. */
+    public function testPruneKeepsALegacyPathShapedFileThatStillHasAPointer(): void
+    {
+        $cache = new Cache(TestEnvironment::cacheDir());
+        self::tpl('legacy_guarded', 'body');
+        self::render('legacy_guarded');
+
+        // A current pointer exists for this template; the guard is the pointer's
+        // presence at the same hash, not the file's contents.
+        $pointer = $cache->cacheFilePath('legacy_guarded');
+        $hash    = substr(basename($pointer), 0, -4);
+        $sibling = dirname($pointer) . DIRECTORY_SEPARATOR . $hash . '.php';
+        file_put_contents($sibling, "<?php\n// stray\n");
+
+        $cache->prune();
+
+        $this->assertFileExists($sibling, 'a live pointer at this hash protects the name');
+        $this->assertFileExists($pointer);
+    }
+
+    /**
+     * The template-name hash is declared by ONE function and every path uses it.
+     *
+     * If the pointer path, the body path and the class name disagreed, prune could
+     * not match a body to its pointer and would delete a live file.
+     */
+    public function testEveryPathUsesTheDeclaredTemplateHash(): void
+    {
+        $cache = new Cache(TestEnvironment::cacheDir());
+        self::tpl('hashed_paths', 'x');
+        self::render('hashed_paths');
+
+        $hash = Cache::templateHash('hashed_paths');
+
+        $this->assertSame($hash, hash('xxh128', 'hashed_paths'), 'xxh128 is the declared scheme');
+        $this->assertSame('__Clarity_' . $hash, $cache->classNameFor('hashed_paths'));
+        $this->assertSame(substr($hash, 0, 2), basename(dirname($cache->cacheFilePath('hashed_paths'))));
+        $this->assertStringStartsWith($hash . '-', basename((string) $cache->getLoadedCodeFile('hashed_paths')));
+    }
+
+    /** A current pointer must never be mistaken for an unreachable one. */
+    public function testPruneKeepsCurrentPointers(): void
+    {
+        $cache = new Cache(TestEnvironment::cacheDir());
+        self::tpl('keep_me', 'x');
+        self::render('keep_me');
+
+        $pointer = $cache->cacheFilePath('keep_me');
+        $body    = (string) $cache->getLoadedCodeFile('keep_me');
+
+        $result = $cache->prune();
+
+        $this->assertSame(0, $result['legacy']);
+        $this->assertFileExists($pointer);
+        $this->assertFileExists($body);
+    }
+
+    /**
+     * A legacy compiled file at the pointer path must never be included.
+     *
+     * Pre-content-addressing cache files returned a class name, and including one
+     * DECLARES that class. Pointers are now serialized data, so there is nothing
+     * to include — but a file left behind by an older version must still be
+     * rejected rather than executed, and must not survive as a usable pointer.
+     */
+    public function testLegacyCompiledFileIsNotIncludedSoItsClassIsNeverDeclared(): void
+    {
+        $cache   = new Cache(TestEnvironment::cacheDir());
+        $pointer = $cache->cacheFilePath('legacy_guard');
+
+        @mkdir(dirname($pointer), 0755, true);
+
+        $legacyClass = '__Clarity_legacy_guard_' . bin2hex('deadbeef');
+        file_put_contents($pointer, "<?php\nclass {$legacyClass} {}\nreturn '{$legacyClass}';\n");
+
+        $this->assertFalse(class_exists($legacyClass, false), 'precondition: not yet declared');
+
+        // Any read path must refuse the file without executing it.
+        $this->assertNull($cache->getLoadedCodeFile('legacy_guard'));
+        $this->assertNull($cache->load('legacy_guard'));
+        $this->assertFalse(
+            class_exists($legacyClass, false),
+            'a legacy compiled file must not be included, because including it declares a class'
+        );
+
+        @unlink($pointer);
+    }
+
+    // =========================================================================
+    // Pointer store
+    // =========================================================================
+
+    /** A pointer is serialized data, never PHP. */
+    public function testPointerFileIsNotPhp(): void
+    {
+        $cache = new Cache(TestEnvironment::cacheDir());
+        self::tpl('ptr_format', 'x');
+        self::render('ptr_format');
+
+        $pointer = $cache->cacheFilePath('ptr_format');
+        $this->assertStringEndsWith('.ptr', $pointer);
+
+        $raw = (string) file_get_contents($pointer);
+        $this->assertStringNotContainsString('<?php', $raw, 'a pointer must never be executable code');
+        $this->assertStringNotContainsString('class ' . '__Clarity_', $raw, 'the pointer records a name, never a declaration');
+
+        $data = unserialize($raw, ['allowed_classes' => false]);
+        $this->assertIsArray($data);
+        $this->assertArrayNotHasKey('file', $data, 'the body path is derived, not stored');
+        $this->assertArrayHasKey('class', $data);
+        $this->assertArrayHasKey('version', $data);
+        $this->assertArrayHasKey('deps', $data);
+    }
+
+    /** A truncated or foreign pointer must read as "no pointer", not throw. */
+    public function testCorruptPointerIsTreatedAsMissing(): void
+    {
+        // Deliberately a name this process never renders: the "what is loaded"
+        // memo is a process-wide static, so a template that already rendered would
+        // answer from memory instead of from the file being tested.
+        $cache   = new Cache(TestEnvironment::cacheDir());
+        $pointer = $cache->cacheFilePath('ptr_corrupt_only');
+        @mkdir(dirname($pointer), 0755, true);
+        file_put_contents($pointer, 'a:2:{s:5:"class";s:3:"abc";}');   // truncated
+
+        self::tpl('ptr_corrupt_only', 'body');
+
+        // Reflected because readPointer() is private and the cache is a deliberate
+        // black box: the assertion is specifically that the FILE is rejected.
+        $read = new \ReflectionMethod($cache, 'readPointerFile');
+        $read->setAccessible(true);
+        $this->assertNull($read->invoke($cache, 'ptr_corrupt_only'));
+
+        // And rendering must recompile rather than fail.
+        $this->assertSame('body', self::render('ptr_corrupt_only'));
+    }
+
+    /**
+     * The APCu layer is read-through: it must return the same pointer the file
+     * does, and enabling it must not change what is written to disk.
+     */
+    public function testPointerCacheIsTransparent(): void
+    {
+        $engine = TestEnvironment::engine();
+        self::tpl('ptr_apcu', 'hello {{ n }}');
+        self::assertSame('hello 1', self::render('ptr_apcu', ['n' => 1]));
+
+        $dir   = TestEnvironment::cacheDir();
+        $cache = new Cache($dir);
+        $file  = null;
+        foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS)) as $f) {
+            if (str_ends_with($f->getFilename(), '.ptr')) { $file = (string) file_get_contents($f->getPathname()); }
+        }
+
+        $cache->setPointerCache(true);
+        $this->assertTrue($cache->hasPointerCache());
+        $this->assertSame('hello 2', self::render('ptr_apcu', ['n' => 2]), 'enabling the layer must not break rendering');
+
+        $after = null;
+        foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS)) as $f) {
+            if (str_ends_with($f->getFilename(), '.ptr')) { $after = (string) file_get_contents($f->getPathname()); }
+        }
+        $this->assertSame($file, $after, 'the file remains the durable record');
+
+        $cache->setPointerCache(false);
+    }
 }

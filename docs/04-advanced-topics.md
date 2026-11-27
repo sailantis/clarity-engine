@@ -140,7 +140,54 @@ Clarity compiles `.clarity.html` templates into PHP classes and caches them on d
 ### How Caching Works
 
 1. **First render:** the template is compiled to PHP and written to the cache directory
-2. **Subsequent renders:** the cached file is loaded directly (one `require`, accelerated by OPcache)
+2. **Subsequent renders:** the compiled body is loaded directly (one `require`, accelerated by OPcache)
+
+### Content-Addressed Bodies
+
+Each template uses a serialized pointer to its current compiled body:
+
+```
+cache/clarity/a1/
+├── a1b2c3d4…cdef.ptr                 pointer
+├── a1b2c3d4…cdef-9f8e7d6c5b4a.php   compiled body (class)
+└── a1b2c3d4…cdef-112233445566.php   superseded body
+```
+
+Bodies are named by a digest of their emitted source and are never rewritten.
+Unchanged recompiles reuse the body; changed source writes a new body and updates
+the pointer. Pointer files are rewritten only when their contents change.
+
+This layout avoids invalidating shared OPcache entries. Generated bodies are
+backdated past `opcache.file_update_protection` and are written without
+`opcache_invalidate()`. In testing with OPcache enabled, 300 identical recompiles
+and 20 content changes produced **0 B** of shared-memory waste.
+
+The pointer is needed because a body's content-addressed path is known only after
+compilation. It records the current body for other workers without loading
+candidate classes. Its `.ptr` file stores serialized data, read with
+`file_get_contents()` and `unserialize(..., ['allowed_classes' => false])`.
+The body path is derived from the template and class hashes, so moving the cache
+directory does not invalidate it. `Cache::templateHash()` uses `xxh128` for the
+template-name hash used in the pointer path, body path and class name.
+
+Serialization also supports non-UTF-8 data. For a 12-dependency pointer, reading
+and decoding took 39.3 µs with `serialize()` versus 47.0 µs with JSON.
+
+### Optional APCu pointer cache
+
+```php
+$engine->setPointerCache(true);   // read-through APCu, off by default
+```
+
+APCu caches pointer reads; the `.ptr` file remains the durable record. Under FPM,
+workers share the APCu segment. Superseded bodies can be removed with:
+
+```bash
+php azera cache:prune
+php azera cache:prune --older-than=3600
+```
+
+`cache:status` reports how many unreferenced bodies exist.
 
 ### Compiler Version
 
@@ -149,13 +196,16 @@ recompiles cached files when their version is stale or missing.
 
 The compiled class also records the debug-mode flag and a digest of the [policy](09-policy-api.md#a-policy-change-invalidates-the-compiled-cache) it was built under; a change to either recompiles the template.
 
+The class **name** itself ends in a digest of the emitted source (`__Clarity_<hash(template)>_<digest>`), which is what makes the body content-addressed and lets an unchanged recompile reuse the file already on disk.
+
 ### Cache Configuration
 
 ```php
 $engine->setCachePath(__DIR__ . '/cache/clarity'); // must be writable by the web server
 $cachePath = $engine->getCachePath();              // default: sys_get_temp_dir() . '/clarity'
 
-$engine->flushCache(); // delete all cached files
+$engine->flushCache();  // delete every cached file, bodies included
+$engine->pruneCache();  // delete only unreferenced bodies
 ```
 
 ### Cache Directory Structure
@@ -164,12 +214,13 @@ Cached files are organized by hash:
 
 ```
 cache/clarity/
-├── a1/a1b2c3d4e5f6...php  (compiled: views/home.clarity.html)
-├── b1/b2c3d4e5f6a1...php  (compiled: layouts/main.clarity.html)
+├── a1/a1b2c3d4…cdef.ptr              pointer  (views/home.clarity.html)
+├── a1/a1b2c3d4…cdef-9f8e7d6c5b4a.php body     (current)
+├── b1/b2c3d4e5…a1b2.ptr              pointer  (layouts/main.clarity.html)
 └── ...
 ```
 
-File names are deterministic hashes of the template path.
+Pointer names are deterministic hashes of the template name; body names append the content digest.
 
 ## Auto-Escaping
 

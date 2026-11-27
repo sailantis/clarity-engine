@@ -91,8 +91,10 @@ class OutputBufferTest extends BaseTestCase
 
     private function compiledFileFor(string $view): string
     {
-        $file = (new Cache($this->cacheDir))->cacheFilePath($view);
-        $this->assertFileExists($file, 'the template must have been compiled to disk');
+        $cache = new Cache($this->cacheDir);
+        $file  = $cache->getLoadedCodeFile($view);
+        $this->assertNotNull($file, 'the template must have been compiled to disk');
+        $this->assertFileExists($file);
 
         return $file;
     }

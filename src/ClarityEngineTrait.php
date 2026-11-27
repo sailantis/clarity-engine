@@ -652,6 +652,26 @@ trait ClarityEngineTrait
     }
 
     /**
+     * Enable the optional in-memory pointer layer (APCu).
+     *
+     * A read-through cache in front of the durable pointer files.
+     *
+     * @param bool $enabled Whether to enable it. No-op (but harmless) when APCu is absent.
+     * @return static
+     */
+    public function setPointerCache(bool $enabled = true): static
+    {
+        $this->cache->setPointerCache($enabled);
+        return $this;
+    }
+
+    /** Whether the optional in-memory pointer layer is enabled. */
+    public function hasPointerCache(): bool
+    {
+        return $this->cache->hasPointerCache();
+    }
+
+    /**
      * Get the currently configured cache directory.
      *
      * @return string Absolute path to the cache directory.
@@ -703,6 +723,22 @@ trait ClarityEngineTrait
     {
         $this->cache->flush();
         return $this;
+    }
+
+    /**
+     * Delete compiled bodies that no pointer references any more.
+     *
+     * Bodies are content-addressed, so a changed template leaves its previous
+     * version on disk under a digest nothing points at. Those files are inert;
+     * this removes them. Intended for a maintenance task rather than the request
+     * path, because a worker may hold a pointer it read a moment ago.
+     *
+     * @param int $olderThanSeconds Only remove bodies untouched for this long. 0 = any age.
+     * @return array{removed: int, kept: int}
+     */
+    public function pruneCache(int $olderThanSeconds = 0): array
+    {
+        return $this->cache->prune($olderThanSeconds);
     }
 
     /**
@@ -1123,9 +1159,32 @@ trait ClarityEngineTrait
             return 0;
         }
 
-        $cachePath  = $this->cache->cacheFilePath($templateName);
+        $cachePath  = $this->cache->getLoadedCodeFile($templateName);
+        if ($cachePath === null) {
+            return 0;
+        }
+
         $cacheReal  = \realpath($cachePath);
         $cacheForms = $cacheReal === false ? [$cachePath] : [$cachePath, $cacheReal];
+
+        // The class may have been declared from a DIFFERENT directory than the one
+        // this cache currently points at: two engines in one process, a rotated
+        // cache dir, a test harness.  Reflection reports where the bytecode
+        // actually came from, so add it as a candidate instead of assuming the
+        // current pointer names the file the exception will mention.
+        try {
+            $declared = (new \ReflectionClass($className))->getFileName();
+        } catch (\ReflectionException) {
+            $declared = false;
+        }
+
+        if (\is_string($declared) && $declared !== '' && !in_array($declared, $cacheForms, true)) {
+            $declaredReal    = \realpath($declared);
+            $cacheForms[]    = $declared;
+            if ($declaredReal !== false) {
+                $cacheForms[] = $declaredReal;
+            }
+        }
 
         $file = $e->getFile();
         if (in_array($file, $cacheForms, true)) {
@@ -1179,9 +1238,12 @@ trait ClarityEngineTrait
      */
     private function buildErrorHandler(string $templateName, ?callable &$previousHandler = null): callable
     {
-        $cacheFile = $this->cache->cacheFilePath($templateName);
+        return function (int $errno, string $errstr, string $errfile, int $errline) use ($templateName, &$previousHandler): bool {
 
-        return function (int $errno, string $errstr, string $errfile, int $errline) use ($templateName, $cacheFile, &$previousHandler): bool {
+            // The compiled body lives in a content-addressed file, so the path is
+            // resolved per event rather than captured: a long-lived worker may
+            // have recompiled the template since this closure was built.
+            $cacheFile = $this->cache->getLoadedCodeFile($templateName) ?? $this->cache->cacheFilePath($templateName);
 
             // Diagnostics raised outside the compiled template belong to the
             // application, not to the template → hand them to the handler that

@@ -3,6 +3,7 @@
 namespace Clarity\Engine\Compiler;
 
 use Clarity\ClarityException;
+use Clarity\Engine\Cache;
 use Clarity\Engine\CompiledTemplate;
 use Clarity\Template\TemplateLoader;
 
@@ -82,10 +83,11 @@ trait CompilerCoreTrait
         // Pre-scan: extract macro definitions and strip them from source.
         $this->extractMacros($source, $templateName);
 
-        // Unique class name prevents redeclaration collisions in long-running
-        // processes (Swoole, RoadRunner, etc.) when a template is recompiled
-        // mid-flight. The md5 prefix keeps it identifiable per logical name.
-        $className = '__Clarity_' . \md5($templateName) . '_' . \substr(\str_replace('.', '', \uniqid('', true)), -12);
+        // The class name includes a digest of the complete emitted source.
+        // Resolving it after code generation makes unchanged compiles reuse the
+        // same class and cache body. Use the template hash shared with {@see Cache}
+        // so paths and pruning identify the corresponding body.
+        $className = '__Clarity_' . Cache::templateHash($templateName) . '_' . self::CLASS_NAME_DIGEST_TOKEN;
 
         // Compile the render body
         $body = $this->compileSource($source, $templateName);
@@ -121,6 +123,18 @@ trait CompilerCoreTrait
             $code
         );
 
+        // Resolve the class-name digest LAST, so it covers every byte that will
+        // be written.  The name is not part of its own input: the placeholder
+        // stands in for it while hashing, which is why the placeholder does not
+        // appear in the digests of finished templates.
+        $className = \str_replace(
+            self::CLASS_NAME_DIGEST_TOKEN,
+            self::contentDigest($code),
+            $className
+        );
+
+        $code = \str_replace(self::CLASS_NAME_DIGEST_TOKEN, self::contentDigest($code), $code);
+
         return new CompiledTemplate(
             className: $className,
             code: $code,
@@ -130,6 +144,19 @@ trait CompilerCoreTrait
             renderBodyLine: $renderBodyLine,
             sourcePaths: $this->sourcePaths,
         );
+    }
+
+    /**
+     * Digest of the emitted source, as used in the generated class name.
+     *
+     * Taken over the code WITH the placeholder still in place, so the value does
+     * not depend on itself. Stable for a given (template, policy, compiler)
+     * triple, which is what allows an unchanged recompile to reuse the file it
+     * already wrote instead of declaring a new class.
+     */
+    private static function contentDigest(string $code): string
+    {
+        return \hash('xxh3', $code);
     }
 
     /**
