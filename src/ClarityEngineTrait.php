@@ -9,8 +9,6 @@ use Clarity\Engine\Cache;
 use Clarity\Engine\Compiler;
 use Clarity\Engine\Directive;
 use Clarity\Engine\Policy;
-use Clarity\Engine\Pointer\ApcuPointerCache;
-use Clarity\Engine\Pointer\PointerCache;
 use Clarity\Engine\Registry;
 use Clarity\Engine\SourceMap;
 use Clarity\Template\DomainRouterLoader;
